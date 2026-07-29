@@ -1,13 +1,21 @@
 class_name SaveData
 extends RefCounted
 
-## Typed record and JSON helper for game state serialization and deserialization.
+## Generic save envelope and JSON helper. The root carries only compatibility
+## metadata and sections: `game`, `map`, `engine` headers owned by the host and a
+## `modules` dictionary where each participating module owns its section
+## (multi_purpose_engine.md §3.5).
+##
+## SaveData deliberately knows nothing about settlement fields. A v1–v3 save —
+## which was a flat settlement blob — is normalized exactly once in `from_dict`:
+## the legacy fields are packed into `modules["gth.settlement"]`, the embedded
+## `map_ref` is lifted into `map_header`, and the version is bumped to 4. That
+## adapter is the single import path for old saves and is not developed further.
 
 ## Bump this only alongside an explicit migration in `from_dict`.
-##   v2 -> v3: added `forest` (per-tree wood/branch/felled state). Absent in
-##             older saves, which load with a pristine (regenerated) forest.
-##   v3 -> v4: root became game/map/engine/module sections. The old fields below
-##             remain a compatibility projection for SettlementSaveLoader.
+##   v2 -> v3: added per-tree `forest` state (older saves load with a pristine forest).
+##   v3 -> v4: root became game/map/engine/module sections. The legacy flat fields
+##             are migrated into `modules["gth.settlement"]` once, then dropped.
 const VERSION := 4
 
 ## Read once from the project so a single edit in project.godot propagates here.
@@ -18,21 +26,14 @@ var version: int = VERSION
 var timestamp: int = 0
 var game_version: String = _project_version()
 
-var settlement_state: Dictionary = {}
-var clock_state: Dictionary = {}
-var world_state: Dictionary = {}
-var buildings_state: Array = []
-var construction_sites_state: Array = []
-var citizens_state: Array = []
-var resource_piles_state: Array = []
-var forest_state: Array = []
-var camera_state: Dictionary = {}
-## Metadata and raw sections of the v4 envelope. A module owns its section; the
-## temporary settlement projection above is removed only after its loader has
-## moved behind a proper module save port.
+## Host-owned headers. `game`/`map` identify which pack, definition and world the
+## save belongs to; `engine` holds host-scale state (seed, clock model). A module
+## never writes here — the coordinator composes these around the module sections.
 var game_header: Dictionary = {}
 var map_header: Dictionary = {}
 var engine_state: Dictionary = {}
+## One entry per participating module id; the module owns its section's schema,
+## migration and validation. SaveData treats the contents as opaque.
 var module_states: Dictionary = {}
 
 
@@ -60,30 +61,20 @@ static func dict_to_vector2i(d: Dictionary) -> Vector2i:
 
 
 func to_dict() -> Dictionary:
-	var map_reference: Dictionary = world_state.get("map_ref", {}) if world_state.get("map_ref", {}) is Dictionary else {}
 	var game := game_header.duplicate(true)
 	if game.is_empty():
+		# A save written without a host header is by construction a legacy
+		# settlement save (the only pre-sectioned game). Keep the default so a
+		# bare SaveData round-trips, but production writes always set the header.
 		game = {"pack": "core", "id": "settlement", "revision": ""}
-	var map := map_header.duplicate(true)
-	if map.is_empty():
-		map = map_reference.duplicate(true)
-	var engine := engine_state.duplicate(true)
-	if engine.is_empty():
-		engine = {"clock": clock_state.duplicate(true), "camera": camera_state.duplicate(true)}
-	var modules := module_states.duplicate(true)
-	if modules.is_empty():
-		# Direct legacy SettlementGame callers still populate projection fields.
-		# A generic game with an explicit header may legitimately have no module
-		# state at all, so never manufacture settlement data for it.
-		modules = {"gth.settlement": settlement_module_state()} if game_header.is_empty() else {}
 	return {
 		"format_version": VERSION,
 		"timestamp": timestamp,
 		"game_version": game_version,
 		"game": game,
-		"map": map,
-		"engine": engine,
-		"modules": modules,
+		"map": map_header.duplicate(true),
+		"engine": engine_state.duplicate(true),
+		"modules": module_states.duplicate(true),
 	}
 
 
@@ -97,40 +88,7 @@ func from_dict(data: Dictionary) -> bool:
 	game_version = str(data.get("game_version", _project_version()))
 	if version == VERSION:
 		return _read_sectioned_v4(data)
-	
-	if not _is_dictionary_field(data, "settlement") or not _is_dictionary_field(data, "clock") or not _is_dictionary_field(data, "world"):
-		push_error("SaveData: Invalid save root schema")
-		return false
-	if not _is_array_field(data, "buildings") or not _is_array_field(data, "construction_sites") or not _is_array_field(data, "citizens") or not _is_array_field(data, "resource_piles"):
-		push_error("SaveData: Invalid save collection schema")
-		return false
-	settlement_state = (data.get("settlement") as Dictionary).duplicate(true)
-	clock_state = (data.get("clock") as Dictionary).duplicate(true)
-	world_state = (data.get("world") as Dictionary).duplicate(true)
-	buildings_state = (data.get("buildings") as Array).duplicate(true)
-	construction_sites_state = (data.get("construction_sites") as Array).duplicate(true)
-	citizens_state = (data.get("citizens") as Array).duplicate(true)
-	resource_piles_state = (data.get("resource_piles") as Array).duplicate(true)
-	# Forest and camera are optional: saves predating v3 (or headless) omit them,
-	# and a missing forest simply means the regenerated one is left untouched.
-	forest_state = (data.get("forest", []) as Array).duplicate(true) if data.get("forest", []) is Array else []
-	camera_state = (data.get("camera", {}) as Dictionary).duplicate(true) if data.get("camera", {}) is Dictionary else {}
-	if version == 1:
-		_migrate_v1_to_v2()
-	version = VERSION
-	return true
-
-
-func settlement_module_state() -> Dictionary:
-	return {
-		"settlement": settlement_state.duplicate(true),
-		"world": world_state.duplicate(true),
-		"buildings": buildings_state.duplicate(true),
-		"construction_sites": construction_sites_state.duplicate(true),
-		"citizens": citizens_state.duplicate(true),
-		"resource_piles": resource_piles_state.duplicate(true),
-		"forest": forest_state.duplicate(true),
-	}
+	return _migrate_legacy_to_v4(data, version)
 
 
 func _read_sectioned_v4(data: Dictionary) -> bool:
@@ -144,31 +102,56 @@ func _read_sectioned_v4(data: Dictionary) -> bool:
 	map_header = (data["map"] as Dictionary).duplicate(true)
 	engine_state = (data["engine"] as Dictionary).duplicate(true)
 	module_states = (data["modules"] as Dictionary).duplicate(true)
-	var settlement_section: Variant = module_states.get("gth.settlement", null)
-	if settlement_section != null:
-		if not (settlement_section is Dictionary):
-			push_error("SaveData: Invalid gth.settlement save section")
-			return false
-		var section := settlement_section as Dictionary
-		if not _is_dictionary_field(section, "settlement") or not _is_dictionary_field(section, "world"):
-			push_error("SaveData: Invalid gth.settlement save section")
-			return false
-		if not _is_array_field(section, "buildings") or not _is_array_field(section, "construction_sites") or not _is_array_field(section, "citizens") or not _is_array_field(section, "resource_piles"):
-			push_error("SaveData: Invalid gth.settlement collections")
-			return false
-		settlement_state = (section["settlement"] as Dictionary).duplicate(true)
-		world_state = (section["world"] as Dictionary).duplicate(true)
-		# Map ownership is generic in v4. Keep the legacy projection needed by the
-		# current launch manager and settlement loader.
-		if not map_header.is_empty():
-			world_state["map_ref"] = map_header.duplicate(true)
-		clock_state = (engine_state.get("clock", {}) as Dictionary).duplicate(true) if engine_state.get("clock", {}) is Dictionary else {}
-		camera_state = (engine_state.get("camera", {}) as Dictionary).duplicate(true) if engine_state.get("camera", {}) is Dictionary else {}
-		buildings_state = (section["buildings"] as Array).duplicate(true)
-		construction_sites_state = (section["construction_sites"] as Array).duplicate(true)
-		citizens_state = (section["citizens"] as Array).duplicate(true)
-		resource_piles_state = (section["resource_piles"] as Array).duplicate(true)
-		forest_state = (section.get("forest", []) as Array).duplicate(true) if section.get("forest", []) is Array else []
+	version = VERSION
+	return true
+
+
+## One-time normalization of a flat v1–v3 settlement save into the sectioned v4
+## envelope. Every legacy save is a settlement save, so the flat blob becomes the
+## `gth.settlement` module section and its embedded `map_ref` is lifted into the
+## host `map_header`. This is the only code path that still understands the old
+## field names; once no v1–v3 save exists in the wild it is not extended.
+func _migrate_legacy_to_v4(data: Dictionary, legacy_version: int) -> bool:
+	if not _is_dictionary_field(data, "settlement") or not _is_dictionary_field(data, "clock") or not _is_dictionary_field(data, "world"):
+		push_error("SaveData: Invalid legacy save root schema")
+		return false
+	if not _is_array_field(data, "buildings") or not _is_array_field(data, "construction_sites") or not _is_array_field(data, "citizens") or not _is_array_field(data, "resource_piles"):
+		push_error("SaveData: Invalid legacy save collection schema")
+		return false
+	var settlement_state := (data["settlement"] as Dictionary).duplicate(true)
+	var clock_state := (data["clock"] as Dictionary).duplicate(true)
+	var world_state := (data["world"] as Dictionary).duplicate(true)
+	var buildings_state := (data["buildings"] as Array).duplicate(true)
+	var construction_sites_state := (data["construction_sites"] as Array).duplicate(true)
+	var citizens_state := (data["citizens"] as Array).duplicate(true)
+	var resource_piles_state := (data["resource_piles"] as Array).duplicate(true)
+	# Forest and camera are optional: saves predating v3 (or headless) omit them,
+	# and a missing forest simply means the regenerated one is left untouched.
+	var forest_state := (data.get("forest", []) as Array).duplicate(true) if data.get("forest", []) is Array else []
+	var camera_state := (data.get("camera", {}) as Dictionary).duplicate(true) if data.get("camera", {}) is Dictionary else {}
+	if legacy_version == 1:
+		_migrate_v1_piles(resource_piles_state)
+
+	game_header = {"pack": "core", "id": "settlement", "revision": ""}
+	engine_state = {}
+	# Lift the embedded map reference into the host header so launch/save routing
+	# never needs to reach inside a module section to find the world.
+	var map_reference: Variant = world_state.get("map_ref", {})
+	if map_reference is Dictionary and not (map_reference as Dictionary).is_empty():
+		map_header = (map_reference as Dictionary).duplicate(true)
+	module_states = {
+		"gth.settlement": {
+			"settlement": settlement_state,
+			"world": world_state,
+			"buildings": buildings_state,
+			"construction_sites": construction_sites_state,
+			"citizens": citizens_state,
+			"resource_piles": resource_piles_state,
+			"forest": forest_state,
+			"clock": clock_state,
+			"camera": camera_state,
+		},
+	}
 	version = VERSION
 	return true
 
@@ -181,8 +164,8 @@ func _is_array_field(data: Dictionary, key: String) -> bool:
 	return data.has(key) and data.get(key) is Array
 
 
-func _migrate_v1_to_v2() -> void:
-	## v1 piles stored one resource per entry. Keep old saves loadable.
+## v1 piles stored one resource per entry. Keep old saves loadable.
+func _migrate_v1_piles(resource_piles_state: Array) -> void:
 	for index in resource_piles_state.size():
 		var pile: Variant = resource_piles_state[index]
 		if pile is Dictionary and pile.has("resource_id"):
@@ -197,14 +180,14 @@ func save_to_file(path: String) -> bool:
 	var dir_path := path.get_base_dir()
 	if not DirAccess.dir_exists_absolute(dir_path):
 		DirAccess.make_dir_recursive_absolute(dir_path)
-	
+
 	timestamp = int(Time.get_unix_time_from_system())
 	var temporary_path := path + ".tmp"
 	var file := FileAccess.open(temporary_path, FileAccess.WRITE)
 	if file == null:
 		push_error("SaveData: Failed to open temporary save file: " + path + " error: " + str(FileAccess.get_open_error()))
 		return false
-	
+
 	var json_string := JSON.stringify(to_dict(), "  ")
 	file.store_string(json_string)
 	file.flush()
@@ -220,23 +203,23 @@ func load_from_file(path: String) -> bool:
 	if not FileAccess.file_exists(path):
 		push_warning("SaveData: File does not exist: " + path)
 		return false
-	
+
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		push_error("SaveData: Failed to open file for reading: " + path)
 		return false
-	
+
 	var json_string := file.get_as_text()
 	file.close()
-	
+
 	var json := JSON.new()
 	var error := json.parse(json_string)
 	if error != OK:
 		push_error("SaveData: JSON parse error: " + json.get_error_message())
 		return false
-	
+
 	if not (json.data is Dictionary):
 		push_error("SaveData: Invalid root JSON structure")
 		return false
-	
+
 	return from_dict(json.data as Dictionary)

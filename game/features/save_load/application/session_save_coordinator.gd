@@ -8,6 +8,10 @@ extends RefCounted
 const QUICKSAVE_PATH := "user://saves/quicksave.json"
 
 
+static func has_quicksave() -> bool:
+	return FileAccess.file_exists(QUICKSAVE_PATH)
+
+
 static func save_quicksave(runtime: GameRuntime) -> bool:
 	if runtime == null or runtime.active_session == null:
 		push_error("[save] no active game session")

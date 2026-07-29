@@ -42,8 +42,11 @@ func launch_from_save(save_path: String) -> void:
 	if not save_data.load_from_file(save_path):
 		push_warning("[launch] сохранение не читается: %s" % save_path)
 		return
-	var map_reference: Variant = save_data.map_header if not save_data.map_header.is_empty() else save_data.world_state.get("map_ref", {})
-	if not map_reference is Dictionary or (map_reference as Dictionary).is_empty():
+	# The map ref always lives in the host map header now: a v4 save writes it
+	# there directly, and the v1–v3 adapter lifts the embedded map_ref into the
+	# same header during migration. There is no projection to fall back to.
+	var map_reference: Dictionary = save_data.map_header
+	if map_reference.is_empty():
 		push_warning("[launch] сохранение не открыто: в нём нет ссылки на карту")
 		return
 	var reference := map_reference as Dictionary

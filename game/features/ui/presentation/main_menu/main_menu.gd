@@ -225,10 +225,11 @@ func _on_quit_pressed() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Load the quicksave through the same host path F5-save uses. The save file
+	# and slot are owned by SessionSaveCoordinator; the menu only routes the key.
 	if event is InputEventKey and event.keycode == KEY_6 and event.pressed and not event.echo:
-		var save_service = load("res://game/features/save_load/application/save_game_service.gd")
-		if save_service != null and save_service.has_quicksave():
+		if SessionSaveCoordinator.has_quicksave():
 			var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
 			if launch_mgr != null and launch_mgr.has_method("launch_from_save"):
-				launch_mgr.call("launch_from_save", save_service.QUICKSAVE_PATH)
+				launch_mgr.call("launch_from_save", SessionSaveCoordinator.QUICKSAVE_PATH)
 				get_viewport().set_input_as_handled()

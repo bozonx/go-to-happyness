@@ -850,4 +850,9 @@ func _finalize_launch(launch_mgr: Node) -> void:
 		if not pending_save.is_empty():
 			launch_mgr.set("pending_save_path", "")
 	if not pending_save.is_empty():
-		SaveGameService.load_game(game, pending_save)
+		# Direct SettlementGame scene runs (no GameRuntime parent) restore through
+		# the same module-section path the host coordinator uses. Runtime sessions
+		# return earlier above; this only covers editor/scene-test launches.
+		var save_data := SaveData.new()
+		if save_data.load_from_file(pending_save):
+			game.restore_from_save_data(save_data)

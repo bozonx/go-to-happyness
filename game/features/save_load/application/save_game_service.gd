@@ -1,37 +1,28 @@
 class_name SaveGameService
 extends RefCounted
 
-## Application service managing save and load operations.
+## Settlement-module serialization. This builds and reads only the
+## `gth.settlement` save section; the host `SessionSaveCoordinator` owns the
+## file, headers and the slot path. The section schema is the module's contract
+## and may evolve with the module — nothing else reads these keys.
 
-const QUICKSAVE_PATH := "user://saves/quicksave.json"
 const SaveDataScript = preload("res://game/features/save_load/domain/save_data.gd")
 const WarehouseStateScript = preload("res://game/features/settlement/domain/warehouse_state.gd")
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 const ContentIdScript = preload("res://game/features/content/domain/content_id.gd")
 
 
-static func has_quicksave() -> bool:
-	return FileAccess.file_exists(QUICKSAVE_PATH)
-
-
-static func save_quicksave(game: Node) -> bool:
-	return save_game(game, QUICKSAVE_PATH)
-
-
-static func load_quicksave(game: Node) -> bool:
-	return load_game(game, QUICKSAVE_PATH)
-
-
-## Settlement-owned serialization. It deliberately does not write a file or
-## choose headers: the host coordinator composes those concerns around this data.
-static func capture_settlement_state(game: Node) -> SaveData:
+## Builds the full `gth.settlement` module section from a running session. The
+## caller (the module's save hook) files this under `modules["gth.settlement"]`.
+## Returns an empty dictionary only if the game node is null; everything else
+## writes a valid, possibly partial, section.
+static func capture_settlement_section(game: Node) -> Dictionary:
 	if game == null:
 		push_error("SaveGameService: Cannot save null game instance")
-		return null
-		
-	var save_data := SaveDataScript.new()
-	
+		return {}
+
 	# 1. Settlement State
+	var settlement_state := {}
 	if "settlement" in game and game.settlement != null:
 		var s = game.settlement
 		var res_map: Dictionary = {}
@@ -41,7 +32,7 @@ static func capture_settlement_state(game: Node) -> SaveData:
 				var amt: int = s.amount(res_id)
 				if amt > 0:
 					res_map[res_id] = amt
-		save_data.settlement_state = {
+		settlement_state = {
 			"money": s.money,
 			"wellbeing": s.wellbeing,
 			"resources": res_map,
@@ -69,16 +60,17 @@ static func capture_settlement_state(game: Node) -> SaveData:
 			"era": int(s.era)
 		}
 
-	# 2. Simulation Clock
+	# 2. Simulation Clock (module-owned; the host engine_state holds only the clock model)
+	var clock_state := {}
 	if "clock" in game and game.clock != null:
-		save_data.clock_state = {
+		clock_state = {
 			"minutes": game.clock.minutes,
 			"current_day": game.day_cycle.current_day if "day_cycle" in game else 1,
 		}
-		
-	# 3. Camera
+
+	# 3. Camera (module-owned; only the settlement session stores camera framing)
 	var camera_target: Variant = game.get("camera_target") if "camera_target" in game else Vector3.ZERO
-	save_data.camera_state = {
+	var camera_state := {
 		"target": SaveDataScript.vector3_to_dict(camera_target if camera_target is Vector3 else Vector3.ZERO),
 		"distance": float(game.get("camera_distance")) if "camera_distance" in game else 30.0,
 		"yaw": float(game.get("camera_yaw")) if "camera_yaw" in game else 42.0,
@@ -119,8 +111,6 @@ static func capture_settlement_state(game: Node) -> SaveData:
 						"blueprint_ref": blueprint_ref.duplicate(true),
 						"zone_state": zone_state.duplicate(true),
 					})
-	save_data.buildings_state = buildings_list
-	save_data.construction_sites_state = construction_sites_list
 
 	# 5. Resource Piles
 	var piles_list: Array = []
@@ -133,11 +123,11 @@ static func capture_settlement_state(game: Node) -> SaveData:
 					"is_backpack": pile.is_backpack,
 					"landscape_owned": bool(pile.node.get_meta("landscape_owned", false)),
 				})
-	save_data.resource_piles_state = piles_list
 
 	# 5b. Forest (felled trees and branch/wood depletion)
+	var forest_state: Array = []
 	if "foraging_service" in game and game.foraging_service != null and game.foraging_service.has_method("export_tree_state"):
-		save_data.forest_state = game.foraging_service.export_tree_state()
+		forest_state = game.foraging_service.export_tree_state()
 
 	# 6. Citizens
 	var citizens_list: Array = []
@@ -180,14 +170,15 @@ static func capture_settlement_state(game: Node) -> SaveData:
 				if "age" in citizen:
 					citizen_data["age"] = citizen.get("age")
 				citizens_list.append(citizen_data)
-	save_data.citizens_state = citizens_list
+
+	# 7. World state (next id, biome, map ref, natural resources, roads, map zones)
 	var map_reference: Dictionary = {}
 	if "launch_config" in game and game.launch_config != null and not String(game.launch_config.map_ref).is_empty():
 		var address := ContentIdScript.split_runtime_key(game.launch_config.map_ref)
 		map_reference = {"source": String(address["source"]), "id": String(address["id"])}
 		if game.launch_config.map_document != null:
 			map_reference["revision"] = game.launch_config.map_document.meta.revision
-	save_data.world_state = {
+	var world_state := {
 		"next_ai_citizen_id": game.get("next_ai_citizen_id"),
 		"biome_id": str(game.launch_config.biome_id) if "launch_config" in game and game.launch_config != null else "",
 		"map_ref": map_reference,
@@ -199,17 +190,18 @@ static func capture_settlement_state(game: Node) -> SaveData:
 		# with the registry left at its freshly-built default.
 		"map_zones": game.map_zone_registry.session_state_to_dict() if "map_zone_registry" in game and game.map_zone_registry != null else [],
 	}
-	return save_data
 
-
-static func save_game(game: Node, path: String = QUICKSAVE_PATH) -> bool:
-	var save_data := capture_settlement_state(game)
-	if save_data == null:
-		return false
-	var success := save_data.save_to_file(path)
-	if success:
-		print("SaveGameService: Successfully saved quicksave to " + path)
-	return success
+	return {
+		"settlement": settlement_state,
+		"world": world_state,
+		"buildings": buildings_list,
+		"construction_sites": construction_sites_list,
+		"citizens": citizens_list,
+		"resource_piles": piles_list,
+		"forest": forest_state,
+		"clock": clock_state,
+		"camera": camera_state,
+	}
 
 
 static func _save_warehouses(settlement: RefCounted) -> Array:
@@ -221,28 +213,6 @@ static func _save_warehouses(settlement: RefCounted) -> Array:
 			"blacklisted": warehouse.blacklisted.duplicate(true),
 		})
 	return result
-
-
-static func load_game(game: Node, path: String = QUICKSAVE_PATH) -> bool:
-	if game == null:
-		push_error("SaveGameService: Cannot load into null game instance")
-		return false
-
-	var save_data := SaveDataScript.new()
-	if not save_data.load_from_file(path):
-		push_error("SaveGameService: Failed to read save file from " + path)
-		return false
-
-	if game.has_method("restore_from_save_data"):
-		var restored: Variant = game.call("restore_from_save_data", save_data)
-		if restored is bool and not restored:
-			push_error("SaveGameService: Game rejected save data")
-			return false
-		print("SaveGameService: Successfully loaded quicksave from " + path)
-		return true
-	else:
-		push_error("SaveGameService: Target game node missing restore_from_save_data method")
-		return false
 
 
 ## Restores core settlement domain state (money, wellbeing, era, resources,

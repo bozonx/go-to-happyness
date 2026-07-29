@@ -80,23 +80,10 @@ func handle_menu_right_click() -> bool:
 
 
 func handle_unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.keycode == KEY_5 and event.pressed and not event.echo:
-		if SaveGameService.save_quicksave(game):
-			game.update_interface(S.QUICKSAVE_SUCCESS)
-		else:
-			game.update_interface(S.QUICKSAVE_ERROR)
-		game.get_viewport().set_input_as_handled()
-		return
-	if event is InputEventKey and event.keycode == KEY_6 and event.pressed and not event.echo:
-		if SaveGameService.has_quicksave():
-			if SaveGameService.load_quicksave(game):
-				game.update_interface(S.QUICKLOAD_SUCCESS)
-			else:
-				game.update_interface(S.QUICKLOAD_ERROR)
-		else:
-			game.update_interface(S.QUICKLOAD_NOT_FOUND)
-		game.get_viewport().set_input_as_handled()
-		return
+	# Quicksave/quicksave-load are host-owned (F5 quicksave via HostInputController;
+	# load from the library through RuntimeLaunchManager.launch_from_save). The
+	# settlement scene no longer wires its own save hotkeys, so there is exactly
+	# one write path for the save file.
 	if event is InputEventKey and event.keycode == KEY_F and event.ctrl_pressed and event.pressed and not event.echo:
 		if OS.is_debug_build():
 			game.grant_debug_resources()

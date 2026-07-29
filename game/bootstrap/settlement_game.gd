@@ -834,10 +834,9 @@ func restore_from_save_data(save_data: SaveData) -> bool:
 
 
 func save_session_state() -> Dictionary:
-	var state := SaveGameService.capture_settlement_state(self)
 	return {
 		"module": "gth.settlement",
-		"state": state.settlement_module_state() if state != null else {},
+		"state": SaveGameService.capture_settlement_section(self),
 	}
 
 

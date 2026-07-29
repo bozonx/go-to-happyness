@@ -14,6 +14,23 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 	if save_data == null:
 		return false
 
+	# The settlement module owns its section. SaveData no longer carries a flat
+	# settlement projection, so everything this loader needs lives under one key;
+	# the v1–v3 adapter in SaveData.from_dict has already packed it there.
+	var section: Dictionary = save_data.module_states.get("gth.settlement", {})
+	if section.is_empty():
+		push_warning("SettlementSaveLoader: save has no gth.settlement section")
+		return false
+	var settlement_state: Dictionary = section.get("settlement", {})
+	var clock_state: Dictionary = section.get("clock", {})
+	var camera_state: Dictionary = section.get("camera", {})
+	var world_state: Dictionary = section.get("world", {})
+	var buildings_state: Array = section.get("buildings", [])
+	var construction_sites_state: Array = section.get("construction_sites", [])
+	var citizens_state: Array = section.get("citizens", [])
+	var resource_piles_state: Array = section.get("resource_piles", [])
+	var forest_state: Array = section.get("forest", [])
+
 	# 1. Despawn current citizens
 	for citizen in game.citizens.duplicate():
 		if is_instance_valid(citizen):
@@ -70,16 +87,16 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 	game.settlement.buildings.clear()
 
 	# 3. Restore Settlement State
-	var s_dict: Dictionary = save_data.settlement_state
+	var s_dict: Dictionary = settlement_state
 	SaveGameService.restore_settlement_state(game.settlement, s_dict)
 	SaveGameService.restore_work_policy(game.settlement, s_dict.get("work_policy", {}))
 	SaveGameService.restore_research(game.settlement, s_dict.get("research", {}))
 
 	# 4. Restore Simulation Clock
-	SaveGameService.restore_clock(game.clock, game.day_cycle, save_data.clock_state)
+	SaveGameService.restore_clock(game.clock, game.day_cycle, clock_state)
 
 	# 5. Restore Camera State
-	var cam_state := SaveGameService.restore_camera(save_data.camera_state)
+	var cam_state := SaveGameService.restore_camera(camera_state)
 	if not cam_state.is_empty():
 		if cam_state.has("target"):
 			game.camera_target = cam_state["target"]
@@ -88,7 +105,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 		game.camera_pitch = cam_state["pitch"]
 
 	# 6. Restore Placed Buildings
-	for b_dict in save_data.buildings_state:
+	for b_dict in buildings_state:
 		var cell = SaveData.dict_to_vector2i(b_dict.get("cell", {}))
 		var b_type = str(b_dict.get("building_type", ""))
 		var pos = SaveData.dict_to_vector3(b_dict.get("position", {}))
@@ -120,7 +137,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 			push_warning("restore_from_save_data: skipping building with unknown type '" + b_type + "' at cell " + str(cell))
 
 	# 7. Restore Construction Sites
-	for c_dict in save_data.construction_sites_state:
+	for c_dict in construction_sites_state:
 		var cell = SaveData.dict_to_vector2i(c_dict.get("cell", {}))
 		var b_type = str(c_dict.get("building_type", ""))
 		var pos = SaveData.dict_to_vector3(c_dict.get("position", {}))
@@ -147,7 +164,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 	SaveGameService.restore_warehouses(game.settlement, s_dict.get("warehouses", []), s_dict.get("warehouse_types", []), bool(s_dict.get("warehouse_ever_built", false)))
 
 	# 8. Restore Resource Piles
-	for p_dict in save_data.resource_piles_state:
+	for p_dict in resource_piles_state:
 		if not (p_dict is Dictionary):
 			continue
 		var resources: Dictionary = p_dict.get("resources", {})
@@ -162,22 +179,22 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 			game.backpack_node = pile_node
 
 	# 8b. Restore Forest state (felled trees, branch/wood depletion)
-	_restore_forest(save_data.forest_state)
-	if game.ambient_spawner != null and save_data.world_state.get("natural_resources", {}) is Dictionary:
-		game.ambient_spawner.restore_resource_state(save_data.world_state.get("natural_resources", {}))
-	if game.road_network_service != null and save_data.world_state.get("roads", []) is Array:
-		game.road_network_service.restore_state(save_data.world_state.get("roads", []))
+	_restore_forest(forest_state)
+	if game.ambient_spawner != null and world_state.get("natural_resources", {}) is Dictionary:
+		game.ambient_spawner.restore_resource_state(world_state.get("natural_resources", {}))
+	if game.road_network_service != null and world_state.get("roads", []) is Array:
+		game.road_network_service.restore_state(world_state.get("roads", []))
 	# Map-zone session state (§13) is laid over the freshly-built registry: the
 	# geometry and roles came back from the map document in `_setup_zone_runtime`,
 	# and only what a session mutated (owner, flags) is restored from the save.
 	# An absent key is the default for saves predating this slot.
-	if game.map_zone_registry != null and save_data.world_state.get("map_zones", []) is Array:
-		game.map_zone_registry.apply_session_state(save_data.world_state.get("map_zones", []))
+	if game.map_zone_registry != null and world_state.get("map_zones", []) is Array:
+		game.map_zone_registry.apply_session_state(world_state.get("map_zones", []))
 
 	# 9. Restore Citizens
-	game.next_ai_citizen_id = int(save_data.world_state.get("next_ai_citizen_id", 1))
+	game.next_ai_citizen_id = int(world_state.get("next_ai_citizen_id", 1))
 	game.hero_citizen = null
-	for cit_dict in save_data.citizens_state:
+	for cit_dict in citizens_state:
 		var pos = SaveData.dict_to_vector3(cit_dict.get("position", {}))
 		var is_hero = bool(cit_dict.get("is_hero", false))
 		var saved_id = int(cit_dict.get("ai_id", 0))
