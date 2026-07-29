@@ -19,9 +19,7 @@ func _run() -> void:
 	var definition := GameModuleRegistry.resolve_definition(&"core:settlement")
 	assert(definition != null)
 	assert(definition.module_ids == [&"core.world", &"gth.settlement"])
-	launch_manager.set("active_session", GameSessionConfig.create(definition, config.map_ref, config.map_document, {
-		&"gth.settlement": definition.start_parameters.duplicate(true),
-	}))
+	launch_manager.set("active_session", GameSessionConfig.create(definition, config.map_ref, config.map_document))
 	var runtime := GameRuntimeScene.instantiate() as GameRuntime
 	root.add_child(runtime)
 	for _frame in range(4):

@@ -34,7 +34,7 @@ static func run_all() -> void:
 	_test_registry_removal_republishes_and_is_undoable()
 	_test_flow_requires_a_river()
 	_test_level_brush_can_lower_a_lake()
-	_test_erase_takes_water_away_and_undo_brings_it_back()
+	_test_remove_body_takes_water_away_and_undo_brings_it_back()
 	_test_creating_a_body_publishes_nothing()
 	_test_border_ocean_floods_only_what_touches_the_rim()
 	_test_border_nothing_never_floods()
@@ -197,7 +197,7 @@ static func _test_undo_restores_the_layer_exactly() -> void:
 
 	assert(service.flood(Vector2i(0, 0), lake.id, 0))
 	assert(service.set_frozen(service.cells_of_body(lake.id), true, 2))
-	assert(service.erase(service.cells_of_body(lake.id)))
+	assert(service.remove_body(lake.id))
 	while service.can_undo():
 		assert(service.undo())
 	var after := water.snapshot()
@@ -405,9 +405,9 @@ static func _test_level_brush_can_lower_a_lake() -> void:
 	assert(water.height_of(Vector2i.ZERO) == 0)
 	assert(water.is_wet(terrain, Vector2i(3, 0)), "the shelf is under water at level 0")
 
-	var cells := water.cells_of_body(lake.id)
-	assert(service.set_level(cells, -1))
+	assert(service.set_body_level(lake.id, -1))
 	assert(water.height_of(Vector2i.ZERO) == -1)
+	assert(lake.surface_height == -1)
 	# The middle is still water — one step of it — and the shelf, which sat exactly at
 	# -1, is dry ground again without anyone erasing it.
 	assert(water.is_wet(terrain, Vector2i.ZERO))
@@ -418,7 +418,7 @@ static func _test_level_brush_can_lower_a_lake() -> void:
 	assert(water.is_wet(terrain, Vector2i(3, 0)))
 
 
-static func _test_erase_takes_water_away_and_undo_brings_it_back() -> void:
+static func _test_remove_body_takes_water_away_and_undo_brings_it_back() -> void:
 	var terrain := _terrain()
 	_dig_basin(terrain)
 	var water := _water_over(terrain)
@@ -428,10 +428,9 @@ static func _test_erase_takes_water_away_and_undo_brings_it_back() -> void:
 	assert(service.flood(Vector2i.ZERO, lake.id, 0))
 	var before := water.snapshot()
 
-	assert(service.erase([Vector2i.ZERO, Vector2i(1, 0)]))
+	assert(service.remove_body(lake.id))
 	assert(not water.has_water(Vector2i.ZERO))
-	# Erasing the cells does not erase the body: the author still has it selected.
-	assert(water.has_body(lake.id))
+	assert(not water.has_body(lake.id))
 
 	assert(service.undo())
 	var after := water.snapshot()

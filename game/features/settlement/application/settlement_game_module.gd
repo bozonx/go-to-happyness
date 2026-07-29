@@ -20,7 +20,8 @@ func validate_session(session: GameSessionConfig) -> Array[String]:
 	var parameters: Variant = session.module_parameters.get(module_id(), {})
 	if not parameters is Dictionary:
 		return ["start parameters должны быть объектом"]
-	return []
+	var launch := _launch_config(session, parameters as Dictionary)
+	return MapValidator.validate_party_spawns(launch.map_document, launch.starting_population)
 
 
 func start(runtime: GameRuntime, session: GameSessionConfig) -> bool:
@@ -33,10 +34,9 @@ func start(runtime: GameRuntime, session: GameSessionConfig) -> bool:
 	if settlement == null:
 		push_error("[launch] failed to instantiate settlement session")
 		return false
-	settlement.start_on_ready = false
 	settlement.world_session = runtime.world_session
 	runtime.attach_session_content(settlement)
-	settlement.start_settlement_session(launch)
+	settlement.start_session(launch)
 	return settlement.world_setup != null
 
 

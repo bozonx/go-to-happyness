@@ -199,8 +199,8 @@ game to that library. The shipped `core:settlement` definition selects
 can use the same world module without Settlement. Definitions are indexed from
 content packs rather than hard-coded as the application's only game, and
 `GameRuntime` carries no citizen, era, wellbeing, building or settlement-resource
-field. `SettlementGame` and its scene remain a compatibility entry for existing
-scene tests and direct editor runs, but they are not the menu's launch target.
+field. `SettlementGame` is the settlement module's presentation adapter, created
+only by `SettlementGameModule`; scene tests enter through `GameRuntime` as well.
 
 Keep game-specific fields inside a module's start parameters. `GameSessionConfig`
 may hold a map, seed and definition, but never era, wellbeing, population or

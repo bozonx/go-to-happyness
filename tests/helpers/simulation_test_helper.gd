@@ -4,27 +4,32 @@ extends RefCounted
 ## Shared helpers for SceneTree-based feature/smoke tests.
 ## Extracted from duplicated code across tests/features/ and tests/repro/.
 ##
-## All access to SettlementGame private methods goes through these wrappers
-## so tests do not couple to internal implementation names. If a private
-## method is renamed, only this file needs updating.
+## All settlement scene tests enter through the production host runtime. The
+## returned node is still the module's SettlementGame projection, so feature
+## assertions do not depend on generic runtime internals.
 
-const SettlementGameScene := preload("res://game/bootstrap/settlement_game.tscn")
-
-
-static func create_simulation() -> Node:
-	var simulation := SettlementGameScene.instantiate()
-	simulation.launch_config = _default_launch_config()
-	return simulation
+const GameRuntimeScene := preload("res://game/bootstrap/game_runtime.tscn")
 
 
-static func setup_simulation(tree: SceneTree) -> Node:
-	var simulation := SettlementGameScene.instantiate()
-	simulation.launch_config = _default_launch_config()
-	tree.root.add_child(simulation)
+static func setup_simulation(tree: SceneTree, document: MapDocument = null) -> Node:
+	# SceneTree test scripts begin their `_init` before autoload attachment.
+	await tree.process_frame
+	var map := document if document != null else _default_map()
+	assert(map != null, "Settlement map must be available for scene tests")
+	var definition := GameModuleRegistry.resolve_definition(&"core:settlement")
+	assert(definition != null, "Settlement definition must be available for scene tests")
+	var launch_manager := tree.root.get_node_or_null("GameLaunchManager")
+	assert(launch_manager != null, "GameLaunchManager autoload is required for scene tests")
+	launch_manager.active_session = GameSessionConfig.create(definition, &"editor:preview" if document != null else definition.default_map, map)
+	var runtime := GameRuntimeScene.instantiate() as GameRuntime
+	tree.root.add_child(runtime)
 	await tree.process_frame
 	await tree.physics_frame
 	for _frame in range(10):
 		await tree.physics_frame
+	var simulation := runtime.session_content as SettlementGame
+	assert(simulation != null, "Settlement module must attach its session projection")
+	simulation.set_meta("test_runtime", runtime)
 	if not is_instance_valid(simulation.entrance_stone):
 		var entrance := Node3D.new()
 		entrance.position = cell_center(simulation, Vector2i(-22, 1))
@@ -33,17 +38,24 @@ static func setup_simulation(tree: SceneTree) -> Node:
 	return simulation
 
 
-static func _default_launch_config() -> GameLaunchConfig:
-	var config := GameLaunchConfig.for_tent_era()
-	config.map_document = MapDocumentService.new().load_map(config.map_ref)
-	config.apply_map_start()
-	return config
+static func _default_map() -> MapDocument:
+	var definition := GameModuleRegistry.resolve_definition(&"core:settlement")
+	return MapDocumentService.new().load_map(definition.default_map) if definition != null else null
 
 
 static func cleanup_simulation(tree: SceneTree, simulation: Node) -> void:
-	if is_instance_valid(simulation):
-		tree.root.remove_child(simulation)
-		simulation.free()
+	if not is_instance_valid(simulation):
+		return
+	var runtime: Node = simulation.get_meta("test_runtime", null)
+	if is_instance_valid(runtime):
+		if runtime.get_parent() != null:
+			runtime.get_parent().remove_child(runtime)
+		runtime.free()
+	var launch_manager := tree.root.get_node_or_null("GameLaunchManager")
+	if launch_manager != null:
+		launch_manager.active_session = null
+	else:
+		push_error("SimulationTestHelper: simulation has no host runtime")
 
 
 static func appoint_test_official(simulation: Node, citizen: Citizen) -> void:

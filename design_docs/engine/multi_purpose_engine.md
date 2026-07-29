@@ -232,8 +232,8 @@ built-in модулей и `SettlementGameModule`. Главное меню за�
 один путь; definitions индексируются из папки `games/` content pack.
 `core.world` создаёт единый `WorldSession` с картой, `WorldSetup` и
 terrain/water navigation, который используют модули игры. Существующий
-`SettlementGame` пока остаётся внутренним адаптером модуля, а старые scene tests
-могут создавать его напрямую.
+`SettlementGame` остаётся внутренним адаптером модуля; даже scene tests запускают
+его только через `GameRuntime`.
 
 Секционные сохранения уже пишет `SessionSaveCoordinator`: заголовки game/map
 принадлежат host, а Settlement и Showcase добавляют только свои module sections.

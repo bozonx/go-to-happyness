@@ -4,13 +4,7 @@ const SimHelper = preload("res://tests/helpers/simulation_test_helper.gd")
 
 
 func _init() -> void:
-	var scene := load("res://game/bootstrap/settlement_game.tscn") as PackedScene
-	var simulation := scene.instantiate() as Node
-	root.add_child(simulation)
-	await process_frame
-	await physics_frame
-	for _f in range(20):
-		await physics_frame
+	var simulation := await SimHelper.setup_simulation(self)
 
 	var c: Citizen = simulation.citizens[2]
 	simulation.selected_builder = c
@@ -31,4 +25,5 @@ func _init() -> void:
 		var role: String = button.get_meta("role", "")
 		print("role='", role, "' visible=", button.visible, " disabled=", button.disabled, " connected=", button.pressed.get_connections().size(), " tooltip='", button.tooltip_text, "'")
 
+	SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

@@ -40,9 +40,39 @@ func run(runtime: GameRuntime, session: GameSessionConfig) -> bool:
 			push_error("[launch] invalid %s parameters: %s" % [module.module_id(), "; ".join(errors)])
 			return false
 	runtime.active_session = session
-	for module: GameModule in modules:
-		if not module.start(runtime, session):
-			push_error("[launch] failed to start module: %s" % module.module_id())
+	var pending := modules.duplicate()
+	var started: Array[GameModule] = []
+	while not pending.is_empty():
+		var started_this_pass := false
+		for index in range(pending.size()):
+			var module: GameModule = pending[index]
+			if not _dependencies_started(module, started):
+				continue
+			runtime.register_module(module)
+			started.append(module)
+			pending.remove_at(index)
+			started_this_pass = true
+			if not module.start(runtime, session):
+				push_error("[launch] failed to start module: %s" % module.module_id())
+				_rollback(runtime, started)
+				return false
+			break
+		if not started_this_pass:
+			push_error("[launch] module dependency cycle")
+			_rollback(runtime, started)
 			return false
-		runtime.register_module(module)
 	return true
+
+
+func _dependencies_started(module: GameModule, started: Array[GameModule]) -> bool:
+	for dependency: StringName in module.required_modules():
+		if not started.any(func(candidate: GameModule) -> bool: return candidate.module_id() == dependency):
+			return false
+	return true
+
+
+func _rollback(runtime: GameRuntime, started: Array[GameModule]) -> void:
+	started.reverse()
+	for module: GameModule in started:
+		module.stop(runtime)
+	runtime.abort_session()

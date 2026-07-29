@@ -74,14 +74,7 @@ func _init() -> void:
 ## but substitutes the document, so the bootstrap's zone phase has real zones to
 ## adopt instead of an empty layer.
 func _setup_with_zone_map(tree: SceneTree) -> Node:
-	var simulation := SimHelper.create_simulation()
-	simulation.launch_config.map_document = _zone_map()
-	tree.root.add_child(simulation)
-	await tree.process_frame
-	await tree.physics_frame
-	for _frame in range(10):
-		await tree.physics_frame
-	return simulation
+	return await SimHelper.setup_simulation(tree, _zone_map())
 
 
 func _zone_map() -> MapDocument:
@@ -113,6 +106,11 @@ func _zone_map() -> MapDocument:
 		companion.function = MapSpawnService.COMPANION_START
 		companion.pos = Vector3(7.5 + float(index), 0.0, 6.5)
 		document.zones.anchors.append(companion)
+	var backpack := MapEntityRecord.new()
+	backpack.id = &"starter_backpack"
+	backpack.archetype_id = &"core:starter_backpack"
+	backpack.position = Vector3(6.5, 0.0, 7.5)
+	document.entities.entities.append(backpack)
 
 	# Two waypoints inside the gate_yard region, adjacent and walkable.
 	var post_a := ZoneAnchorRecord.new()

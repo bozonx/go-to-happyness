@@ -426,21 +426,14 @@ var workplace_controller: SettlementWorkplaceController
 var simulation_tick_controller: SettlementSimulationTickController
 var logistics_controller: SettlementLogisticsController
 var world_navigation_controller: SettlementWorldNavigationController
-## Direct editor/scene runs retain the historic automatic start. GameRuntime
-## turns this off before adding the scene and lets SettlementGameModule start it.
-var start_on_ready := true
 
 
-func _ready() -> void:
-	if start_on_ready:
-		start_settlement_session(_active_legacy_launch_config())
-
-
-## Transitional public module boundary. The generic GameRuntime invokes this
-## through SettlementGameModule; direct scene tests still use _ready above.
-func start_settlement_session(active_config: GameLaunchConfig) -> void:
+## Module-owned session boundary. SettlementGame is not an independently
+## launchable scene: the host runtime resolves a definition and map first.
+func start_session(active_config: GameLaunchConfig) -> void:
 	if active_config == null:
-		active_config = GameLaunchConfig.for_tent_era()
+		push_error("[launch] SettlementGame requires module launch configuration")
+		return
 	launch_config = active_config
 	if launch_config.map_document == null:
 		push_error("[launch] SettlementGame requires a resolved map document")
@@ -457,12 +450,6 @@ func start_settlement_session(active_config: GameLaunchConfig) -> void:
 		return
 	board_cells = launch_config.board_cells()
 	SettlementBootstrapper.new().run(self)
-
-
-func _active_legacy_launch_config() -> GameLaunchConfig:
-	return launch_config if launch_config != null else GameLaunchConfig.for_tent_era()
-
-
 func next_registration_ticket() -> int:
 	return citizen_registration_service.next_registration_ticket() if citizen_registration_service != null else 0
 

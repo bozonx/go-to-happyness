@@ -4,13 +4,7 @@ const SimHelper = preload("res://tests/helpers/simulation_test_helper.gd")
 
 
 func _init() -> void:
-	var scene := load("res://game/bootstrap/settlement_game.tscn") as PackedScene
-	var simulation := scene.instantiate() as Node
-	root.add_child(simulation)
-	await process_frame
-	await physics_frame
-	for _f in range(20):
-		await physics_frame
+	var simulation := await SimHelper.setup_simulation(self)
 
 	print("citizens=", simulation.citizens.size(), " ai=", simulation.citizen_ai)
 	print("brain_count=", simulation.citizen_ai.brain_count(), " goal_count=", simulation.citizen_ai.goal_count())
@@ -28,4 +22,5 @@ func _init() -> void:
 		var has_order: bool = simulation.citizen_ai.has_current_order(c.ai_id)
 		print("t", step, " state=", c.state, " active_role=", c.active_role, " has_order=", has_order, " nav_failed=", c.navigation_failed, " pos=", c.global_position)
 
+	SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

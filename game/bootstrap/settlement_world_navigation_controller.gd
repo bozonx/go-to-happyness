@@ -27,13 +27,16 @@ func _init(p_navigation_runtime: WorldNavigationRuntimePort, p_presentation_runt
 func create_world() -> void:
 	# CameraController is a declared child of settlement_game.tscn; only the world
 	# itself is built here, because its construction needs the launched map.
+	if world_session == null:
+		push_error("[launch] Settlement world requires core.world session")
+		return
 	var world_setup: WorldSetup = world_session.build(
 		presentation_runtime.territory_getter.call().get_parent(),
 		presentation_runtime.camera_getter.call(),
 		presentation_runtime.cell_size,
 		presentation_runtime.board_cells,
 		presentation_runtime.trail_field_getter.call(),
-	) if world_session != null else _build_legacy_world()
+	)
 	if world_setup == null:
 		return
 	presentation_runtime.world_setup_setter.call(world_setup)
@@ -42,20 +45,6 @@ func create_world() -> void:
 	publish_terrain_navigation()
 	refresh_navigation_grid()
 	presentation_runtime.move_selection.call(Vector3.ZERO)
-
-
-func _build_legacy_world() -> WorldSetup:
-	var session := WorldSession.new(presentation_runtime.map_document_getter.call())
-	var territory: TerritoryBase = presentation_runtime.territory_getter.call()
-	return session.build(
-		territory.get_parent() if territory != null else null,
-		presentation_runtime.camera_getter.call(),
-		presentation_runtime.cell_size,
-		presentation_runtime.board_cells,
-		presentation_runtime.trail_field_getter.call(),
-	)
-
-
 func add_landscape_object(node: Node) -> void:
 	var territory: TerritoryBase = presentation_runtime.territory_getter.call()
 	if territory != null:

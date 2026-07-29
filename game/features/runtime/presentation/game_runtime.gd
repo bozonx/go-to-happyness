@@ -40,6 +40,15 @@ func register_module(module: GameModule) -> void:
 		active_modules[module.module_id()] = module
 
 
+## Disposes a partially composed session after a module refuses to start.
+func abort_session() -> void:
+	active_modules.clear()
+	active_session = null
+	if session_content != null:
+		session_content.queue_free()
+		session_content = null
+
+
 func _exit_tree() -> void:
 	var module_ids: Array = active_modules.keys()
 	module_ids.reverse()

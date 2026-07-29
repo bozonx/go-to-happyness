@@ -24,7 +24,7 @@ static func run_all() -> void:
 	_test_undo_and_redo()
 	_test_freeze_and_thaw()
 	_test_level_tool_stamps_an_absolute_level()
-	_test_erase_tool_clears_the_cells_under_the_brush()
+	_test_freeze_and_thaw_brushes_are_cell_local()
 	print("    [PASS] Water Brush Tests")
 
 
@@ -178,7 +178,7 @@ static func _test_cycle_tool_rotates_the_three_tools() -> void:
 	brush.cycle_tool()
 	assert(brush.tool == WaterBrushController.TOOL_LEVEL)
 	brush.cycle_tool()
-	assert(brush.tool == WaterBrushController.TOOL_ERASE)
+	assert(brush.tool == WaterBrushController.TOOL_FREEZE)
 	brush.cycle_tool()
 	assert(brush.tool == WaterBrushController.TOOL_FLOOD)
 
@@ -303,14 +303,12 @@ static func _test_level_tool_stamps_an_absolute_level() -> void:
 	assert(brush.level == terrain.height_of(Vector2i.ZERO) + 1)
 
 
-## Erase drains the whole body under the cursor, not just the cells under the
-## brush. Water is authored per body, so a partial erase would leave a body with
-## no surface — a state the author cannot inspect or continue editing.
-static func _test_erase_tool_clears_the_cells_under_the_brush() -> void:
+## Ice is the only local water brush: it authors passability, not a separate
+## water surface. Thaw reverses only the cells the author paints.
+static func _test_freeze_and_thaw_brushes_are_cell_local() -> void:
 	var world := _make()
 	var terrain: TerrainGrid = world["terrain"]
 	var water: WaterGrid = world["water"]
-	var service: WaterService = world["service"]
 	var brush: WaterBrushController = world["brush"]
 	for z in range(-2, 3):
 		for x in range(-2, 3):
@@ -319,16 +317,11 @@ static func _test_erase_tool_clears_the_cells_under_the_brush() -> void:
 	brush.level = 0
 	_hover(brush, Vector2i.ZERO)
 	brush.apply()
-	var wet_before := water.wet_cell_count()
-	assert(wet_before > 1)
-
-	brush.tool = WaterBrushController.TOOL_ERASE
+	brush.tool = WaterBrushController.TOOL_FREEZE
 	brush.apply()
-	assert(not water.has_water(Vector2i.ZERO))
-	assert(water.wet_cell_count() == 0)
-	# Erasing drains the body entirely: the body is gone from the registry.
-	assert(not water.has_body(body.id))
-
-	assert(service.undo())
-	assert(water.wet_cell_count() == wet_before)
+	assert(water.is_frozen(Vector2i.ZERO))
+	assert(not water.is_frozen(Vector2i(2, 2)))
 	assert(water.has_body(body.id))
+	brush.tool = WaterBrushController.TOOL_THAW
+	brush.apply()
+	assert(not water.is_frozen(Vector2i.ZERO))

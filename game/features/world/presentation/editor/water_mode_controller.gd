@@ -21,7 +21,6 @@ const OPTION_LEVEL_UP := &"level_up"
 const OPTION_LEVEL_DOWN := &"level_down"
 const OPTION_TOOL_PREFIX := "tool_"
 const OPTION_ICE := &"ice"
-const OPTION_BODY_ICE := &"body_ice"
 const OPTION_FLOW_DIR := &"flow_dir"
 const OPTION_FLOW_STRENGTH := &"flow_strength"
 
@@ -119,8 +118,9 @@ func _handle_key(event: InputEventKey) -> bool:
 		KEY_G:
 			brush.pick_level_from_ground()
 		KEY_F:
-			context.set_edit_label("лёд")
-			brush.toggle_body_ice()
+			brush.tool = WaterBrushController.TOOL_FREEZE
+		KEY_R:
+			brush.tool = WaterBrushController.TOOL_THAW
 		KEY_I:
 			brush.cycle_ice_thickness()
 		KEY_V:
@@ -140,7 +140,7 @@ func _stroke() -> void:
 	context.set_edit_label(_edit_label())
 	var brush := context.water_brush
 	brush.apply()
-	if brush.tool != WaterBrushController.TOOL_ERASE and _flow_strength > 0 and _selected_body_is_river():
+	if brush.tool == WaterBrushController.TOOL_FLOOD and _flow_strength > 0 and _selected_body_is_river():
 		context.water_service.set_flow(
 			brush.brush_cells(brush.hovered_cell),
 			brush.body_id,
@@ -153,7 +153,8 @@ func _edit_label() -> String:
 	match context.water_brush.tool:
 		WaterBrushController.TOOL_FLOOD: return "залив низины"
 		WaterBrushController.TOOL_LEVEL: return "уровень воды"
-		WaterBrushController.TOOL_ERASE: return "осушение"
+		WaterBrushController.TOOL_FREEZE: return "заморозка"
+		WaterBrushController.TOOL_THAW: return "разморозка"
 	return "вода"
 
 
@@ -221,8 +222,8 @@ func tool_options() -> Array:
 		options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (brush.brush_size - 1), &"brush", false, true))
 		options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", &"brush"))
 		options.append(ToolOption.of(OPTION_BRUSH_UP, "+", &"brush"))
-	options.append(ToolOption.of(OPTION_ICE, "Толщина льда: %d" % brush.ice_thickness))
-	options.append(ToolOption.of(OPTION_BODY_ICE, "Заморозить водоём"))
+	if brush.tool == WaterBrushController.TOOL_FREEZE:
+		options.append(ToolOption.of(OPTION_ICE, "Толщина льда: %d" % brush.ice_thickness))
 	if _selected_body_is_river():
 		options.append(ToolOption.of(OPTION_FLOW_DIR, "Течение: %s" % TerrainBrushController.direction_name(_flow_direction)))
 		options.append(ToolOption.of(OPTION_FLOW_STRENGTH, "Сила течения: %d" % _flow_strength))
@@ -247,9 +248,6 @@ func activate_option(option_id: StringName) -> void:
 			brush.adjust_level(-1)
 		OPTION_ICE:
 			brush.cycle_ice_thickness()
-		OPTION_BODY_ICE:
-			context.set_edit_label("лёд")
-			brush.toggle_body_ice()
 		OPTION_FLOW_DIR:
 			_cycle_flow_direction()
 		OPTION_FLOW_STRENGTH:
@@ -282,14 +280,16 @@ func inspector_lines() -> Array[String]:
 	lines.append("")
 	if _selected_body_is_river():
 		lines.append("Течение Flood: %s, сила %d" % [TerrainBrushController.direction_name(_flow_direction), _flow_strength])
-	lines.append("Толщина льда: %d (пешеход %d, тележка %d)" % [
-		brush.ice_thickness,
-		TravelerProfile.MIN_ICE_THICKNESS_PEDESTRIAN,
-		TravelerProfile.MIN_ICE_THICKNESS_CART,
-	])
+	if brush.tool == WaterBrushController.TOOL_FREEZE:
+		lines.append("Толщина льда: %d (пешеход %d, тележка %d)" % [
+			brush.ice_thickness,
+			TravelerProfile.MIN_ICE_THICKNESS_PEDESTRIAN,
+			TravelerProfile.MIN_ICE_THICKNESS_CART,
+		])
 	lines.append("")
-	lines.append("ЛКМ по водоёму с другим типом — сменить тип всего водоёма")
-	lines.append("ПКМ — осушить весь водоём (краевой нельзя — только поднятием земли)")
+	lines.append("Flood: ЛКМ по водоёму другого типа сменит тип всего водоёма")
+	lines.append("Уровень меняет весь выбранный водоём; Flood задаёт его контур")
+	lines.append("Заморозка и разморозка рисуются кистью; ПКМ — осушить весь водоём")
 	return lines
 
 

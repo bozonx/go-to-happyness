@@ -159,7 +159,7 @@ func flood(seed: Vector2i, body_id: int, level: int) -> bool:
 	var cells := grid.flood_cells(terrain, seed, level, body_id)
 	if cells.is_empty():
 		return _reject(REASON_NOTHING_TO_DO)
-	return paint(cells, body_id, level)
+	return _resurface_body(body_id, cells, level)
 
 
 ## Floods every low area connected to the board edge.  This is the authored
@@ -206,36 +206,17 @@ func _queue_ocean_cell(cell: Vector2i, level: int, body_id: int, seen: Dictionar
 	queue.append(cell)
 
 
-func erase(cells: Array[Vector2i]) -> bool:
-	if grid == null:
-		return _reject(REASON_NO_GRID)
-	var delta := WaterDelta.new()
-	for cell: Vector2i in CellUtils.sorted_unique(cells):
-		if not grid.is_inside(cell) or not grid.has_water(cell):
-			continue
-		delta.record(cell, WaterDelta.state_of(grid, cell), WaterDelta.dry_state())
-	return _commit_or_reject(delta)
-
-
-## Raises or lowers the surface of the cells already painted, without changing
-## which body they belong to. Absolute, so it is idempotent under a drag that
-## crosses its own path — the rule every brush in this project follows.
-func set_level(cells: Array[Vector2i], level: int) -> bool:
+## Raises or lowers one whole water body.  A body cannot contain multiple water
+## levels; lowering also removes columns whose ground is now at or above the
+## surface.  Expanding a shoreline is explicitly Flood, from a chosen seed.
+func set_body_level(body_id: int, level: int) -> bool:
 	if grid == null:
 		return _reject(REASON_NO_GRID)
 	if level < WaterGrid.MIN_HEIGHT or level > WaterGrid.MAX_HEIGHT:
 		return _reject(REASON_NOTHING_TO_DO)
-	var delta := WaterDelta.new()
-	for cell: Vector2i in CellUtils.sorted_unique(cells):
-		if not grid.is_inside(cell) or not grid.has_water(cell):
-			continue
-		var old_state := WaterDelta.state_of(grid, cell)
-		var body_id: int = old_state[WaterDelta.STATE_BODY]
-		var new_state := WaterDelta.make_state(body_id, level, _kept_flags(old_state, body_id, level))
-		if old_state == new_state:
-			continue
-		delta.record(cell, old_state, new_state)
-	return _commit_or_reject(delta)
+	if not grid.has_body(body_id):
+		return _reject(REASON_NO_BODY)
+	return _resurface_body(body_id, cells_of_body(body_id), level)
 
 
 ## Freezes or thaws cells (§9.6). Geometry does not change at all — this only
@@ -411,6 +392,18 @@ func _commit_registry_edit(edit: WaterBodyEdit) -> bool:
 	registry_changed.emit(edit.cells)
 	edit_committed.emit(edit)
 	return true
+
+
+func _resurface_body(body_id: int, cells: Array[Vector2i], level: int) -> bool:
+	var body := grid.body(body_id)
+	if body == null:
+		return _reject(REASON_NO_BODY)
+	var edit := WaterBodyEdit.resurface(grid, terrain, body, cells, level)
+	# A new empty body may receive no cells when its seed was invalid; existing
+	# bodies may still need their metadata level updated.
+	if edit.is_empty() and body.surface_height == level:
+		return _reject(REASON_NOTHING_TO_DO)
+	return _commit_registry_edit(edit)
 
 
 func _reject(reason: StringName) -> bool:

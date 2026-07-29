@@ -26,8 +26,9 @@ extends BaseBrushController
 ## the body (`toggle_body_ice`), which is the granularity the mechanic has.
 const TOOL_FLOOD := &"flood"
 const TOOL_LEVEL := &"level"
-const TOOL_ERASE := &"erase"
-const TOOLS: Array[StringName] = [TOOL_FLOOD, TOOL_LEVEL, TOOL_ERASE]
+const TOOL_FREEZE := &"freeze"
+const TOOL_THAW := &"thaw"
+const TOOLS: Array[StringName] = [TOOL_FLOOD, TOOL_LEVEL, TOOL_FREEZE, TOOL_THAW]
 
 var tool: StringName = TOOL_FLOOD
 ## The body strokes go into. Zero until the author makes one — a stroke with no
@@ -110,14 +111,17 @@ func create_body(body_type: WaterBody.Type) -> WaterBody:
 func apply() -> void:
 	if not has_hover or _service == null:
 		return
-	_maybe_retype_hovered_body()
+	if tool == TOOL_FLOOD:
+		_maybe_retype_hovered_body()
 	match tool:
 		TOOL_FLOOD:
 			_flood()
 		TOOL_LEVEL:
 			_set_level()
-		TOOL_ERASE:
-			_erase()
+		TOOL_FREEZE:
+			_set_frozen(true)
+		TOOL_THAW:
+			_set_frozen(false)
 
 
 func _flood() -> void:
@@ -146,8 +150,11 @@ func _flood() -> void:
 ## at a lower level reaches fewer cells and leaves the rest standing at the old
 ## one, so a lake could be raised and never lowered.
 func _set_level() -> void:
-	if _service.set_level(brush_cells(hovered_cell), level):
-		last_message = "level %d: %d cells" % [level, _service.last_delta_size()]
+	if body_id == WaterBody.NO_BODY:
+		last_message = "select a water body first"
+		return
+	if _service.set_body_level(body_id, level):
+		last_message = "body level %d: %d cells" % [level, _service.last_delta_size()]
 		return
 	last_message = "level unchanged (%s)" % _service.last_rejection()
 
@@ -156,8 +163,11 @@ func _set_level() -> void:
 ## authored per body — a lake is one entity with one level — so erasing a cell at a
 ## time would leave a half-drained body with no surface, which is not a state the
 ## author can meaningfully inspect or continue editing.
-func _erase() -> void:
-	_drain_body_at_hover()
+func _set_frozen(frozen: bool) -> void:
+	if _service.set_frozen(brush_cells(hovered_cell), frozen, ice_thickness):
+		last_message = "%s: %d cells" % ["froze" if frozen else "thawed", _service.last_delta_size()]
+		return
+	last_message = "ice unchanged (%s)" % _service.last_rejection()
 
 
 ## Right button is the inverse or the complement of the left one: drain the whole

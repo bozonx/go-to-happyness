@@ -126,8 +126,10 @@ func _on_game_selected(index: int) -> void:
 
 func _select_game_option() -> void:
 	var definition := GameModuleRegistry.resolve_definition(selected_game)
-	var has_era_config := definition != null and definition.start_parameters.has("era")
-	tent_era_btn.get_parent().get_parent().visible = has_era_config
+	# Launch options are module-owned. Phase A has no generic parameter editor,
+	# so the host starts the definition exactly as authored instead of interpreting
+	# settlement fields such as `era` or `biome`.
+	tent_era_btn.get_parent().get_parent().visible = false
 	if definition != null and not definition.default_map.is_empty():
 		_select_default_map(definition.default_map)
 	start_game_btn.text = "▶ Запустить игру"
@@ -197,30 +199,9 @@ func _landscape_summary() -> String:
 func _on_start_game_pressed() -> void:
 	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
 	if launch_mgr != null and launch_mgr.has_method("launch_game_definition"):
-		var parameters := _build_module_parameters()
-		launch_mgr.call("launch_game_definition", selected_game, selected_map, parameters)
+		launch_mgr.call("launch_game_definition", selected_game, selected_map)
 	else:
 		get_tree().change_scene_to_file("res://game/bootstrap/game_runtime.tscn")
-
-
-## Builds module parameters from the definition's start_parameters, overriding
-## era/biome from the UI when the definition declares them. Parameters are keyed
-## by the first non-core module, which is the gameplay module that consumes them.
-func _build_module_parameters() -> Dictionary:
-	var definition := GameModuleRegistry.resolve_definition(selected_game)
-	if definition == null or definition.start_parameters.is_empty():
-		return {}
-	var base := definition.start_parameters.duplicate(true)
-	if base.has("era"):
-		base["era"] = String(selected_era)
-	if base.has("biome"):
-		base["biome"] = String(selected_biome)
-	var params := {}
-	for module_id: StringName in definition.module_ids:
-		if module_id == &"core.world":
-			continue
-		params[module_id] = base.duplicate(true)
-	return params
 
 
 func _on_building_editor_pressed() -> void:
