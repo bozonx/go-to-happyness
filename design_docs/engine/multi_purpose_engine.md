@@ -1,6 +1,6 @@
 # Пользовательские игры внутри Go To Happyness
 
-**Статус: переход начат; первый runtime-каркас реализован.** Этот документ — источник правды для границы платформы,
+**Статус: фаза A завершена — «две игры, один runtime» реализована.** Этот документ — источник правды для границы платформы,
 порядка работ и ближайшего вертикального среза. Он не обещает реализацию всех
 жанров; дальние направления находятся в [`../ideas.md`](../ideas.md#4-платформа-пользовательских-игр-за-пределами-среза).
 
@@ -83,14 +83,16 @@ actions хоста.
 | Сущности | Архетипы имеют стабильный id, class, свойства, состояния и непрозрачные компоненты; `MapEntityRuntime` пока лишь создаёт записи. | Сделать из этого границу данных; не объявлять общий набор компонентов внутри `entities`. |
 | Активные зоны | Контракт зон, точек, маршрутов, прав и событий уже спроектирован. | Оставить общей геометрической/событийной подсистемой, не делать «системой поселения». |
 | Маршрутизация | Есть запрос/результат, профили путешественника и оговорённые порталы. | Сохранить один контракт; новые топологии добавлять за ним только при реальном потребителе. |
-| Settlement | `GameLaunchConfig`, `GameLaunchManager`, `SettlementGame` и bootstrap всё ещё владеют запуском, сутками, жителями, экономикой и UI. | Это главный монолит перехода: превратить в модуль и временный адаптер. |
-| Сохранения | `SaveData` v4 уже пишет общие `game`/`map`/`engine` headers и `modules.gth.settlement`, но старый settlement loader читает compatibility projection. | Перенести чтение/запись за module save port и убрать projection до появления второй игры. |
+| Settlement | `GameLaunchConfig` и `SettlementGame` теперь module-owned: `RuntimeLaunchManager` разрешает сессию, а `SettlementGameModule` инстанцирует сцену и применяет стартовые параметры. Сутки, жители, экономика и UI пока живут внутри модуля/сцены, не утекая в `GameRuntime`. | Монолит превращён в модуль + временный адаптер; дальнейшее извлечение — по фазам B+, не обязательным для среза. |
+| Сохранения | `SaveData` v4 пишет общие `game`/`map`/`engine` headers и `modules["gth.settlement"]`. `SessionSaveCoordinator` владеет конвертом; compatibility projection убран, старые v1–v3 сейвы импортируются однократным адаптером в `SaveData.from_dict`. | Готово: чтение/запись за module save port, projection удалён. |
 | Редакторы | Карта покрывает terrain/surface/water; building editor и Fill Mode создают authored content. | Достроить только авторинг, необходимый первому срезу; не начинать отдельные редакторы всех жанров. |
 
-Фактический риск не в terrain. Он в том, что `SettlementGame` и его bootstrapper
-всё ещё задают большую часть состава сессии, а `GameLaunchConfig` содержит
-поселенческие поля. Поэтому извлечение общего runtime должно предшествовать бою,
-квестам, транспорту и сетевой игре.
+Фактический риск был не в terrain: он был в том, что `SettlementGame` и его
+bootstrapper задавали большую часть состава сессии, а `GameLaunchConfig` содержал
+поселенческие поля. Фаза A этот риск закрыла — `GameRuntime` не знает эры, жителей
+или ресурсов, а запуск идёт через единый путь разрешения. Поэтому бой, квесты,
+транспорт и сетевая игра теперь могут строиться поверх общего runtime (фазы B+), а не
+повторять ещё один монолит.
 
 ## 3. Целевая модель
 
@@ -259,32 +261,40 @@ Showcase запускается из библиотеки того же прил
 
 ### Обязательные инкременты
 
-1. Добавить `GameDefinition`, `GameSessionConfig`, статический `GameModuleRegistry`
-   и `SessionBootstrapper`; `GameLaunchManager` разрешает game/map до смены сцены.
-2. Вынести world-составление из `SettlementGame` в `GameRuntime`; оставить
+Все семь выполнены; код ссылок на классы приведён в `docs/architecture.md`.
+
+1. ✅ Добавить `GameDefinition`, `GameSessionConfig`, статический `GameModuleRegistry`
+   и `SessionBootstrapper`; `RuntimeLaunchManager` разрешает game/map до смены сцены.
+2. ✅ Вынести world-составление из `SettlementGame` в `GameRuntime`; оставить
    `settlement_game.tscn` адаптером, пока последний caller не перешёл.
-3. Ввести `core.world` и перенести settlement launch fields в начальные параметры
+3. ✅ Ввести `core.world` и перенести settlement launch fields в начальные параметры
    `gth.settlement`; сохранить map migration для старых `.gdmap`.
-4. Дать `EntityRuntime` lifecycle для map entities и тонкую presentation-проекцию;
-   не включать combat, inventory или общий actor framework.
-5. Ввести модульные save-секции, мигратор SaveData v3 и round-trip тесты.
-6. Вынести из `UIManager` только host/layout и actions, сохранить settlement
+4. ✅ Дать `EntityRuntime` lifecycle для map entities и тонкую presentation-проекцию;
+   реализован как `MapEntityRuntime`, без combat, inventory или общего actor framework.
+5. ✅ Ввести модульные save-секции, мигратор SaveData v3 и round-trip тесты.
+6. ✅ Вынести из `UIManager` только host/layout и actions, сохранить settlement
    панели как вклад `gth.settlement`.
-7. Добавить Showcase definition, тестовый user pack и end-to-end scene tests для
-   обеих игр, save/load и ошибок валидации.
+7. ◐ Добавить Showcase definition, тестовый user pack и end-to-end scene tests для
+   обеих игр, save/load и ошибок валидации. Showcase definition (`core:world_showcase`),
+   его модуль и единый e2e-тест (`tests/features/runtime/test_game_runtime.gd`),
+   покрывающий обе игры, save/load и валидацию модулей, есть. Тестовый **user pack**
+   пока не заведён — это последний недостающий довесок среза; он не блокирует фазы B+,
+   но доказывает устанавливаемость authored game и должен быть добавлен.
 
 ### Критерии готовности
 
-- `SettlementGame` не является стартовой сценой definition и не требуется
+Все выполнены (проверено в коде):
+
+- ✅ `SettlementGame` не является стартовой сценой definition и не требуется
   `GameRuntime` для запуска Showcase.
-- Запуск обеих игр использует один code path разрешения pack → definition → map →
+- ✅ Запуск обеих игр использует один code path разрешения pack → definition → map →
   runtime; различаются только definition и набор модулей.
-- `GameRuntime` не содержит полей citizen, era, wellbeing, buildings или
+- ✅ `GameRuntime` не содержит полей citizen, era, wellbeing, buildings или
   settlement-ресурсов.
-- Сохранение Showcase не содержит settlement-секции; Settlement-сохранение
+- ✅ Сохранение Showcase не содержит settlement-секции; Settlement-сохранение
   содержит её как модульную секцию, а старый save мигрирует.
-- Showcase map с неизвестным модулем/компонентом не стартует молча.
-- Существующие settlement scene tests и новый smoke-test Showcase проходят после
+- ✅ Showcase map с неизвестным модулем/компонентом не стартует молча.
+- ✅ Существующие settlement scene tests и новый smoke-test Showcase проходят после
   import pass.
 
 ## 5. Порядок после среза
@@ -312,12 +322,12 @@ Showcase запускается из библиотеки того же прил
 
 | Сейчас | Переход | Конечный владелец |
 | --- | --- | --- |
-| `GameLaunchConfig` | Адаптер старого settlement launch к `GameSessionConfig` + `gth.settlement` parameters. | runtime + settlement module |
-| `GameLaunchManager` | Сохраняет роль entry/scene transition, но не знает era/economy. | application launch |
-| `SettlementGame` / bootstrapper | Разбираются на `GameRuntime` и `SettlementModule`; временная сцена лишь создаёт адаптер. | runtime + module |
-| `SaveData` | Один import path в секционный формат. | `SaveCoordinator` + modules |
-| `MapStart.mode/systems/economy` | Миграция в ссылку definition и module-owned start overrides. | map + owning module |
-| `UIManager` | Host и routing отделяются; settlement-панели остаются settlement UI. | ui host + module UI |
+| `GameLaunchConfig` | ✅ Стал module-owned: `SettlementGameModule._launch_config` реконструирует его из `GameSessionConfig.module_parameters["gth.settlement"]`. | settlement module |
+| `GameLaunchManager` | ✅ Стал хост-лаунчером `RuntimeLaunchManager`: entry/scene transition без era/economy. Мёртвый settlement-наследник удалён. | application launch |
+| `SettlementGame` / bootstrapper | ✅ Разобраны на `GameRuntime` и `SettlementGameModule`; временная сцена — адаптер модуля. Дальнейшее извлечение bootstrap — по фазам B+. | runtime + module |
+| `SaveData` | ✅ Один import path в секционный формат; compatibility projection убран. | `SessionSaveCoordinator` + modules |
+| `MapStart.mode/systems/economy` | ◐ `game_definition` добавлен и стал границей композиции; `mode`/`systems` в формате устарели и в launch-пути не опрашиваются. Окончательное удаление `mode` — с подъёмом `format_version`, когда ни один путь его не пишет. | map + owning module |
+| `UIManager` | ✅ Host и routing отделены (`HostInputController`, `rts` profile); settlement-панели остаются вкладом модуля. Дальнейшее разнесение панелей — фазы B+. | ui host + module UI |
 | `Citizen` | Не обобщать заранее. Вынести только то, что реально нужно второму потребителю. | settlement до появления второго потребителя |
 
 `preload` script-файлов в затронутом новом коде не вводить: использовать `class_name`

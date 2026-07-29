@@ -44,7 +44,8 @@
 Цель — дать творческому игроку сделать на базе движка не только карту для управления
 поселением, но и сценарий с героем или отрядом: испытание, зачистку, оборону, вплоть до
 шутерной арены. Поэтому редактор не знает про «поселение» как единственный режим: он
-готовит мир и объявляет, какие игровые системы в этом мире включены.
+готовит мир, а состав сессии — модули, ввод и время — выбирает установленная game
+definition (`start.game_definition`, см. §7.1 и [multi_purpose_engine.md](multi_purpose_engine.md)).
 
 Скриптовый язык на этом этапе **не вводится**. Вместо него — декларативная таблица
 правил поверх существующей feature `events` (§10). Формат заложен так, чтобы скрипт позже
@@ -193,7 +194,7 @@
 | Идентичность | `id`, `name`, `author` |
 | Классификация | `map_kind`, `biomes[]`, `tags[]`, `players` |
 | Мир | `border.kind`, `border.level` |
-| Старт | `start.era`, `start.style`, `start.time_of_day`, `start.day_of_year`, `start.weather_preset`, `start.mode.id` |
+| Старт | `start.era`, `start.style`, `start.time_of_day`, `start.day_of_year`, `start.weather_preset`, `start.game_definition` |
 
 Размер доски там **не редактируется** и показан только для чтения: он выбирается в
 диалоге создания и не меняется (§6.2, §17.2).
@@ -370,6 +371,7 @@ player: user://content/local/maps/        → ключ user:<id>
     "latitude": 54.0,
     "time_of_day": 480,
     "weather_preset": "clear",
+    "game_definition": "core:settlement",
     "mode": {
       "id": "settlement",
       "systems": {
@@ -420,6 +422,11 @@ player: user://content/local/maps/        → ключ user:<id>
 
 `biomes[]`, `tags[]` и `start.*` уже в модели, но задать их нечем: инспектора карты в
 редакторе нет. Это и есть содержание фазы 1a.
+
+`start.game_definition` (`MapStart`) — единственная связь карты с game definition:
+runtime key установленной игры, по умолчанию `core:world_showcase` (карта остаётся
+тестируемой без settlement-данных). `mode`/`systems` в `start` сохранены как устаревшая
+форма (§7.1): launch-путь их больше не опрашивает, и новая карта их не пишет.
 
 **Версии.** Актуальная реализованная версия — 2: `border.level` стал целыми шагами Δh, а записи реестра
 `water` потеряли рыбные поля. Единственная существующая карта `green_valley` записана в
@@ -666,7 +673,7 @@ Merge, §8), объекты и декор, растительность и ре�
 | `time_of_day` | минута суток на старте (`SimulationClock.minutes`, сейчас дефолт 480 = 8:00) |
 | `weather_preset` | стартовая погода в двухосевой модели (`cloud_cover` + `storm_influence`) |
 | `game_definition` | runtime key установленной игры, которая интерпретирует карту; новые карты начинают с `core:world_showcase` |
-| `mode` | режим игры и набор включённых систем |
+| `mode` | режим игры и набор включённых систем — устаревшая граница, см. §7.1 |
 | `economy` | стартовые деньги, население, ресурсы, снаряжение |
 
 **День года и широта — входные данные, а не готовая механика.** Сезонность и накопление
@@ -675,28 +682,29 @@ Merge, §8), объекты и декор, растительность и ре�
 `format_version` у всех уже созданных карт.
 
 `economy` перекрывает дефолты `GameLaunchConfig`; поля, которых нет в карте, берутся из
-конфига эры.
+конфига эры. Применяет эти overrides не карта и не хост, а модуль `gth.settlement` через
+`GameLaunchConfig.apply_map_start()`.
 
-### 7.1. Режим игры — то, ради чего это гибко
+### 7.1. Game definition заменил `mode`/`systems` как границу композиции
 
-```json
-"mode": {
-  "id": "settlement",
-  "systems": {
-    "settlement_sim": true,
-    "needs": true,
-    "economy": true,
-    "construction": true,
-    "hero_control": "third_person"
-  }
-}
-```
+`start.game_definition` — runtime key установленной игры (`core:settlement`,
+`core:world_showcase` или будущего `user:...`). Именно он решает, какие модули поднимаются
+на карте: definition перечисляет модули, `RuntimeLaunchManager` разрешает их через
+`GameModuleRegistry`, и сессия собирается из модулей, а не из набора флагов внутри карты.
+Подробно модель составления сессии описана в
+[multi_purpose_engine.md](multi_purpose_engine.md) §3.1–3.2.
 
-`id` — пресет (`settlement`, `hero`, `squad`, `sandbox`), `systems` — точная настройка
-поверх него. Шутерная карта — это `settlement_sim: false`, `construction: false`,
-`hero_control: "first_person"`; управление от первого лица уже спроектировано в
-`first_person_hero_control.md`. Ни одна игровая система не узнаёт про «режимы»: каждая
-получает свой флаг «включена ли я» при старте сессии.
+`start.mode` с его `systems` остаётся в формате как **устаревшая** форма той же настройки.
+Сегодня settlement-модуль `mode`/`systems` уже не опрашивает: `apply_map_start()` читает
+только `era`, `style` и `economy`. Поле сохранено ради round-trip карт прошлых версий и
+переживает миграцию безболезненно; новой карте достаточно `game_definition`. Убрать `mode`
+окончательно — это поднять `format_version`, и это делается, когда ни один авторский путь
+больше его не пишет (например, вместе с редактором game definition).
+
+Как пресеты карт соотносятся с definition, определено там же, в определении игры и её
+модулях: шутерная карта — это не `settlement_sim: false`, а другая definition с другим
+набором модулей. Управление от первого лица (`first_person_hero_control.md`) задаётся
+definition'ом через `input_profile`, а не полем `systems.hero_control` в карте.
 
 ---
 
@@ -873,11 +881,20 @@ Merge, §8), объекты и декор, растительность и ре�
 
 ### 14.1. Точка вклинивания
 
-Она одна: `GameLaunchConfig` получает поле `map_ref`, а `GameLaunchManager` при старте
-загружает пакет карты. Всё, что карта задаёт (эра, экономика, время, режим), перекрывает
-дефолты конфига.
+Карта входит в сессию через хост-рантайм, а не напрямую в settlement-сцены. Поле
+`start.game_definition` выбирает установленную игру, которая её интерпретирует;
+`RuntimeLaunchManager` разрешает pack → definition → map и переходит в одну общую
+сцену `game_runtime.tscn`. Какую игру запустить, решает definition, а не карта: карта
+приносит мир, definition — модули и их стартовые параметры.
 
-Следствия:
+Всё, что карта задаёт поверх (эра, стиль, экономика, время), — это overrides, которыми
+владеет отвечающий за них модуль: `gth.settlement` применяет `start.era`, `start.style`
+и `start.economy` через `GameLaunchConfig.apply_map_start()` поверх дефолтов эры.
+`mode`/`systems` больше не являются границей композиции сессии — эту роль принял game
+definition ([multi_purpose_engine.md](multi_purpose_engine.md) §3.1) — и в launch-пути
+settlement не опрашиваются.
+
+Следствия (уже выполнены):
 
 * `main_menu.gd` заменяет дропдаун «ландшафт» на выбор карты (встроенные + пользовательские
   с миниатюрами) и получает кнопку «🗺 Редактор территорий» рядом с «🏗 Редактор зданий».

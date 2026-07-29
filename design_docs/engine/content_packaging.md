@@ -196,6 +196,15 @@
 переходами. Карты несут placements, зоны и spawn-точки, а здания, сущности,
 предметы и ассеты переиспользуются по стабильным content id.
 
+`games/` уже работает: пак `core` содержит две игровые записи — `settlement.gdgame.json`
+(`core:settlement`) и `world_showcase.gdgame.json` (`core:world_showcase`). Каждая —
+это `GameDefinition` ([multi_purpose_engine.md](multi_purpose_engine.md) §3.1):
+перечисляет встроенные модули (`core.world` + модуль игры), карту по умолчанию, модель
+часов, input profile и layout. `RuntimeLaunchManager` индексирует их через `ContentIndex`
+и запускает одним путём; карта входит в сессию через `start.game_definition`, а не через
+собственный переключатель режимов. Пак без `games/` остаётся библиотекой контента и
+появляется в меню только если его игру выбрала другая definition как зависимость.
+
 Пак остаётся пакетом данных для установленного приложения Go To Happyness. В нём
 нет GDScript, отдельного executable или собственного runtime; публикация и
 установка через будущий встроенный каталог не создают новый формат поверх этого
@@ -213,6 +222,19 @@
   "requires": [ { "kind": "pack", "id": "core", "min_version": "1.0.0" } ]
 }
 ```
+
+Зависимости бывают двух сортов, и validated их по-разному:
+
+- **Между паками** — поле `requires` в `pack.json` (формат обмена, §11). Сегодня поле
+  пишется и round-trip'ится; real проверка версий и отказ запуска при недостающем паке
+  появятся вместе со встроенным каталогом (этап 2, шаг 24).
+- **Модульные** — `modules[]` внутри `.gdgame.json`. Это уже рабочая граница:
+  `GameModuleRegistry.validate_definition` отвергает определение с неизвестным модулем
+  или без `default_map` **до** смены сцены, а `SessionBootstrapper` проверяет
+  `required_modules()` каждого модуля перед стартом. Так карта с неизвестным модулем не
+  стартует молча. Contract модуля (id, API-версия, фаза запуска, capability, save-секция)
+  описан в [multi_purpose_engine.md](multi_purpose_engine.md) §3.2; первый срез реестра
+  статичен и собирается кодом, регистрация сторонних скриптовых модулей не входит.
 
 Подпапки внутри `buildings/` — свободные: `buildings/tent/`, `buildings/workshops/`,
 как удобно автору. Загрузчик обходит дерево **рекурсивно** и классифицирует файлы
@@ -380,8 +402,8 @@ Dev-режим — авторский инструмент для **станда
 - dev-режим доступен **только при запуске из Godot** (`OS.has_feature("editor")`):
   в экспортированной сборке `res://` — read-only `.pck`, и «сохранить» молча ничего
   не сделало бы;
-- флаг режима один на оба редактора и приходит из `GameLaunchManager`
-  (`editor_dev_mode`); из главного меню оба редактора запускаются в player-режиме;
+- флаг режима один на оба редактора и приходит из хост-лаунчера
+  (`RuntimeLaunchManager.editor_dev_mode`); из главного меню оба редактора запускаются в player-режиме;
 - в собранной игре редакторы всегда в player-режиме и пишут в `user://content/local/`;
 - переключатель режима в UI при отсутствии editor-фичи не показывается вовсе;
 - **проверка режима принадлежит слою записи, а не UI.** `BlueprintRepository` и
@@ -510,7 +532,7 @@ game/features/content/
 
 | # | Шаг | Файлы | Готово, когда |
 | --- | --- | --- | --- |
-| 9 | Dev-режим для редактора карт, симметрично чертежам (§9) | `map_document_service.gd`, `game_launch_manager.gd`, `map_editor.gd` | ✅ `MapDocumentService.new(dev)`, флаг `editor_dev_mode` + `editor_mode_forced` в лаунчере |
+| 9 | Dev-режим для редактора карт, симметрично чертежам (§9) | `map_document_service.gd`, `runtime_launch_manager.gd`, `map_editor.gd` | ✅ `MapDocumentService.new(dev)`, флаг `editor_dev_mode` + `editor_mode_forced` в лаунчере |
 | 10 | Сохранение по исходному пути + «Сохранить как» в обоих редакторах (§6.4) | оба репозитория, оба редактора | ✅ `current_path` в обоих редакторах, `save(bp, path)` и `save_map_to` |
 | 11 | Открытие из всех источников с пометкой и отвязкой read-only (§6.4) | `blueprint_repository.gd`, `map_document_service.gd`, оба редактора | ✅ список через `ContentIndex`, `can_write()` решает привязку |
 | 12 | Инспектор карты + `map_kind`, `players`; размер доски — только в диалоге создания | `map_meta.gd`, `map_editor_dialogs.tscn/.gd` | ✅ диалоги вынесены отдельной сценой |

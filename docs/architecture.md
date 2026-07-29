@@ -95,7 +95,10 @@ create generic `utils`, `helpers`, `managers` or catch-all `services` directorie
   scheduling.
 - `events`: data-driven random events — definitions, conditions, outcomes,
   delayed effects and the choice UI. See `design_docs/settlement/event_system.md`.
-- `save_load`: save file schema and the save/load service.
+- `save_load`: save file schema and the save/load service. `SessionSaveCoordinator`
+  owns the generic save envelope — `game`/`map`/`engine` headers plus one section per
+  participating module; per-game sections are still read through `SaveGameService` by
+  the owning module. See `design_docs/engine/multi_purpose_engine.md` §3.5.
 - `world`: terrain, water, maps, the map editor and world-only presentation.
 - `routing`: navigation grid, route selection and route results. UI belongs in a
   future `ui/presentation` feature.
@@ -187,15 +190,17 @@ dispatcher and AI order path.
 
 ### Game runtime migration
 
-The player launch path is now `game definition -> GameSessionConfig ->
-RuntimeLaunchManager -> GameRuntime -> registered modules`. The host menu indexes
-installed game definitions, and `Esc` returns any running game to that library.
-The shipped `core:settlement` definition selects `core.world` and
-`gth.settlement`; `core:world_showcase` proves that another game can use the same
-world module without Settlement. Definitions are indexed from content packs rather
-than hard-coded as the application's only game. `SettlementGame` and its scene
-remain a compatibility entry for existing scene tests and direct editor runs, but
-they are not the menu's launch target.
+Phase A of the platform transition (`design_docs/engine/multi_purpose_engine.md`
+§4) is complete. The player launch path is now `game definition ->
+GameSessionConfig -> RuntimeLaunchManager -> GameRuntime -> registered modules`.
+The host menu indexes installed game definitions, and `Esc` returns any running
+game to that library. The shipped `core:settlement` definition selects
+`core.world` and `gth.settlement`; `core:world_showcase` proves that another game
+can use the same world module without Settlement. Definitions are indexed from
+content packs rather than hard-coded as the application's only game, and
+`GameRuntime` carries no citizen, era, wellbeing, building or settlement-resource
+field. `SettlementGame` and its scene remain a compatibility entry for existing
+scene tests and direct editor runs, but they are not the menu's launch target.
 
 Keep game-specific fields inside a module's start parameters. `GameSessionConfig`
 may hold a map, seed and definition, but never era, wellbeing, population or
@@ -205,13 +210,15 @@ does not carry that record. Do not add new launch paths that do.
 
 `SessionSaveCoordinator` owns the generic save envelope: `SaveData` v4 persists
 the `game`, `map` and `engine` headers plus a section per participating module.
-It still exposes a legacy settlement projection to `SettlementSaveLoader`, so old
-v1–v3 saves remain loadable while the loader moves behind the module boundary.
+The legacy settlement projection is gone: `SettlementGameModule.save_state` /
+`restore_state` go through `SaveGameService` and `SettlementSaveLoader`, and old
+v1–v3 saves import through the one-time `_migrate_legacy_to_v4` adapter in
+`SaveData.from_dict`, which lifts the flat settlement blob into the
+`modules["gth.settlement"]` section. The generic session does not carry a
+settlement record.
 `HostInputController` handles registered profile shortcuts before module scenes;
 the first supported profile is `rts` (`F5` quicksave, `Esc` library). Host UI and
-further input-profile extraction follow that same rule. Do not introduce a second
-gameplay module until the settlement module owns its save port rather than this
-projection.
+further input-profile extraction follow that same rule.
 
 The native AI migration is the primary execution path. Continue extracting
 bootstrap implementation into feature modules incrementally without a behavior
