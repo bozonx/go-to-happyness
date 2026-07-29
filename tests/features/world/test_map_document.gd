@@ -17,7 +17,7 @@ const BOARD_CELLS := 32
 
 static func run_all() -> void:
 	_test_meta_round_trips_through_json()
-	_test_start_defaults_and_system_flags()
+	_test_start_defaults()
 	_test_border_level_migrates_from_version_one()
 	_test_legacy_zone_sections_migrate_to_v3()
 	_test_legacy_objects_migrate_to_entities_v4()
@@ -55,9 +55,6 @@ static func _test_meta_round_trips_through_json() -> void:
 	document.meta.start.day_of_year = 200
 	document.meta.start.latitude = 60.0
 	document.meta.start.time_of_day = 540
-	document.meta.start.mode_id = MapStart.MODE_HERO
-	document.meta.start.systems = {"settlement_sim": false, "hero_control": "first_person"}
-	document.meta.start.economy = {"money": 900, "population": 2}
 	document.meta.required_content = [{"kind": "building", "source": "player", "id": "my_bakery"}]
 
 	var restored := MapDocument.from_json(document.to_json())
@@ -75,10 +72,7 @@ static func _test_meta_round_trips_through_json() -> void:
 	assert(restored.meta.start.style == &"roman")
 	assert(is_equal_approx(restored.meta.start.latitude, 60.0))
 	assert(restored.meta.start.time_of_day == 540)
-	assert(restored.meta.start.mode_id == MapStart.MODE_HERO)
-	assert(restored.meta.start.hero_control() == MapStart.HERO_CONTROL_FIRST_PERSON)
 	assert(restored.meta.required_content.size() == 1)
-	assert(restored.meta.start.economy["money"] == 900)
 	assert(restored.to_json()["format_version"] == MapMeta.FORMAT_VERSION)
 
 
@@ -204,21 +198,13 @@ static func _test_write_target_follows_the_mode() -> void:
 	assert(not player.last_error.is_empty(), "and says why")
 
 
-## A system a map never mentions must keep running. Otherwise adding a flag to the
-## format would silently switch that system off in every map authored before it.
-static func _test_start_defaults_and_system_flags() -> void:
+## A map start with no overrides must keep era defaults. The game_definition
+## field defaults to the generic showcase so old maps remain testable.
+static func _test_start_defaults() -> void:
 	var start := MapStart.from_dict({})
-	assert(start.mode_id == MapStart.MODE_SETTLEMENT)
+	assert(start.era == &"tent")
 	assert(start.time_of_day == MapStart.DEFAULT_TIME_OF_DAY)
-	assert(start.is_system_enabled(&"a_system_invented_next_year"))
-	assert(start.hero_control() == MapStart.HERO_CONTROL_THIRD_PERSON)
-
-	var shooter := MapStart.from_dict({
-		"mode": {"id": "hero", "systems": {"settlement_sim": false, "hero_control": "first_person"}},
-	})
-	assert(not shooter.is_system_enabled(&"settlement_sim"))
-	assert(shooter.is_system_enabled(&"needs"))
-	assert(shooter.hero_control() == MapStart.HERO_CONTROL_FIRST_PERSON)
+	assert(start.game_definition == &"core:world_showcase")
 
 	# Board sizes are whole chunks or they are not board sizes.
 	assert(MapMeta.is_valid_board_size(MapMeta.PRESET_STANDARD))
@@ -324,7 +310,6 @@ static func _test_package_round_trip_on_disk() -> void:
 	var service := _service()
 	var document := MapDocument.create(&"round_trip", "Круг", BOARD_CELLS)
 	document.terrain = _authored_grid()
-	document.meta.start.economy = {"money": 42}
 	var revision_before := document.meta.revision
 
 	var path := _save_to(service, document)
@@ -340,7 +325,6 @@ static func _test_package_round_trip_on_disk() -> void:
 	assert(loaded.meta.name == "Круг")
 	assert(loaded.meta.board_cells == BOARD_CELLS)
 	assert(loaded.meta.revision == document.meta.revision)
-	assert(loaded.meta.start.economy["money"] == 42)
 	assert(not loaded.dirty)
 	assert(MapTerrainCodec.encode(loaded.terrain) == MapTerrainCodec.encode(document.terrain))
 

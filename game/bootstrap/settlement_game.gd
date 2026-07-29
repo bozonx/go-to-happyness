@@ -836,7 +836,3 @@ func save_session_state() -> Dictionary:
 		"module": "gth.settlement",
 		"state": SaveGameService.capture_settlement_section(self),
 	}
-
-
-func restore_session_state(save_data: SaveData) -> void:
-	restore_from_save_data(save_data)

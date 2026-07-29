@@ -16,10 +16,10 @@ func _init() -> void:
 	var valley := MapDocument.create(&"green_valley", "Зелёная долина", 96)
 	valley.meta.author = "Go To Happyness"
 	valley.meta.start.era = &"tent"
+	valley.meta.start.game_definition = &"core:settlement"
 	valley.meta.start.day_of_year = 120
 	valley.meta.start.latitude = 54.0
 	valley.meta.start.time_of_day = MapStart.DEFAULT_TIME_OF_DAY
-	valley.meta.start.mode_id = MapStart.MODE_SETTLEMENT
 	_author_green_valley_terrain(valley.terrain)
 	_author_green_valley_water(valley.terrain, valley.water)
 

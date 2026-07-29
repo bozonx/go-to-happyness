@@ -312,15 +312,6 @@ layout_mode = 2
 size_flags_horizontal = 3
 placeholder_text = "generic"
 
-[node name="ModeLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
-layout_mode = 2
-text = "Режим игры:"
-
-[node name="PropModeOption" type="OptionButton" parent="PropertiesDialog/Body/Scroll/Grid"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
 [node name="TimeLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
 layout_mode = 2
 text = "Время суток (мин):"

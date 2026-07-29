@@ -50,7 +50,6 @@ func run(p_game: SettlementGame) -> void:
 	_setup_ui_controllers()
 	_setup_controllers_and_world()
 	_setup_citizens_and_ai()
-	_finalize_launch(game.get_node_or_null("/root/GameLaunchManager"))
 
 
 func _setup_controllers() -> void:
@@ -838,21 +837,3 @@ func _setup_citizens_and_ai() -> void:
 	game.player_controller.enter_first_person(game.hero_citizen, "Hero view enabled.")
 
 
-func _finalize_launch(launch_mgr: Node) -> void:
-	# Runtime sessions restore through SessionSaveCoordinator after the module has
-	# finished starting. Keep this legacy loader only for direct SettlementGame
-	# scene runs and old scene tests.
-	if game.get_parent() is GameRuntime:
-		return
-	var pending_save: String = ""
-	if launch_mgr != null and "pending_save_path" in launch_mgr:
-		pending_save = str(launch_mgr.get("pending_save_path"))
-		if not pending_save.is_empty():
-			launch_mgr.set("pending_save_path", "")
-	if not pending_save.is_empty():
-		# Direct SettlementGame scene runs (no GameRuntime parent) restore through
-		# the same module-section path the host coordinator uses. Runtime sessions
-		# return earlier above; this only covers editor/scene-test launches.
-		var save_data := SaveData.new()
-		if save_data.load_from_file(pending_save):
-			game.restore_from_save_data(save_data)

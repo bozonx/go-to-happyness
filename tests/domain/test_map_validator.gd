@@ -16,8 +16,7 @@ static func run_all() -> void:
 	_test_spawn_on_lava_is_an_error()
 	_test_spawn_on_dry_ground_is_clean()
 	_test_frozen_water_is_walkable()
-	_test_hero_mode_without_spawn_is_an_error()
-	_test_settlement_mode_needs_no_spawn()
+	_test_settlement_map_without_spawns_is_clean()
 	_test_party_spawns_are_required_at_launch()
 	_test_warnings_skip_when_nav_grid_is_null()
 	_test_anchor_on_blocked_cell_warns()
@@ -84,22 +83,12 @@ static func _test_frozen_water_is_walkable() -> void:
 	assert(errors.is_empty(), "frozen water is walkable: %s" % "; ".join(errors))
 
 
-## A hero-mode map with no spawn anchor cannot place the hero — §11.
-static func _test_hero_mode_without_spawn_is_an_error() -> void:
-	var document := MapDocument.create(&"hero_map", "Hero", BOARD_CELLS)
-	document.meta.start.mode_id = MapStart.MODE_HERO
-	document.meta.start.systems = {"hero_control": "first_person"}
-	var errors := MapValidator.validate(document, _flat_terrain(), WaterGrid.new(), null)
-	assert(errors.any(func(m: String) -> bool: return m.find("hero_start") > 0 or m.find("spawn") > 0),
-		"hero mode without spawn: %s" % "; ".join(errors))
-
-
-## A settlement-mode map does not require a spawn — the entrance stone stands in.
-static func _test_settlement_mode_needs_no_spawn() -> void:
+## A settlement map with no spawn anchors is not a launch error on its own —
+## `validate_party_spawns` is the gate that demands them at launch time.
+static func _test_settlement_map_without_spawns_is_clean() -> void:
 	var document := MapDocument.create(&"settle", "Settle", BOARD_CELLS)
-	# Default mode is settlement; no spawn anchor authored.
 	var errors := MapValidator.validate(document, _flat_terrain(), WaterGrid.new(), null)
-	assert(errors.is_empty(), "settlement mode needs no spawn: %s" % "; ".join(errors))
+	assert(errors.is_empty(), "settlement map needs no spawn at validate time: %s" % "; ".join(errors))
 
 
 static func _test_party_spawns_are_required_at_launch() -> void:

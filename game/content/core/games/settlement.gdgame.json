@@ -8,5 +8,13 @@
   "clock": "realtime_pauseable",
   "input_profile": "rts",
   "ui_layout": "settlement_hud",
-  "start": {"era": "tent", "biome": "summer_valley"}
+  "start": {
+    "era": "tent",
+    "biome": "summer_valley",
+    "starting_money": 500,
+    "starting_wellbeing": 75,
+    "starting_population": 4,
+    "starting_resources": {"food": 16, "water": 8, "tarp": 1},
+    "starting_equipment": {"flint_steel": {"owned": true}, "construction_gloves": {"sets": 1, "active_durability": 100.0}}
+  }
 }

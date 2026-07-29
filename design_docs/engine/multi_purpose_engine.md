@@ -332,21 +332,21 @@ Showcase запускается из библиотеки того же прил
 | `GameLaunchManager` | ✅ Стал хост-лаунчером `RuntimeLaunchManager`: entry/scene transition без era/economy. Мёртвый settlement-наследник удалён. | application launch |
 | `SettlementGame` / bootstrapper | ✅ Разобраны на `GameRuntime` и `SettlementGameModule`; константы вынесены в `SettlementConstants`; временная сцена — адаптер модуля. Дальнейшее извлечение bootstrap — по фазам B+. | runtime + module |
 | `SaveData` | ✅ Один import path в секционный формат; compatibility projection убран. | `SessionSaveCoordinator` + modules |
-| `MapStart.mode/systems/economy` | ◐ `game_definition` добавлен и стал границей композиции; `mode`/`systems` в формате устарели и в launch-пути не опрашиваются. Окончательное удаление `mode` — с подъёмом `format_version`, когда ни один путь его не пишет. | map + owning module |
+| `MapStart.mode/systems/economy` | ✅ `game_definition` — граница композиции; `mode`/`systems`/`economy` удалены из формата (v5), экономика перенесена в `start_parameters` game definition. | map + owning module |
 | `UIManager` | ✅ Host и routing отделены (`HostInputController`, `rts` profile); settlement-панели остаются вкладом модуля. Дальнейшее разнесение панелей — фазы B+. | ui host + module UI |
 | `Citizen` | Не обобщать заранее. Вынести только то, что реально нужно второму потребителю. | settlement до появления второго потребителя |
 
 `preload` script-файлов в затронутом новом коде не вводить: использовать `class_name`
 по правилам репозитория. `PackedScene` остаётся допустимым preload.
 
-Нужные обновления соседних документов в том же наборе изменений:
+Нужные обновления соседних документов:
 
-- [`map_editor.md`](map_editor.md): заменить `mode/systems` на game definition и
-  описать миграцию формата;
+- ✅ [`map_editor.md`](map_editor.md): `mode`/`systems`/`economy` удалены, формат
+  поднят до v5, миграция описана;
+- ✅ [`map_fill_mode.md`](map_fill_mode.md): ссылка на `start.economy.population`
+  обновлена на `start_parameters.starting_population`;
 - [`content_packaging.md`](content_packaging.md): schema pack, entry games и
   dependency/API validation;
-- [`map_fill_mode.md`](map_fill_mode.md): связь authored entity с lifecycle
-  `EntityRuntime`, без перечисления компонентов;
 - [`docs/architecture.md`](../../docs/architecture.md): после появления кода
   зафиксировать новые feature ownership и composition root.
 

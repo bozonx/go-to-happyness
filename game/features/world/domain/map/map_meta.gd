@@ -35,7 +35,10 @@ const BORDER_NOTHING := &"nothing"
 const BORDER_KINDS: Array[StringName] = [BORDER_OCEAN, BORDER_LAVA, BORDER_NOTHING]
 
 ## 4 — map fill mode promoted opaque `objects[]` into typed `entities[]`.
-const FORMAT_VERSION := 4
+## 5 — `mode`/`systems`/`economy` removed from `start`; `game_definition` is
+##     the composition boundary, economy is module-owned via game definition
+##     `start_parameters`.
+const FORMAT_VERSION := 5
 
 ## Board presets (§6.2). All are multiples of `TerrainGrid.CHUNK_CELLS` so the
 ## board is whole chunks. The default is the largest one that still loads

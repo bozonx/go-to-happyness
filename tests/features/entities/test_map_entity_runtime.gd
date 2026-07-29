@@ -19,9 +19,6 @@ func _run() -> void:
 	entity.position = Vector3(3.5, 0.0, 3.5)
 	entity.initial_state = &"cold"
 	config.map_document.entities.entities.append(entity)
-	var launch_manager := root.get_node_or_null("GameLaunchManager")
-	if launch_manager != null:
-		launch_manager.set("active_launch_config", config)
 	var simulation := SettlementGameScene.instantiate()
 	simulation.launch_config = config
 	root.add_child(simulation)

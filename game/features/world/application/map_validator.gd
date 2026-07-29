@@ -27,7 +27,6 @@ static func validate(document: MapDocument, terrain: TerrainGrid, water: WaterGr
 	for anchor in document.zones.anchors:
 		_validate_anchor_place(anchor, terrain, water, errors)
 	_validate_entities(document, terrain, errors)
-	_validate_hero_start(document, errors)
 	return errors
 
 
@@ -89,21 +88,6 @@ static func _validate_anchor_place(anchor: ZoneAnchorRecord, terrain: TerrainGri
 		# Frozen water is walkable (ice); open water deeper than a ford is not.
 		if water.has_water(cell) and not water.is_frozen(cell) and water.depth_steps_at(terrain, cell) > WaterGrid.FORD_MAX_DEPTH_STEPS:
 			errors.append("точка %s стоит под непроходимой водой" % anchor.id)
-
-
-## A hero-mode map must name where the hero appears (map_editor.md §11). The
-## gate is `mode_id == hero`, not `hero_control != none`: `hero_control` defaults
-## to third-person for every mode, so the looser check would demand a spawn on
-## every settlement map too.
-static func _validate_hero_start(document: MapDocument, errors: Array[String]) -> void:
-	if document.meta.start.mode_id != MapStart.MODE_HERO:
-		return
-	if document.meta.start.hero_control() == MapStart.HERO_CONTROL_NONE:
-		return
-	for anchor in document.zones.anchors:
-		if anchor.role == ZoneAnchorRecord.ROLE_SPAWN and anchor.function == MapSpawnService.HERO_START:
-			return
-	errors.append("hero-режим карты требует хотя бы одну spawn-точку (hero_start)")
 
 
 ## Reachability-grade findings: a map launches with them, but the author very

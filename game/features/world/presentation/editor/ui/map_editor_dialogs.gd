@@ -48,7 +48,6 @@ const BuildingMaterialCatalogScript = preload("res://game/features/buildings/dom
 @onready var _prop_game_option: OptionButton = %PropGameOption
 @onready var _prop_era_option: OptionButton = %PropEraOption
 @onready var _prop_style_edit: LineEdit = %PropStyleEdit
-@onready var _prop_mode_option: OptionButton = %PropModeOption
 @onready var _prop_time_spin: SpinBox = %PropTimeSpin
 @onready var _prop_day_spin: SpinBox = %PropDaySpin
 @onready var _prop_weather_edit: LineEdit = %PropWeatherEdit
@@ -164,7 +163,6 @@ func open_properties_dialog(meta: MapMeta) -> void:
 	_fill_game_options(meta.start.game_definition)
 	_select_metadata(_prop_era_option, meta.start.era)
 	_prop_style_edit.text = String(meta.start.style)
-	_select_metadata(_prop_mode_option, meta.start.mode_id)
 	_prop_time_spin.value = meta.start.time_of_day
 	_prop_day_spin.value = meta.start.day_of_year
 	_prop_weather_edit.text = String(meta.start.weather_preset)
@@ -192,7 +190,6 @@ func _on_properties_confirmed() -> void:
 	meta.start.era = StringName(_prop_era_option.get_item_metadata(_prop_era_option.selected))
 	var style := ContentIdScript.normalize_id(_prop_style_edit.text)
 	meta.start.style = StringName(style) if not style.is_empty() else &"generic"
-	meta.start.mode_id = StringName(_prop_mode_option.get_item_metadata(_prop_mode_option.selected))
 	meta.start.time_of_day = int(_prop_time_spin.value)
 	meta.start.day_of_year = int(_prop_day_spin.value)
 	var weather := _prop_weather_edit.text.strip_edges()
@@ -220,12 +217,6 @@ func _fill_static_options() -> void:
 		[MapMeta.BORDER_OCEAN, "Океан"],
 		[MapMeta.BORDER_LAVA, "Лава"],
 		[MapMeta.BORDER_NOTHING, "Ничего"],
-	])
-	_add_options(_prop_mode_option, [
-		[MapStart.MODE_SETTLEMENT, "Поселение"],
-		[MapStart.MODE_HERO, "Герой"],
-		[MapStart.MODE_SQUAD, "Отряд"],
-		[MapStart.MODE_SANDBOX, "Песочница"],
 	])
 	var eras: Array = []
 	for era: StringName in BuildingMaterialCatalogScript.ERA_ORDER:

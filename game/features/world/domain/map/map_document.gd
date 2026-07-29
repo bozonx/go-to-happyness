@@ -4,7 +4,7 @@ extends RefCounted
 ## One map, whole, in memory (design_docs/engine/map_editor.md §15).
 ##
 ## Pure data: no nodes, no files, no rendering. `MapDocumentService` reads and
-## writes it, the editor mutates it, `GameLaunchManager` starts a session from it.
+## writes it, the editor mutates it, `RuntimeLaunchManager` starts a session from it.
 ##
 ## The layers phases 2–5 will fill — placements, objects, regions, markers,
 ## routes, flags, rules, victory, defeat — are already carried here as raw

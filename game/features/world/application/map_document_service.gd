@@ -224,6 +224,8 @@ static func _migrate(parsed: Dictionary, from_version: int) -> Dictionary:
 		parsed = _promote_legacy_zone_sections(parsed)
 	if from_version < 4:
 		parsed = _promote_legacy_objects(parsed)
+	if from_version < 5:
+		parsed = _strip_legacy_mode(parsed)
 	return parsed
 
 
@@ -262,6 +264,21 @@ static func _promote_legacy_objects(parsed: Dictionary) -> Dictionary:
 			promoted.append(entry.duplicate(true))
 	migrated["entities"] = promoted
 	migrated.erase("objects")
+	return migrated
+
+
+## v4 → v5 drops `mode`/`systems` and `economy` from `start`. The
+## `game_definition` field is the composition boundary now; mode and per-system
+## switches are gone. Economy (money, population, resources, equipment) is
+## settlement-specific and moved to module parameters in the game definition.
+static func _strip_legacy_mode(parsed: Dictionary) -> Dictionary:
+	var migrated := parsed.duplicate(true)
+	var start: Variant = migrated.get("start", {})
+	if start is Dictionary:
+		var start_dict := start as Dictionary
+		start_dict.erase("mode")
+		start_dict.erase("economy")
+		migrated["start"] = start_dict
 	return migrated
 
 

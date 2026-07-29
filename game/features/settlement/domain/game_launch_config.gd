@@ -19,7 +19,7 @@ var world_style: StringName = &"generic"
 ## The map this session runs on, as a runtime key (`core:green_valley` or
 ## `user:green_valley`). A playable session always has a map.
 var map_ref: StringName = &"core:green_valley"
-## The loaded package. `GameLaunchManager` fills it from `map_ref` before the
+## The loaded package. `RuntimeLaunchManager` fills it from `map_ref` before the
 ## scene changes, so the bootstrap never waits on disk mid-startup.
 var map_document: MapDocument = null
 var starting_money: int = 500
@@ -64,17 +64,6 @@ func apply_map_start() -> void:
 	var start := map_document.meta.start
 	era_id = start.era
 	world_style = start.style
-	var economy := start.economy
-	if economy.has("money"):
-		starting_money = int(economy["money"])
-	if economy.has("population"):
-		starting_population = int(economy["population"])
-	if economy.has("wellbeing"):
-		starting_wellbeing = int(economy["wellbeing"])
-	if economy.has("resources"):
-		starting_resources = (economy["resources"] as Dictionary).duplicate(true)
-	if economy.has("equipment"):
-		starting_equipment = (economy["equipment"] as Dictionary).duplicate(true)
 
 
 static func create_custom(

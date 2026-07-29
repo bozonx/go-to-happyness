@@ -58,9 +58,11 @@ func _launch_config(session: GameSessionConfig, parameters: Dictionary) -> GameL
 	var launch := GameLaunchConfig.for_tent_era()
 	launch.map_ref = session.map_ref
 	launch.map_document = session.map_document
-	# Map-authored settlement overrides stay module-owned. This preserves the
-	# former launch path while the host passes only generic session data.
-	launch.apply_map_start()
+	# Map-owned visual overrides: era and world style are properties of the map,
+	# not of the settlement module. Economy (money, population, resources) is
+	# module-owned and comes only from the game definition's start_parameters.
+	if session.map_document != null:
+		launch.apply_map_start()
 	launch.era_id = StringName(parameters.get("era", launch.era_id))
 	launch.era_type = int(parameters.get("era_type", launch.era_type))
 	launch.biome_id = StringName(parameters.get("biome", launch.biome_id))
