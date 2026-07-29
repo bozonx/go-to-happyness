@@ -277,11 +277,15 @@ Showcase запускается из библиотеки того же прил
 7. ✅ Добавить Showcase definition, тестовый user pack и end-to-end scene tests для
    обеих игр, save/load и ошибок валидации. Showcase definition (`core:world_showcase`),
    его модуль и единый e2e-тест (`tests/features/runtime/test_game_runtime.gd`),
-   покрывающий обе игры, save/load и валидацию модулей, есть. Тестовый user pack
-   проверяется доменным тестом `test_installed_user_pack_game_is_indexed_and_resolvable`
-   в `tests/domain/test_domain_game_runtime.gd`: пак создаётся в
-   `user://content/installed/`, индексируется `ContentIndex` и резолвится
-   `GameModuleRegistry` по runtime key `pack:test_author.test_pack/test_game`.
+   покрывающий обе игры, save/load и валидацию модулей, есть. Тестовый user pack покрыт
+   на двух уровнях: доменный тест `test_installed_user_pack_game_is_indexed_and_resolvable`
+   в `tests/domain/test_domain_game_runtime.gd` создаёт пак в
+   `user://content/installed/`, индексирует его `ContentIndex` и резолвит
+   `GameModuleRegistry` по runtime key `pack:test_author.test_pack/test_game`; а
+   сквозной тест `tests/features/runtime/test_user_pack_game.gd` с файловой фикстурой
+   `tests/fixtures/test_user_pack/` доказывает полный цикл install → index → resolve →
+   validate → launch авторской игры (`pack:gth.test_user_pack/sky_island_tour`) как пакета
+   данных поверх общих модулей, без своего GDScript-модуля.
 
 ### Критерии готовности
 
