@@ -834,3 +834,15 @@ func get_toilets() -> Array[Node3D]:
 
 func restore_from_save_data(save_data: SaveData) -> bool:
 	return SettlementSaveLoader.new().restore(self, save_data)
+
+
+func save_session_state() -> Dictionary:
+	var state := SaveGameService.capture_settlement_state(self)
+	return {
+		"module": "gth.settlement",
+		"state": state.settlement_module_state() if state != null else {},
+	}
+
+
+func restore_session_state(save_data: SaveData) -> void:
+	restore_from_save_data(save_data)

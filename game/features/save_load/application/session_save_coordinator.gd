@@ -70,5 +70,6 @@ static func _definition_key(definition: GameDefinition) -> StringName:
 static func _matches_active_definition(save_data: SaveData, session: GameSessionConfig) -> bool:
 	if save_data == null or session == null or session.definition == null:
 		return false
-	return StringName(save_data.game_header.get("pack", "")) == session.definition.pack_id \
+	var address := ContentId.split_runtime_key(_definition_key(session.definition))
+	return StringName(save_data.game_header.get("pack", "")) == address["source"] \
 		and StringName(save_data.game_header.get("id", "")) == session.definition.id

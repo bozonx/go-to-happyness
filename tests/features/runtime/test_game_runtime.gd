@@ -34,6 +34,15 @@ func _run() -> void:
 	assert(settlement.launch_config.map_document == config.map_document)
 	assert(settlement.launch_config.starting_population == config.starting_population)
 	assert(settlement.world_setup != null, "settlement module must initialize the existing game")
+	assert(SessionSaveCoordinator.save_quicksave(runtime))
+	var settlement_save := SaveData.new()
+	assert(settlement_save.load_from_file(SessionSaveCoordinator.QUICKSAVE_PATH))
+	assert(settlement_save.game_header.get("id") == "settlement")
+	assert(settlement_save.module_states.has("gth.settlement"))
+	var saved_money := settlement.settlement.money
+	settlement.settlement.money = 1
+	assert(SessionSaveCoordinator.load_pending(runtime, SessionSaveCoordinator.QUICKSAVE_PATH))
+	assert(settlement.settlement.money == saved_money)
 	runtime.queue_free()
 	await process_frame
 	await _assert_world_showcase(launch_manager)

@@ -75,7 +75,7 @@ func to_dict() -> Dictionary:
 		# Direct legacy SettlementGame callers still populate projection fields.
 		# A generic game with an explicit header may legitimately have no module
 		# state at all, so never manufacture settlement data for it.
-		modules = {"gth.settlement": _settlement_module_section()} if game_header.is_empty() else {}
+		modules = {"gth.settlement": settlement_module_state()} if game_header.is_empty() else {}
 	return {
 		"format_version": VERSION,
 		"timestamp": timestamp,
@@ -121,7 +121,7 @@ func from_dict(data: Dictionary) -> bool:
 	return true
 
 
-func _settlement_module_section() -> Dictionary:
+func settlement_module_state() -> Dictionary:
 	return {
 		"settlement": settlement_state.duplicate(true),
 		"world": world_state.duplicate(true),
