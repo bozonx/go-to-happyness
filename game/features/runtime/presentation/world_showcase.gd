@@ -1,27 +1,19 @@
 class_name WorldShowcase
 extends Node3D
 
-const WorldSetupScene = preload("res://game/features/world/presentation/world_setup.tscn")
 const CELL_SIZE := 2.0
 
 @onready var camera_controller: CameraController = $CameraController
 var world_setup: WorldSetup = null
+var world_session: WorldSession = null
 
 
 func start_session(session: GameSessionConfig) -> bool:
 	if session == null or session.map_document == null:
 		push_error("[launch] World Showcase requires a map")
 		return false
-	world_setup = WorldSetupScene.instantiate() as WorldSetup
-	world_setup.setup(
-		camera_controller.camera,
-		CELL_SIZE,
-		session.map_document.board_cells(),
-		null,
-		session.map_document,
-	)
-	add_child(world_setup)
-	world_setup.build(self)
+	var active_world_session := world_session if world_session != null else WorldSession.new(session.map_document)
+	world_setup = active_world_session.build(self, camera_controller.camera, CELL_SIZE, session.map_document.board_cells())
 	return world_setup.terrain_grid != null and world_setup.water_grid != null
 
 

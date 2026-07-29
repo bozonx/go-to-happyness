@@ -121,7 +121,8 @@ func _setup_controllers() -> void:
 	game.logistics_controller = SettlementLogisticsController.new(game)
 	game.world_navigation_controller = SettlementWorldNavigationController.new(
 		game.port_factory.world_navigation_runtime_port(),
-		game.port_factory.world_navigation_presentation_port()
+		game.port_factory.world_navigation_presentation_port(),
+		game.world_session
 	)
 	game.ui_manager.setup(game)
 	game.ui_manager.bind_delegate_events(SettlementUICallbacks.new(game))

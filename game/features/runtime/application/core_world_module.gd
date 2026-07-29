@@ -22,4 +22,5 @@ func start(_runtime: GameRuntime, session: GameSessionConfig) -> bool:
 	if not errors.is_empty():
 		push_error("[launch] invalid world map: %s" % "; ".join(errors))
 		return false
+	_runtime.world_session = WorldSession.new(session.map_document)
 	return true

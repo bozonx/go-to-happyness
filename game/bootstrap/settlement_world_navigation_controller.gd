@@ -1,14 +1,13 @@
 class_name SettlementWorldNavigationController
 extends RefCounted
 
-const WorldSetupScene = preload("res://game/features/world/presentation/world_setup.tscn")
-
 ## Manages world setup, navigation grid refresh, terrain access positions,
 ## tree felling, trail overlay, and boundary markers.
 ## Extracted from SettlementGame to reduce its method count.
 
 var navigation_runtime: WorldNavigationRuntimePort
 var presentation_runtime: WorldNavigationPresentationPort
+var world_session: WorldSession
 
 ## Kept alive for the session: it owns the published terrain field and, once the
 ## game gains terrain editing, the subscription that keeps it current.
@@ -19,30 +18,42 @@ var terrain_navigation_publisher := TerrainNavigationPublisher.new()
 var overlay_navigation_publisher := OverlayNavigationPublisher.new()
 
 
-func _init(p_navigation_runtime: WorldNavigationRuntimePort, p_presentation_runtime: WorldNavigationPresentationPort) -> void:
+func _init(p_navigation_runtime: WorldNavigationRuntimePort, p_presentation_runtime: WorldNavigationPresentationPort, p_world_session: WorldSession = null) -> void:
 	navigation_runtime = p_navigation_runtime
 	presentation_runtime = p_presentation_runtime
+	world_session = p_world_session
 
 
 func create_world() -> void:
 	# CameraController is a declared child of settlement_game.tscn; only the world
 	# itself is built here, because its construction needs the launched map.
-	var world_setup := WorldSetupScene.instantiate() as WorldSetup
-	world_setup.setup(
+	var world_setup: WorldSetup = world_session.build(
+		presentation_runtime.territory_getter.call().get_parent(),
 		presentation_runtime.camera_getter.call(),
 		presentation_runtime.cell_size,
 		presentation_runtime.board_cells,
 		presentation_runtime.trail_field_getter.call(),
-		presentation_runtime.map_document_getter.call()
-	)
+	) if world_session != null else _build_legacy_world()
+	if world_setup == null:
+		return
 	presentation_runtime.world_setup_setter.call(world_setup)
 	presentation_runtime.water_access_setter.call(world_setup.water_access)
-	presentation_runtime.add_to_scene.call(world_setup)
-	presentation_runtime.build_world_setup.call(world_setup)
 	presentation_runtime.update_daylight.call()
 	publish_terrain_navigation()
 	refresh_navigation_grid()
 	presentation_runtime.move_selection.call(Vector3.ZERO)
+
+
+func _build_legacy_world() -> WorldSetup:
+	var session := WorldSession.new(presentation_runtime.map_document_getter.call())
+	var territory: TerritoryBase = presentation_runtime.territory_getter.call()
+	return session.build(
+		territory.get_parent() if territory != null else null,
+		presentation_runtime.camera_getter.call(),
+		presentation_runtime.cell_size,
+		presentation_runtime.board_cells,
+		presentation_runtime.trail_field_getter.call(),
+	)
 
 
 func add_landscape_object(node: Node) -> void:

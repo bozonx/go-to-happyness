@@ -21,6 +21,7 @@ func start(runtime: GameRuntime, session: GameSessionConfig) -> bool:
 		push_error("[launch] failed to instantiate settlement session")
 		return false
 	settlement.start_on_ready = false
+	settlement.world_session = runtime.world_session
 	runtime.attach_session_content(settlement)
 	settlement.start_settlement_session(launch)
 	return settlement.world_setup != null

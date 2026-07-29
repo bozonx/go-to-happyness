@@ -12,5 +12,6 @@ func start(runtime: GameRuntime, session: GameSessionConfig) -> bool:
 	if showcase == null:
 		push_error("[launch] failed to instantiate world showcase")
 		return false
+	showcase.world_session = runtime.world_session
 	runtime.attach_session_content(showcase)
 	return showcase.start_session(session)

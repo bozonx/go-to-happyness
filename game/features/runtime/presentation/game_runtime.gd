@@ -6,6 +6,9 @@ extends Node3D
 
 var active_session: GameSessionConfig = null
 var session_content: Node = null
+## Created by core.world before any gameplay module starts. It owns the map
+## session and the single WorldSetup projection for the active scene host.
+var world_session: WorldSession = null
 
 
 func _ready() -> void:
