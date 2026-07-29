@@ -149,12 +149,18 @@ func _place(cell: Vector2i) -> void:
 
 func _surface_position(cell: Vector2i, archetype: EntityArchetype) -> Vector3:
 	var position := context.terrain.cell_center(cell)
+	# MapEntityRecord stores Y relative to the terrain at its X/Z. Keeping that
+	# contract here is essential: the renderer and launched runtime add the live
+	# terrain height when projecting the record into world space.
+	position.y = 0.0
 	var asset := EntityArchetypeCatalog.asset_of(archetype.id)
 	if asset != null:
 		var policy := asset.placement_policy()
 		var surface := _surface_kind(cell)
 		if surface in [AssetPlacementPolicy.SURFACE_SHALLOW, AssetPlacementPolicy.SURFACE_WATER, AssetPlacementPolicy.SURFACE_ICE, AssetPlacementPolicy.SURFACE_LAVA]:
-			position.y = context.water.surface_metres_at(cell)
+			# Water levels are absolute, while the stored value is relative to
+			# ground. This makes the projection land exactly on the water surface.
+			position.y = context.water.surface_metres_at(cell) - context.terrain.height_at(position)
 		position.y += policy.vertical_offset
 	return position
 
@@ -316,14 +322,19 @@ func _make_view(archetype_id: StringName) -> Node3D:
 
 
 func _apply_transform(view: Node3D, record: MapEntityRecord) -> void:
-	view.position = record.position
+	view.position = _world_position(record.position)
 	# Stored Y is the authored offset above ground. The editor must draw the same
 	# terrain-attached transform the launched map uses, otherwise objects vanish
 	# into raised terrain or float over excavations.
-	if context != null and context.terrain != null:
-		view.position.y = context.terrain.height_at(record.position) + record.position.y
 	view.rotation_degrees.y = record.yaw_degrees
 	view.scale = Vector3.ONE * record.scale
+
+
+func _world_position(local_position: Vector3) -> Vector3:
+	var world_position := local_position
+	if context != null and context.terrain != null:
+		world_position.y = context.terrain.height_at(local_position) + local_position.y
+	return world_position
 
 
 func _add_selection_ring(view: Node3D) -> void:
@@ -359,7 +370,7 @@ func _refresh_ghost() -> void:
 		_apply_preview_look(_ghost)
 	var cell := context.brush.hovered_cell
 	_ghost.visible = true
-	_ghost.position = _surface_position(cell, archetype)
+	_ghost.position = _world_position(_surface_position(cell, archetype))
 	_set_preview_colour(_ghost, Color(1.0, 0.78, 0.22, 0.72) if not _placement_warnings(cell, archetype).is_empty() else Color(0.35, 0.9, 1.0, 0.58))
 
 

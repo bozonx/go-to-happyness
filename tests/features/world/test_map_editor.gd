@@ -186,16 +186,27 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 	editor._undo()
 	editor._undo()
 	assert(editor.document.entities.entities.size() == 1, "shortcut edits undo back to the original")
-	# Raising its cell is one terrain action and the record follows the surface in
-	# that very same shared-history entry.
+	# Raising its cell is one terrain action. The record keeps its authored local
+	# offset; the view projects it onto the new surface rather than double-counting
+	# the terrain height.
 	editor._select_mode(&"terrain")
 	editor._brush.hovered_cell = Vector2i(7, 7)
 	editor._brush.has_hover = true
 	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true))
 	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, false))
-	assert(is_equal_approx(editor.document.entities.entities[0].position.y, 0.5), "terrain lift moved the entity with its surface")
+	assert(is_equal_approx(editor.document.entities.entities[0].position.y, 0.0), "terrain lift preserved the entity's local offset")
+	var fill_mode: FillModeController = null
+	for mode: MapEditorMode in editor._modes:
+		if mode is FillModeController:
+			fill_mode = mode as FillModeController
+			break
+	assert(fill_mode != null)
+	var view := fill_mode._views.get(entity.id) as Node3D
+	assert(view != null and is_equal_approx(view.position.y, 0.5), "entity view follows the raised terrain once")
 	editor._undo()
-	assert(is_equal_approx(editor.document.entities.entities[0].position.y, 0.0), "undo restored the entity height with terrain")
+	assert(is_equal_approx(editor.document.entities.entities[0].position.y, 0.0), "undo preserved the entity's local offset")
+	view = fill_mode._views.get(entity.id) as Node3D
+	assert(view != null and is_equal_approx(view.position.y, 0.0), "undo reprojected the entity onto the restored terrain")
 	editor._undo()
 	assert(editor.history.undo_depth() == 0, "fill left the next mode a clean stack")
 	print("  fill placement + shared undo ok")
