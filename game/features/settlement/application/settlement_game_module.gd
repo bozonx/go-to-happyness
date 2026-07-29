@@ -10,6 +10,17 @@ func module_id() -> StringName:
 	return &"gth.settlement"
 
 
+func required_modules() -> Array[StringName]:
+	return [&"core.world"]
+
+
+func validate_session(session: GameSessionConfig) -> Array[String]:
+	var parameters: Variant = session.module_parameters.get(module_id(), {})
+	if not parameters is Dictionary:
+		return ["start parameters должны быть объектом"]
+	return []
+
+
 func start(runtime: GameRuntime, session: GameSessionConfig) -> bool:
 	var parameters: Variant = session.module_parameters.get(module_id(), {})
 	if not parameters is Dictionary:
@@ -25,6 +36,20 @@ func start(runtime: GameRuntime, session: GameSessionConfig) -> bool:
 	runtime.attach_session_content(settlement)
 	settlement.start_settlement_session(launch)
 	return settlement.world_setup != null
+
+
+func save_state(runtime: GameRuntime) -> Dictionary:
+	var settlement := runtime.session_content as SettlementGame
+	return SaveGameService.capture_settlement_section(settlement)
+
+
+func restore_state(runtime: GameRuntime, state: Dictionary) -> bool:
+	var settlement := runtime.session_content as SettlementGame
+	if settlement == null:
+		return false
+	var save_data := SaveData.new()
+	save_data.module_states[module_id()] = state.duplicate(true)
+	return SettlementSaveLoader.new().restore(settlement, save_data)
 
 
 func _launch_config(session: GameSessionConfig, parameters: Dictionary) -> GameLaunchConfig:

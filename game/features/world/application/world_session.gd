@@ -12,6 +12,9 @@ var map_document: MapDocument
 var world_setup: WorldSetup = null
 var nav_grid := NavGrid.new()
 var terrain_navigation_publisher := TerrainNavigationPublisher.new()
+## Stable map-entity identity and lifecycle are session data, not presentation
+## metadata. WorldSetup merely projects this instance into the territory.
+var entity_runtime := MapEntityRuntime.new()
 var cell_size := DEFAULT_CELL_SIZE
 
 
@@ -38,6 +41,7 @@ func build(
 	world_setup.setup(camera, cell_size, board_cells, trail_field, map_document)
 	scene_host.add_child(world_setup)
 	world_setup.build(scene_host)
+	entity_runtime = world_setup.map_entity_runtime
 	publish_navigation()
 	return world_setup
 

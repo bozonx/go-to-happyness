@@ -6,6 +6,7 @@ static func run_all() -> void:
 	test_core_settlement_definition_is_indexed()
 	test_session_keeps_settlement_values_module_scoped()
 	test_host_input_profiles_are_allowlisted()
+	test_definition_validation_rejects_unknown_module()
 	print("    [PASS] Game Runtime Domain Tests")
 
 
@@ -37,3 +38,15 @@ static func test_host_input_profiles_are_allowlisted() -> void:
 	assert(HostInputProfile.is_supported(&"rts"))
 	assert(not HostInputProfile.is_supported(&"first_person"))
 	assert(not HostInputProfile.is_supported(&"author_supplied_shortcuts"))
+
+
+static func test_definition_validation_rejects_unknown_module() -> void:
+	var definition := GameDefinition.from_dict({
+		"format_version": 1,
+		"id": "broken",
+		"pack": "core",
+		"default_map": "core:green_valley",
+		"modules": ["core.world", "unknown.module"],
+	})
+	var errors := GameModuleRegistry.validate_definition(definition)
+	assert(errors.any(func(error: String) -> bool: return error.contains("unknown.module")))

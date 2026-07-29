@@ -23,3 +23,22 @@ static func create_module(module_id: StringName) -> GameModule:
 		return WorldShowcaseModule.new()
 	push_error("GameModuleRegistry: unknown module: %s" % module_id)
 	return null
+
+
+static func has_module(module_id: StringName) -> bool:
+	return module_id in [&"core.world", &"gth.settlement", &"gth.world_showcase"]
+
+
+static func validate_definition(definition: GameDefinition) -> Array[String]:
+	var errors: Array[String] = []
+	if definition == null:
+		errors.append("описание игры отсутствует")
+		return errors
+	if definition.default_map.is_empty():
+		errors.append("не задана стартовая карта")
+	if definition.module_ids.is_empty():
+		errors.append("не задан ни один модуль")
+	for module_id: StringName in definition.module_ids:
+		if not has_module(module_id):
+			errors.append("неизвестный модуль %s" % module_id)
+	return errors

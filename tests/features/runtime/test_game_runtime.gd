@@ -27,6 +27,8 @@ func _run() -> void:
 	for _frame in range(4):
 		await physics_frame
 	assert(runtime.active_session != null)
+	assert(runtime.active_modules.has(&"core.world"))
+	assert(runtime.active_modules.has(&"gth.settlement"))
 	assert(runtime.world_session != null, "core.world must own the active map session")
 	assert(runtime.world_session.nav_grid != null)
 	var settlement := runtime.session_content as SettlementGame
@@ -66,6 +68,8 @@ func _assert_world_showcase(launch_manager: Node) -> void:
 	for _frame in range(4):
 		await physics_frame
 	assert(runtime.active_session != null)
+	assert(runtime.active_modules.has(&"core.world"))
+	assert(runtime.active_modules.has(&"gth.world_showcase"))
 	assert(runtime.world_session != null)
 	var showcase := runtime.session_content as WorldShowcase
 	assert(showcase != null, "showcase must not instantiate SettlementGame")

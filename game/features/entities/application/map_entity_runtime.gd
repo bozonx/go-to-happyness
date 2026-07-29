@@ -14,6 +14,7 @@ class RuntimeEntity:
 	var scale := 1.0
 	var state: StringName = EntityStateSet.FOLLOW_SEASON
 	var props: Dictionary = {}
+	var active := true
 
 var _entities: Dictionary = {}
 
@@ -52,3 +53,37 @@ func all() -> Array[RuntimeEntity]:
 
 func by_id(entity_id: StringName) -> RuntimeEntity:
 	return _entities.get(entity_id, null)
+
+
+func deactivate(entity_id: StringName) -> bool:
+	var entity := by_id(entity_id)
+	if entity == null or not entity.active:
+		return false
+	entity.active = false
+	return true
+
+
+func activate(entity_id: StringName) -> bool:
+	var entity := by_id(entity_id)
+	if entity == null or entity.active:
+		return false
+	entity.active = true
+	return true
+
+
+func lifecycle_snapshot() -> Dictionary:
+	var result: Dictionary = {}
+	for entity: RuntimeEntity in all():
+		if not entity.active:
+			result[entity.id] = {"active": false, "state": String(entity.state)}
+	return result
+
+
+func restore_lifecycle(snapshot: Dictionary) -> void:
+	for raw_id: Variant in snapshot:
+		var entity := by_id(StringName(raw_id))
+		var saved: Variant = snapshot[raw_id]
+		if entity == null or not saved is Dictionary:
+			continue
+		entity.active = bool((saved as Dictionary).get("active", true))
+		entity.state = StringName((saved as Dictionary).get("state", entity.state))

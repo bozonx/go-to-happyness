@@ -16,6 +16,8 @@ func present(runtime: MapEntityRuntime, territory: TerritoryBase) -> void:
 		return
 	for entity: MapEntityRuntime.RuntimeEntity in runtime.all():
 		var view := _make_view(entity)
+		if not entity.active:
+			continue
 		# Interactive natural entities are instantiated by AmbientSpawner, which
 		# also registers them with harvesting and foraging services. A generic
 		# visual here would create a second, inert copy.

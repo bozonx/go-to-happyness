@@ -5,6 +5,7 @@ extends Node3D
 ## node; it deliberately owns no settlement scene, UI or gameplay state.
 
 var active_session: GameSessionConfig = null
+var active_modules: Dictionary = {}
 var session_content: Node = null
 ## Created by core.world before any gameplay module starts. It owns the map
 ## session and the single WorldSetup projection for the active scene host.
@@ -32,6 +33,20 @@ func attach_session_content(node: Node) -> void:
 		return
 	session_content = node
 	add_child(node)
+
+
+func register_module(module: GameModule) -> void:
+	if module != null:
+		active_modules[module.module_id()] = module
+
+
+func _exit_tree() -> void:
+	var module_ids: Array = active_modules.keys()
+	module_ids.reverse()
+	for module_id: StringName in module_ids:
+		var module: GameModule = active_modules[module_id]
+		module.stop(self)
+	active_modules.clear()
 
 
 func _restore_pending_save() -> void:
