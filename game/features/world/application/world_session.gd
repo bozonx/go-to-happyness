@@ -6,13 +6,20 @@ extends RefCounted
 ## entities are built once from the same map document for every module.
 
 const WorldSetupScene = preload("res://game/features/world/presentation/world_setup.tscn")
+const DEFAULT_CELL_SIZE := 2.0
 
 var map_document: MapDocument
 var world_setup: WorldSetup = null
+var nav_grid := NavGrid.new()
+var terrain_navigation_publisher := TerrainNavigationPublisher.new()
+var cell_size := DEFAULT_CELL_SIZE
 
 
-func _init(p_map_document: MapDocument = null) -> void:
+func _init(p_map_document: MapDocument = null, p_cell_size := DEFAULT_CELL_SIZE) -> void:
 	map_document = p_map_document
+	cell_size = p_cell_size
+	if map_document != null:
+		nav_grid.configure(cell_size, map_document.board_cells())
 
 
 func build(
@@ -31,4 +38,17 @@ func build(
 	world_setup.setup(camera, cell_size, board_cells, trail_field, map_document)
 	scene_host.add_child(world_setup)
 	world_setup.build(scene_host)
+	publish_navigation()
 	return world_setup
+
+
+func publish_navigation() -> void:
+	if world_setup == null or world_setup.terrain_grid == null or world_setup.water_grid == null:
+		return
+	terrain_navigation_publisher.configure(
+		world_setup.terrain_grid,
+		nav_grid,
+		null,
+		world_setup.water_grid,
+	)
+	world_setup.water_access.configure(world_setup.water_grid, world_setup.terrain_grid, nav_grid)

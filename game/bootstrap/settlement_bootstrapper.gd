@@ -180,8 +180,9 @@ func _setup_ai_and_navigation() -> void:
 		game.citizen_ai = CitizenAISystem.new()
 		game.citizen_ai.name = "CitizenAI"
 		game.add_child(game.citizen_ai)
-	game.nav_grid = NavGrid.new()
-	game.nav_grid.configure(SettlementGame.CELL_SIZE, game.board_cells)
+	game.nav_grid = game.world_session.nav_grid if game.world_session != null else NavGrid.new()
+	if game.world_session == null:
+		game.nav_grid.configure(SettlementGame.CELL_SIZE, game.board_cells)
 	game.road_network_service = RoadNetworkService.new()
 	game.road_network_service.configure(game.nav_grid)
 	game.navigation_obstacle_publisher = NavigationObstaclePublisher.new()

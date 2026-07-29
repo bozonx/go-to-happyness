@@ -83,6 +83,7 @@ func launch_map_editor(map_key: StringName = &"", dev_mode := false) -> void:
 
 
 func return_to_main_menu() -> void:
+	reset_to_default()
 	get_tree().change_scene_to_file("res://game/features/ui/presentation/main_menu/main_menu.tscn")
 
 

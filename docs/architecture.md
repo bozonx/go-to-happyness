@@ -40,10 +40,11 @@ schema and their states, all of it pack data
 (`design_docs/engine/map_fill_mode.md` §4). It deliberately knows no component by
 name: the module that executes a component introduces and validates it.
 
-`game/bootstrap/settlement_game.tscn` is the configured main scene. Its
-`settlement_game.gd` controller is the composition root: it creates the runtime
-services, wires signals and drives the simulation tick. It must not become the owner
-of new feature rules or UI implementation.
+`project.godot` starts the host main menu. `GameRuntime` is the composition root
+of one selected game session; `game/bootstrap/settlement_game.tscn` is now the
+temporary presentation root of the `gth.settlement` module. Its controller still
+wires the legacy settlement services and simulation tick, but it must not become
+the owner of new feature rules, host UI or session-wide infrastructure.
 
 ## Layer boundaries
 
@@ -84,9 +85,12 @@ create generic `utils`, `helpers`, `managers` or catch-all `services` directorie
 - `production`: production-specific rules and systems, currently the sawmill.
 - `runtime`: game definitions, session configuration, the registry of built-in
   game modules and their composition order. It owns no settlement rule, actor
-  type or UI panel. `GameRuntime` is the generic session root; a temporary
-  `SettlementGameModule` starts the existing settlement bootstrap through this
-  boundary while its services are extracted incrementally.
+  type or UI panel. `GameRuntime` is the generic session root. `core.world`
+  creates the session's `WorldSession` (map, `WorldSetup`, and terrain/water
+  navigation); a game module may add its own overlays and obstacles but never a
+  second map world. `SettlementGameModule` temporarily starts the existing
+  settlement bootstrap through this boundary while its services are extracted
+  incrementally.
 - `simulation`: the deterministic clock, day-cycle events and simulation-wide
   scheduling.
 - `events`: data-driven random events — definitions, conditions, outcomes,
@@ -184,11 +188,14 @@ dispatcher and AI order path.
 ### Game runtime migration
 
 The player launch path is now `game definition -> GameSessionConfig ->
-RuntimeLaunchManager -> GameRuntime -> registered modules`. The shipped `core:settlement` definition
-selects `gth.settlement`; it is indexed from the content pack like other authored
-content rather than hard-coded as the application's only game. `SettlementGame`
-and its scene remain a compatibility entry for existing scene tests and direct
-editor runs, but they are not the menu's launch target.
+RuntimeLaunchManager -> GameRuntime -> registered modules`. The host menu indexes
+installed game definitions, and `Esc` returns any running game to that library.
+The shipped `core:settlement` definition selects `core.world` and
+`gth.settlement`; `core:world_showcase` proves that another game can use the same
+world module without Settlement. Definitions are indexed from content packs rather
+than hard-coded as the application's only game. `SettlementGame` and its scene
+remain a compatibility entry for existing scene tests and direct editor runs, but
+they are not the menu's launch target.
 
 Keep game-specific fields inside a module's start parameters. `GameSessionConfig`
 may hold a map, seed and definition, but never era, wellbeing, population or
@@ -196,12 +203,13 @@ settlement resources. `SettlementGameModule` temporarily adapts its module
 parameters to the existing settlement bootstrap start record; the generic session
 does not carry that record. Do not add new launch paths that do.
 
-`SaveData` v4 now persists the generic `game`, `map` and `engine` headers plus
-`modules.gth.settlement`. It still exposes a legacy settlement projection to
-`SettlementSaveLoader`, so old v1–v3 saves remain loadable while the loader moves
-behind the module boundary. UI host and input-profile extraction follow that same
-rule. Do not introduce a second gameplay module until the settlement module owns
-its save port rather than this projection.
+`SessionSaveCoordinator` owns the generic save envelope: `SaveData` v4 persists
+the `game`, `map` and `engine` headers plus a section per participating module.
+It still exposes a legacy settlement projection to `SettlementSaveLoader`, so old
+v1–v3 saves remain loadable while the loader moves behind the module boundary.
+Host UI and input-profile extraction follow that same rule. Do not introduce a
+second gameplay module until the settlement module owns its save port rather than
+this projection.
 
 The native AI migration is the primary execution path. Continue extracting
 bootstrap implementation into feature modules incrementally without a behavior

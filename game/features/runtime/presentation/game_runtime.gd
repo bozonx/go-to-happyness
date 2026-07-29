@@ -48,3 +48,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		if SessionSaveCoordinator.save_quicksave(self):
 			print("[save] quicksave written")
 			get_viewport().set_input_as_handled()
+		return
+	if event is InputEventKey and event.keycode == KEY_ESCAPE and event.pressed and not event.echo:
+		var launch_manager := get_node_or_null("/root/GameLaunchManager")
+		if launch_manager != null and launch_manager.has_method("return_to_main_menu"):
+			launch_manager.call("return_to_main_menu")
+			get_viewport().set_input_as_handled()

@@ -28,9 +28,11 @@ func _run() -> void:
 		await physics_frame
 	assert(runtime.active_session != null)
 	assert(runtime.world_session != null, "core.world must own the active map session")
+	assert(runtime.world_session.nav_grid != null)
 	var settlement := runtime.session_content as SettlementGame
 	assert(settlement != null, "settlement must be module-owned session content")
 	assert(settlement.world_session == runtime.world_session)
+	assert(settlement.nav_grid == runtime.world_session.nav_grid)
 	assert(settlement.launch_config != null)
 	assert(settlement.launch_config != config, "runtime must receive module parameters, not the legacy launch object")
 	assert(settlement.launch_config.map_document == config.map_document)
@@ -70,6 +72,7 @@ func _assert_world_showcase(launch_manager: Node) -> void:
 	assert(showcase.world_session == runtime.world_session)
 	assert(showcase.world_setup != null)
 	assert(showcase.world_setup.terrain_grid == map.terrain)
+	assert(showcase.world_session.nav_grid.terrain_field() != null)
 	showcase.camera_controller.camera_yaw = 17.0
 	assert(SessionSaveCoordinator.save_quicksave(runtime))
 	var save := SaveData.new()

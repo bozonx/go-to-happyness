@@ -89,6 +89,10 @@ func publish_terrain_navigation() -> void:
 	var world_setup: WorldSetup = presentation_runtime.world_setup_getter.call()
 	if nav_grid == null or world_setup == null:
 		return
+	if world_session != null:
+		world_session.publish_navigation()
+		_publish_overlay_navigation(nav_grid)
+		return
 	# `configure` sizes the nav grid off the terrain, so the two cannot disagree
 	# about cell size or board extent — a mismatch neither side could detect.
 	# Water goes in with the ground: depth, fords, ice and lava are passability
