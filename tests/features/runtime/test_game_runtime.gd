@@ -57,4 +57,13 @@ func _assert_world_showcase(launch_manager: Node) -> void:
 	assert(showcase != null, "showcase must not instantiate SettlementGame")
 	assert(showcase.world_setup != null)
 	assert(showcase.world_setup.terrain_grid == map.terrain)
+	showcase.camera_controller.camera_yaw = 17.0
+	assert(SessionSaveCoordinator.save_quicksave(runtime))
+	var save := SaveData.new()
+	assert(save.load_from_file(SessionSaveCoordinator.QUICKSAVE_PATH))
+	assert(save.game_header.get("id") == "world_showcase")
+	assert(save.module_states.get("gth.world_showcase", {}).get("camera", {}).get("yaw") == 17.0)
+	showcase.camera_controller.camera_yaw = 90.0
+	assert(SessionSaveCoordinator.load_pending(runtime, SessionSaveCoordinator.QUICKSAVE_PATH))
+	assert(showcase.camera_controller.camera_yaw == 17.0)
 	runtime.queue_free()

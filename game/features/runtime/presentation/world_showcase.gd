@@ -34,3 +34,34 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
 		camera_controller.pan(event.relative)
 		get_viewport().set_input_as_handled()
+
+
+func save_session_state() -> Dictionary:
+	return {
+		"module": "gth.world_showcase",
+		"state": {
+			"camera": {
+				"target": SaveData.vector3_to_dict(camera_controller.camera_target),
+				"distance": camera_controller.camera_distance,
+				"yaw": camera_controller.camera_yaw,
+				"pitch": camera_controller.camera_pitch,
+			},
+		},
+	}
+
+
+func restore_session_state(save_data: SaveData) -> void:
+	var section: Variant = save_data.module_states.get("gth.world_showcase", {})
+	if not section is Dictionary:
+		return
+	var camera_state: Variant = (section as Dictionary).get("camera", {})
+	if not camera_state is Dictionary:
+		return
+	var state := camera_state as Dictionary
+	var target: Variant = state.get("target", {})
+	if target is Dictionary:
+		camera_controller.camera_target = SaveData.dict_to_vector3(target as Dictionary)
+	camera_controller.camera_distance = float(state.get("distance", camera_controller.camera_distance))
+	camera_controller.camera_yaw = float(state.get("yaw", camera_controller.camera_yaw))
+	camera_controller.camera_pitch = float(state.get("pitch", camera_controller.camera_pitch))
+	camera_controller.apply_position()

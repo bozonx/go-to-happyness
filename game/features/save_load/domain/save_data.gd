@@ -72,7 +72,10 @@ func to_dict() -> Dictionary:
 		engine = {"clock": clock_state.duplicate(true), "camera": camera_state.duplicate(true)}
 	var modules := module_states.duplicate(true)
 	if modules.is_empty():
-		modules = {"gth.settlement": _settlement_module_section()}
+		# Direct legacy SettlementGame callers still populate projection fields.
+		# A generic game with an explicit header may legitimately have no module
+		# state at all, so never manufacture settlement data for it.
+		modules = {"gth.settlement": _settlement_module_section()} if game_header.is_empty() else {}
 	return {
 		"format_version": VERSION,
 		"timestamp": timestamp,
@@ -141,30 +144,31 @@ func _read_sectioned_v4(data: Dictionary) -> bool:
 	map_header = (data["map"] as Dictionary).duplicate(true)
 	engine_state = (data["engine"] as Dictionary).duplicate(true)
 	module_states = (data["modules"] as Dictionary).duplicate(true)
-	var settlement_section: Variant = module_states.get("gth.settlement", {})
-	if not (settlement_section is Dictionary):
-		push_error("SaveData: Missing gth.settlement save section")
-		return false
-	var section := settlement_section as Dictionary
-	if not _is_dictionary_field(section, "settlement") or not _is_dictionary_field(section, "world"):
-		push_error("SaveData: Invalid gth.settlement save section")
-		return false
-	if not _is_array_field(section, "buildings") or not _is_array_field(section, "construction_sites") or not _is_array_field(section, "citizens") or not _is_array_field(section, "resource_piles"):
-		push_error("SaveData: Invalid gth.settlement collections")
-		return false
-	settlement_state = (section["settlement"] as Dictionary).duplicate(true)
-	world_state = (section["world"] as Dictionary).duplicate(true)
-	# Map ownership is generic in v4. Keep the legacy projection needed by the
-	# current launch manager and settlement loader.
-	if not map_header.is_empty():
-		world_state["map_ref"] = map_header.duplicate(true)
-	clock_state = (engine_state.get("clock", {}) as Dictionary).duplicate(true) if engine_state.get("clock", {}) is Dictionary else {}
-	camera_state = (engine_state.get("camera", {}) as Dictionary).duplicate(true) if engine_state.get("camera", {}) is Dictionary else {}
-	buildings_state = (section["buildings"] as Array).duplicate(true)
-	construction_sites_state = (section["construction_sites"] as Array).duplicate(true)
-	citizens_state = (section["citizens"] as Array).duplicate(true)
-	resource_piles_state = (section["resource_piles"] as Array).duplicate(true)
-	forest_state = (section.get("forest", []) as Array).duplicate(true) if section.get("forest", []) is Array else []
+	var settlement_section: Variant = module_states.get("gth.settlement", null)
+	if settlement_section != null:
+		if not (settlement_section is Dictionary):
+			push_error("SaveData: Invalid gth.settlement save section")
+			return false
+		var section := settlement_section as Dictionary
+		if not _is_dictionary_field(section, "settlement") or not _is_dictionary_field(section, "world"):
+			push_error("SaveData: Invalid gth.settlement save section")
+			return false
+		if not _is_array_field(section, "buildings") or not _is_array_field(section, "construction_sites") or not _is_array_field(section, "citizens") or not _is_array_field(section, "resource_piles"):
+			push_error("SaveData: Invalid gth.settlement collections")
+			return false
+		settlement_state = (section["settlement"] as Dictionary).duplicate(true)
+		world_state = (section["world"] as Dictionary).duplicate(true)
+		# Map ownership is generic in v4. Keep the legacy projection needed by the
+		# current launch manager and settlement loader.
+		if not map_header.is_empty():
+			world_state["map_ref"] = map_header.duplicate(true)
+		clock_state = (engine_state.get("clock", {}) as Dictionary).duplicate(true) if engine_state.get("clock", {}) is Dictionary else {}
+		camera_state = (engine_state.get("camera", {}) as Dictionary).duplicate(true) if engine_state.get("camera", {}) is Dictionary else {}
+		buildings_state = (section["buildings"] as Array).duplicate(true)
+		construction_sites_state = (section["construction_sites"] as Array).duplicate(true)
+		citizens_state = (section["citizens"] as Array).duplicate(true)
+		resource_piles_state = (section["resource_piles"] as Array).duplicate(true)
+		forest_state = (section.get("forest", []) as Array).duplicate(true) if section.get("forest", []) is Array else []
 	version = VERSION
 	return true
 

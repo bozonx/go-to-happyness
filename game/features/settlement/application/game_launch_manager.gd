@@ -100,7 +100,9 @@ func launch_from_save(save_path: String) -> void:
 	if not save_data.load_from_file(save_path):
 		push_warning("[launch] сохранение не читается: %s" % save_path)
 		return
-	var map_reference: Variant = save_data.world_state.get("map_ref", {})
+	# v4 map metadata belongs to the host envelope. `world_state` remains only
+	# the compatibility projection for old Settlement saves.
+	var map_reference: Variant = save_data.map_header if not save_data.map_header.is_empty() else save_data.world_state.get("map_ref", {})
 	if map_reference is Dictionary and not (map_reference as Dictionary).is_empty():
 		var reference := map_reference as Dictionary
 		var source := StringName(reference.get("source", "core"))

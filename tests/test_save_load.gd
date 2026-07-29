@@ -75,6 +75,20 @@ static func run_all() -> void:
 	assert(read_data.buildings_state[0].get("blueprint_ref", {}).get("id") == "test_house")
 	assert(int(read_data.buildings_state[0].get("zone_state", [])[0].get("assigned_citizen_ids", [0])[0]) == 1)
 
+	# A non-settlement game owns different module data. The host envelope must
+	# accept it without manufacturing or requiring settlement state.
+	var showcase_save := SaveDataScript.new()
+	assert(showcase_save.from_dict({
+		"format_version": SaveDataScript.VERSION,
+		"game": {"pack": "core", "id": "world_showcase", "revision": ""},
+		"map": {"source": "core", "id": "green_valley", "revision": ""},
+		"engine": {"clock": {}},
+		"modules": {"gth.world_showcase": {"camera": {"yaw": 42.0}}},
+	}), "Generic module save should load without gth.settlement")
+	assert(showcase_save.module_states.has("gth.world_showcase"))
+	assert(showcase_save.settlement_state.is_empty())
+	assert(showcase_save.map_header.get("id") == "green_valley")
+
 	# A v2 save predates the forest field; it must still load, with an empty forest.
 	var v2_compat := SaveDataScript.new()
 	assert(v2_compat.from_dict({

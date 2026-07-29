@@ -14,7 +14,9 @@ func _ready() -> void:
 	if session == null:
 		push_error("[launch] GameRuntime requires an active game session")
 		return
-	SessionBootstrapper.new().run(self, session)
+	if not SessionBootstrapper.new().run(self, session):
+		return
+	_restore_pending_save()
 
 
 func attach_session_content(node: Node) -> void:
@@ -25,3 +27,21 @@ func attach_session_content(node: Node) -> void:
 		return
 	session_content = node
 	add_child(node)
+
+
+func _restore_pending_save() -> void:
+	var launch_manager := get_node_or_null("/root/GameLaunchManager")
+	if launch_manager == null:
+		return
+	var path := String(launch_manager.get("pending_save_path"))
+	if path.is_empty():
+		return
+	if SessionSaveCoordinator.load_pending(self, path):
+		launch_manager.set("pending_save_path", "")
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.keycode == KEY_F5 and event.pressed and not event.echo:
+		if SessionSaveCoordinator.save_quicksave(self):
+			print("[save] quicksave written")
+			get_viewport().set_input_as_handled()
