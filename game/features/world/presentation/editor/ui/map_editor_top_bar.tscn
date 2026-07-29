@@ -74,11 +74,9 @@ mouse_filter = 2
 [node name="ValidateButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
 text = "✔"
-disabled = true
-tooltip_text = "Проверить карту — валидатор появляется в фазе 6"
+tooltip_text = "Проверить карту"
 
 [node name="TestButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
 text = "▶"
-disabled = true
-tooltip_text = "Тест-запуск (F5) появляется в фазе 6"
+tooltip_text = "Тест-запуск World Showcase (F5)"

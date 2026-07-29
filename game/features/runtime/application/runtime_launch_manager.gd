@@ -13,6 +13,9 @@ var pending_save_path := ""
 var editor_dev_mode := false
 var editor_mode_forced := false
 var pending_editor_map: StringName = &""
+## In-memory hand-off for F5 from the map editor. It is intentionally not a
+## save: a test run must see unsaved edits and must not mutate the document.
+var pending_editor_document: MapDocument = null
 
 var _map_service := MapDocumentService.new()
 
@@ -35,6 +38,25 @@ func launch_game_definition(
 		return
 	active_session = GameSessionConfig.create(definition, selected_map, document, module_parameters)
 	get_tree().change_scene_to_file(GAME_RUNTIME_SCENE)
+
+
+func launch_editor_test(document: MapDocument) -> void:
+	if document == null:
+		push_warning("[launch] тест-запуск отменён: карта отсутствует")
+		return
+	var definition := GameModuleRegistry.resolve_definition(&"core:world_showcase")
+	if definition == null:
+		push_error("[launch] тест-запуску нужен core:world_showcase")
+		return
+	pending_save_path = ""
+	pending_editor_document = document
+	active_session = GameSessionConfig.create(definition, &"editor:preview", document)
+	get_tree().change_scene_to_file(GAME_RUNTIME_SCENE)
+
+
+func return_to_editor_test() -> void:
+	active_session = null
+	get_tree().change_scene_to_file(MAP_EDITOR_SCENE)
 
 
 func launch_from_save(save_path: String) -> void:
@@ -92,6 +114,7 @@ func return_to_main_menu() -> void:
 
 func reset_to_default() -> void:
 	pending_save_path = ""
+	pending_editor_document = null
 	active_session = null
 
 

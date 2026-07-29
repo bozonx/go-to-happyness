@@ -46,6 +46,8 @@ const PLANNED_MODES: Array = [
 @onready var _settings_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/SettingsButton
 @onready var _undo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/UndoButton
 @onready var _redo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/RedoButton
+@onready var _validate_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/ValidateButton
+@onready var _test_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/TestButton
 @onready var _dialogs: MapEditorDialogs = $UI/Dialogs
 
 var document: MapDocument
@@ -66,6 +68,7 @@ var _brush := TerrainBrushController.new()
 var _water_service := WaterService.new()
 var _water_brush := WaterBrushController.new()
 var _border_ocean := BorderOceanService.new()
+var _test_run_service := MapTestRunService.new()
 
 var _context := MapEditorContext.new()
 var _modes: Array[MapEditorMode] = []
@@ -117,6 +120,12 @@ func _resolve_launch_mode() -> void:
 ## one. Saving it goes through Save As, which is where a name is asked for.
 func _open_requested_map() -> void:
 	var launch_manager: Node = get_node_or_null("/root/GameLaunchManager")
+	if launch_manager != null and launch_manager.get("pending_editor_document") is MapDocument:
+		document = launch_manager.get("pending_editor_document") as MapDocument
+		launch_manager.set("pending_editor_document", null)
+		current_path = ""
+		_message = "возврат из тест-запуска · несохранённые правки сохранены"
+		return
 	var requested: StringName = &""
 	if launch_manager != null:
 		requested = launch_manager.get("pending_editor_map")
@@ -329,6 +338,10 @@ func _connect_ui() -> void:
 	_settings_button.pressed.connect(_open_settings)
 	_undo_button.pressed.connect(_undo)
 	_redo_button.pressed.connect(_redo)
+	_validate_button.pressed.connect(_validate_map)
+	_test_button.pressed.connect(_test_run)
+	_validate_button.disabled = false
+	_test_button.disabled = false
 	_dialogs.create_requested.connect(_on_create_requested)
 	_dialogs.open_requested.connect(_on_open_requested)
 	_dialogs.save_as_requested.connect(_on_save_as_requested)
@@ -481,6 +494,9 @@ func _handle_key(event: InputEventKey) -> void:
 				_redo()
 		return
 	match event.keycode:
+		KEY_F5:
+			_test_run()
+			return
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7:
 			var slot := event.keycode - KEY_1
 			if slot < _modes.size():
@@ -494,6 +510,36 @@ func _handle_key(event: InputEventKey) -> void:
 			return
 	if _active != null and _active.handle_input(event):
 		_refresh_panels()
+
+
+func _validate_map() -> Dictionary:
+	var result := _test_run_service.validate(document, _nav_grid)
+	var errors: Array = result["errors"]
+	var warnings: Array = result["warnings"]
+	if not errors.is_empty():
+		_message = "ошибки: %s" % "; ".join(errors)
+	elif warnings.is_empty():
+		_message = "карта проверена: ошибок и предупреждений нет"
+	else:
+		_message = "карта проверена · предупреждения: %s" % "; ".join(warnings)
+	_refresh_panels()
+	return result
+
+
+## F5 deliberately runs World Showcase: it is the generic `core.world`
+## consumer and therefore proves this map without silently adding Settlement
+## rules, citizens, economy or authored start requirements to a new map.
+func _test_run() -> void:
+	var result := _validate_map()
+	if not (result["errors"] as Array).is_empty():
+		return
+	var launch_manager: Node = get_node_or_null("/root/GameLaunchManager")
+	if launch_manager == null or not launch_manager.has_method("launch_game_definition"):
+		_message = "тест-запуск недоступен: нет host launcher"
+		_refresh_panels()
+		return
+	if launch_manager.has_method("launch_editor_test"):
+		launch_manager.call("launch_editor_test", document)
 
 
 ## Every committed ground edit becomes exactly one command, recorded here rather

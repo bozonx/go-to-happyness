@@ -28,6 +28,7 @@ func _run() -> void:
 	await process_frame
 
 	_test_scene_came_up(editor)
+	_test_validation(editor)
 	_test_mode_switching(editor)
 	await _test_terrain_editing_and_shared_undo(editor)
 	_test_fill_placement_and_shared_undo(editor)
@@ -52,6 +53,13 @@ func _test_scene_came_up(editor: Node) -> void:
 	# must not open with the author inside a hill.
 	assert(editor.camera.distance > editor.document.meta.board_metres() * 0.5, "camera framed the board")
 	print("  scene up: board %d, camera at %.1f" % [editor.document.board_cells(), editor.camera.distance])
+
+
+func _test_validation(editor: Node) -> void:
+	var result: Dictionary = editor._validate_map()
+	assert((result["errors"] as Array).is_empty(), "a blank sandbox map is valid for the generic test run")
+	assert(not editor._validate_button.disabled and not editor._test_button.disabled, "validation and test-run are available")
+	print("  validation ok")
 
 
 ## The mode strip is data. Five modes work, the rest are visibly present and
