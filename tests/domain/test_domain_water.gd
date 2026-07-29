@@ -407,7 +407,7 @@ static func _test_level_brush_can_lower_a_lake() -> void:
 
 	assert(service.set_body_level(lake.id, -1))
 	assert(water.height_of(Vector2i.ZERO) == -1)
-	assert(lake.surface_height == -1)
+	assert(water.body(lake.id).surface_height == -1)
 	# The middle is still water — one step of it — and the shelf, which sat exactly at
 	# -1, is dry ground again without anyone erasing it.
 	assert(water.is_wet(terrain, Vector2i.ZERO))

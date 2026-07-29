@@ -51,6 +51,7 @@ func activate() -> void:
 	if context.nav_overlay != null:
 		context.nav_overlay.configure(context.nav_grid, NAV_PROFILES[_nav_profile_index])
 		context.nav_overlay.visible = false
+	_update_ramp_preview()
 
 
 func deactivate() -> void:
@@ -58,11 +59,15 @@ func deactivate() -> void:
 		context.brush.set_paint_direction(0)
 	if context != null and context.nav_overlay != null:
 		context.nav_overlay.visible = false
+	if context != null and context.ramp_preview != null:
+		context.ramp_preview.hide_preview()
 
 
 func clear_hover() -> void:
 	if context != null and context.brush != null:
 		context.brush.clear_hover()
+	if context != null and context.ramp_preview != null:
+		context.ramp_preview.hide_preview()
 
 
 func hover_brush() -> BaseBrushController:
@@ -77,6 +82,7 @@ func adjust_brush_size(delta: int) -> void:
 func process(_delta: float) -> void:
 	if context.brush != null:
 		context.brush.update_hover(context.camera, context.space_state(), context.mouse_position())
+	_update_ramp_preview()
 
 
 func handle_input(event: InputEvent) -> bool:
@@ -135,6 +141,7 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 					context.brush.place_ramp()
 				else:
 					context.brush.dissolve_ramp()
+				context.set_status_message(context.brush.last_message)
 		TOOL_HOLE:
 			if event.pressed:
 				var cutting := _hole_cutting if direction > 0 else not _hole_cutting
@@ -149,6 +156,8 @@ func _handle_key(event: InputEventKey) -> bool:
 	match event.keycode:
 		KEY_TAB:
 			_tool = TOOLS[(TOOLS.find(_tool) + 1) % TOOLS.size()]
+			if _tool == TOOL_RAMP:
+				context.set_status_message(_ramp_guidance_message())
 		KEY_F:
 			context.set_edit_label("выравнивание")
 			context.brush.apply_flatten()
@@ -163,8 +172,10 @@ func _handle_key(event: InputEventKey) -> bool:
 			context.brush.adjust_brush_size(1)
 		KEY_C:
 			context.brush.cycle_ramp_class()
+			context.set_status_message(_ramp_message())
 		KEY_V:
 			context.brush.cycle_ramp_direction()
+			context.set_status_message(_ramp_message())
 		_:
 			return false
 	notify_ui_changed()
@@ -212,6 +223,8 @@ func selected_palette_entry() -> StringName:
 func select_palette_entry(entry_id: StringName) -> void:
 	if TOOLS.has(entry_id):
 		_tool = entry_id
+		if _tool == TOOL_RAMP:
+			context.set_status_message(_ramp_guidance_message())
 		notify_ui_changed()
 
 
@@ -228,7 +241,7 @@ func tool_options() -> Array:
 	if _tool == TOOL_HOLE:
 		options.append(ToolOption.of(OPTION_HOLE_MODE, "Режим: %s" % ("вырез" if _hole_cutting else "засыпка")))
 	if _tool == TOOL_RAMP:
-		options.append(ToolOption.of(OPTION_RAMP_CLASS, "Класс: %s" % SlopeCatalog.id_of_class(context.brush.ramp_class)))
+		options.append(ToolOption.of(OPTION_RAMP_CLASS, "Тип: %s" % _ramp_class_label()))
 		options.append(ToolOption.of(OPTION_RAMP_DIR, "Направление: %s" % TerrainBrushController.direction_name(context.brush.ramp_direction)))
 	return options
 
@@ -243,8 +256,10 @@ func activate_option(option_id: StringName) -> void:
 			context.brush.adjust_brush_size(-1)
 		OPTION_RAMP_CLASS:
 			context.brush.cycle_ramp_class()
+			context.set_status_message(_ramp_message())
 		OPTION_RAMP_DIR:
 			context.brush.cycle_ramp_direction()
+			context.set_status_message(_ramp_message())
 		OPTION_NAV_NONE:
 			_set_overlay_profile(&"")
 		OPTION_NAV_PEDESTRIAN:
@@ -267,7 +282,7 @@ func inspector_lines() -> Array[String]:
 	if _tool == TOOL_HOLE:
 		lines.append("Режим кисти: %s" % ("вырез" if _hole_cutting else "засыпка"))
 	lines.append("Пандус: %s → %s" % [
-		SlopeCatalog.id_of_class(context.brush.ramp_class),
+		_ramp_class_label(),
 		TerrainBrushController.direction_name(context.brush.ramp_direction),
 	])
 	lines.append("Навигация: %s (%s)" % [_overlay_state(), NAV_PROFILES[_nav_profile_index]])
@@ -311,6 +326,62 @@ func _set_overlay_profile(profile: StringName) -> void:
 	context.nav_overlay.configure(context.nav_grid, profile)
 	context.nav_overlay.visible = true
 	context.nav_overlay.rebuild()
+
+
+func _update_ramp_preview() -> void:
+	if context == null or context.ramp_preview == null:
+		return
+	if _tool != TOOL_RAMP or context.brush == null or not context.brush.has_hover:
+		context.ramp_preview.hide_preview()
+		return
+	context.ramp_preview.show_ramp(
+		context.brush.hovered_cell, context.brush.ramp_class, context.brush.ramp_direction,
+	)
+
+
+func _ramp_class_label() -> String:
+	var slope_id := SlopeCatalog.id_of_class(context.brush.ramp_class)
+	return "%s — %d кл., +%d" % [
+		_ramp_class_name(slope_id), SlopeCatalog.run_of(slope_id), SlopeCatalog.rise_of(slope_id),
+	]
+
+
+func _ramp_message() -> String:
+	if context.brush == null or not context.brush.has_hover:
+		return "пандус: наведите курсор на нижнюю клетку"
+	var slope_id := SlopeCatalog.id_of_class(context.brush.ramp_class)
+	var reason := context.terrain.ramp_placement_rejection(
+		context.brush.hovered_cell, context.brush.ramp_class, context.brush.ramp_direction,
+	)
+	if reason.is_empty():
+		return "пандус: можно поставить (%s → %s)" % [_ramp_class_label(), TerrainBrushController.direction_name(context.brush.ramp_direction)]
+	return "пандус: %s" % _ramp_rejection_message(reason, slope_id)
+
+
+func _ramp_guidance_message() -> String:
+	return "пандус: ЛКМ с нижней клетки; V — направление подъёма, C — тип"
+
+
+static func _ramp_class_name(slope_id: StringName) -> String:
+	match slope_id:
+		SlopeCatalog.SHALLOW: return "очень пологий"
+		SlopeCatalog.GENTLE: return "пологий"
+		SlopeCatalog.MODERATE: return "средний"
+		SlopeCatalog.STEEP: return "крутой"
+		SlopeCatalog.VERY_STEEP: return "очень крутой"
+		SlopeCatalog.PRE_CLIFF: return "предельный"
+		_: return String(slope_id)
+
+
+static func _ramp_rejection_message(reason: StringName, slope_id: StringName) -> String:
+	match reason:
+		&"start_outside", &"run_outside", &"top_outside": return "не хватает места до края карты"
+		&"start_hole", &"run_hole", &"top_hole": return "на пути есть вырез"
+		&"run_anchor": return "на пути закреплённая клетка"
+		&"run_ramp", &"top_ramp": return "на пути уже есть пандус"
+		&"run_height": return "основание должно быть ровным (%d клеток)" % SlopeCatalog.run_of(slope_id)
+		&"top_height": return "верхняя клетка должна быть ровно на +%d выше" % SlopeCatalog.rise_of(slope_id)
+		_: return "недопустимое положение"
 
 
 func list_title() -> String:

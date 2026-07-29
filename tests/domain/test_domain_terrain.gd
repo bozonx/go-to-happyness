@@ -174,8 +174,10 @@ static func _test_ramp_placement_rules() -> void:
 	var grid := _make_grid()
 	# Needs a column exactly `rise` higher beyond the run.
 	assert(not grid.can_place_ramp(Vector2i(0, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
+	assert(grid.ramp_placement_rejection(Vector2i(0, 0), SlopeCatalog.CLASS_GENTLE, SlopeCatalog.DIR_E) == &"top_height")
 	grid.set_height(Vector2i(4, 0), 1)
 	assert(grid.can_place_ramp(Vector2i(0, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
+	assert(grid.ramp_placement_rejection(Vector2i(0, 0), SlopeCatalog.CLASS_GENTLE, SlopeCatalog.DIR_E).is_empty())
 	grid.set_height(Vector2i(4, 0), 2)
 	assert(not grid.can_place_ramp(Vector2i(0, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
 	grid.set_height(Vector2i(4, 0), 1)
@@ -183,6 +185,7 @@ static func _test_ramp_placement_rules() -> void:
 	# An uneven run is not a ramp site.
 	grid.set_height(Vector2i(2, 0), 1)
 	assert(not grid.place_ramp(Vector2i(0, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
+	assert(grid.ramp_placement_rejection(Vector2i(0, 0), SlopeCatalog.CLASS_GENTLE, SlopeCatalog.DIR_E) == &"run_height")
 	grid.set_height(Vector2i(2, 0), 0)
 	# Neither is a run crossing a hole or an anchor.
 	grid.set_hole(Vector2i(2, 0), true)

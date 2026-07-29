@@ -449,26 +449,43 @@ func can_place_ramp(start_cell: Vector2i, slope_id: StringName, direction: int) 
 
 
 func can_place_ramp_class(start_cell: Vector2i, slope_class: int, direction: int) -> bool:
-	if not SlopeCatalog.is_ramp_class(slope_class) or not SlopeCatalog.is_orthogonal(direction):
-		return false
+	return ramp_placement_rejection(start_cell, slope_class, direction) == &""
+
+
+## Empty when a ramp can be placed.  The editor uses the stable reason codes to
+## explain its preview; placement itself uses this same query, so the preview
+## cannot promise an invalid edit.
+func ramp_placement_rejection(start_cell: Vector2i, slope_class: int, direction: int) -> StringName:
+	if not SlopeCatalog.is_ramp_class(slope_class):
+		return &"invalid_slope"
+	if not SlopeCatalog.is_orthogonal(direction):
+		return &"invalid_direction"
 	if not is_inside(start_cell) or is_hole(start_cell):
-		return false
+		return &"start_outside" if not is_inside(start_cell) else &"start_hole"
 	var offset := SlopeCatalog.direction_offset(direction)
 	var run := SlopeCatalog.run_of_class(slope_class)
 	var rise := SlopeCatalog.rise_of_class(slope_class)
 	var base_height := height_of(start_cell)
 	for step in run:
 		var cell := start_cell + offset * step
-		if not is_inside(cell) or is_hole(cell) or is_anchor(cell):
-			return false
+		if not is_inside(cell):
+			return &"run_outside"
+		if is_hole(cell):
+			return &"run_hole"
+		if is_anchor(cell):
+			return &"run_anchor"
 		if height_of(cell) != base_height:
-			return false
+			return &"run_height"
 		if is_ramp_cell(cell):
-			return false
+			return &"run_ramp"
 	var top_cell := start_cell + offset * run
-	if not is_inside(top_cell) or is_hole(top_cell) or is_ramp_cell(top_cell):
-		return false
-	return height_of(top_cell) == base_height + rise
+	if not is_inside(top_cell):
+		return &"top_outside"
+	if is_hole(top_cell):
+		return &"top_hole"
+	if is_ramp_cell(top_cell):
+		return &"top_ramp"
+	return &"" if height_of(top_cell) == base_height + rise else &"top_height"
 
 
 ## Turns the ramp containing `cell` back into flat columns at its base height.

@@ -1,6 +1,8 @@
 class_name MapEditorContext
 extends RefCounted
 
+signal status_message_changed(message: String)
+
 ## Everything a mode is allowed to reach (map_editor.md §3.5).
 ##
 ## Handed to every mode instead of the editor node itself. That is the whole
@@ -29,6 +31,7 @@ var terrain_world: GridTerrainWorld = null
 var water_world: WaterWorld = null
 var nav_overlay: NavTerrainOverlay = null
 var hover_marker: Node3D = null
+var ramp_preview: RampPreview = null
 
 ## Set by the editor so a mode can raycast without knowing the scene tree.
 var world_3d: World3D = null
@@ -58,3 +61,7 @@ func space_state() -> PhysicsDirectSpaceState3D:
 
 func set_edit_label(label: String) -> void:
 	pending_edit_label = label
+
+
+func set_status_message(message: String) -> void:
+	status_message_changed.emit(message)

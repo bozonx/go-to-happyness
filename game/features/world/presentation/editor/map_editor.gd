@@ -29,6 +29,7 @@ const PLANNED_MODES: Array = [
 @onready var water_world: WaterWorld = $Water
 @onready var nav_overlay: NavTerrainOverlay = $NavOverlay
 @onready var hover_marker: MeshInstance3D = $HoverMarker
+@onready var ramp_preview: RampPreview = $RampPreview
 @onready var camera: MapEditorCamera = $Camera3D
 
 @onready var _top_bar: Control = $UI/Screen/TopBar
@@ -187,8 +188,17 @@ func _build_services() -> void:
 	_context.water_world = water_world
 	_context.nav_overlay = nav_overlay
 	_context.hover_marker = hover_marker
+	_context.ramp_preview = ramp_preview
 	_context.world_3d = get_world_3d()
 	_context.viewport = get_viewport()
+	if not _context.status_message_changed.is_connected(_on_status_message_changed):
+		_context.status_message_changed.connect(_on_status_message_changed)
+	ramp_preview.configure(document.terrain)
+
+
+func _on_status_message_changed(message: String) -> void:
+	_message = message
+	_refresh_panels()
 
 
 func _build_hover_marker() -> void:

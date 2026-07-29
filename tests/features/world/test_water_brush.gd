@@ -17,7 +17,7 @@ static func run_all() -> void:
 	_test_reverse_flood_drains_whole_body()
 	_test_no_hover_means_no_edit()
 	_test_no_body_means_refusal()
-	_test_cycle_tool_rotates_the_three_tools()
+	_test_cycle_tool_rotates_the_water_tools()
 	_test_adjust_level_clamps()
 	_test_pick_level_from_ground()
 	_test_create_body_is_undoable()
@@ -170,7 +170,7 @@ static func _test_no_body_means_refusal() -> void:
 
 # --- Tool cycling -------------------------------------------------------------
 
-static func _test_cycle_tool_rotates_the_three_tools() -> void:
+static func _test_cycle_tool_rotates_the_water_tools() -> void:
 	var world := _make()
 	var brush: WaterBrushController = world["brush"]
 
@@ -179,6 +179,8 @@ static func _test_cycle_tool_rotates_the_three_tools() -> void:
 	assert(brush.tool == WaterBrushController.TOOL_LEVEL)
 	brush.cycle_tool()
 	assert(brush.tool == WaterBrushController.TOOL_FREEZE)
+	brush.cycle_tool()
+	assert(brush.tool == WaterBrushController.TOOL_THAW)
 	brush.cycle_tool()
 	assert(brush.tool == WaterBrushController.TOOL_FLOOD)
 

@@ -11,6 +11,7 @@
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_status_bar.tscn" id="10_status_bar"]
 [ext_resource type="Script" uid="uid://dvuwd0lsd080y" path="res://game/features/world/presentation/water/water_world.gd" id="11_water"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_dialogs.tscn" id="12_dialogs"]
+[ext_resource type="Script" path="res://game/features/world/presentation/editor/ramp_preview.gd" id="13_ramp_preview"]
 
 [sub_resource type="Environment" id="env_map_editor"]
 background_mode = 1
@@ -44,6 +45,11 @@ script = ExtResource("3_nav_overlay")
 
 [node name="HoverMarker" type="MeshInstance3D" parent="." unique_id=1075526191]
 cast_shadow = 0
+
+[node name="RampPreview" type="MeshInstance3D" parent="."]
+visible = false
+cast_shadow = 0
+script = ExtResource("13_ramp_preview")
 
 [node name="Camera3D" type="Camera3D" parent="." unique_id=1817952013]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 40, 40)

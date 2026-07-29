@@ -403,7 +403,10 @@ func _resurface_body(body_id: int, cells: Array[Vector2i], level: int) -> bool:
 	# bodies may still need their metadata level updated.
 	if edit.is_empty() and body.surface_height == level:
 		return _reject(REASON_NOTHING_TO_DO)
-	return _commit_registry_edit(edit)
+	# The body remains the same registry entry; only its authored surface and
+	# cells changed. `edit_committed` republishes those cells, while
+	# `registry_changed` stays reserved for add/remove/retype cache invalidation.
+	return _commit_or_reject(edit)
 
 
 func _reject(reason: StringName) -> bool:
