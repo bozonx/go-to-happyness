@@ -3,8 +3,10 @@ extends GameModule
 
 const SettlementScene = preload("res://game/bootstrap/settlement_game.tscn")
 
-## Transitional settlement module. It owns selection of the existing settlement
-## bootstrap while that bootstrap is incrementally extracted from SettlementGame.
+## Settlement game module. Owns the settlement session lifecycle: it resolves
+## start parameters into a GameLaunchConfig, instantiates the settlement scene,
+## and manages save/restore. Gameplay constants live in SettlementConstants;
+## the scene script remains a presentation adapter for the bootstrap.
 
 func module_id() -> StringName:
 	return &"gth.settlement"

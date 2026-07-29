@@ -1,7 +1,9 @@
 class_name MainMenu
 extends Control
 
-## Main menu controller supporting era selection, landscape selection, and game launch.
+## Host game library. Every installed game definition appears here on equal
+## terms; settlement-specific configuration (era/biome) is driven by the
+## definition's start_parameters, not by hardcoded module or game id checks.
 
 const UI_THEME = preload("res://game/features/ui/presentation/theme/ui_theme.tres")
 @onready var title_label: Label = $MarginContainer/VBoxContainer/Header/TitleLabel
@@ -124,11 +126,11 @@ func _on_game_selected(index: int) -> void:
 
 func _select_game_option() -> void:
 	var definition := GameModuleRegistry.resolve_definition(selected_game)
-	var is_settlement := definition != null and definition.module_ids.has(&"gth.settlement")
-	tent_era_btn.get_parent().get_parent().visible = is_settlement
+	var has_era_config := definition != null and definition.start_parameters.has("era")
+	tent_era_btn.get_parent().get_parent().visible = has_era_config
 	if definition != null and not definition.default_map.is_empty():
 		_select_default_map(definition.default_map)
-	start_game_btn.text = "▶ Начать Settlement" if is_settlement else "▶ Запустить игру"
+	start_game_btn.text = "▶ Запустить игру"
 	subtitle_label.text = "Главное меню — библиотека установленных игр"
 	_update_config_summary()
 
@@ -166,18 +168,20 @@ func _update_era_buttons_state() -> void:
 
 
 func _update_config_summary() -> void:
-	if selected_game != &"core:settlement":
-		var definition := GameModuleRegistry.resolve_definition(selected_game)
-		era_description_label.text = definition.name if definition != null else "Неизвестная игра"
-		param_summary_label.text = "• %s\n• Запускается внутри Go To Happyness" % [_landscape_summary()]
+	var definition := GameModuleRegistry.resolve_definition(selected_game)
+	if definition == null:
+		era_description_label.text = "Неизвестная игра"
+		param_summary_label.text = ""
 		return
-	match selected_era:
-		&"tent":
-			era_description_label.text = "Палаточная эра: Начало пути вашей кочевой группы. Выживание в дикой природе, сбор ресурсов, постройка первого костра и палаток."
-			param_summary_label.text = "• %s\n• Стартовое население: 4 жителей\n• Монеты: 500\n• Запасы: Еда (16), Вода (8), Тент (1)\n• Снаряжение: Кремень и огниво, Рабочие перчатки" % [_landscape_summary()]
-		_:
-			era_description_label.text = "Эта эра будет доступна в следующих обновлениях."
-			param_summary_label.text = ""
+	era_description_label.text = definition.name
+	if definition.start_parameters.has("era"):
+		match selected_era:
+			&"tent":
+				param_summary_label.text = "• %s\n• Стартовое население: 4 жителей\n• Монеты: 500\n• Запасы: Еда (16), Вода (8), Тент (1)\n• Снаряжение: Кремень и огниво, Рабочие перчатки" % [_landscape_summary()]
+			_:
+				param_summary_label.text = "• %s\n• Эта эра будет доступна в следующих обновлениях." % [_landscape_summary()]
+	else:
+		param_summary_label.text = "• %s\n• Запускается внутри Go To Happyness" % [_landscape_summary()]
 
 
 ## What the chosen entry actually decides. A map states its own board and start
@@ -193,12 +197,30 @@ func _landscape_summary() -> String:
 func _on_start_game_pressed() -> void:
 	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
 	if launch_mgr != null and launch_mgr.has_method("launch_game_definition"):
-		var parameters := {
-			&"gth.settlement": {"era": String(selected_era), "biome": String(selected_biome)},
-		} if selected_game == &"core:settlement" else {}
+		var parameters := _build_module_parameters()
 		launch_mgr.call("launch_game_definition", selected_game, selected_map, parameters)
 	else:
 		get_tree().change_scene_to_file("res://game/bootstrap/game_runtime.tscn")
+
+
+## Builds module parameters from the definition's start_parameters, overriding
+## era/biome from the UI when the definition declares them. Parameters are keyed
+## by the first non-core module, which is the gameplay module that consumes them.
+func _build_module_parameters() -> Dictionary:
+	var definition := GameModuleRegistry.resolve_definition(selected_game)
+	if definition == null or definition.start_parameters.is_empty():
+		return {}
+	var base := definition.start_parameters.duplicate(true)
+	if base.has("era"):
+		base["era"] = String(selected_era)
+	if base.has("biome"):
+		base["biome"] = String(selected_biome)
+	var params := {}
+	for module_id: StringName in definition.module_ids:
+		if module_id == &"core.world":
+			continue
+		params[module_id] = base.duplicate(true)
+	return params
 
 
 func _on_building_editor_pressed() -> void:

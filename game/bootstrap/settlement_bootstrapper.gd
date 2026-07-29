@@ -182,13 +182,13 @@ func _setup_ai_and_navigation() -> void:
 		game.add_child(game.citizen_ai)
 	game.nav_grid = game.world_session.nav_grid if game.world_session != null else NavGrid.new()
 	if game.world_session == null:
-		game.nav_grid.configure(SettlementGame.CELL_SIZE, game.board_cells)
+		game.nav_grid.configure(SettlementConstants.CELL_SIZE, game.board_cells)
 	game.road_network_service = RoadNetworkService.new()
 	game.road_network_service.configure(game.nav_grid)
 	game.navigation_obstacle_publisher = NavigationObstaclePublisher.new()
 	game.navigation_obstacle_publisher.configure(game.nav_grid)
 	game.trail_field = TrailFieldService.new()
-	game.trail_field.configure(game.board_cells * SettlementGame.CELL_SIZE, SettlementGame.CELL_SIZE, game.nav_grid)
+	game.trail_field.configure(game.board_cells * SettlementConstants.CELL_SIZE, SettlementConstants.CELL_SIZE, game.nav_grid)
 	game.trail_texture_renderer = TrailTextureRenderer.new()
 	game.route_service = GridRouteService.new()
 	game.route_service.configure(game.nav_grid)
@@ -272,7 +272,7 @@ func _setup_building_services() -> void:
 	game.village_territory_service = VillageTerritoryService.new()
 	game.village_territory_service.configure(game.building_registry, int(game.settlement.era))
 	game.sawmills = SawmillService.new()
-	game.sawmills.configure(game.sawmill_stocks, game.sawmill_positions, SettlementGame.SAWMILL_PROCESS_DURATION, game.cell_from_position)
+	game.sawmills.configure(game.sawmill_stocks, game.sawmill_positions, SettlementConstants.SAWMILL_PROCESS_DURATION, game.cell_from_position)
 
 
 func _setup_construction_and_demolition() -> void:
@@ -281,7 +281,7 @@ func _setup_construction_and_demolition() -> void:
 	construction_runtime.settlement = game.settlement
 	construction_runtime.building_registry = game.building_registry
 	construction_runtime.citizens = game.citizens
-	construction_runtime.duration = SettlementGame.CONSTRUCTION_DURATION
+	construction_runtime.duration = SettlementConstants.CONSTRUCTION_DURATION
 	construction_runtime.builder_power = func(site_node): return game.construction_controller.building_power(site_node)
 	construction_runtime.builder_count = func(site_node): return game.construction_controller.builder_count(site_node)
 	construction_runtime.set_status = func(text): game.construction_controller.set_construction_status(text)
@@ -294,7 +294,7 @@ func _setup_construction_and_demolition() -> void:
 	game.construction.entrance_post_scene = ConstructionEntrancePostScene
 	game.construction.configure(construction_runtime)
 	var demolition_runtime := DemolitionRuntime.new()
-	demolition_runtime.duration = SettlementGame.DEMOLITION_DURATION
+	demolition_runtime.duration = SettlementConstants.DEMOLITION_DURATION
 	demolition_runtime.building_power = func(site_node): return game.construction_controller.building_power(site_node)
 	demolition_runtime.is_ready = func(site): return game.building_lifecycle_service.demolition_ready(site)
 	demolition_runtime.completed = game.finish_demolition
@@ -352,7 +352,7 @@ func _setup_foraging_and_fire() -> void:
 	# getters return temporary empty dictionaries that never receive grass data.
 	var hero_port := HeroInteractionRuntimePort.new()
 	hero_port.player_citizen_getter = func() -> Citizen: return game.player_citizen
-	hero_port.interaction_range = SettlementGame.INTERACTION_RANGE
+	hero_port.interaction_range = SettlementConstants.INTERACTION_RANGE
 	hero_port.tree_positions = game.tree_positions
 	hero_port.tree_nodes = game.tree_nodes
 	hero_port.sawmill_positions = game.sawmill_positions
@@ -467,7 +467,7 @@ func _setup_building_lifecycle() -> void:
 	port.factories = game.factories
 	port.house_lights = game.house_lights
 	port.entrance_lights = game.entrance_lights
-	port.house_capacity = SettlementGame.HOUSE_CAPACITY
+	port.house_capacity = SettlementConstants.HOUSE_CAPACITY
 	port.fire_light_scene = FireLightScene
 	port.entrance_stone_getter = func() -> Node3D: return game.entrance_stone
 	port.campfire_node_getter = func() -> Node3D: return game.campfire_node
@@ -562,7 +562,7 @@ func _setup_citizen_registration_and_school() -> void:
 	game.citizen_registration_service = CitizenRegistrationService.new()
 	var registration_port := CitizenRegistrationRuntimePort.new()
 	registration_port.citizens = game.citizens
-	registration_port.officer_post_radius = SettlementGame.OFFICER_POST_RADIUS
+	registration_port.officer_post_radius = SettlementConstants.OFFICER_POST_RADIUS
 	registration_port.employment_centre_building_getter = game.employment_centre_building
 	registration_port.employment_center_position_getter = game.employment_center_position
 	registration_port.is_work_time = func(): return game.simulation_tick_controller.is_work_time()
@@ -580,7 +580,7 @@ func _setup_citizen_registration_and_school() -> void:
 	placement_port.building_registry = game.building_registry
 	placement_port.tree_positions = game.tree_positions
 	placement_port.terrain_height_at = game.terrain_height_at
-	placement_port.max_build_slope = SettlementGame.MAX_BUILD_SLOPE
+	placement_port.max_build_slope = SettlementConstants.MAX_BUILD_SLOPE
 	game.building_placement_service.configure(placement_port)
 
 
@@ -596,7 +596,7 @@ func _setup_citizen_needs_and_orders() -> void:
 	daily_order_port.is_work_time = func(): return game.simulation_tick_controller.is_work_time()
 	daily_order_port.is_citizen_work_time = func(citizen): return game.simulation_tick_controller.is_citizen_work_time(citizen)
 	daily_order_port.absolute_game_minutes = func(): return game.outside_work_controller.absolute_game_minutes()
-	daily_order_port.game_minutes_per_second = SettlementGame.GAME_MINUTES_PER_SECOND
+	daily_order_port.game_minutes_per_second = SettlementConstants.GAME_MINUTES_PER_SECOND
 	daily_order_port.citizen_ai_request_decision_refresh = func() -> void: if game.citizen_ai != null: game.citizen_ai.request_decision_refresh()
 	game.citizen_daily_order_service.configure(daily_order_port)
 	game.citizen_needs_service = CitizenNeedsService.new()
@@ -638,7 +638,7 @@ func _setup_trade_and_logistics() -> void:
 	routing_port.warehouse_positions = game.warehouse_positions
 	routing_port.resource_piles = game.resource_piles
 	routing_port.player_citizen_getter = func() -> Citizen: return game.player_citizen
-	routing_port.interaction_range = SettlementGame.INTERACTION_RANGE
+	routing_port.interaction_range = SettlementConstants.INTERACTION_RANGE
 	routing_port.is_route_reachable = game.is_route_reachable
 	routing_port.find_path_around_houses = game.find_path_around_houses
 	routing_port.nav_grid = game.nav_grid

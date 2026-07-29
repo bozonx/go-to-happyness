@@ -6,24 +6,24 @@ const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.
 const S = preload("res://game/features/ui/domain/game_strings.gd")
 
 
-const CELL_SIZE := BuildingBlueprints.BLOCK_SIZE
-const BUILDING_CLEARANCE_BLOCKS := 3.0
-const NAVIGATION_CLEARANCE_MARGIN := 1.0
-const MAX_BUILD_SLOPE := 0.35
-const POPULATION := 4
-const FOOD_PURCHASE_PRICE := 2
-const ENTRANCE_GLOVE_PRICE := 20
-const ENTRANCE_BUCKET_PRICE := 15
-const ENTRANCE_WATER_PRICE := 2
-const OUTSIDE_WORK_BASE_REWARD_MIN := 4
-const OUTSIDE_WORK_BASE_REWARD_MAX := 12
-const OUTSIDE_WORK_UPGRADE_REWARD := 16
-const HOUSE_CAPACITY := 4
-const CONSTRUCTION_DURATION := 4.0
-const DEMOLITION_DURATION := 3.0
-const INTERACTION_RANGE := 4.5
-const POCKET_CAPACITY := 8
-const SAWMILL_PROCESS_DURATION := 4.0
+const CELL_SIZE = SettlementConstants.CELL_SIZE
+const BUILDING_CLEARANCE_BLOCKS = SettlementConstants.BUILDING_CLEARANCE_BLOCKS
+const NAVIGATION_CLEARANCE_MARGIN = SettlementConstants.NAVIGATION_CLEARANCE_MARGIN
+const MAX_BUILD_SLOPE = SettlementConstants.MAX_BUILD_SLOPE
+const POPULATION = SettlementConstants.POPULATION
+const FOOD_PURCHASE_PRICE = SettlementConstants.FOOD_PURCHASE_PRICE
+const ENTRANCE_GLOVE_PRICE = SettlementConstants.ENTRANCE_GLOVE_PRICE
+const ENTRANCE_BUCKET_PRICE = SettlementConstants.ENTRANCE_BUCKET_PRICE
+const ENTRANCE_WATER_PRICE = SettlementConstants.ENTRANCE_WATER_PRICE
+const OUTSIDE_WORK_BASE_REWARD_MIN = SettlementConstants.OUTSIDE_WORK_BASE_REWARD_MIN
+const OUTSIDE_WORK_BASE_REWARD_MAX = SettlementConstants.OUTSIDE_WORK_BASE_REWARD_MAX
+const OUTSIDE_WORK_UPGRADE_REWARD = SettlementConstants.OUTSIDE_WORK_UPGRADE_REWARD
+const HOUSE_CAPACITY = SettlementConstants.HOUSE_CAPACITY
+const CONSTRUCTION_DURATION = SettlementConstants.CONSTRUCTION_DURATION
+const DEMOLITION_DURATION = SettlementConstants.DEMOLITION_DURATION
+const INTERACTION_RANGE = SettlementConstants.INTERACTION_RANGE
+const POCKET_CAPACITY = SettlementConstants.POCKET_CAPACITY
+const SAWMILL_PROCESS_DURATION = SettlementConstants.SAWMILL_PROCESS_DURATION
 
 var settlement := SettlementState.new()
 var world_resource_state := WorldResourceState.new()
@@ -38,21 +38,19 @@ var clock: SimulationClock = day_cycle.clock
 var game_minutes: float:
 	get: return clock.minutes
 	set(value): clock.minutes = value
-const GAME_DAY_REAL_SECONDS := 300.0
-const GAME_MINUTES_PER_SECOND := 1440.0 / GAME_DAY_REAL_SECONDS
+const GAME_DAY_REAL_SECONDS = SettlementConstants.GAME_DAY_REAL_SECONDS
+const GAME_MINUTES_PER_SECOND = SettlementConstants.GAME_MINUTES_PER_SECOND
 var time_multiplier := 1.0
 # The scheduler used to run only on discrete events, so a citizen who fell idle
 # between events could stand doing nothing indefinitely. Poll it steadily during
 # work hours so idle workers are promptly re-assigned or sent to wait/rest.
-const WORKER_POLL_INTERVAL := 0.5
+const WORKER_POLL_INTERVAL = SettlementConstants.WORKER_POLL_INTERVAL
 # The main campfire progression (town hall) doubles as the employment centre:
 # the employment officer must man it to register residents. The civic centre
 # is always the main campfire or its town-hall upgrade.
-const OFFICIAL_WORKPLACE_TYPES: Array[String] = BuildingTypes.CIVIC_TYPES
-# How close the officer must stand to their post to count as manning it.
-const OFFICER_POST_RADIUS := 3.5
-# Maximum branches a fire source holds before couriers stop delivering.
-const FIRE_SUPPLY_TARGET := 4
+const OFFICIAL_WORKPLACE_TYPES: Array[String] = SettlementConstants.OFFICIAL_WORKPLACE_TYPES
+const OFFICER_POST_RADIUS = SettlementConstants.OFFICER_POST_RADIUS
+const FIRE_SUPPLY_TARGET = SettlementConstants.FIRE_SUPPLY_TARGET
 var worker_poll_timer := 0.0
 var registration_queue_counter := 0
 var last_unstaffed_warning_time := -1000.0
@@ -140,7 +138,7 @@ var forage_sources: Dictionary:
 	get: return foraging_service.forage_sources
 var rabbit_sources: Dictionary:
 	get: return foraging_service.rabbit_sources
-const RABBIT_MAX_COUNT := 8
+const RABBIT_MAX_COUNT = SettlementConstants.RABBIT_MAX_COUNT
 var outside_workers: Dictionary:
 	get: return world_state.outside_workers
 var last_citizen_positions: Dictionary:
@@ -645,7 +643,7 @@ func update_interface(message: String) -> void:
 	else:
 		ui_manager.hud.update_camera_hint(S.HUD_OVERVIEW_HINT)
 
-const ERA_CATEGORIES := ["tent", "earth", "clay", "wood", "stone", "brick"]
+const ERA_CATEGORIES = SettlementConstants.ERA_CATEGORIES
 
 func resource_display_name(resource_type: String) -> String:
 	match resource_type:

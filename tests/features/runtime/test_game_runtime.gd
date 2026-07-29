@@ -20,7 +20,7 @@ func _run() -> void:
 	assert(definition != null)
 	assert(definition.module_ids == [&"core.world", &"gth.settlement"])
 	launch_manager.set("active_session", GameSessionConfig.create(definition, config.map_ref, config.map_document, {
-		&"gth.settlement": GameSessionConfig.settlement_parameters_from(config),
+		&"gth.settlement": definition.start_parameters.duplicate(true),
 	}))
 	var runtime := GameRuntimeScene.instantiate() as GameRuntime
 	root.add_child(runtime)

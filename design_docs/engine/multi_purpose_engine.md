@@ -274,12 +274,14 @@ Showcase запускается из библиотеки того же прил
 5. ✅ Ввести модульные save-секции, мигратор SaveData v3 и round-trip тесты.
 6. ✅ Вынести из `UIManager` только host/layout и actions, сохранить settlement
    панели как вклад `gth.settlement`.
-7. ◐ Добавить Showcase definition, тестовый user pack и end-to-end scene tests для
+7. ✅ Добавить Showcase definition, тестовый user pack и end-to-end scene tests для
    обеих игр, save/load и ошибок валидации. Showcase definition (`core:world_showcase`),
    его модуль и единый e2e-тест (`tests/features/runtime/test_game_runtime.gd`),
-   покрывающий обе игры, save/load и валидацию модулей, есть. Тестовый **user pack**
-   пока не заведён — это последний недостающий довесок среза; он не блокирует фазы B+,
-   но доказывает устанавливаемость authored game и должен быть добавлен.
+   покрывающий обе игры, save/load и валидацию модулей, есть. Тестовый user pack
+   проверяется доменным тестом `test_installed_user_pack_game_is_indexed_and_resolvable`
+   в `tests/domain/test_domain_game_runtime.gd`: пак создаётся в
+   `user://content/installed/`, индексируется `ContentIndex` и резолвится
+   `GameModuleRegistry` по runtime key `pack:test_author.test_pack/test_game`.
 
 ### Критерии готовности
 
@@ -324,7 +326,7 @@ Showcase запускается из библиотеки того же прил
 | --- | --- | --- |
 | `GameLaunchConfig` | ✅ Стал module-owned: `SettlementGameModule._launch_config` реконструирует его из `GameSessionConfig.module_parameters["gth.settlement"]`. | settlement module |
 | `GameLaunchManager` | ✅ Стал хост-лаунчером `RuntimeLaunchManager`: entry/scene transition без era/economy. Мёртвый settlement-наследник удалён. | application launch |
-| `SettlementGame` / bootstrapper | ✅ Разобраны на `GameRuntime` и `SettlementGameModule`; временная сцена — адаптер модуля. Дальнейшее извлечение bootstrap — по фазам B+. | runtime + module |
+| `SettlementGame` / bootstrapper | ✅ Разобраны на `GameRuntime` и `SettlementGameModule`; константы вынесены в `SettlementConstants`; временная сцена — адаптер модуля. Дальнейшее извлечение bootstrap — по фазам B+. | runtime + module |
 | `SaveData` | ✅ Один import path в секционный формат; compatibility projection убран. | `SessionSaveCoordinator` + modules |
 | `MapStart.mode/systems/economy` | ◐ `game_definition` добавлен и стал границей композиции; `mode`/`systems` в формате устарели и в launch-пути не опрашиваются. Окончательное удаление `mode` — с подъёмом `format_version`, когда ни один путь его не пишет. | map + owning module |
 | `UIManager` | ✅ Host и routing отделены (`HostInputController`, `rts` profile); settlement-панели остаются вкладом модуля. Дальнейшее разнесение панелей — фазы B+. | ui host + module UI |
