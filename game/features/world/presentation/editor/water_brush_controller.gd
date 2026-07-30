@@ -31,7 +31,7 @@ const TOOL_FREEZE := &"freeze"
 const TOOL_THAW := &"thaw"
 const TOOLS: Array[StringName] = [TOOL_SELECT, TOOL_FLOOD, TOOL_DRAIN, TOOL_FREEZE, TOOL_THAW]
 
-var tool: StringName = TOOL_SELECT
+var tool: StringName = TOOL_FLOOD
 ## The body strokes go into. Zero until the author makes one — a stroke with no
 ## body is refused rather than quietly inventing a lake.
 var body_id := WaterBody.NO_BODY
