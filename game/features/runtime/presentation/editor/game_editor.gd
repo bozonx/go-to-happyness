@@ -7,6 +7,7 @@ extends Control
 @onready var game_list: ItemList = %GameList
 @onready var game_id_edit: LineEdit = %GameIdEdit
 @onready var game_name_edit: LineEdit = %GameNameEdit
+@onready var game_description_edit: TextEdit = %GameDescriptionEdit
 @onready var modules_edit: LineEdit = %ModulesEdit
 @onready var map_option: OptionButton = %DefaultMapOption
 @onready var clock_option: OptionButton = %ClockOption
@@ -143,6 +144,7 @@ func _sync_definition_to_ui() -> void:
 		return
 	game_id_edit.text = String(definition.id)
 	game_name_edit.text = definition.name
+	game_description_edit.text = definition.description
 	modules_edit.text = ", ".join(definition.module_ids.map(func(value: StringName) -> String: return String(value)))
 	_select_option_metadata(map_option, definition.default_map)
 	_select_option_metadata(clock_option, definition.clock_id)
@@ -161,6 +163,7 @@ func _collect_definition_from_ui() -> bool:
 	_commit_era_fields()
 	definition.id = StringName(ContentId.normalize_id(game_id_edit.text))
 	definition.name = game_name_edit.text.strip_edges()
+	definition.description = game_description_edit.text.strip_edges()
 	definition.pack_id = pack.id
 	definition.module_ids.clear()
 	for raw: String in modules_edit.text.split(",", false):

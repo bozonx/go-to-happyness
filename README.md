@@ -52,3 +52,21 @@ Two conventions worth knowing before writing code:
 - `BuildingRuntimeState` (`game/features/buildings/domain/building_runtime_state.gd`)
   gives typed access to building node metadata via `BuildingRecord.runtime_state()`.
   Use it instead of raw `get_meta` / `set_meta`.
+
+## Main menu
+
+The main menu is the host game library. It lists every installed game definition
+on equal terms — built-in games (📦) and user-created games (🎮) appear in the same
+picker. Each game shows its description, and the selected map displays a preview
+image when available.
+
+- **F6** — load quicksave (if one exists).
+- **F12** — open the Editor Hub in dev mode (only when running from the Godot editor).
+- **💾 Сохранения** — open the save manager to load or delete save files.
+
+## Dev mode
+
+Running any editor scene directly from Godot (F5 on `map_editor.tscn`,
+`building_editor.tscn`) enters dev mode automatically, writing to
+`res://game/content/core`. F12 from the main menu opens the Editor Hub in dev mode
+with the core pack exposed as a writable project.

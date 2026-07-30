@@ -13,6 +13,7 @@ const TOOLS: Array[StringName] = [TOOL_AREA, TOOL_POINT, TOOL_ROUTE]
 var _tool: StringName = TOOL_AREA
 var _area_role: StringName = ZoneAreaRecord.ROLE_REGION
 var _anchor_role: StringName = ZoneAnchorRecord.ROLE_SPAWN
+var _spawn_function: StringName = MapSpawnService.HERO_START
 var _drag_start := Vector2i.ZERO
 var _dragging := false
 var _active_route_id: StringName = &""
@@ -113,6 +114,10 @@ func _add_anchor(cell: Vector2i) -> void:
 	var anchor := ZoneAnchorRecord.new()
 	anchor.id = _next_id("point")
 	anchor.role = _anchor_role
+	if _anchor_role == ZoneAnchorRecord.ROLE_SPAWN:
+		anchor.function = _spawn_function
+		if _spawn_function == MapSpawnService.HERO_START and not context.document.zones.has_id(&"hero_start"):
+			anchor.id = &"hero_start"
 	var centre := context.terrain.cell_center(cell)
 	anchor.pos = centre
 	context.document.zones.anchors.append(anchor)
@@ -199,6 +204,9 @@ func tool_options() -> Array:
 	if _tool == TOOL_POINT:
 		for role in ZoneAnchorRecord.ROLES:
 			options.append(ToolOption.of(StringName("anchor_%s" % role), ZoneAnchorRecord.role_display_name(role), &"role", _anchor_role == role))
+		if _anchor_role == ZoneAnchorRecord.ROLE_SPAWN:
+			options.append(ToolOption.of(&"spawn_hero", "Старт героя", &"function", _spawn_function == MapSpawnService.HERO_START))
+			options.append(ToolOption.of(&"spawn_companion", "Старт жителя", &"function", _spawn_function == MapSpawnService.COMPANION_START))
 	return options
 
 
@@ -209,6 +217,10 @@ func activate_option(option_id: StringName) -> void:
 		_area_role = ZoneAreaRecord.ROLE_OVERLAY
 	elif String(option_id).begins_with("anchor_"):
 		_anchor_role = StringName(String(option_id).trim_prefix("anchor_"))
+	elif option_id == &"spawn_hero":
+		_spawn_function = MapSpawnService.HERO_START
+	elif option_id == &"spawn_companion":
+		_spawn_function = MapSpawnService.COMPANION_START
 	notify_ui_changed()
 
 

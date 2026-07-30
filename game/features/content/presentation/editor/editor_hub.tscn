@@ -80,6 +80,11 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "+ Новый проект"
 
+[node name="DeleteButton" type="Button" parent="Margin/Root/Body/Projects"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "🗑 Удалить проект"
+
 [node name="Workspace" type="VBoxContainer" parent="Margin/Root/Body"]
 layout_mode = 2
 theme_override_constants/separation = 14
@@ -94,6 +99,12 @@ text = "Выберите проект"
 unique_name_in_owner = true
 layout_mode = 2
 autowrap_mode = 3
+
+[node name="ContentCountsLabel" type="Label" parent="Margin/Root/Body/Workspace"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.75, 0.7, 1)
+text = ""
 
 [node name="GameButton" type="Button" parent="Margin/Root/Body/Workspace"]
 unique_name_in_owner = true
@@ -123,7 +134,6 @@ unique_name_in_owner = true
 title = "Новый project pack"
 initial_position = 2
 size = Vector2i(480, 360)
-
 [node name="Fields" type="VBoxContainer" parent="CreateDialog"]
 offset_left = 16.0
 offset_top = 16.0
@@ -154,3 +164,9 @@ text = "Название проекта"
 [node name="PackNameEdit" type="LineEdit" parent="CreateDialog/Fields"]
 unique_name_in_owner = true
 layout_mode = 2
+
+[node name="DeleteDialog" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "Удаление проекта"
+initial_position = 2
+size = Vector2i(480, 200)

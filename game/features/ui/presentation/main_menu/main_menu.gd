@@ -15,12 +15,21 @@ const UI_THEME = preload("res://game/features/ui/presentation/theme/ui_theme.tre
 
 ## This picker chooses the authored world for the session.
 @onready var game_option: OptionButton = $MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox/GameOption
+@onready var game_description_label: Label = $MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox/GameDescriptionLabel
 @onready var landscape_option: OptionButton = $MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox/LandscapeOption
+@onready var map_preview_rect: TextureRect = $MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox/MapPreviewRect
 @onready var era_description_label: Label = $MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox/DescriptionLabel
 @onready var param_summary_label: Label = $MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox/ParamSummaryLabel
 
 @onready var start_game_btn: Button = $MarginContainer/VBoxContainer/Footer/StartGameButton
+@onready var saves_btn: Button = $MarginContainer/VBoxContainer/Footer/SavesButton
 @onready var quit_btn: Button = $MarginContainer/VBoxContainer/Footer/QuitButton
+
+@onready var saves_dialog: AcceptDialog = $SavesDialog
+@onready var saves_list: ItemList = $SavesDialog/SavesContent/SavesList
+@onready var load_save_btn: Button = $SavesDialog/SavesContent/SavesActions/LoadSaveButton
+@onready var delete_save_btn: Button = $SavesDialog/SavesContent/SavesActions/DeleteSaveButton
+@onready var close_saves_btn: Button = $SavesDialog/SavesContent/SavesActions/CloseSavesButton
 
 var selected_era: StringName = &"tent"
 var selected_game: StringName = &"core:settlement"
@@ -48,8 +57,10 @@ func _setup_game_options() -> void:
 	var slot := 0
 	var settlement_slot := -1
 	for entry in index.game_entries():
-		game_option.add_item("🎮 %s" % entry.name, slot)
-		game_option.set_item_metadata(slot, {"game": entry.runtime_key})
+		var is_builtin := bool(entry.metadata.get("is_builtin", false))
+		var badge := "📦 " if is_builtin else "🎮 "
+		game_option.add_item("%s%s" % [badge, entry.name], slot)
+		game_option.set_item_metadata(slot, {"game": entry.runtime_key, "is_builtin": is_builtin})
 		if entry.runtime_key == &"core:settlement":
 			settlement_slot = slot
 		slot += 1
@@ -95,6 +106,10 @@ func _connect_signals() -> void:
 	landscape_option.item_selected.connect(_on_landscape_selected)
 	start_game_btn.pressed.connect(_on_start_game_pressed)
 	quit_btn.pressed.connect(_on_quit_pressed)
+	saves_btn.pressed.connect(_open_saves_dialog)
+	close_saves_btn.pressed.connect(saves_dialog.hide)
+	load_save_btn.pressed.connect(_load_selected_save)
+	delete_save_btn.pressed.connect(_delete_selected_save)
 
 
 func _on_landscape_selected(index: int) -> void:
@@ -103,6 +118,7 @@ func _on_landscape_selected(index: int) -> void:
 		return
 	var entry: Dictionary = metadata
 	selected_map = entry.get("map", &"")
+	_refresh_map_preview()
 	_refresh_era_options()
 	_update_config_summary()
 
@@ -116,8 +132,12 @@ func _on_game_selected(index: int) -> void:
 
 func _select_game_option() -> void:
 	var definition := GameModuleRegistry.resolve_definition(selected_game)
-	if definition != null and not definition.default_map.is_empty():
-		_select_default_map(definition.default_map)
+	if definition != null:
+		game_description_label.text = definition.description if not definition.description.is_empty() else ""
+		if not definition.default_map.is_empty():
+			_select_default_map(definition.default_map)
+	else:
+		game_description_label.text = ""
 	start_game_btn.text = "▶ Запустить игру"
 	subtitle_label.text = "Библиотека игр, карт и пользовательского контента"
 	_refresh_era_options()
@@ -227,6 +247,63 @@ func _on_quit_pressed() -> void:
 	get_tree().quit()
 
 
+## Loads the preview.png from the selected map's package directory.
+func _refresh_map_preview() -> void:
+	map_preview_rect.texture = null
+	if selected_map.is_empty():
+		return
+	var map_path := _map_service.map_path(selected_map)
+	if map_path.is_empty():
+		return
+	var preview_path := map_path.path_join("preview.png")
+	if FileAccess.file_exists(preview_path):
+		var image := Image.load_from_file(preview_path)
+		if image != null:
+			map_preview_rect.texture = ImageTexture.create_from_image(image)
+
+
+## Populates the saves dialog with all save files found in user://saves/.
+func _open_saves_dialog() -> void:
+	saves_list.clear()
+	var saves := SessionSaveCoordinator.list_saves()
+	if saves.is_empty():
+		saves_list.add_item("Нет сохранений")
+		saves_list.disabled = true
+		load_save_btn.disabled = true
+		delete_save_btn.disabled = true
+		return
+	saves_list.disabled = false
+	load_save_btn.disabled = false
+	delete_save_btn.disabled = false
+	for save: Dictionary in saves:
+		var datetime := Time.get_datetime_dict_from_unix_time(int(save["modified"]))
+		var timestamp := "%04d-%02d-%02d %02d:%02d" % [datetime["year"], datetime["month"], datetime["day"], datetime["hour"], datetime["minute"]]
+		var label := "%s · %s/%s · %s" % [save["file_name"], save["pack_id"], save["game_id"], timestamp]
+		saves_list.add_item(label)
+		saves_list.set_item_metadata(saves_list.item_count - 1, save["path"])
+	saves_list.select(0)
+	saves_dialog.popup_centered()
+
+
+func _load_selected_save() -> void:
+	var indices := saves_list.get_selected_items()
+	if indices.is_empty():
+		return
+	var path: String = saves_list.get_item_metadata(indices[0])
+	saves_dialog.hide()
+	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
+	launch_mgr.call("launch_from_save", path)
+
+
+func _delete_selected_save() -> void:
+	var indices := saves_list.get_selected_items()
+	if indices.is_empty():
+		return
+	var path: String = saves_list.get_item_metadata(indices[0])
+	if SessionSaveCoordinator.delete_save(path):
+		_open_saves_dialog()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	# Load the quicksave through the same host path F5-save uses. The save file
 	# and slot are owned by SessionSaveCoordinator; the menu only routes the key.
@@ -234,4 +311,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		if SessionSaveCoordinator.has_quicksave():
 			var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
 			launch_mgr.call("launch_from_save", SessionSaveCoordinator.QUICKSAVE_PATH)
+			get_viewport().set_input_as_handled()
+	# F12 opens the Editor Hub in dev mode when running from the Godot editor.
+	if event is InputEventKey and event.keycode == KEY_F12 and event.pressed and not event.echo:
+		if OS.has_feature("editor"):
+			var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
+			launch_mgr.call("launch_editor_hub", true)
 			get_viewport().set_input_as_handled()

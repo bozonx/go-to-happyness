@@ -407,7 +407,10 @@ func _apply_header_change(message: String) -> void:
 
 func _rebuild_palette() -> void:
 	_palette.set_title("%s — палитра" % _active.title)
-	_palette.set_entries(_active.palette_entries(), _active.selected_palette_entry())
+	if _active.has_method("use_catalog_panel") and _active.call("use_catalog_panel"):
+		_palette.show_catalog(_active, _active.call("catalog_scope"))
+	else:
+		_palette.set_entries(_active.palette_entries(), _active.selected_palette_entry())
 
 
 ## Where a save would land, and whether this document owns a file. Silent write

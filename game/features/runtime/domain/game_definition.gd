@@ -8,6 +8,8 @@ const FORMAT_VERSION := 1
 
 var id: StringName = &""
 var name := ""
+## Short human-readable description shown in the game library menu.
+var description := ""
 ## Runtime address from ContentIndex (`core:settlement` or `pack:author.pack/game`).
 ## It is assigned by the registry, not authored in
 ## `.gdgame.json`, because an installed pack's source is chosen on install.
@@ -20,6 +22,10 @@ var input_profile: StringName = &"rts"
 var ui_layout: StringName = &""
 ## Defaults keyed by the module that owns and validates them.
 var start_module_parameters: Dictionary = {}
+## Declares which start parameters the game wants surfaced in the menu UI.
+## Each entry is `{ "id": StringName, "label": String, "type": "era" }`.
+## An empty array means the menu shows no game-specific selectors.
+var menu_parameters: Array[Dictionary] = []
 var progression: GameProgressionDefinition = GameProgressionDefinition.new()
 
 
@@ -46,6 +52,7 @@ static func from_dict(source: Dictionary) -> GameDefinition:
 	var definition := GameDefinition.new()
 	definition.id = StringName(source.get("id", ""))
 	definition.name = String(source.get("name", definition.id))
+	definition.description = String(source.get("description", ""))
 	definition.pack_id = StringName(source.get("pack", ""))
 	definition.default_map = StringName(source.get("default_map", ""))
 	definition.clock_id = StringName(source.get("clock", definition.clock_id))
@@ -58,6 +65,11 @@ static func from_dict(source: Dictionary) -> GameDefinition:
 		var modules: Variant = (start as Dictionary).get("modules", {})
 		if modules is Dictionary:
 			definition.start_module_parameters = (modules as Dictionary).duplicate(true)
+	var menu_params_source: Variant = source.get("menu_parameters", [])
+	if menu_params_source is Array:
+		for raw_param: Variant in menu_params_source:
+			if raw_param is Dictionary:
+				definition.menu_parameters.append((raw_param as Dictionary).duplicate(true))
 	var progression_source: Variant = source.get("progression", {})
 	if progression_source is Dictionary:
 		definition.progression = GameProgressionDefinition.from_dict(progression_source)
@@ -71,6 +83,7 @@ func to_dict() -> Dictionary:
 		"format_version": FORMAT_VERSION,
 		"id": String(id),
 		"name": name,
+		"description": description,
 		"pack": String(pack_id),
 		"modules": module_ids.map(func(module_id: StringName) -> String: return String(module_id)),
 		"default_map": String(default_map),
@@ -78,5 +91,6 @@ func to_dict() -> Dictionary:
 		"input_profile": String(input_profile),
 		"ui_layout": String(ui_layout),
 		"start": {"modules": start_module_parameters.duplicate(true)},
+		"menu_parameters": menu_parameters.duplicate(true),
 		"progression": progression.to_dict(),
 	}

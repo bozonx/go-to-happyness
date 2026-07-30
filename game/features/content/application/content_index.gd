@@ -140,6 +140,8 @@ func _index_games(root: String, source: StringName) -> void:
 			"pack": _pack_id_for(source),
 			"modules": definition.module_ids.map(func(module_id: StringName) -> String: return String(module_id)),
 			"default_map": String(definition.default_map),
+			"description": definition.description,
+			"is_builtin": source_kind_is_core(source),
 		}
 		_register(entry)
 

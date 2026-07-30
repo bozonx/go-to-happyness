@@ -133,6 +133,13 @@ text = "Название"
 [node name="GameNameEdit" type="LineEdit" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
 unique_name_in_owner = true
 layout_mode = 2
+[node name="GameDescriptionLabel" type="Label" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
+layout_mode = 2
+text = "Описание игры"
+[node name="GameDescriptionEdit" type="TextEdit" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 60)
+layout_mode = 2
 [node name="ModulesLabel" type="Label" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
 layout_mode = 2
 text = "Модули (через запятую)"

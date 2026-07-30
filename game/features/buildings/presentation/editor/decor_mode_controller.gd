@@ -16,7 +16,7 @@ const DecorObjectRecordScript = preload("res://game/features/buildings/domain/ed
 const FixtureEditorPanelScript = preload("res://game/features/buildings/presentation/editor/fixture_editor_panel.gd")
 const DecorPlacementValidatorScript = preload("res://game/features/buildings/presentation/editor/decor_placement_validator.gd")
 const DecorCollisionOverlayScript = preload("res://game/features/buildings/presentation/editor/decor_collision_overlay.gd")
-const DecorCatalogPanelScript = preload("res://game/features/buildings/presentation/editor/decor_catalog_panel.gd")
+
 
 const ROTATION_STEP_DEG := 15.0
 ## Ghost feedback colours (design §6.2).
@@ -72,7 +72,7 @@ var _toolbar_delete_btn: Button = null
 var _layer_label: Label = null
 var _collision_overlay_btn: Button = null
 var _collision_overlay: Node3D = null
-var _catalog_panel: RefCounted = null
+var _catalog_panel: DecorCatalogPanel = null
 var _zone_filter_option: OptionButton = null
 var _zone_out_of_bounds_label: Label = null
 
@@ -118,7 +118,7 @@ func setup(editor: Node) -> void:
 	_fixture_panel.setup(editor, Callable(self, "_push_undo"))
 
 	# Catalog panel — delegated to DecorCatalogPanel
-	_catalog_panel = DecorCatalogPanelScript.new()
+	_catalog_panel = DecorCatalogPanel.new()
 	_catalog_panel.setup(self, editor)
 
 	editor.get_node("%DecorRotXBtn").pressed.connect(rotate_selection.bind("x", 1))

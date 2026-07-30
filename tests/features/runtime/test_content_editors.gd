@@ -17,6 +17,9 @@ func _run() -> void:
 	await process_frame
 	assert(menu.game_option.item_count > 0)
 	assert(menu.editor_btn.visible and not menu.editor_btn.disabled)
+	assert(menu.game_description_label != null)
+	assert(menu.map_preview_rect != null)
+	assert(menu.saves_btn != null)
 	menu.queue_free()
 	await process_frame
 
@@ -27,6 +30,8 @@ func _run() -> void:
 	await process_frame
 	assert(not hub.projects.is_empty(), "dev Editor Hub must expose the core pack")
 	assert(not hub.game_button.disabled and not hub.map_button.disabled and not hub.building_button.disabled)
+	assert(hub.content_counts_label != null)
+	assert(not hub.content_counts_label.text.is_empty(), "content counts must be populated for core pack")
 	hub.queue_free()
 	await process_frame
 
@@ -38,6 +43,8 @@ func _run() -> void:
 	assert(game_editor.definition != null)
 	assert(game_editor.era_list.item_count == game_editor.definition.progression.eras.size())
 	assert(not game_editor.technologies_edit.text.is_empty())
+	assert(game_editor.game_description_edit != null)
+	assert(not game_editor.game_description_edit.text.is_empty(), "settlement definition must have a description")
 	game_editor.queue_free()
 	await process_frame
 

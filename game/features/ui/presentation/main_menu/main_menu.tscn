@@ -123,6 +123,13 @@ text = "Выберите игру:"
 custom_minimum_size = Vector2(0, 36)
 layout_mode = 2
 
+[node name="GameDescriptionLabel" type="Label" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.8, 0.85, 1)
+theme_override_font_sizes/font_size = 13
+autowrap_mode = 3
+text = ""
+
 [node name="LandscapeLabel" type="Label" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
 layout_mode = 2
 text = "Выберите ландшафт / карту:"
@@ -130,6 +137,13 @@ text = "Выберите ландшафт / карту:"
 [node name="LandscapeOption" type="OptionButton" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
 custom_minimum_size = Vector2(0, 36)
 layout_mode = 2
+
+[node name="MapPreviewRect" type="TextureRect" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 160)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 6
 
 [node name="HSeparator" type="HSeparator" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
 layout_mode = 2
@@ -157,8 +171,49 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "▶ Начать эру"
 
+[node name="SavesButton" type="Button" parent="MarginContainer/VBoxContainer/Footer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "💾 Сохранения"
+
 [node name="QuitButton" type="Button" parent="MarginContainer/VBoxContainer/Footer"]
 custom_minimum_size = Vector2(160, 48)
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "❌ Выход"
+
+[node name="SavesDialog" type="AcceptDialog" parent="."]
+unique_name_in_owner = true
+title = "Сохранения"
+initial_position = 2
+size = Vector2i(640, 480)
+
+[node name="SavesContent" type="VBoxContainer" parent="SavesDialog"]
+layout_mode = 2
+
+[node name="SavesList" type="ItemList" parent="SavesDialog/SavesContent"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 300)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="SavesActions" type="HBoxContainer" parent="SavesDialog/SavesContent"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="LoadSaveButton" type="Button" parent="SavesDialog/SavesContent/SavesActions"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "▶ Загрузить"
+
+[node name="DeleteSaveButton" type="Button" parent="SavesDialog/SavesContent/SavesActions"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "🗑 Удалить"
+
+[node name="CloseSavesButton" type="Button" parent="SavesDialog/SavesContent/SavesActions"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Закрыть"

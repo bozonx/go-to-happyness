@@ -411,6 +411,14 @@ func _set_preview_colour(root: Node3D, colour: Color) -> void:
 					preview.albedo_color = colour
 
 
+func use_catalog_panel() -> bool:
+	return true
+
+
+func catalog_scope() -> StringName:
+	return WorldAssetDef.SCOPE_MAP
+
+
 func palette_entries() -> Array:
 	var entries: Array = [
 		PaletteEntry.of(TOOL_SELECT, "Выбрать"),
@@ -430,54 +438,96 @@ func selected_palette_entry() -> StringName:
 func select_palette_entry(entry_id: StringName) -> void:
 	if entry_id in TOOLS:
 		_tool = entry_id
-	else:
+	elif EntityArchetypeCatalog.has_archetype(entry_id):
 		_archetype_id = entry_id
 		_tool = TOOL_PLACE
+	else:
+		var archetype := _resolve_archetype_for_asset(entry_id)
+		if archetype != null:
+			_archetype_id = archetype.id
+			_tool = TOOL_PLACE
 	notify_ui_changed()
 
 
+func _resolve_archetype_for_asset(asset_id: StringName) -> EntityArchetype:
+	for archetype: EntityArchetype in EntityArchetypeCatalog.all():
+		if archetype.asset_id == asset_id or archetype.id == asset_id:
+			return archetype
+	return null
+
+
 func inspector_lines() -> Array[String]:
-	var lines: Array[String] = [
-		"Инструмент: %s" % ("поставить" if _tool == TOOL_PLACE else "выбрать"),
-		"Сущностей: %d · выделено: %d" % [context.document.entities.entities.size(), _selected_ids().size()],
-	]
 	var selected := context.document.entities.by_id(_selected_id)
 	if selected != null:
-		lines.append("id: %s" % selected.id)
-		lines.append("архетип: %s" % selected.archetype_id)
-		lines.append("клетка: %d, %d" % [selected.cell(context.terrain).x, selected.cell(context.terrain).y])
-	for warning in _last_warnings:
-		lines.append("⚠ %s" % warning)
-	return lines
+		var archetype := EntityArchetypeCatalog.get_archetype(selected.archetype_id)
+		var lines: Array[String] = [
+			"Инструмент: %s" % ("поставить" if _tool == TOOL_PLACE else "выбрать"),
+			"Свойства: %s" % (archetype.name if archetype != null else String(selected.archetype_id)),
+			"id: %s" % selected.id,
+			"архетип: %s" % selected.archetype_id,
+			"клетка: %d, %d" % [selected.cell(context.terrain).x, selected.cell(context.terrain).y],
+		]
+		for warning in _last_warnings:
+			lines.append("⚠ %s" % warning)
+		return lines
+
+	var active_archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
+	if active_archetype != null:
+		var asset := EntityArchetypeCatalog.asset_of(active_archetype.id)
+		var lines: Array[String] = [
+			"Инструмент: поставить",
+			"Ассет: %s" % active_archetype.name,
+			"Категория: %s" % (WorldAssetCatalog.category_display_name(asset.category) if asset != null else active_archetype.category),
+			"Сущностей на карте: %d" % context.document.entities.entities.size(),
+		]
+		if asset != null and not asset.description.is_empty():
+			lines.append(asset.description)
+		for warning in _last_warnings:
+			lines.append("⚠ %s" % warning)
+		return lines
+
+	return [
+		"Инструмент: %s" % ("поставить" if _tool == TOOL_PLACE else "выбрать"),
+		"Сущностей на карте: %d" % context.document.entities.entities.size(),
+		"Выберите ассет в палитре или объект на карте",
+	]
 
 
 func inspector_properties() -> Array[EntityPropertyDef]:
 	var selected := context.document.entities.by_id(_selected_id)
-	if selected == null:
-		return []
-	var archetype := EntityArchetypeCatalog.get_archetype(selected.archetype_id)
-	var position_property := EntityPropertyDef.from_dict({"name": INSPECTOR_POSITION, "label": "Позиция", "type": "vector3", "section": "transform", "unit": "м"})
-	position_property.step = 0.25
-	var properties: Array[EntityPropertyDef] = [
-		position_property,
-		EntityPropertyDef.from_dict({"name": INSPECTOR_YAW, "label": "Поворот Y", "type": "float", "section": "transform", "unit": "°", "min": 0.0, "max": 359.0, "step": 15.0, "default": 0.0}),
-		EntityPropertyDef.from_dict({"name": INSPECTOR_SCALE, "label": "Масштаб", "type": "float", "section": "transform", "min": 0.05, "max": 10.0, "step": 0.05, "default": 1.0}),
-	]
-	if archetype != null:
-		properties.append_array(archetype.property_schema)
-	return properties
+	if selected != null:
+		var archetype := EntityArchetypeCatalog.get_archetype(selected.archetype_id)
+		var position_property := EntityPropertyDef.from_dict({"name": INSPECTOR_POSITION, "label": "Позиция", "type": "vector3", "section": "transform", "unit": "м"})
+		position_property.step = 0.25
+		var properties: Array[EntityPropertyDef] = [
+			position_property,
+			EntityPropertyDef.from_dict({"name": INSPECTOR_YAW, "label": "Поворот Y", "type": "float", "section": "transform", "unit": "°", "min": 0.0, "max": 359.0, "step": 15.0, "default": 0.0}),
+			EntityPropertyDef.from_dict({"name": INSPECTOR_SCALE, "label": "Масштаб", "type": "float", "section": "transform", "min": 0.05, "max": 10.0, "step": 0.05, "default": 1.0}),
+		]
+		if archetype != null:
+			properties.append_array(archetype.property_schema)
+		return properties
+
+	var active_archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
+	if active_archetype != null:
+		return active_archetype.property_schema
+	return []
 
 
 func inspector_values() -> Dictionary:
 	var selected := context.document.entities.by_id(_selected_id)
-	if selected == null:
-		return {}
-	var archetype := EntityArchetypeCatalog.get_archetype(selected.archetype_id)
-	var values := archetype.resolved_properties(selected.props) if archetype != null else {}
-	values[INSPECTOR_POSITION] = selected.position
-	values[INSPECTOR_YAW] = selected.yaw_degrees
-	values[INSPECTOR_SCALE] = selected.scale
-	return values
+	if selected != null:
+		var archetype := EntityArchetypeCatalog.get_archetype(selected.archetype_id)
+		var values := archetype.resolved_properties(selected.props) if archetype != null else {}
+		values[INSPECTOR_POSITION] = selected.position
+		values[INSPECTOR_YAW] = selected.yaw_degrees
+		values[INSPECTOR_SCALE] = selected.scale
+		return values
+
+	var active_archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
+	if active_archetype != null:
+		return active_archetype.default_values()
+	return {}
 
 
 func apply_inspector_value(property_name: StringName, value: Variant) -> bool:

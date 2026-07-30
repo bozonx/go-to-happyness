@@ -8,6 +8,7 @@ static func run_all() -> void:
 	test_host_input_profiles_are_allowlisted()
 	test_definition_validation_rejects_unknown_module()
 	test_installed_user_pack_game_is_indexed_and_resolvable()
+	test_definition_round_trips_description_and_menu_parameters()
 	print("    [PASS] Game Runtime Domain Tests")
 
 
@@ -23,6 +24,7 @@ static func test_core_settlement_definition_is_indexed() -> void:
 	assert(definition.runtime_key == &"core:settlement")
 	assert(definition.default_map == &"core:green_valley")
 	assert(definition.module_ids == [&"core.world", &"gth.settlement"])
+	assert(not definition.description.is_empty(), "settlement definition must have a description")
 
 
 static func test_session_keeps_settlement_values_module_scoped() -> void:
@@ -55,6 +57,38 @@ static func test_definition_validation_rejects_unknown_module() -> void:
 	})
 	var errors := GameModuleRegistry.validate_definition(definition)
 	assert(errors.any(func(error: String) -> bool: return error.contains("unknown.module")))
+
+
+static func test_definition_round_trips_description_and_menu_parameters() -> void:
+	var source := {
+		"format_version": 1,
+		"id": "roundtrip",
+		"name": "Round Trip",
+		"description": "Test description",
+		"pack": "core",
+		"modules": ["core.world"],
+		"default_map": "core:green_valley",
+		"clock": "realtime_pauseable",
+		"input_profile": "rts",
+		"ui_layout": "",
+		"start": {"modules": {}},
+		"menu_parameters": [{"id": "era", "label": "Era", "type": "era"}],
+		"progression": {"eras": [], "technologies": {}},
+	}
+	var definition := GameDefinition.from_dict(source)
+	assert(definition != null)
+	assert(definition.description == "Test description")
+	assert(definition.menu_parameters.size() == 1)
+	assert(String(definition.menu_parameters[0].get("id", "")) == "era")
+	var serialized := definition.to_dict()
+	assert(serialized["description"] == "Test description")
+	var menu_params: Array = serialized["menu_parameters"]
+	assert(menu_params.size() == 1)
+	# Round-trip back
+	var restored := GameDefinition.from_dict(serialized)
+	assert(restored != null)
+	assert(restored.description == "Test description")
+	assert(restored.menu_parameters.size() == 1)
 
 
 const _TEST_PACK_DIR := "user://content/installed/test_author.test_pack"

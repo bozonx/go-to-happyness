@@ -7,11 +7,14 @@ extends Control
 @onready var mode_label: Label = %ModeLabel
 @onready var project_title: Label = %ProjectTitle
 @onready var project_details: Label = %ProjectDetails
+@onready var content_counts_label: Label = %ContentCountsLabel
 @onready var create_button: Button = %CreateButton
+@onready var delete_button: Button = %DeleteButton
 @onready var game_button: Button = %GameButton
 @onready var map_button: Button = %MapButton
 @onready var building_button: Button = %BuildingButton
 @onready var create_dialog: ConfirmationDialog = %CreateDialog
+@onready var delete_dialog: ConfirmationDialog = %DeleteDialog
 @onready var author_id_edit: LineEdit = %AuthorIdEdit
 @onready var author_name_edit: LineEdit = %AuthorNameEdit
 @onready var pack_id_edit: LineEdit = %PackIdEdit
@@ -31,9 +34,12 @@ func _ready() -> void:
 	repository = ContentProjectRepository.new(dev_mode)
 	mode_label.text = "Встроенный контент · dev mode" if dev_mode else "Пользовательские проекты"
 	create_button.visible = not dev_mode
+	delete_button.visible = not dev_mode
 	project_list.item_selected.connect(_select_project)
 	create_button.pressed.connect(create_dialog.popup_centered)
 	create_dialog.confirmed.connect(_create_project)
+	delete_button.pressed.connect(_confirm_delete_project)
+	delete_dialog.confirmed.connect(_delete_project)
 	game_button.pressed.connect(_open_game_editor)
 	map_button.pressed.connect(_open_map_editor)
 	building_button.pressed.connect(_open_building_editor)
@@ -70,8 +76,32 @@ func _set_project(project: Dictionary) -> void:
 	project_details.text = "%s\n%s" % [project.get("root", ""),
 		"Встроенный writable pack" if dev_mode and available else "Редактируемый пользовательский pack" if available else ""]
 	if available:
+		_refresh_content_counts(project)
 		var launch_manager := get_node_or_null("/root/GameLaunchManager")
 		launch_manager.call("select_editor_pack", project.root, project.source)
+	else:
+		content_counts_label.text = ""
+
+
+## Counts games, maps and buildings in the selected project pack by indexing
+## its content through ContentIndex filtered by source.
+func _refresh_content_counts(project: Dictionary) -> void:
+	var index := ContentIndex.new()
+	index.rebuild()
+	var source: StringName = project.get("source", &"")
+	var game_count := 0
+	var map_count := 0
+	var building_count := 0
+	for entry in index.game_entries():
+		if entry.source == source:
+			game_count += 1
+	for entry in index.map_entries():
+		if entry.source == source and entry.kind != &"prefab":
+			map_count += 1
+	for entry in index.blueprint_entries():
+		if entry.source == source:
+			building_count += 1
+	content_counts_label.text = "Игр: %d · Карт: %d · Зданий: %d" % [game_count, map_count, building_count]
 
 
 func _create_project() -> void:
@@ -96,6 +126,39 @@ func _open_map_editor() -> void:
 
 func _open_building_editor() -> void:
 	get_node("/root/GameLaunchManager").call("launch_building_editor", dev_mode)
+
+
+func _confirm_delete_project() -> void:
+	if selected_project.is_empty():
+		return
+	delete_dialog.dialog_text = "Удалить проект «%s»?\nПапка: %s\nВесь контент будет удалён безвозвратно." % [
+		selected_project.get("name", ""), selected_project.get("root", "")]
+	delete_dialog.popup_centered()
+
+
+func _delete_project() -> void:
+	if selected_project.is_empty():
+		return
+	var root: String = selected_project.get("root", "")
+	if root.is_empty() or dev_mode:
+		return
+	if _remove_directory_recursive(root):
+		status_label.text = "Проект удалён: %s" % root
+		selected_project = {}
+		_refresh_projects()
+	else:
+		status_label.text = "Не удалось удалить проект"
+
+
+static func _remove_directory_recursive(path: String) -> bool:
+	if not DirAccess.dir_exists_absolute(path):
+		return false
+	for file_name in DirAccess.get_files_at(path):
+		DirAccess.remove_absolute(path.path_join(file_name))
+	for directory in DirAccess.get_directories_at(path):
+		_remove_directory_recursive(path.path_join(directory))
+	DirAccess.remove_absolute(path)
+	return not DirAccess.dir_exists_absolute(path)
 
 
 func _sanitize_id(value: String, field: LineEdit) -> void:
