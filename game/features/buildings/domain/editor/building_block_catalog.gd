@@ -429,12 +429,12 @@ static func occupied_aabb(
 	rot_z: int = 0
 ) -> AABB:
 	var size := size_of(block_id, variant_id)
-	var base := anchor_base_offset(block_id, variant_id, anchor_kind)
+	var base := anchor_base_offset_3d(block_id, variant_id, anchor_kind)
 	var basis := Basis.from_euler(Vector3(
 		deg_to_rad(90.0 * float(rot_x)),
 		deg_to_rad(90.0 * float(rot)),
 		deg_to_rad(90.0 * float(rot_z))))
-	var local_center := basis * Vector3(base.x, size.y * 0.5 - 0.5, base.y)
+	var local_center := basis * Vector3(base.x, size.y * 0.5 - 0.5 + base.y, base.z)
 	var center := Vector3(cell) + Vector3(0.5, 0.5, 0.5) + local_center + Vector3.UP * vertical_offset_of(block_id, variant_id)
 	var half := size * 0.5
 	var extent := Vector3(
@@ -455,22 +455,29 @@ const ANCHOR_CORNER := 2
 const SUBGRID_STEP := 0.0625
 
 
-static func pack_subgrid_anchor(off_x: float, off_z: float) -> int:
+static func pack_subgrid_anchor(off_x: float, off_z: float, off_y: float = 0.0) -> int:
 	var ix := clampi(int(round(off_x / SUBGRID_STEP)), -8, 8)
 	var iz := clampi(int(round(off_z / SUBGRID_STEP)), -8, 8)
-	if ix == 0 and iz == 0:
+	var iy := clampi(int(round(off_y / SUBGRID_STEP)), 0, 12)
+	if ix == 0 and iz == 0 and iy == 0:
 		return 0
-	return (ix + 8) | ((iz + 8) << 5)
+	return (ix + 8) | ((iz + 8) << 5) | (iy << 10)
 
 
-static func unpack_subgrid_anchor(anchor_kind: int) -> Vector2:
+static func unpack_subgrid_anchor_3d(anchor_kind: int) -> Vector3:
 	if anchor_kind == 0:
-		return Vector2.ZERO
+		return Vector3.ZERO
 	if anchor_kind > 2:
 		var ix := (anchor_kind & 31) - 8
 		var iz := ((anchor_kind >> 5) & 31) - 8
-		return Vector2(float(ix) * SUBGRID_STEP, float(iz) * SUBGRID_STEP)
-	return Vector2.ZERO
+		var iy := (anchor_kind >> 10) & 15
+		return Vector3(float(ix) * SUBGRID_STEP, float(iy) * SUBGRID_STEP, float(iz) * SUBGRID_STEP)
+	return Vector3.ZERO
+
+
+static func unpack_subgrid_anchor(anchor_kind: int) -> Vector2:
+	var off3 := unpack_subgrid_anchor_3d(anchor_kind)
+	return Vector2(off3.x, off3.z)
 
 
 ## Free space (in cell units) between the block face and the cell side on each
@@ -491,55 +498,72 @@ static func normalize_anchor(_block_id: StringName, _variant_id: StringName, anc
 	return anchor_kind
 
 
-## Public accessor for the rot=0 in-cell anchor offset (see `_anchor_base_offset`),
+## Public accessor for the rot=0 in-cell anchor offset,
 ## used by presentation to build the full 3D placement offset.
 static func anchor_base_offset(block_id: StringName, variant_id: StringName, anchor_kind: int) -> Vector2:
-	return _anchor_base_offset(block_id, variant_id, anchor_kind)
+	var off3 := anchor_base_offset_3d(block_id, variant_id, anchor_kind)
+	return Vector2(off3.x, off3.z)
 
 
-static func _anchor_base_offset(block_id: StringName, variant_id: StringName, anchor_kind: int) -> Vector2:
+static func anchor_base_offset_3d(block_id: StringName, variant_id: StringName, anchor_kind: int) -> Vector3:
 	if anchor_kind > 2:
-		return unpack_subgrid_anchor(anchor_kind)
+		return unpack_subgrid_anchor_3d(anchor_kind)
 	var f := _free_extents(block_id, variant_id)
 	match anchor_kind:
 		ANCHOR_EDGE:
-			return Vector2(0.0, -f.y) if f.y >= f.x else Vector2(-f.x, 0.0)
+			var off2 := Vector2(0.0, -f.y) if f.y >= f.x else Vector2(-f.x, 0.0)
+			return Vector3(off2.x, 0.0, off2.y)
 		ANCHOR_CORNER:
-			return Vector2(-f.x, -f.y)
+			return Vector3(-f.x, 0.0, -f.y)
 		_:
-			return Vector2.ZERO
+			return Vector3.ZERO
 
 
 ## Calculates the closest valid sub-grid anchor (packed int) for a block given
-## a local mouse offset (unrotated frame, -0.5..+0.5 range).
+## a local mouse offset (unrotated frame, -0.5..+0.5 range for X/Z, 0..1 for Y).
 static func snap_subgrid_anchor(block_id: StringName, variant_id: StringName, local_pos_rot0: Vector2) -> int:
+	return snap_subgrid_anchor_3d(block_id, variant_id, Vector3(local_pos_rot0.x, 0.0, local_pos_rot0.y))
+
+
+static func snap_subgrid_anchor_3d(block_id: StringName, variant_id: StringName, local_pos_rot0: Vector3) -> int:
 	var sz := size_of(block_id, variant_id)
 	var free_x := maxf(0.0, 1.0 - sz.x)
+	var free_y := maxf(0.0, 1.0 - sz.y)
 	var free_z := maxf(0.0, 1.0 - sz.z)
-	if free_x <= 0.001 and free_z <= 0.001:
-		return 0
 
 	var step_x := 0.25 if sz.x <= 0.5 else 0.125
+	var step_y := 0.25 if sz.y <= 0.5 else 0.125
 	var step_z := 0.25 if sz.z <= 0.5 else 0.125
 
 	var lx := local_pos_rot0.x + 0.5
-	var lz := local_pos_rot0.y + 0.5
+	var ly := local_pos_rot0.y
+	var lz := local_pos_rot0.z + 0.5
 
-	var desired_left_x := lx - sz.x * 0.5
-	var snapped_left_x := clampf(roundf(desired_left_x / step_x) * step_x, 0.0, free_x)
-	var off_x := snapped_left_x + sz.x * 0.5 - 0.5
+	var off_x := 0.0
+	if free_x > 0.001:
+		var desired_left_x := lx - sz.x * 0.5
+		var snapped_left_x := clampf(roundf(desired_left_x / step_x) * step_x, 0.0, free_x)
+		off_x = snapped_left_x + sz.x * 0.5 - 0.5
 
-	var desired_left_z := lz - sz.z * 0.5
-	var snapped_left_z := clampf(roundf(desired_left_z / step_z) * step_z, 0.0, free_z)
-	var off_z := snapped_left_z + sz.z * 0.5 - 0.5
+	var off_y := 0.0
+	if free_y > 0.001:
+		var desired_bottom_y := ly
+		var snapped_bottom_y := clampf(roundf(desired_bottom_y / step_y) * step_y, 0.0, free_y)
+		off_y = snapped_bottom_y
 
-	return pack_subgrid_anchor(off_x, off_z)
+	var off_z := 0.0
+	if free_z > 0.001:
+		var desired_left_z := lz - sz.z * 0.5
+		var snapped_left_z := clampf(roundf(desired_left_z / step_z) * step_z, 0.0, free_z)
+		off_z = snapped_left_z + sz.z * 0.5 - 0.5
+
+	return pack_subgrid_anchor(off_x, off_z, off_y)
 
 
 ## Horizontal position (X, Z in [0,1]) of the block's mesh origin inside its
 ## cell for the given variant, anchor kind and rotation.
 static func cell_offset(block_id: StringName, variant_id: StringName, anchor_kind: int, rot: int) -> Vector2:
-	var base := _anchor_base_offset(block_id, variant_id, anchor_kind)
+	var base := anchor_base_offset(block_id, variant_id, anchor_kind)
 	var rotated := Basis(Vector3.UP, deg_to_rad(90.0 * float(rot))) * Vector3(base.x, 0.0, base.y)
 	return Vector2(0.5 + rotated.x, 0.5 + rotated.z)
 

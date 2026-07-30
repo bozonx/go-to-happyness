@@ -17,7 +17,6 @@ const TENT_STARTING_POPULATION := 4
 const TENT_STARTING_WELLBEING := 75
 const TENT_STARTING_EQUIPMENT := {
 	"flint_steel": {"owned": true},
-	"construction_gloves": {"sets": 1, "active_durability": 100.0},
 }
 
 var era_progress := EraProgress.new()

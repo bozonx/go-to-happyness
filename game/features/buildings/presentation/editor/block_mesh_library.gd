@@ -30,9 +30,9 @@ static func local_offset(
 	rot_z: int = 0
 ) -> Vector3:
 	var size := BuildingBlockCatalogScript.size_of(block_id, variant)
-	var base := BuildingBlockCatalogScript.anchor_base_offset(block_id, variant, anchor)
-	# Default centre-to-centre offset: horizontal anchor + resting on the floor.
-	var d0 := Vector3(base.x, size.y * 0.5 - 0.5, base.y)
+	var base := BuildingBlockCatalogScript.anchor_base_offset_3d(block_id, variant, anchor)
+	# Default centre-to-centre offset: horizontal anchor + resting on the floor + Y sub-offset.
+	var d0 := Vector3(base.x, size.y * 0.5 - 0.5 + base.y, base.z)
 	var r := Basis.from_euler(Vector3(
 		deg_to_rad(90.0 * float(rot_x)),
 		deg_to_rad(90.0 * float(rot)),

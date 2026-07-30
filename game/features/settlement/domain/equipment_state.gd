@@ -7,7 +7,6 @@ const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.
 
 const TENT_STARTING_EQUIPMENT := {
 	"flint_steel": {"owned": true},
-	ResourceIds.CONSTRUCTION_GLOVES: {"sets": 1, "active_durability": 100.0},
 }
 
 var tools := {

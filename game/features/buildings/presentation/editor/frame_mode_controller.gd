@@ -220,18 +220,79 @@ func process(_delta: float) -> void:
 			refresh_ghost()
 
 
+var manual_subgrid_y: float = 0.0
+
+
+func step_manual_subgrid_y(delta_y: float) -> void:
+	manual_subgrid_y = clampf(manual_subgrid_y + delta_y, 0.0, 0.75)
+	refresh_ghost()
+
+
 func _update_current_subgrid_anchor() -> void:
 	if not _editor.cursor_valid or _editor.current_block_id.is_empty():
 		return
-	var hit_cell := _editor.cursor_cell
-	var hit_pos := _editor.cursor_hit_pos
-	var cell_center_x := float(hit_cell.x) + 0.5
-	var cell_center_z := float(hit_cell.z) + 0.5
-	var local_p := Vector2(hit_pos.x - cell_center_x, hit_pos.z - cell_center_z)
-	var rot_basis := Basis(Vector3.UP, deg_to_rad(-90.0 * float(_editor.current_rot)))
-	var unrot_p3 := rot_basis * Vector3(local_p.x, 0.0, local_p.y)
-	var unrot_p := Vector2(unrot_p3.x, unrot_p3.z)
-	_editor.current_anchor = BuildingBlockCatalog.snap_subgrid_anchor(_editor.current_block_id, _editor.current_variant, unrot_p)
+
+	# The editor cursor first intersects the active layer.  A frame block may
+	# replace that target only when it is actually in front of that layer on the
+	# same ray; otherwise a block below a deliberately selected upper layer would
+	# steal the ghost.
+	var hit_info := _placement_block_hit_info_under_mouse()
+	var placement := _placement_target_from_hit(_editor.cursor_cell, hit_info)
+	_editor.cursor_cell = placement["cell"]
+	_editor.current_anchor = placement["anchor"]
+
+
+## Resolves the snapped frame target from one cursor-plane cell and an optional
+## nearer block hit.  Kept separate from camera input so the placement rule is
+## directly covered by the scene regression tests.
+func _placement_target_from_hit(cursor_plane_cell: Vector3i, hit_info: Dictionary) -> Dictionary:
+	var target_cell := cursor_plane_cell
+	var local_p3 := Vector3.ZERO
+
+	if not hit_info.is_empty():
+		var normal: Vector3 = hit_info["normal"]
+		var hit_pos: Vector3 = hit_info["hit_pos"]
+
+		if normal.y > 0.5:
+			var hit_block := hit_info["block"] as BlueprintBlock
+			# `cursor_cell.xz` comes from the active-layer plane, which is displaced
+			# from the top face under an angled camera.  The hit block owns the cell
+			# that receives the next sub-block.
+			target_cell.x = hit_block.pos.x
+			target_cell.z = hit_block.pos.z
+			var target_y_world := hit_pos.y
+			target_cell.y = int(floor(target_y_world - 0.0001))
+			if target_cell.y < 0:
+				target_cell.y = 0
+			var unrot_y := target_y_world - float(target_cell.y)
+			if unrot_y >= 0.999:
+				target_cell.y += 1
+				unrot_y = 0.0
+			var cell_center_x := float(target_cell.x) + 0.5
+			var cell_center_z := float(target_cell.z) + 0.5
+			var local_xz := Vector2(hit_pos.x - cell_center_x, hit_pos.z - cell_center_z)
+			var rot_basis := Basis(Vector3.UP, deg_to_rad(-90.0 * float(_editor.current_rot)))
+			var unrot_xz3 := rot_basis * Vector3(local_xz.x, 0.0, local_xz.y)
+			local_p3 = Vector3(unrot_xz3.x, unrot_y, unrot_xz3.z)
+		else:
+			var cell_center_x := float(target_cell.x) + 0.5
+			var cell_center_z := float(target_cell.z) + 0.5
+			var local_xz := Vector2(_editor.cursor_hit_pos.x - cell_center_x, _editor.cursor_hit_pos.z - cell_center_z)
+			var rot_basis := Basis(Vector3.UP, deg_to_rad(-90.0 * float(_editor.current_rot)))
+			var unrot_xz3 := rot_basis * Vector3(local_xz.x, 0.0, local_xz.y)
+			local_p3 = Vector3(unrot_xz3.x, manual_subgrid_y, unrot_xz3.z)
+	else:
+		var cell_center_x := float(target_cell.x) + 0.5
+		var cell_center_z := float(target_cell.z) + 0.5
+		var local_xz := Vector2(_editor.cursor_hit_pos.x - cell_center_x, _editor.cursor_hit_pos.z - cell_center_z)
+		var rot_basis := Basis(Vector3.UP, deg_to_rad(-90.0 * float(_editor.current_rot)))
+		var unrot_xz3 := rot_basis * Vector3(local_xz.x, 0.0, local_xz.y)
+		local_p3 = Vector3(unrot_xz3.x, manual_subgrid_y, unrot_xz3.z)
+
+	return {
+		"cell": target_cell,
+		"anchor": BuildingBlockCatalog.snap_subgrid_anchor_3d(_editor.current_block_id, _editor.current_variant, local_p3),
+	}
 
 
 func refresh_ghost() -> void:
@@ -419,22 +480,102 @@ func refresh_shift_hover() -> void:
 
 
 func _block_under_mouse() -> BlueprintBlock:
+	var info := _block_hit_info_under_mouse()
+	return info.get("block", null) as BlueprintBlock
+
+
+func _block_hit_info_under_mouse() -> Dictionary:
+	return _block_hit_info_on_ray(INF)
+
+
+## Returns the closest block before `max_distance` on the current camera ray.
+## The placement cursor uses the active-layer hit as that limit; Shift picking
+## deliberately keeps the unbounded version above.
+func _placement_block_hit_info_under_mouse() -> Dictionary:
 	if _camera_controller == null or _camera_controller.camera == null:
-		return null
+		return {}
 	var camera := _camera_controller.camera
 	var mouse_pos := _editor.get_viewport().get_mouse_position()
 	var origin := camera.project_ray_origin(mouse_pos)
 	var direction := camera.project_ray_normal(mouse_pos)
-	var closest: BlueprintBlock = null
-	var closest_distance := INF
+	return _placement_block_hit_info_on_ray(origin, direction, _editor.active_layer)
+
+
+func _placement_block_hit_info_on_ray(origin: Vector3, direction: Vector3, active_layer: int) -> Dictionary:
+	if absf(direction.y) < 0.000001:
+		return {}
+	var plane_distance := (float(active_layer) - origin.y) / direction.y
+	if plane_distance < 0.0:
+		return {}
+	return _block_hit_info_on_ray(plane_distance + 0.0001, origin, direction)
+
+
+func _block_hit_info_on_ray(max_distance: float, origin := Vector3.INF, direction := Vector3.ZERO) -> Dictionary:
+	if _camera_controller == null or _camera_controller.camera == null:
+		return {}
+	if origin == Vector3.INF:
+		var camera := _camera_controller.camera
+		var mouse_pos := _editor.get_viewport().get_mouse_position()
+		origin = camera.project_ray_origin(mouse_pos)
+		direction = camera.project_ray_normal(mouse_pos)
+	var closest_block: BlueprintBlock = null
+	var closest_distance := max_distance
+	var hit_normal := Vector3.UP
+	var hit_pos := Vector3.ZERO
 	for block: BlueprintBlock in _editor.grid_model.all_blocks():
 		var aabb := BuildingBlockCatalog.occupied_aabb(block.pos, block.block_id,
 			block.variant, block.rot, block.anchor, block.rot_x, block.rot_z)
-		var distance := _ray_aabb_entry_distance(origin, direction, aabb)
-		if distance >= 0.0 and distance < closest_distance:
-			closest = block
-			closest_distance = distance
-	return closest
+		var hit_info := _ray_aabb_hit_info(origin, direction, aabb)
+		if not hit_info.is_empty():
+			var dist: float = hit_info["distance"]
+			if dist >= 0.0 and dist <= closest_distance:
+				closest_block = block
+				closest_distance = dist
+				hit_normal = hit_info["normal"]
+				hit_pos = hit_info["hit_pos"]
+	if closest_block == null:
+		return {}
+	return {
+		"block": closest_block,
+		"distance": closest_distance,
+		"normal": hit_normal,
+		"hit_pos": hit_pos
+	}
+
+
+func _ray_aabb_hit_info(origin: Vector3, direction: Vector3, aabb: AABB) -> Dictionary:
+	var t_min := -INF
+	var t_max := INF
+	var hit_normal := Vector3.UP
+	for axis in 3:
+		var start: float = origin[axis]
+		var ray: float = direction[axis]
+		var lower: float = aabb.position[axis]
+		var upper: float = aabb.end[axis]
+		if absf(ray) < 0.000001:
+			if start < lower or start > upper:
+				return {}
+			continue
+		var first := (lower - start) / ray
+		var last := (upper - start) / ray
+		var axis_normal_dir := -1.0
+		if first > last:
+			var swap := first
+			first = last
+			last = swap
+			axis_normal_dir = 1.0
+		if first > t_min:
+			t_min = first
+			var norm := Vector3.ZERO
+			norm[axis] = axis_normal_dir
+			hit_normal = norm
+		t_max = minf(t_max, last)
+		if t_min > t_max:
+			return {}
+	if t_min < 0.0:
+		return {}
+	var hit := origin + direction * t_min
+	return {"hit_pos": hit, "normal": hit_normal, "distance": t_min}
 
 
 func _ray_aabb_entry_distance(origin: Vector3, direction: Vector3, aabb: AABB) -> float:

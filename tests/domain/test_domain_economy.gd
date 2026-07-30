@@ -70,12 +70,13 @@ static func _test_tent_start_config() -> void:
 	state.apply_tent_start()
 	assert(state.era == SettlementState.Era.TENT)
 	assert(state.money == SettlementState.TENT_STARTING_MONEY)
-	assert(state.amount("food") == SettlementState.TENT_STARTING_FOOD)
-	assert(state.amount("water") == SettlementState.TENT_STARTING_WATER)
+	# Food and water now come from the map backpack entity, not from launch config.
+	assert(state.amount("food") == 0)
+	assert(state.amount("water") == 0)
 	assert(state.branches == 0 and state.grass == 0)
 	assert(bool(state.equipment.flint_steel.owned))
-	assert(int(state.equipment.construction_gloves.sets) == 1)
-	assert(state.construction_gloves_available())
+	# Construction gloves now come from the map backpack entity as a physical resource.
+	assert(not state.construction_gloves_available())
 	assert(state.wear_construction_gloves(100.0) == false)
 	state.add_construction_glove_set()
 	assert(state.construction_gloves_available())
@@ -84,6 +85,8 @@ static func _test_tent_start_config() -> void:
 	assert(state.is_building_unlocked("tent"))
 	assert(state.is_building_unlocked("cook_campfire"))
 	assert(state.is_building_unlocked("dew_collector"))
+	# Tarp now comes from the map backpack entity; add it manually for this test.
+	state.add(ResourceIds.TARP, 1)
 	assert(state.tarp == 1)
 	assert(state.can_cover_warehouse_with_tarp())
 	assert(state.cover_warehouse_with_tarp())
@@ -143,6 +146,9 @@ static func _test_virtual_stockpile_migration() -> void:
 
 	var small_overflow_state := SettlementState.new()
 	small_overflow_state.apply_tent_start()
+	small_overflow_state.add(ResourceIds.FOOD, 16)
+	small_overflow_state.add(ResourceIds.WATER, 8)
+	small_overflow_state.add(ResourceIds.TARP, 1)
 	small_overflow_state.add("branches", 4)
 	small_overflow_state.add_warehouse("warehouse")
 	var small_overflow := small_overflow_state.migrate_virtual_to_warehouse(1)
@@ -378,5 +384,6 @@ static func _test_resource_pile_decay_rates() -> void:
 static func _test_backpack_invariants() -> void:
 	var state := SettlementState.new()
 	state.apply_tent_start()
-	assert(state.amount("food") == SettlementState.TENT_STARTING_FOOD)
-	assert(state.amount("water") == SettlementState.TENT_STARTING_WATER)
+	# Backpack starts empty; resources are filled from the map backpack entity at runtime.
+	assert(state.amount("food") == 0)
+	assert(state.amount("water") == 0)

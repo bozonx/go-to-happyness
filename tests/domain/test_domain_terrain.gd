@@ -26,6 +26,7 @@ static func run_all() -> void:
 	_test_ramp_dissolves_when_its_top_column_moves()
 	_test_ramp_dissolves_when_ground_is_carved_away()
 	_test_dirty_chunks_cover_neighbours()
+	_test_geometry_delta_does_not_publish_surface_early()
 	print("    [PASS] Terrain Grid Tests")
 	_test_cascade_builds_symmetric_pyramid()
 	_test_cascade_respects_material_repose()
@@ -418,6 +419,27 @@ static func _test_dirty_chunks_cover_neighbours() -> void:
 		return a.y < b.y if a.y != b.y else a.x < b.x)
 	assert(all_chunks == sorted)
 	assert(all_chunks.size() == 4)
+
+
+static func _test_geometry_delta_does_not_publish_surface_early() -> void:
+	var grid := _make_grid()
+	grid.take_dirty_chunks()
+	grid.take_dirty_surface_cells()
+	var cell := Vector2i(4, 4)
+	var old_state := TerrainDelta.state_of(grid, cell)
+	var raised_state := old_state.duplicate()
+	raised_state[TerrainDelta.STATE_HEIGHT] = 1
+	assert(grid.set_cell_state(
+		cell,
+		raised_state[TerrainDelta.STATE_HEIGHT], raised_state[TerrainDelta.STATE_SLOPE_CLASS],
+		raised_state[TerrainDelta.STATE_SLOPE_DIR], raised_state[TerrainDelta.STATE_SLOPE_INDEX],
+		raised_state[TerrainDelta.STATE_MATERIAL], raised_state[TerrainDelta.STATE_FLAGS],
+		raised_state[TerrainDelta.STATE_DETAIL],
+	))
+	assert(grid.has_dirty_chunks())
+	# The chunk rebuild updates ground and derived grass together. Publishing this
+	# as a surface-only edit would move the grass one frame before the ground.
+	assert(not grid.has_dirty_surface_cells())
 
 
 # --- Cascade ----------------------------------------------------------------

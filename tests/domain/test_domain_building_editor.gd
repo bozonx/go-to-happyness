@@ -97,19 +97,37 @@ static func _test_catalog() -> void:
 
 static func _test_anchoring() -> void:
 	var C := BuildingBlockCatalogScript
-	# Subgrid anchor packing / unpacking
-	var packed_slot1 := C.snap_subgrid_anchor(&"cube", &"0.25", Vector2(-0.35, -0.35))
-	var offset1 := C.anchor_base_offset(&"cube", &"0.25", packed_slot1)
-	assert(_approx(offset1, Vector2(-0.375, -0.375)))
+	# 3D Subgrid anchor packing / unpacking
+	var packed_slot1 := C.snap_subgrid_anchor_3d(&"cube", &"0.25", Vector3(-0.35, 0.25, -0.35))
+	var offset1 := C.anchor_base_offset_3d(&"cube", &"0.25", packed_slot1)
+	assert(_approx3(offset1, Vector3(-0.375, 0.25, -0.375)))
 
-	var packed_slot2 := C.snap_subgrid_anchor(&"cube", &"0.25", Vector2(-0.10, 0.10))
-	var offset2 := C.anchor_base_offset(&"cube", &"0.25", packed_slot2)
-	assert(_approx(offset2, Vector2(-0.125, 0.125)))
+	var packed_slot2 := C.snap_subgrid_anchor_3d(&"cube", &"0.25", Vector3(-0.10, 0.50, 0.10))
+	var offset2 := C.anchor_base_offset_3d(&"cube", &"0.25", packed_slot2)
+	assert(_approx3(offset2, Vector3(-0.125, 0.50, 0.125)))
+
+	# Stacking 4 quarter-cubes in one cell at different Y sub-levels
+	var grid := BuildingGridModelScript.new()
+	var cell := Vector3i(1, 0, 1)
+	var anc0 := C.snap_subgrid_anchor_3d(&"cube", &"0.25", Vector3(-0.375, 0.00, -0.375))
+	var anc1 := C.snap_subgrid_anchor_3d(&"cube", &"0.25", Vector3(-0.375, 0.25, -0.375))
+	var anc2 := C.snap_subgrid_anchor_3d(&"cube", &"0.25", Vector3(-0.375, 0.50, -0.375))
+	var anc3 := C.snap_subgrid_anchor_3d(&"cube", &"0.25", Vector3(-0.375, 0.75, -0.375))
+
+	assert(grid.place(cell, &"cube", 0, &"stone", &"0.25", anc0))
+	assert(grid.place(cell, &"cube", 0, &"stone", &"0.25", anc1))
+	assert(grid.place(cell, &"cube", 0, &"stone", &"0.25", anc2))
+	assert(grid.place(cell, &"cube", 0, &"stone", &"0.25", anc3))
+	assert(grid.blocks_anchored_at(cell).size() == 4)
 
 	# Legacy anchor compatibility (ANCHOR_CORNER / ANCHOR_EDGE)
 	assert(C.cell_offset(&"column_square", &"0.5", C.ANCHOR_CENTER, 0) == Vector2(0.5, 0.5))
 	assert(_approx(C.cell_offset(&"column_square", &"0.5", C.ANCHOR_CORNER, 0), Vector2(0.25, 0.25)))
 	assert(_approx(C.cell_offset(&"column_square", &"0.5", C.ANCHOR_CORNER, 2), Vector2(0.75, 0.75)))
+
+
+static func _approx3(a: Vector3, b: Vector3) -> bool:
+	return is_equal_approx(a.x, b.x) and is_equal_approx(a.y, b.y) and is_equal_approx(a.z, b.z)
 
 
 static func _approx(a: Vector2, b: Vector2) -> bool:

@@ -239,10 +239,16 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 			_panning = event.pressed
 		MOUSE_BUTTON_WHEEL_UP:
 			if event.pressed:
-				_zoom(-2.0)
+				if event.alt_pressed and current_mode == EditMode.FRAME:
+					frame_mode.step_manual_subgrid_y(0.25)
+				else:
+					_zoom(-2.0)
 		MOUSE_BUTTON_WHEEL_DOWN:
 			if event.pressed:
-				_zoom(2.0)
+				if event.alt_pressed and current_mode == EditMode.FRAME:
+					frame_mode.step_manual_subgrid_y(-0.25)
+				else:
+					_zoom(2.0)
 		MOUSE_BUTTON_LEFT:
 			if event.pressed:
 				if event.shift_pressed:
@@ -306,9 +312,15 @@ func _handle_key(event: InputEventKey) -> void:
 		KEY_M:
 			_on_brush_rect_pressed()
 		KEY_PAGEUP:
-			_set_layer(active_layer + 1)
+			if event.alt_pressed and current_mode == EditMode.FRAME:
+				frame_mode.step_manual_subgrid_y(0.25)
+			else:
+				_set_layer(active_layer + 1)
 		KEY_PAGEDOWN:
-			_set_layer(active_layer - 1)
+			if event.alt_pressed and current_mode == EditMode.FRAME:
+				frame_mode.step_manual_subgrid_y(-0.25)
+			else:
+				_set_layer(active_layer - 1)
 		KEY_ESCAPE:
 			frame_mode.clear_block_selection()
 

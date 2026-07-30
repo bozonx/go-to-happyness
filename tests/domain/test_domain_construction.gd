@@ -396,7 +396,6 @@ static func _test_building_queue_multiple_entrances() -> void:
 	queues.release(beta)
 	alpha.free()
 	beta.free()
-	scene_root.remove_child(building)
 	building.free()
 
 
@@ -433,7 +432,6 @@ static func _test_building_queue_keeps_assigned_entrance() -> void:
 	queues.release(beta)
 	alpha.free()
 	beta.free()
-	scene_root.remove_child(building)
 	building.free()
 
 
@@ -463,7 +461,6 @@ static func _test_building_queue_keeps_ai_citizens() -> void:
 	assert(result.is_head, "AI citizen with small ai_id should be treated as a valid queue member")
 	queues.release(citizen)
 	citizen.free()
-	scene_root.remove_child(building)
 	building.free()
 
 
@@ -497,5 +494,6 @@ static func _test_construction_site_uses_building_entrance() -> void:
 		assert(cell_position != cell, "Service position must be outside the building footprint")
 
 	service.cancel_site(site.node)
-	scene_root_parent.remove_child(scene_root)
 	scene_root.free()
+	if tree == null and is_instance_valid(scene_root_parent):
+		scene_root_parent.free()

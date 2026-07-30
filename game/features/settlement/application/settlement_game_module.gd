@@ -59,8 +59,9 @@ func _launch_config(session: GameSessionConfig, parameters: Dictionary) -> GameL
 	launch.map_ref = session.map_ref
 	launch.map_document = session.map_document
 	# Map-owned visual overrides: era and world style are properties of the map,
-	# not of the settlement module. Economy (money, population, resources) is
-	# module-owned and comes only from the game definition's start_parameters.
+	# not of the settlement module. Economy (money, population) is module-owned
+	# and comes from the game definition's start_parameters. Starting resources
+	# and equipment are map-owned: they live on the backpack entity.
 	if session.map_document != null:
 		launch.apply_map_start()
 	launch.era_id = StringName(parameters.get("era", launch.era_id))

@@ -104,13 +104,22 @@ func create_starter_backpack() -> void:
 	if game.launch_config == null or game.launch_config.map_document == null:
 		return
 	var spawn: MapEntityRecord = null
+	var archetype: EntityArchetype = null
 	for entity: MapEntityRecord in game.launch_config.map_document.entities.entities:
 		if entity.archetype_id in [&"core:backpack", &"core:starter_backpack", &"backpack", &"starter_backpack"]:
 			spawn = entity
+			archetype = EntityArchetypeCatalog.get_archetype(entity.archetype_id)
 			break
 	if spawn == null:
 		# Backpack is an optional placement on maps; if absent, start without a ground backpack pile.
 		return
+	# Fill the settlement backpack from the entity's authored props so the
+	# starting resources live on the map, not in the game definition.
+	var props := archetype.resolved_properties(spawn.props) if archetype != null else spawn.props
+	for key in props:
+		var amount := int(props[key])
+		if amount > 0:
+			game.settlement.backpack[str(key)] = amount
 	game.backpack_position = spawn.position
 	var terrain_height := game.terrain_height_at(game.backpack_position.x, game.backpack_position.z, 0.0)
 	if not is_nan(terrain_height):

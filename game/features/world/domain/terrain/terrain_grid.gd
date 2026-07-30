@@ -314,7 +314,12 @@ func set_cell_state(cell: Vector2i, height: int, slope_class: int, slope_dir: in
 	_flags[index] = next_flags
 	if geometry_changed:
 		_touch(cell)
-	if geometry_changed or surface_changed:
+	# A geometry edit already rebuilds the complete chunk, including its derived
+	# grass, in GridTerrainWorld. Marking it as a surface edit as well made grass
+	# jump to the new height before the terrain mesh caught up, then rebuilt the
+	# same vegetation a second time. Surface dirtiness is only for GPU texels and
+	# material/detail-only vegetation changes.
+	if surface_changed:
 		_touch_surface(cell)
 	return true
 

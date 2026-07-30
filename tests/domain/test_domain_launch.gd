@@ -30,8 +30,8 @@ static func test_default_tent_config() -> void:
 	assert(config.starting_money == 500)
 	assert(config.starting_wellbeing == 75)
 	assert(config.starting_population == 4)
-	assert(int(config.starting_resources.get(ResourceIds.FOOD, 0)) == 16)
-	assert(int(config.starting_resources.get(ResourceIds.WATER, 0)) == 8)
+	# Starting resources now come from the map backpack entity, not the launch config.
+	assert(config.starting_resources.is_empty())
 
 
 static func test_custom_launch_config() -> void:
@@ -101,8 +101,8 @@ static func test_apply_launch_config_null_defaults_to_tent() -> void:
 	assert(int(state.era) == 0)
 	assert(state.money == 500)
 	assert(state.wellbeing == 75)
-	assert(state.backpack_amount(ResourceIds.FOOD) == 16)
-	assert(state.backpack_amount(ResourceIds.WATER) == 8)
+	# Backpack is filled from the map backpack entity at runtime, not from launch config.
+	assert(state.backpack.is_empty())
 
 
 static func test_apply_launch_config_reset_progress_false() -> void:
@@ -139,8 +139,8 @@ static func test_apply_tent_start_backward_compat() -> void:
 	assert(int(state.era) == 0)
 	assert(state.money == 500)
 	assert(state.wellbeing == 75)
-	assert(state.backpack_amount(ResourceIds.FOOD) == 16)
-	assert(state.backpack_amount(ResourceIds.WATER) == 8)
+	# Backpack is filled from the map backpack entity at runtime, not from launch config.
+	assert(state.backpack.is_empty())
 	# apply_tent_start must produce the same result as apply_launch_config(for_tent_era()).
 	var state2 := SettlementStateScript.new()
 	state2.apply_launch_config(GameLaunchConfigScript.for_tent_era())

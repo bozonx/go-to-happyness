@@ -4,8 +4,6 @@ extends RefCounted
 ## Typed record and factory for settlement game launch configurations.
 ## Configures starting era, landscape/biome, starting economy, and extra parameters.
 
-const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
-
 var era_id: StringName = &"tent"
 var era_type: int = 0 # Matches SettlementState.Era.TENT
 ## Atmosphere and vegetation defaults. Since maps arrived the biome no longer
@@ -39,14 +37,8 @@ static func for_tent_era() -> GameLaunchConfig:
 	config.starting_money = 500
 	config.starting_wellbeing = 75
 	config.starting_population = 4
-	config.starting_resources = {
-		ResourceIds.FOOD: 16,
-		ResourceIds.WATER: 8,
-		ResourceIds.TARP: 1,
-	}
 	config.starting_equipment = {
 		"flint_steel": {"owned": true},
-		"construction_gloves": {"sets": 1, "active_durability": 100.0},
 	}
 	return config
 
