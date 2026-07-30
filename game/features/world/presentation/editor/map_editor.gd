@@ -48,7 +48,6 @@ const PLANNED_MODES: Array = [
 @onready var _start_settings_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/StartSettingsButton
 @onready var _undo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/UndoButton
 @onready var _redo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/RedoButton
-@onready var _grass_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/GrassButton
 @onready var _render_mode_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/RenderModeButton
 @onready var _validate_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/ValidateButton
 @onready var _test_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/TestButton
@@ -353,9 +352,6 @@ func _connect_ui() -> void:
 	_start_settings_button.pressed.connect(_open_start_settings)
 	_undo_button.pressed.connect(_undo)
 	_redo_button.pressed.connect(_redo)
-	_grass_button.button_pressed = terrain_world.grass_visible
-	_grass_button.toggled.connect(func(toggled_on: bool) -> void:
-		terrain_world.set_grass_visible(toggled_on))
 	_update_render_mode_button()
 	_render_mode_button.pressed.connect(_cycle_render_mode)
 	_validate_button.pressed.connect(_validate_map)
@@ -538,7 +534,7 @@ func _handle_key(event: InputEventKey) -> void:
 			_test_run()
 			return
 		KEY_G:
-			_grass_button.button_pressed = not _grass_button.button_pressed
+			_cycle_render_mode()
 			return
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7:
 			var slot := event.keycode - KEY_1
@@ -709,13 +705,15 @@ func _confirm_discard_changes() -> bool:
 
 
 func _cycle_render_mode() -> void:
-	var next_mode := (int(terrain_world.render_mode) + 1) % 3
+	var next_mode := (int(terrain_world.render_mode) + 1) % 4
 	terrain_world.set_render_mode(next_mode as GridTerrainWorld.RenderMode)
 	_update_render_mode_button()
 
 
 func _update_render_mode_button() -> void:
 	match terrain_world.render_mode:
+		GridTerrainWorld.RenderMode.FULL:
+			_render_mode_button.text = "🌿 Полный"
 		GridTerrainWorld.RenderMode.TEXTURED:
 			_render_mode_button.text = "🎨 Текстуры"
 		GridTerrainWorld.RenderMode.MATTE:

@@ -38,14 +38,15 @@ signal rebuild_finished()
 @export var full_smoothing := false
 @export_range(0.0, 1.0, 0.01) var edge_rounding := 0.0
 enum RenderMode {
-	TEXTURED = 0,
-	MATTE = 1,
-	SIMPLE = 2,
+	FULL = 0,
+	TEXTURED = 1,
+	MATTE = 2,
+	SIMPLE = 3,
 }
 
 @export var edge_bevel := false
 @export var grass_visible := true
-@export var render_mode: RenderMode = RenderMode.TEXTURED
+@export var render_mode: RenderMode = RenderMode.FULL
 
 var grid: TerrainGrid = null
 ## Optional: without it every chunk is built at full detail.
@@ -290,7 +291,7 @@ func set_grass_visible(enabled: bool) -> void:
 
 
 func _is_grass_effective() -> bool:
-	return grass_visible and (render_mode != RenderMode.MATTE)
+	return grass_visible and (render_mode == RenderMode.FULL)
 
 
 func _update_grass_visibility() -> void:

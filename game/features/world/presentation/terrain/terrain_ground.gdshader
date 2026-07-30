@@ -39,8 +39,8 @@ uniform float edge_rounding : hint_range(0.0, 1.0) = 0.0;
 // 0 makes a curved normal transition; 1 makes a constant-width flat bevel.
 uniform float edge_bevel : hint_range(0.0, 1.0) = 0.0;
 
-// 0 = Textured, 1 = Matte/Clay, 2 = Simple
-uniform float render_mode_idx : hint_range(0.0, 2.0) = 0.0;
+// 0 = Full (Textured + Grass), 1 = Textured, 2 = Matte/Clay, 3 = Simple
+uniform float render_mode_idx : hint_range(0.0, 3.0) = 0.0;
 
 uniform vec3 snow_colour : source_color = vec3(0.88, 0.91, 0.96);
 uniform vec3 wear_tint : source_color = vec3(0.52, 0.44, 0.33);
@@ -169,8 +169,8 @@ void fragment() {
 	normal_map = normalize(normal_map / max(total, 0.0001) * 2.0 - 1.0);
 	detail_sum /= max(total, 0.0001);
 
-	if (render_mode_idx > 1.5) {
-		// Mode 2: Simple - simplified shader textures without normal map noise
+	if (render_mode_idx > 2.5) {
+		// Mode 3: Simple - simplified shader textures without normal map noise
 		normal_map = vec3(0.0, 0.0, 1.0);
 	}
 
@@ -184,7 +184,7 @@ void fragment() {
 	albedo = mix(albedo, snow_colour, smoothstep(0.0, 0.7, snow));
 	// Large-scale colour drift breaks the remaining repetition without changing
 	// material identity or adding another texture lookup.
-	if (render_mode_idx <= 1.5) {
+	if (render_mode_idx < 1.5) {
 		float macro_noise = (sin(world_position.x * 0.19 + world_position.z * 0.07)
 			+ sin(world_position.z * 0.23 - world_position.x * 0.05)) * 0.5;
 		albedo *= 0.98 + macro_noise * 0.025;
@@ -194,9 +194,9 @@ void fragment() {
 	vec3 detailed_world_normal = normalize(cotangent_frame(geometric_world_normal, world_position, tile_uv) * normal_map);
 	NORMAL = normalize((VIEW_MATRIX * vec4(detailed_world_normal, 0.0)).xyz);
 
-	if (render_mode_idx > 0.5 && render_mode_idx < 1.5) {
-		// Mode 1: Matte / Clay - neutral flat surface for inspecting slopes & geometry.
-		ALBEDO = vec3(0.68, 0.67, 0.65);
+	if (render_mode_idx > 1.5 && render_mode_idx < 2.5) {
+		// Mode 2: Matte / Clay - neutral flat surface for inspecting slopes & geometry.
+		ALBEDO = vec3(0.42, 0.42, 0.44);
 		ROUGHNESS = 0.95;
 		SPECULAR = 0.15;
 	} else {

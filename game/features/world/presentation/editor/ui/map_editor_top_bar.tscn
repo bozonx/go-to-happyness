@@ -67,17 +67,10 @@ custom_minimum_size = Vector2(38, 0)
 text = "↪"
 tooltip_text = "Повторить (Ctrl+Shift+Z)"
 
-[node name="GrassButton" type="Button" parent="Margin/Scroll/Row"]
-custom_minimum_size = Vector2(38, 0)
-toggle_mode = true
-button_pressed = true
-text = "🌾"
-tooltip_text = "Показать/скрыть 3D траву (G)"
-
 [node name="RenderModeButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(100, 0)
-text = "🎨 Текстуры"
-tooltip_text = "Режим ландшафта: Текстуры / Матовый / Простой"
+text = "🌿 Полный"
+tooltip_text = "Режим ландшафта: Полный / Текстуры / Матовый / Простой"
 
 [node name="VSep2" type="VSeparator" parent="Margin/Scroll/Row"]
 
