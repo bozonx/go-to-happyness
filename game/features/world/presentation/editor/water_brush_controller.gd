@@ -44,6 +44,28 @@ var level := 0
 ## two-bit field is spare, kept because the format has the bits and a third
 ## traveller class would need them.
 var ice_thickness := WaterGrid.MAX_ICE_THICKNESS
+var liquid_category: StringName = &"water"
+var water_type: WaterBody.Type = WaterBody.Type.LAKE
+
+func active_body_type() -> WaterBody.Type:
+	if liquid_category == &"lava":
+		return WaterBody.Type.LAVA
+	return water_type if water_type != WaterBody.Type.LAVA else WaterBody.Type.LAKE
+
+
+func cycle_liquid_category() -> void:
+	liquid_category = &"lava" if liquid_category == &"water" else &"water"
+	last_message = "жидкость: %s" % ("лава" if liquid_category == &"lava" else "вода")
+
+
+func cycle_water_type() -> void:
+	if liquid_category == &"lava":
+		liquid_category = &"water"
+	var water_types: Array[WaterBody.Type] = [WaterBody.Type.LAKE, WaterBody.Type.RIVER, WaterBody.Type.SEA]
+	var current_idx := water_types.find(water_type)
+	var next_idx := (current_idx + 1) % water_types.size() if current_idx >= 0 else 0
+	water_type = water_types[next_idx]
+	last_message = "тип воды: %s" % WaterBody.type_id_of(water_type)
 
 var _terrain: TerrainGrid
 var _water: WaterGrid
@@ -136,12 +158,18 @@ func pick_from_cell() -> void:
 		var target_body_id := _water.body_id_at(hovered_cell)
 		select_body(target_body_id)
 		level = _water.height_of(hovered_cell)
+		var found_body := _water.body(target_body_id)
+		if found_body != null:
+			if found_body.is_lava():
+				liquid_category = &"lava"
+			else:
+				liquid_category = &"water"
+				water_type = found_body.type
 		if _water.is_frozen(hovered_cell):
 			tool = TOOL_FREEZE
 			ice_thickness = _water.ice_thickness_at(hovered_cell)
 		else:
 			tool = TOOL_FLOOD
-		var found_body := _water.body(target_body_id)
 		last_message = "пипетка: %s (уровень %d)" % [found_body.name if found_body != null else "водоём", level]
 	else:
 		if _terrain != null:
@@ -174,8 +202,10 @@ func apply() -> void:
 
 func _flood() -> void:
 	if body_id == WaterBody.NO_BODY:
-		last_message = "create a body first"
-		return
+		create_body(active_body_type())
+		if body_id == WaterBody.NO_BODY:
+			last_message = "create a body first"
+			return
 	if _water != null and _water.has_water(hovered_cell):
 		var cell_body_id := _water.body_id_at(hovered_cell)
 		var cell_height := _water.height_of(hovered_cell)
@@ -247,24 +277,22 @@ func _drain_body_at_hover() -> void:
 ## body's type, retypes the hovered body to match. Border bodies are protected:
 ## they cannot be retyped, only drained by raising the ground.
 func _maybe_retype_hovered_body() -> void:
-	if _water == null or body_id == WaterBody.NO_BODY:
+	if _water == null:
 		return
-	var selected := _water.body(body_id)
-	if selected == null:
-		return
+	var target_type := active_body_type()
 	var hovered_id := _water.body_id_at(hovered_cell)
 	if hovered_id == WaterBody.NO_BODY:
 		return
 	var hovered_body := _water.body(hovered_id)
-	if hovered_body == null or hovered_body.type == selected.type:
+	if hovered_body == null or hovered_body.type == target_type:
 		return
 	if _border != null and _border.is_border_body(hovered_id):
 		last_message = "border body cannot be retyped"
 		return
-	if _service.retype_body(hovered_id, selected.type):
+	if _service.retype_body(hovered_id, target_type):
 		body_id = hovered_id
 		level = hovered_body.surface_height
-		last_message = "retyped %s to %s" % [hovered_body.name, selected.type_id()]
+		last_message = "retyped %s to %s" % [hovered_body.name, WaterBody.type_id_of(target_type)]
 
 
 ## Freezes or thaws the whole selected body in one transaction — the seasonal

@@ -49,6 +49,7 @@ var _pending_chunks: Array[Vector2i] = []
 var _queued_lookup: Dictionary = {}
 var _library := TerrainMaterialLibrary.new()
 var _surface_maps := TerrainSurfaceMaps.new()
+var _medium_grass := TerrainMediumGrass.new()
 var _tall_grass := TerrainTallGrass.new()
 var _ground_material: ShaderMaterial = null
 var _cliff_material: ShaderMaterial = null
@@ -137,6 +138,7 @@ func set_edge_bevel(enabled: bool) -> void:
 ## presentation boundary accepts the resolved values without depending on the
 ## simulation's WeatherState directly.
 func set_wind(direction: Vector2, strength: float) -> void:
+	_medium_grass.set_wind(direction, strength)
 	_tall_grass.set_wind(direction, strength)
 
 
@@ -177,6 +179,7 @@ func _sync_surface_visuals() -> void:
 	for chunk: Vector2i in chunks:
 		var body: StaticBody3D = _chunk_bodies.get(chunk)
 		if body != null:
+			_rebuild_medium_grass(body, chunk, lod_of_chunk(chunk))
 			_rebuild_tall_grass(body, chunk, lod_of_chunk(chunk))
 
 
@@ -234,6 +237,7 @@ func _rebuild_chunk(chunk: Vector2i) -> void:
 	else:
 		collision.shape = null
 		collision.disabled = true
+	_rebuild_medium_grass(body, chunk, lod)
 	_rebuild_tall_grass(body, chunk, lod)
 	chunk_rebuilt.emit(chunk)
 
@@ -276,6 +280,22 @@ func _rebuild_tall_grass(body: StaticBody3D, chunk: Vector2i, lod: int) -> void:
 		instance.material_override = _tall_grass.material()
 		body.add_child(instance)
 	instance.multimesh = _tall_grass.build_chunk(grid, chunk)
+
+
+func _rebuild_medium_grass(body: StaticBody3D, chunk: Vector2i, lod: int) -> void:
+	var instance: MultiMeshInstance3D = body.get_node_or_null(^"MediumGrass")
+	if lod == TerrainChunkMesher.Lod.TOP_ONLY:
+		if instance != null:
+			instance.multimesh = null
+		return
+	if instance == null:
+		instance = MultiMeshInstance3D.new()
+		instance.name = "MediumGrass"
+		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		instance.extra_cull_margin = TerrainMediumGrass.CARD_HEIGHT
+		instance.material_override = _medium_grass.material()
+		body.add_child(instance)
+	instance.multimesh = _medium_grass.build_chunk(grid, chunk)
 
 
 ## Two surfaces, two shaders (§7.2): tops read the index map, faces are triplanar

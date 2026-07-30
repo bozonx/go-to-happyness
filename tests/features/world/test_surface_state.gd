@@ -28,6 +28,7 @@ static func run_all() -> void:
 	_test_wear_recovers_after_quiet_days_but_rock_never_does()
 	_test_tall_grass_weight_falls_from_two_to_one()
 	_test_tall_grass_decor_follows_surface_state()
+	_test_medium_grass_decor_follows_variant_and_surface_state()
 	print("    [PASS] Surface Wear Tests")
 	_test_snow_changes_weight_and_not_passability()
 	_test_material_weight_reaches_navigation()
@@ -278,6 +279,24 @@ static func _test_tall_grass_decor_follows_surface_state() -> void:
 	assert(decor.build_chunk(grid, Vector2i.ZERO).instance_count == 6)
 	assert(service.set_snow_depth(_brush([cells[1]]), 2))
 	assert(decor.build_chunk(grid, Vector2i.ZERO).instance_count == 4)
+
+
+static func _test_medium_grass_decor_follows_variant_and_surface_state() -> void:
+	var grid := TerrainGrid.new()
+	grid.configure(1.0, 4)
+	var decor := TerrainMediumGrass.new()
+	var first := decor.build_chunk(grid, Vector2i.ZERO)
+	var second := decor.build_chunk(grid, Vector2i.ZERO)
+	assert(first.instance_count == 8) # four in-bounds cells, two clumps each
+	for index in first.instance_count:
+		assert(first.get_instance_transform(index) == second.get_instance_transform(index))
+
+	grid.set_wear(Vector2i(0, 0), 1)
+	assert(decor.build_chunk(grid, Vector2i.ZERO).instance_count == 7)
+	grid.set_snow_depth(Vector2i(1, 0), 2)
+	assert(decor.build_chunk(grid, Vector2i.ZERO).instance_count == 5)
+	grid.set_variant(Vector2i(0, 1), 1) # lush adds one clump
+	assert(decor.build_chunk(grid, Vector2i.ZERO).instance_count == 6)
 
 
 # --- Weights in navigation ------------------------------------------------------

@@ -171,7 +171,7 @@ func _stroke() -> void:
 	# so drain always resolves the body actually clicked, not the previous cell.
 	brush.update_hover(context.camera, context.space_state(), context.mouse_position())
 	brush.apply()
-	if brush.tool == WaterBrushController.TOOL_FLOOD and _flow_strength > 0 and _selected_body_is_river():
+	if brush.tool == WaterBrushController.TOOL_FLOOD and _flow_strength > 0 and _selected_body_has_flow():
 		context.water_service.set_flow(
 			brush.brush_cells(brush.hovered_cell),
 			brush.body_id,
@@ -198,40 +198,37 @@ func _cycle_flow_strength() -> void:
 	_flow_strength = (_flow_strength + 1) % (WaterBody.MAX_FLOW_STRENGTH + 1)
 
 
+const OPTION_LIQUID_CATEGORY := &"liquid_category"
+const OPTION_WATER_TYPE := &"water_type"
+
 # --- Panels -------------------------------------------------------------------
 
-## The registry first, then one "new" entry per type. Both in the same palette on
-## purpose: creating a lake and selecting it are the same gesture as far as the
-## author is concerned, and a separate "add" button would put the type twice in
-## the interface.
 func palette_entries() -> Array:
 	var entries: Array = []
 	for body: WaterBody in context.water.bodies():
-		entries.append(PaletteEntry.of(
-			StringName("body_%d" % body.id),
-			"%s (%s)" % [body.name, body.type_id()],
-			body.colour,
-		))
-	for type_index in WaterBody.TYPE_IDS.size():
-		var body_type := type_index as WaterBody.Type
-		entries.append(PaletteEntry.of(
-			StringName("%s%s" % [NEW_BODY_PREFIX, WaterBody.type_id_of(body_type)]),
-			"+ %s" % WaterBody.type_id_of(body_type),
-			WaterBody.of_type(WaterBody.MIN_ID, body_type).colour.darkened(0.35),
-		))
+		if context.water.cells_of_body(body.id).size() > 0:
+			entries.append(PaletteEntry.of(
+				StringName("body_%d" % body.id),
+				"%s (%s)" % [body.name, body.type_id()],
+				body.colour,
+			))
+	entries.append(PaletteEntry.of(
+		&"new_body",
+		"+ Новый водоём",
+		Color(0.2, 0.45, 0.65, 1.0),
+	))
 	return entries
 
 
 func selected_palette_entry() -> StringName:
 	var body_id := context.water_brush.body_id
-	return StringName("body_%d" % body_id) if body_id != WaterBody.NO_BODY else &""
+	return StringName("body_%d" % body_id) if body_id != WaterBody.NO_BODY else &"new_body"
 
 
 func select_palette_entry(entry_id: StringName) -> void:
 	var text := String(entry_id)
-	if text.begins_with(NEW_BODY_PREFIX):
-		context.water_brush.create_body(WaterBody.type_of_id(StringName(text.trim_prefix(NEW_BODY_PREFIX))))
-		context.document.mark_dirty()
+	if text == "new_body" or text.begins_with(NEW_BODY_PREFIX):
+		context.water_brush.body_id = WaterBody.NO_BODY
 		notify_ui_changed()
 		return
 	if text.begins_with("body_"):
@@ -252,6 +249,14 @@ func tool_options() -> Array:
 		options.append(ToolOption.of(
 			StringName("%s%s" % [OPTION_TOOL_PREFIX, tool]), label, &"tools", brush.tool == tool,
 		))
+	options.append(ToolOption.of(OPTION_LIQUID_CATEGORY, "Жидкость: %s" % ("Лава" if brush.liquid_category == &"lava" else "Вода")))
+	if brush.liquid_category == &"water":
+		var type_name: String = {
+			WaterBody.Type.LAKE: "Озеро",
+			WaterBody.Type.RIVER: "Река",
+			WaterBody.Type.SEA: "Море",
+		}.get(brush.water_type, "Озеро")
+		options.append(ToolOption.of(OPTION_WATER_TYPE, "Тип: %s" % type_name))
 	if brush.tool == WaterBrushController.TOOL_FLOOD:
 		options.append(ToolOption.of(&"water_level", "Уровень %d" % brush.level, &"level", false, true))
 		options.append(ToolOption.of(OPTION_LEVEL_DOWN, "−", &"level"))
@@ -262,7 +267,7 @@ func tool_options() -> Array:
 		options.append(ToolOption.of(OPTION_BRUSH_UP, "+", &"brush"))
 	if brush.tool == WaterBrushController.TOOL_FREEZE:
 		options.append(ToolOption.of(OPTION_ICE, "Толщина льда: %d" % brush.ice_thickness))
-	if _selected_body_is_river():
+	if _selected_body_has_flow():
 		options.append(ToolOption.of(OPTION_FLOW_DIR, "Течение: %s" % TerrainBrushController.direction_name(_flow_direction)))
 		options.append(ToolOption.of(OPTION_FLOW_STRENGTH, "Сила течения: %d" % _flow_strength))
 	return options
@@ -276,6 +281,10 @@ func activate_option(option_id: StringName) -> void:
 		notify_ui_changed()
 		return
 	match option_id:
+		OPTION_LIQUID_CATEGORY:
+			brush.cycle_liquid_category()
+		OPTION_WATER_TYPE:
+			brush.cycle_water_type()
 		OPTION_BRUSH_UP:
 			brush.adjust_brush_size(1)
 		OPTION_BRUSH_DOWN:
@@ -293,9 +302,9 @@ func activate_option(option_id: StringName) -> void:
 	notify_ui_changed()
 
 
-func _selected_body_is_river() -> bool:
+func _selected_body_has_flow() -> bool:
 	var body := context.water.body(context.water_brush.body_id)
-	return body != null and body.type == WaterBody.Type.RIVER
+	return body != null and (body.type == WaterBody.Type.RIVER or body.type == WaterBody.Type.LAVA)
 
 
 func inspector_lines() -> Array[String]:
@@ -317,7 +326,7 @@ func inspector_lines() -> Array[String]:
 		lines.append("Замерзает: %s" % ("да" if body.freezes else "нет"))
 		lines.append("Клеток течения: %d" % body.flow.size())
 	lines.append("")
-	if _selected_body_is_river():
+	if _selected_body_has_flow():
 		lines.append("Течение Flood: %s, сила %d" % [TerrainBrushController.direction_name(_flow_direction), _flow_strength])
 	if brush.tool == WaterBrushController.TOOL_FREEZE:
 		lines.append("Толщина льда: %d (пешеход %d, тележка %d)" % [

@@ -181,13 +181,15 @@ static func _test_no_hover_means_no_edit() -> void:
 static func _test_no_body_means_refusal() -> void:
 	var world := _make()
 	var terrain: TerrainGrid = world["terrain"]
+	var water: WaterGrid = world["water"]
 	var brush: WaterBrushController = world["brush"]
 
 	terrain.set_height(Vector2i.ZERO, -2)
 	_hover(brush, Vector2i.ZERO)
 	brush.body_id = WaterBody.NO_BODY
 	brush.apply()
-	assert(brush.last_message == "create a body first")
+	# Auto-creates body on demand
+	assert(water.has_water(Vector2i.ZERO))
 
 
 # --- Tool cycling -------------------------------------------------------------
