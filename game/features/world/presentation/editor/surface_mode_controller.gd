@@ -39,6 +39,7 @@ var _snow_level := TerrainDetailCodec.MAX_SNOW_DEPTH
 func _init() -> void:
 	id = &"surface"
 	title = "Поверхность"
+	icon = "🌿"
 
 
 func deactivate() -> void:

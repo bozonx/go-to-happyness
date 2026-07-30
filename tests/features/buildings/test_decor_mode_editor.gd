@@ -76,6 +76,9 @@ func _run() -> void:
 	decor.on_left_pressed()
 	assert(decor.selected_object_id == editor.blueprint.objects[0].id, "picked the campfire")
 	assert(editor.get_node("%DecorInspectorPanel").visible, "inspector shown")
+	assert(decor._controls_vbox.get_child_count() > 0, "shared property inspector renders appearance")
+	assert(editor.get_node_or_null("%DecorDuplicateBtn") == null, "duplicate is not repeated in inspector")
+	assert(editor.get_node_or_null("%DecorDeleteBtn") == null, "delete remains in the top toolbar only")
 	print("  selection ok ->", decor.selected_object_id)
 
 	# Drag it.
@@ -92,6 +95,8 @@ func _run() -> void:
 	assert(node.get_node("Fire").visible == false, "visual_flame_visible=false hides the flame")
 	decor._set_property("light_color", "44aaff")
 	assert(node.get_node("Light").light_color.is_equal_approx(Color("44aaff")), "colour binding applied")
+	decor._on_appearance_property_reset(&"light_color")
+	assert(editor.blueprint.objects[0].appearance["light_color"] != "44aaff", "shared reset restores asset default")
 	print("  property bindings ok")
 
 	# Duplicate, delete, undo, redo.

@@ -21,6 +21,7 @@ var _active_route_id: StringName = &""
 func _init() -> void:
 	id = &"entities"
 	title = "Зоны и точки"
+	icon = "📍"
 
 
 func deactivate() -> void:

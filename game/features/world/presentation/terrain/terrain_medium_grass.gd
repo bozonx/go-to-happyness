@@ -10,10 +10,10 @@ extends RefCounted
 
 const TEXTURE_PATH := "res://game/features/world/presentation/terrain/assets/grass_medium_atlas.png"
 const SHADER_PATH := "res://game/features/world/presentation/terrain/tall_grass.gdshader"
-const VARIANT_COUNT := 4
+const VARIANT_COUNT := 8
 
-const CARD_WIDTH := 0.56
-const CARD_HEIGHT := 0.68
+const CARD_WIDTH := 0.46
+const CARD_HEIGHT := 0.50
 const SURFACE_LIFT := 0.012
 
 var _mesh: ArrayMesh = null
@@ -36,8 +36,9 @@ func build_chunk(grid: TerrainGrid, chunk: Vector2i) -> MultiMesh:
 				var z := (float(cell.y) + offset_z) * grid.cell_size
 				var y := grid.height_at(Vector3(x, 0.0, z)) + SURFACE_LIFT
 				var yaw := _unit(seed, 2) * TAU
-				var scale := lerpf(0.76, 1.08, _unit(seed, 3))
-				var basis := Basis(Vector3.UP, yaw).scaled(Vector3(scale, scale, scale))
+				var width_scale := lerpf(0.68, 1.12, _unit(seed, 3))
+				var height_scale := lerpf(0.72, 1.10, _unit(seed, 4))
+				var basis := Basis(Vector3.UP, yaw).scaled(Vector3(width_scale, height_scale, width_scale))
 				transforms.append(Transform3D(basis, Vector3(x, y, z)))
 				variants.append(TerrainMaterialVariants.clamp_variant(TerrainMaterialCatalog.DEFAULT_INDEX, grid.variant_at(cell)))
 
@@ -78,6 +79,11 @@ func set_wind(direction: Vector2, strength: float) -> void:
 	material().set_shader_parameter(&"wind_strength", clampf(strength, 0.0, 1.0))
 
 
+func set_lod_distance(distance: float) -> void:
+	material().set_shader_parameter(&"lod_fade_start", distance * 0.78)
+	material().set_shader_parameter(&"lod_fade_end", distance)
+
+
 func _density_at(grid: TerrainGrid, cell: Vector2i) -> int:
 	if (
 		not grid.is_inside(cell)
@@ -90,9 +96,9 @@ func _density_at(grid: TerrainGrid, cell: Vector2i) -> int:
 	if grid.wear_at(cell) == 1 or grid.snow_depth_at(cell) == 1:
 		return 1
 	match grid.variant_at(cell):
-		1: return 3 # lush
-		3: return 1 # parched
-		_: return 2 # plain / flowering; flowers themselves stay in the surface
+		1: return 4 # lush
+		2: return 2 # parched
+		_: return 3 # plain and the five flowering variants
 
 
 func _card_mesh() -> ArrayMesh:

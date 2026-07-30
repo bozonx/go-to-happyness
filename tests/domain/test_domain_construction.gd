@@ -397,6 +397,8 @@ static func _test_building_queue_multiple_entrances() -> void:
 	alpha.free()
 	beta.free()
 	building.free()
+	if tree == null:
+		scene_root.free()
 
 
 static func _test_building_queue_keeps_assigned_entrance() -> void:
@@ -433,6 +435,8 @@ static func _test_building_queue_keeps_assigned_entrance() -> void:
 	alpha.free()
 	beta.free()
 	building.free()
+	if tree == null:
+		scene_root.free()
 
 
 static func _test_building_queue_keeps_ai_citizens() -> void:
@@ -462,6 +466,8 @@ static func _test_building_queue_keeps_ai_citizens() -> void:
 	queues.release(citizen)
 	citizen.free()
 	building.free()
+	if tree == null:
+		scene_root.free()
 
 
 static func _test_construction_site_uses_building_entrance() -> void:

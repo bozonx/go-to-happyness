@@ -54,6 +54,7 @@ var _hole_cutting := true
 func _init() -> void:
 	id = &"terrain"
 	title = "Рельеф"
+	icon = "⛰️"
 
 
 func activate() -> void:

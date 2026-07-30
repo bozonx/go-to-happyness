@@ -179,7 +179,7 @@ func _update_config_summary() -> void:
 	if definition.start_parameters.has("era"):
 		match selected_era:
 			&"tent":
-				param_summary_label.text = "• %s\n• Стартовое население: 4 жителей\n• Монеты: 500\n• Запасы: Еда (16), Вода (8), Тент (1)\n• Снаряжение: Кремень и огниво, Рабочие перчатки" % [_landscape_summary()]
+				param_summary_label.text = "• %s\n• Стартовое население: 4 жителей\n• Монеты: 500\n• Снаряжение: Кремень и огниво\n• Ресурсы и перчатки — на карте" % [_landscape_summary()]
 			_:
 				param_summary_label.text = "• %s\n• Эта эра будет доступна в следующих обновлениях." % [_landscape_summary()]
 	else:

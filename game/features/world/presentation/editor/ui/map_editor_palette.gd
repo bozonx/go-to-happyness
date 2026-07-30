@@ -95,8 +95,10 @@ func set_options(options: Array) -> void:
 		var parent: Container = _options
 		if option.row != &"":
 			if not rows.has(option.row):
-				var row := HBoxContainer.new()
+				var row := HFlowContainer.new()
 				row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				row.add_theme_constant_override("h_separation", 4)
+				row.add_theme_constant_override("v_separation", 4)
 				_options.add_child(row)
 				rows[option.row] = row
 			parent = rows[option.row]
@@ -107,7 +109,7 @@ func set_options(options: Array) -> void:
 		button.disabled = option.disabled
 		button.focus_mode = Control.FOCUS_NONE
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN if option.row != &"" else Control.SIZE_EXPAND_FILL
 		var option_id: StringName = option.id
 		button.pressed.connect(func() -> void: option_activated.emit(option_id))
 		parent.add_child(button)

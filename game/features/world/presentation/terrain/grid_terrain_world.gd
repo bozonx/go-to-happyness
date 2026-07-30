@@ -38,6 +38,7 @@ signal rebuild_finished()
 @export var full_smoothing := false
 @export_range(0.0, 1.0, 0.01) var edge_rounding := 0.0
 @export var edge_bevel := false
+@export var grass_visible := true
 
 var grid: TerrainGrid = null
 ## Optional: without it every chunk is built at full detail.
@@ -72,6 +73,8 @@ func configure(next_grid: TerrainGrid, next_camera: Camera3D = null) -> void:
 		return
 	_surface_maps.configure(grid.board_cells)
 	_surface_maps.rebuild(grid)
+	_medium_grass.set_lod_distance(lod_distance)
+	_tall_grass.set_lod_distance(lod_distance)
 	grid.take_dirty_surface_cells()
 	_ground_material = null
 	_cliff_material = null
@@ -264,6 +267,22 @@ func _chunk_body(chunk: Vector2i, create_if_missing: bool) -> StaticBody3D:
 	return body
 
 
+func set_grass_visible(enabled: bool) -> void:
+	if grass_visible == enabled:
+		return
+	grass_visible = enabled
+	for child: Node in _chunk_bodies.values():
+		var body := child as StaticBody3D
+		if body == null:
+			continue
+		var tall: MultiMeshInstance3D = body.get_node_or_null(^"TallGrass")
+		if tall != null:
+			tall.visible = grass_visible
+		var med: MultiMeshInstance3D = body.get_node_or_null(^"MediumGrass")
+		if med != null:
+			med.visible = grass_visible
+
+
 func _rebuild_tall_grass(body: StaticBody3D, chunk: Vector2i, lod: int) -> void:
 	var instance: MultiMeshInstance3D = body.get_node_or_null(^"TallGrass")
 	if lod == TerrainChunkMesher.Lod.TOP_ONLY:
@@ -279,6 +298,7 @@ func _rebuild_tall_grass(body: StaticBody3D, chunk: Vector2i, lod: int) -> void:
 		instance.extra_cull_margin = TerrainTallGrass.CARD_HEIGHT
 		instance.material_override = _tall_grass.material()
 		body.add_child(instance)
+	instance.visible = grass_visible
 	instance.multimesh = _tall_grass.build_chunk(grid, chunk)
 
 
@@ -295,6 +315,7 @@ func _rebuild_medium_grass(body: StaticBody3D, chunk: Vector2i, lod: int) -> voi
 		instance.extra_cull_margin = TerrainMediumGrass.CARD_HEIGHT
 		instance.material_override = _medium_grass.material()
 		body.add_child(instance)
+	instance.visible = grass_visible
 	instance.multimesh = _medium_grass.build_chunk(grid, chunk)
 
 
@@ -316,11 +337,14 @@ func _ground_shader_material() -> ShaderMaterial:
 	_ground_material = ShaderMaterial.new()
 	_ground_material.shader = load(GROUND_SHADER_PATH)
 	_ground_material.set_shader_parameter(&"surface_textures", _library.texture_array())
+	_ground_material.set_shader_parameter(&"surface_normals", _library.normal_array())
 	_ground_material.set_shader_parameter(&"index_map", _surface_maps.index_texture())
 	_ground_material.set_shader_parameter(&"detail_map", _surface_maps.detail_texture())
+	_ground_material.set_shader_parameter(&"layer_lookup_map", _library.layer_lookup_texture())
 	_ground_material.set_shader_parameter(&"board_cells", float(grid.board_cells))
 	_ground_material.set_shader_parameter(&"cell_size", grid.cell_size)
-	_ground_material.set_shader_parameter(&"max_variants", float(TerrainMaterialVariants.MAX_VARIANTS))
+	_ground_material.set_shader_parameter(&"material_count", float(TerrainMaterialCatalog.MATERIAL_COUNT))
+	_ground_material.set_shader_parameter(&"variant_capacity", float(TerrainMaterialVariants.MAX_VARIANTS))
 	_ground_material.set_shader_parameter(&"full_smoothing", 1.0 if full_smoothing else 0.0)
 	_ground_material.set_shader_parameter(&"edge_rounding", edge_rounding)
 	_ground_material.set_shader_parameter(&"edge_bevel", 1.0 if edge_bevel else 0.0)

@@ -21,8 +21,8 @@ const MapEditorModeBarScript = preload("res://game/features/world/presentation/e
 ## Phases that own the modes not yet built. They are listed so the author can see
 ## what the editor is going to be, and disabled so they cannot pretend to work.
 const PLANNED_MODES: Array = [
-	{"id": &"roads", "title": "Покрытия", "reason": "Слой покрытий — фаза 3"},
-	{"id": &"rules", "title": "Правила и старт", "reason": "Правила и режимы игры — фаза 5"},
+	{"id": &"roads", "title": "Покрытия", "icon": "🛣️", "reason": "Слой покрытий — фаза 3"},
+	{"id": &"rules", "title": "Правила и старт", "icon": "📜", "reason": "Правила и режимы игры — фаза 5"},
 ]
 
 @onready var terrain_world: GridTerrainWorld = $Terrain
@@ -47,6 +47,7 @@ const PLANNED_MODES: Array = [
 @onready var _settings_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/SettingsButton
 @onready var _undo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/UndoButton
 @onready var _redo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/RedoButton
+@onready var _grass_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/GrassButton
 @onready var _validate_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/ValidateButton
 @onready var _test_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/TestButton
 @onready var _dialogs: MapEditorDialogs = $UI/Dialogs
@@ -305,6 +306,7 @@ func _build_modes() -> void:
 		var placeholder := MapEditorMode.new()
 		placeholder.id = planned["id"]
 		placeholder.title = planned["title"]
+		placeholder.icon = planned.get("icon", "")
 		bar_entries.append(placeholder)
 	_mode_bar.build(bar_entries)
 	for planned: Dictionary in PLANNED_MODES:
@@ -348,6 +350,9 @@ func _connect_ui() -> void:
 	_settings_button.pressed.connect(_open_settings)
 	_undo_button.pressed.connect(_undo)
 	_redo_button.pressed.connect(_redo)
+	_grass_button.button_pressed = terrain_world.grass_visible
+	_grass_button.toggled.connect(func(toggled_on: bool) -> void:
+		terrain_world.set_grass_visible(toggled_on))
 	_validate_button.pressed.connect(_validate_map)
 	_test_button.pressed.connect(_test_run)
 	_validate_button.disabled = false
@@ -357,6 +362,11 @@ func _connect_ui() -> void:
 	_dialogs.save_as_requested.connect(_on_save_as_requested)
 	_dialogs.properties_applied.connect(_on_properties_applied)
 	_side_panel.property_committed.connect(_on_inspector_property_committed)
+	_side_panel.property_reset_requested.connect(_on_inspector_property_reset)
+	_side_panel.entry_activated.connect(func(index: int) -> void:
+		if _active != null:
+			_active.select_list_entry(index)
+			_refresh_panels())
 
 
 func _open_settings() -> void:
@@ -411,7 +421,7 @@ func _refresh_panels() -> void:
 	_side_panel.set_inspector("Инспектор — %s" % _active.title, _active.inspector_lines())
 	_side_panel.set_property_fields(_active.inspector_properties(), _active.inspector_values())
 	_side_panel.set_entries(
-		_active.list_title(), _active.list_entries(), _active.empty_list_hint(),
+		_active.list_title(), _active.list_entries(), _active.empty_list_hint(), _active.selected_list_index(),
 	)
 	# A stack you cannot pop says so by being grey, the way the building editor's
 	# decor buttons do.
@@ -422,6 +432,11 @@ func _refresh_panels() -> void:
 
 func _on_inspector_property_committed(property_name: StringName, value: Variant) -> void:
 	if _active != null and _active.apply_inspector_value(property_name, value):
+		_refresh_panels()
+
+
+func _on_inspector_property_reset(property_name: StringName) -> void:
+	if _active != null and _active.reset_inspector_value(property_name):
 		_refresh_panels()
 
 
@@ -512,6 +527,9 @@ func _handle_key(event: InputEventKey) -> void:
 	match event.keycode:
 		KEY_F5:
 			_test_run()
+			return
+		KEY_G:
+			_grass_button.button_pressed = not _grass_button.button_pressed
 			return
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7:
 			var slot := event.keycode - KEY_1

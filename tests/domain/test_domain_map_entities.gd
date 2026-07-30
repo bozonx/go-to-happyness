@@ -73,4 +73,4 @@ static func _test_presenter_applies_state_variant() -> void:
 	var light := view.get_node_or_null("Light") as OmniLight3D
 	assert(light != null and is_equal_approx(light.light_energy, 0.6))
 	presenter.clear()
-	territory.queue_free()
+	territory.free()

@@ -20,6 +20,22 @@ static func creation(body: WaterBody) -> WaterBodyEdit:
 	return edit
 
 
+## Creates the registry entry and its first wet footprint as one transaction.
+## This is the editor's "click dry ground" gesture: one action and one Ctrl+Z.
+static func creation_with_cells(grid: WaterGrid, terrain: TerrainGrid, body: WaterBody, cells: Array[Vector2i]) -> WaterBodyEdit:
+	var edit := creation(body)
+	if grid == null or body == null:
+		return edit
+	for cell: Vector2i in CellUtils.sorted_unique(cells):
+		if not grid.is_inside(cell) or (terrain != null and terrain.height_of(cell) >= body.surface_height):
+			continue
+		var old_state := WaterDelta.state_of(grid, cell)
+		var new_state := WaterDelta.make_state(body.id, body.surface_height, 0)
+		if old_state != new_state:
+			edit.record(cell, old_state, new_state)
+	return edit
+
+
 static func removal(grid: WaterGrid, body: WaterBody) -> WaterBodyEdit:
 	var edit := WaterBodyEdit.new()
 	edit.kind = Kind.REMOVE
@@ -87,6 +103,7 @@ func apply(grid: WaterGrid) -> void:
 	match kind:
 		Kind.CREATE:
 			grid.add_body(_body_snapshot.duplicate_body())
+			super.apply(grid)
 		Kind.REMOVE:
 			grid.remove_body(_body_snapshot.id)
 		Kind.RETYPE:

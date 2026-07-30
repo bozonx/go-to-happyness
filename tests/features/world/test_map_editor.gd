@@ -94,7 +94,11 @@ func _test_mode_switching(editor: Node) -> void:
 
 	editor._select_mode(&"water")
 	assert(editor._active.id == &"water", "switched to water")
-	assert(not editor._active.palette_entries().is_empty(), "water palette contains new body button")
+	assert(editor._active.palette_entries().size() == 2, "water palette is the water/lava choice")
+	assert(editor._active.selected_palette_entry() == &"liquid_water", "water is selected by default")
+	editor._active.select_palette_entry(&"liquid_lava")
+	assert(editor._active.selected_palette_entry() == &"liquid_lava", "lava is selected directly")
+	editor._active.select_palette_entry(&"liquid_water")
 
 	editor._select_mode(&"entities")
 	assert(editor._active.id == &"entities", "switched to zones")
@@ -220,14 +224,31 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 	editor._active.select_palette_entry(&"select")
 	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true))
 	assert(editor._side_panel.get_node("Margin/Scroll/Rows/InspectorFields").get_child_count() > 0, "schema generated inspector controls")
+	assert(editor._active.apply_inspector_value(&"editor_scale", 1.5), "shared inspector edits entity scale")
+	assert(is_equal_approx(editor.document.entities.entities[0].scale, 1.5), "scale reached the map record")
+	editor._undo()
+	assert(is_equal_approx(editor.document.entities.entities[0].scale, 1.0), "transform edit participates in shared undo")
 	assert(editor._active.apply_inspector_value(&"fuel_units", 5), "inspector applied authored property")
 	assert(editor.document.entities.entities[0].props == {&"fuel_units": 5}, "only authored difference is stored")
+	assert(editor._active.reset_inspector_value(&"fuel_units"), "inspector reset restores archetype default")
+	assert(editor.document.entities.entities[0].props.is_empty(), "reset removes the authored override")
+	editor._undo()
+	assert(editor.document.entities.entities[0].props == {&"fuel_units": 5}, "reset is undoable")
 	editor._undo()
 	assert(editor.document.entities.entities[0].props.is_empty(), "property undo restored defaults")
 	editor._active.handle_input(_key(KEY_D, true))
 	assert(editor.document.entities.entities.size() == 2, "Ctrl+D duplicated the selected entity")
 	editor._active.handle_input(_key(KEY_R))
 	assert(is_equal_approx(editor.document.entities.entities[1].yaw_degrees, 15.0), "R rotated the duplicate")
+	var side_list := editor._side_panel.get_node("Margin/Scroll/Rows/List") as ItemList
+	side_list.item_selected.emit(0)
+	assert(editor._active.selected_list_index() == 0, "side list selects the corresponding map entity")
+	var side_search := editor._side_panel.get_node("Margin/Scroll/Rows/ListSearch") as LineEdit
+	side_search.text = "entity_2"
+	side_search.text_changed.emit(side_search.text)
+	assert(side_list.item_count == 1, "side-list search filters entities")
+	side_search.text = ""
+	side_search.text_changed.emit("")
 	editor._active.handle_input(_key(KEY_DELETE))
 	assert(editor.document.entities.entities.size() == 1, "Delete removed the selection")
 	editor._undo()
@@ -337,7 +358,7 @@ func _test_snow_paint_respects_water_and_slope(editor: Node) -> void:
 	print("  snow surface rules ok")
 
 
-## Water mode end to end: make a body from the palette, dig a hollow, fill it,
+## Water mode end to end: choose water, dig a hollow, create and fill in one click,
 ## and check that the layer, the undo stack and the navigation field all moved
 ## together. The last of those is the one that matters — a lake the routing does
 ## not know about is a lake citizens walk across.
@@ -358,19 +379,23 @@ func _test_water_mode(editor: Node) -> void:
 
 	editor._select_mode(&"water")
 	await process_frame
-	editor._active.select_palette_entry(&"new_lake")
-	assert(water.body_count() == 1, "the palette made a body")
-	var body_id: int = editor._water_brush.body_id
-	assert(body_id != WaterBody.NO_BODY, "and selected it")
+	editor._active.select_palette_entry(&"liquid_water")
+	assert(water.body_count() == 0, "choosing a liquid does not create an empty body")
 
 	var undo_before: int = editor.history.undo_depth()
 	var topology_before: int = editor._nav_grid.topology_revision()
 	editor._water_brush.hovered_cell = cell
 	editor._water_brush.has_hover = true
 	editor._water_brush.level = 0
-	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true))
-	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, false))
+	editor._water_brush.auto_level = false
+	# The scene test has no real viewport pointer over this authored cell; drive
+	# the production brush after selecting the mode exactly as the controller does.
+	editor._context.set_edit_label("наполнение водоёма")
+	editor._water_brush.apply()
 
+	assert(water.body_count() == 1, "the first stroke created the body")
+	assert(editor._water_brush.body_id != WaterBody.NO_BODY, "and selected it")
+	var body_id: int = editor._water_brush.body_id
 	assert(water.is_wet(terrain, cell), "the stroke filled the hollow")
 	assert(water.depth_steps_at(terrain, cell) == 2, "two steps deep")
 	assert(editor.history.undo_depth() == undo_before + 1, "the stroke is on the SHARED stack")
@@ -387,7 +412,10 @@ func _test_water_mode(editor: Node) -> void:
 
 	# The inverse of Flood is intentionally whole-body drainage, never a patch
 	# erase. It is one shared-history command and returns navigation immediately.
-	editor._active.handle_input(_click(MOUSE_BUTTON_RIGHT, true))
+	editor._water_brush.hovered_cell = cell
+	editor._water_brush.has_hover = true
+	editor._context.set_edit_label("удаление водоёма")
+	editor._water_brush.apply_secondary()
 	assert(not water.has_body(body_id), "reverse flood removed the whole body")
 	assert(editor._nav_grid.is_walkable(cell), "draining republished navigation")
 	editor._undo()

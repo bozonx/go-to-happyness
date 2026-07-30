@@ -27,9 +27,12 @@ func build(modes: Array) -> void:
 	var slot := 1
 	for mode: MapEditorMode in modes:
 		var button := Button.new()
-		button.text = "%d. %s" % [slot, mode.title]
+		var display_symbol: String = mode.icon if not mode.icon.is_empty() else mode.title
+		button.text = display_symbol
+		button.custom_minimum_size = Vector2(38, 0)
 		button.toggle_mode = true
 		button.focus_mode = Control.FOCUS_NONE
+		button.tooltip_text = "%d. %s (клавиша %d)" % [slot, mode.title, slot]
 		var mode_id: StringName = mode.id
 		button.pressed.connect(func() -> void: mode_selected.emit(mode_id))
 		add_child(button)
@@ -50,4 +53,5 @@ func set_enabled(mode_id: StringName, enabled: bool, reason := "") -> void:
 	if button == null:
 		return
 	button.disabled = not enabled
-	button.tooltip_text = reason
+	if not reason.is_empty():
+		button.tooltip_text += " — " + reason

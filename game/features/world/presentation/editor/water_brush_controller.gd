@@ -46,6 +46,10 @@ var level := 0
 var ice_thickness := WaterGrid.MAX_ICE_THICKNESS
 var liquid_category: StringName = &"water"
 var water_type: WaterBody.Type = WaterBody.Type.LAKE
+## Automatic level is the default authoring path: a new body starts one height
+## step above the clicked ground. Turn it off only when an exact shared surface
+## level is needed across several basins.
+var auto_level := true
 
 func active_body_type() -> WaterBody.Type:
 	if liquid_category == &"lava":
@@ -65,6 +69,17 @@ func cycle_water_type() -> void:
 	var current_idx := water_types.find(water_type)
 	var next_idx := (current_idx + 1) % water_types.size() if current_idx >= 0 else 0
 	water_type = water_types[next_idx]
+	last_message = "тип воды: %s" % WaterBody.type_id_of(water_type)
+
+
+func select_liquid_category(category: StringName) -> void:
+	liquid_category = &"lava" if category == &"lava" else &"water"
+	last_message = "жидкость: %s" % ("лава" if liquid_category == &"lava" else "вода")
+
+
+func select_water_type(body_type: WaterBody.Type) -> void:
+	liquid_category = &"water"
+	water_type = body_type if body_type != WaterBody.Type.LAVA else WaterBody.Type.LAKE
 	last_message = "тип воды: %s" % WaterBody.type_id_of(water_type)
 
 var _terrain: TerrainGrid
@@ -120,6 +135,11 @@ func create_body(body_type: WaterBody.Type) -> WaterBody:
 		last_message = "no room for more bodies (max %d)" % WaterBody.MAX_ID
 		return null
 	body_id = body.id
+	if body_type == WaterBody.Type.LAVA:
+		liquid_category = &"lava"
+	else:
+		liquid_category = &"water"
+		water_type = body_type
 	last_message = "created body: %s" % body.name
 	return body
 
@@ -188,6 +208,7 @@ func apply() -> void:
 	if not has_hover or _service == null:
 		return
 	if tool == TOOL_FLOOD:
+		_adopt_body_at_hover()
 		_maybe_retype_hovered_body()
 	match tool:
 		TOOL_FLOOD:
@@ -201,11 +222,22 @@ func apply() -> void:
 
 
 func _flood() -> void:
+	var dry_cell := _water == null or not _water.has_water(hovered_cell)
+	# A click on dry ground means "make water here", not "move the lake I last
+	# touched over here". An empty body is still reused (undo and old documents
+	# may leave one selected); a body with a contour is not.
+	if dry_cell and body_id != WaterBody.NO_BODY and _water.cells_of_body(body_id).size() > 0:
+		body_id = WaterBody.NO_BODY
+	if dry_cell and body_id == WaterBody.NO_BODY and auto_level and _terrain != null:
+		level = _terrain.height_of(hovered_cell) + 1
 	if body_id == WaterBody.NO_BODY:
-		create_body(active_body_type())
-		if body_id == WaterBody.NO_BODY:
-			last_message = "create a body first"
+		var body := _service.create_and_flood(hovered_cell, active_body_type(), level)
+		if body == null:
+			last_message = "basin did not flood (%s)" % _service.last_rejection()
 			return
+		body_id = body.id
+		last_message = "created and flooded %s: %d cells" % [body.name, _service.last_delta_size()]
+		return
 	if _water != null and _water.has_water(hovered_cell):
 		var cell_body_id := _water.body_id_at(hovered_cell)
 		var cell_height := _water.height_of(hovered_cell)
@@ -226,6 +258,17 @@ func _flood() -> void:
 					last_message = "flooded basin (level %d): %d cells" % [level, _service.last_delta_size()]
 					return
 	last_message = "basin did not flood (%s)" % _service.last_rejection()
+
+
+## Existing liquid is its own selection target. The registry remains the storage
+## model, but the author no longer has to find its id in a palette before editing.
+func _adopt_body_at_hover() -> void:
+	if _water == null or not _water.has_water(hovered_cell):
+		return
+	var requested_level := level
+	select_body(_water.body_id_at(hovered_cell))
+	if not auto_level:
+		level = requested_level
 
 
 func _set_frozen(frozen: bool) -> void:
@@ -324,4 +367,3 @@ func undo() -> void:
 
 func redo() -> void:
 	last_message = "redo" if _service.redo() else "nothing to redo"
-

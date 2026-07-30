@@ -3,12 +3,10 @@ extends MapEditorMode
 
 ## Mode 3, water (map_editor.md §5.3).
 ##
-## Outline, level, type, current and ice. The palette is the registry of
-## `WaterBody` plus one "new body" entry per type, because §9.2 puts the type on
-## the body and not on the bottom: an author picks *which lake*, and the colour,
-## the wave and the fish come with it. A material brush cannot express that, which
-## is the whole reason this is a mode of its own rather than a paint on the
-## surface mode.
+## Outline, level, type, current and ice. The palette expresses the author's
+## primary choice — water or lava — while clicks resolve that intent to the
+## `WaterBody` registry automatically. Existing liquid selects its body; dry
+## ground creates a new one. The registry remains visible in the side list.
 ##
 ## What the mode does NOT do is decide passability. Depth against the ground, the
 ## ford rule and the load the ice carries all live in the published navigation
@@ -23,8 +21,7 @@ const OPTION_TOOL_PREFIX := "tool_"
 const OPTION_ICE := &"ice"
 const OPTION_FLOW_DIR := &"flow_dir"
 const OPTION_FLOW_STRENGTH := &"flow_strength"
-
-const NEW_BODY_PREFIX := "new_"
+const OPTION_ACTION_ICE := &"action_ice"
 
 var _painting := false
 ## What a river stroke writes into the body's sparse flow map (§9.3). Brush state,
@@ -36,6 +33,7 @@ var _flow_strength := 0
 func _init() -> void:
 	id = &"water"
 	title = "Вода"
+	icon = "🌊"
 
 
 func activate() -> void:
@@ -198,66 +196,49 @@ func _cycle_flow_strength() -> void:
 	_flow_strength = (_flow_strength + 1) % (WaterBody.MAX_FLOW_STRENGTH + 1)
 
 
-const OPTION_LIQUID_CATEGORY := &"liquid_category"
-const OPTION_WATER_TYPE := &"water_type"
+const OPTION_WATER := &"liquid_water"
+const OPTION_LAVA := &"liquid_lava"
+const OPTION_LAKE := &"type_lake"
+const OPTION_RIVER := &"type_river"
+const OPTION_SEA := &"type_sea"
+const OPTION_AUTO_LEVEL := &"auto_level"
 
 # --- Panels -------------------------------------------------------------------
 
 func palette_entries() -> Array:
-	var entries: Array = []
-	for body: WaterBody in context.water.bodies():
-		if context.water.cells_of_body(body.id).size() > 0:
-			entries.append(PaletteEntry.of(
-				StringName("body_%d" % body.id),
-				"%s (%s)" % [body.name, body.type_id()],
-				body.colour,
-			))
-	entries.append(PaletteEntry.of(
-		&"new_body",
-		"+ Новый водоём",
-		Color(0.2, 0.45, 0.65, 1.0),
-	))
-	return entries
+	return [
+		PaletteEntry.of(OPTION_WATER, "Вода", Color(0.2, 0.55, 0.85, 1.0)),
+		PaletteEntry.of(OPTION_LAVA, "Лава", Color(0.95, 0.3, 0.08, 1.0)),
+	]
 
 
 func selected_palette_entry() -> StringName:
-	var body_id := context.water_brush.body_id
-	return StringName("body_%d" % body_id) if body_id != WaterBody.NO_BODY else &"new_body"
+	return OPTION_LAVA if context.water_brush.liquid_category == &"lava" else OPTION_WATER
 
 
 func select_palette_entry(entry_id: StringName) -> void:
-	var text := String(entry_id)
-	if text == "new_body" or text.begins_with(NEW_BODY_PREFIX):
-		context.water_brush.body_id = WaterBody.NO_BODY
-		notify_ui_changed()
-		return
-	if text.begins_with("body_"):
-		context.water_brush.select_body(text.trim_prefix("body_").to_int())
-		notify_ui_changed()
+	if entry_id == OPTION_LAVA:
+		context.water_brush.select_liquid_category(&"lava")
+	elif entry_id == OPTION_WATER:
+		context.water_brush.select_liquid_category(&"water")
+	notify_ui_changed()
 
 
 func tool_options() -> Array:
 	var brush := context.water_brush
 	var options: Array = []
-	for tool: StringName in WaterBrushController.TOOLS:
-		var label: String = {
-			WaterBrushController.TOOL_FLOOD: "Наполнить",
-			WaterBrushController.TOOL_DRAIN: "Осушить",
-			WaterBrushController.TOOL_FREEZE: "Заморозить",
-			WaterBrushController.TOOL_THAW: "Разморозить",
-		}.get(tool, String(tool))
-		options.append(ToolOption.of(
-			StringName("%s%s" % [OPTION_TOOL_PREFIX, tool]), label, &"tools", brush.tool == tool,
-		))
-	options.append(ToolOption.of(OPTION_LIQUID_CATEGORY, "Жидкость: %s" % ("Лава" if brush.liquid_category == &"lava" else "Вода")))
+	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_FLOOD]), "Залить", &"tools", brush.tool == WaterBrushController.TOOL_FLOOD))
+	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_DRAIN]), "Удалить", &"tools", brush.tool == WaterBrushController.TOOL_DRAIN))
+	options.append(ToolOption.of(OPTION_ACTION_ICE, "Лёд", &"tools", brush.tool in [WaterBrushController.TOOL_FREEZE, WaterBrushController.TOOL_THAW]))
+	if brush.tool in [WaterBrushController.TOOL_FREEZE, WaterBrushController.TOOL_THAW]:
+		options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_FREEZE]), "Заморозить", &"ice_action", brush.tool == WaterBrushController.TOOL_FREEZE))
+		options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_THAW]), "Убрать лёд", &"ice_action", brush.tool == WaterBrushController.TOOL_THAW))
 	if brush.liquid_category == &"water":
-		var type_name: String = {
-			WaterBody.Type.LAKE: "Озеро",
-			WaterBody.Type.RIVER: "Река",
-			WaterBody.Type.SEA: "Море",
-		}.get(brush.water_type, "Озеро")
-		options.append(ToolOption.of(OPTION_WATER_TYPE, "Тип: %s" % type_name))
+		options.append(ToolOption.of(OPTION_LAKE, "Озеро", &"water_type", brush.water_type == WaterBody.Type.LAKE))
+		options.append(ToolOption.of(OPTION_RIVER, "Река", &"water_type", brush.water_type == WaterBody.Type.RIVER))
+		options.append(ToolOption.of(OPTION_SEA, "Море", &"water_type", brush.water_type == WaterBody.Type.SEA))
 	if brush.tool == WaterBrushController.TOOL_FLOOD:
+		options.append(ToolOption.of(OPTION_AUTO_LEVEL, "Авто", &"level", brush.auto_level))
 		options.append(ToolOption.of(&"water_level", "Уровень %d" % brush.level, &"level", false, true))
 		options.append(ToolOption.of(OPTION_LEVEL_DOWN, "−", &"level"))
 		options.append(ToolOption.of(OPTION_LEVEL_UP, "+", &"level"))
@@ -267,7 +248,7 @@ func tool_options() -> Array:
 		options.append(ToolOption.of(OPTION_BRUSH_UP, "+", &"brush"))
 	if brush.tool == WaterBrushController.TOOL_FREEZE:
 		options.append(ToolOption.of(OPTION_ICE, "Толщина льда: %d" % brush.ice_thickness))
-	if _selected_body_has_flow():
+	if brush.tool == WaterBrushController.TOOL_FLOOD and brush.active_body_type() in [WaterBody.Type.RIVER, WaterBody.Type.LAVA]:
 		options.append(ToolOption.of(OPTION_FLOW_DIR, "Течение: %s" % TerrainBrushController.direction_name(_flow_direction)))
 		options.append(ToolOption.of(OPTION_FLOW_STRENGTH, "Сила течения: %d" % _flow_strength))
 	return options
@@ -281,17 +262,26 @@ func activate_option(option_id: StringName) -> void:
 		notify_ui_changed()
 		return
 	match option_id:
-		OPTION_LIQUID_CATEGORY:
-			brush.cycle_liquid_category()
-		OPTION_WATER_TYPE:
-			brush.cycle_water_type()
+		OPTION_ACTION_ICE:
+			if brush.tool not in [WaterBrushController.TOOL_FREEZE, WaterBrushController.TOOL_THAW]:
+				brush.tool = WaterBrushController.TOOL_FREEZE
+		OPTION_LAKE:
+			brush.select_water_type(WaterBody.Type.LAKE)
+		OPTION_RIVER:
+			brush.select_water_type(WaterBody.Type.RIVER)
+		OPTION_SEA:
+			brush.select_water_type(WaterBody.Type.SEA)
+		OPTION_AUTO_LEVEL:
+			brush.auto_level = not brush.auto_level
 		OPTION_BRUSH_UP:
 			brush.adjust_brush_size(1)
 		OPTION_BRUSH_DOWN:
 			brush.adjust_brush_size(-1)
 		OPTION_LEVEL_UP:
+			brush.auto_level = false
 			brush.adjust_level(1)
 		OPTION_LEVEL_DOWN:
+			brush.auto_level = false
 			brush.adjust_level(-1)
 		OPTION_ICE:
 			brush.cycle_ice_thickness()
@@ -318,7 +308,7 @@ func inspector_lines() -> Array[String]:
 		lines.append("Уровень: %d (%.1f м)" % [brush.level, float(brush.level) * TerrainGrid.HEIGHT_STEP])
 	lines.append("")
 	if body == null:
-		lines.append("Водоём не выбран — создайте его в палитре")
+		lines.append("ЛКМ по суше создаст новый водоём")
 	else:
 		lines.append("Водоём: %s" % body.name)
 		lines.append("Тип: %s, %s" % [body.type_id(), "солёная" if body.salinity == WaterBody.Salinity.SALT else "пресная"])
@@ -335,9 +325,9 @@ func inspector_lines() -> Array[String]:
 			TravelerProfile.MIN_ICE_THICKNESS_CART,
 		])
 	lines.append("")
-	lines.append("Flood: ЛКМ по водоёму другого типа сменит тип всего водоёма")
-	lines.append("Наполнение использует уровень и заменяет контур выбранного водоёма")
-	lines.append("Осушение: клик или Shift+ПКМ удаляет весь водоём; океан защищён")
+	lines.append("ЛКМ по воде выбирает и редактирует этот водоём")
+	lines.append("ЛКМ по суше создаёт новый водоём выбранного типа")
+	lines.append("Удалить или Shift+ПКМ удаляет весь водоём; океан защищён")
 	return lines
 
 
@@ -346,7 +336,7 @@ func list_title() -> String:
 
 
 func empty_list_hint() -> String:
-	return "Ни одного водоёма — создайте его в палитре"
+	return "Ни одного водоёма — выберите воду или лаву и кликните по карте"
 
 
 func list_entries() -> Array[String]:

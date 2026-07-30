@@ -46,12 +46,48 @@
       "variant": "0.25"
     },
     {
+      "anchor": 4558,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        0,
+        0,
+        3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
       "block_id": "slab",
       "material_id": "branches",
       "pos": [
         0,
         0,
         3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4162,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        0,
+        0,
+        4
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4174,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        0,
+        0,
+        4
       ],
       "rot": 0,
       "variant": "0.25"
@@ -79,12 +115,48 @@
       "variant": "0.25"
     },
     {
+      "anchor": 4174,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        1,
+        0,
+        1
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4546,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        1,
+        0,
+        1
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
       "block_id": "slab",
       "material_id": "branches",
       "pos": [
         1,
         0,
         1
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4174,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        1,
+        0,
+        2
       ],
       "rot": 0,
       "variant": "0.25"
@@ -101,12 +173,156 @@
       "variant": "0.25"
     },
     {
+      "anchor": 4170,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        1,
+        0,
+        3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4430,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        1,
+        0,
+        3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4546,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        1,
+        0,
+        3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4550,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        1,
+        0,
+        3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 8526,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        1,
+        0,
+        3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 8654,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        1,
+        0,
+        3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
       "block_id": "slab",
       "material_id": "branches",
       "pos": [
         1,
         0,
         3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 12354,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        1,
+        0,
+        4
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4162,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        1,
+        0,
+        4
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4166,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        1,
+        0,
+        4
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4170,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        1,
+        0,
+        4
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4174,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        1,
+        0,
+        4
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4550,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        1,
+        0,
+        4
       ],
       "rot": 0,
       "variant": "0.25"
@@ -123,15 +339,28 @@
       "variant": "0.25"
     },
     {
-      "block_id": "arch",
+      "anchor": 4162,
+      "block_id": "cube",
       "material_id": "branches",
       "pos": [
-        1,
-        1,
-        3
+        2,
+        0,
+        0
       ],
       "rot": 0,
-      "variant": "bottom"
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4170,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "rot": 0,
+      "variant": "0.25"
     },
     {
       "block_id": "slab",
@@ -140,6 +369,78 @@
         2,
         0,
         0
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4162,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        1
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4166,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        1
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4170,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        1
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4546,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        1
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4554,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        1
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 8642,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        1
       ],
       "rot": 0,
       "variant": "0.25"
@@ -167,12 +468,168 @@
       "variant": "0.25"
     },
     {
+      "anchor": 12354,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4162,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4170,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4174,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4554,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 8258,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
       "block_id": "slab",
       "material_id": "branches",
       "pos": [
         2,
         0,
         3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4162,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        4
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4166,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        4
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4170,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        4
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4174,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        4
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4430,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        4
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 8258,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        4
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 8270,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        2,
+        0,
+        4
       ],
       "rot": 0,
       "variant": "0.25"
@@ -211,7 +668,32 @@
       "variant": "0.25"
     },
     {
-      "block_id": "slab",
+      "anchor": 4298,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        3,
+        0,
+        2
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4302,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        3,
+        0,
+        2
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4426,
+      "block_id": "cube",
       "material_id": "branches",
       "pos": [
         3,
@@ -227,7 +709,126 @@
       "pos": [
         3,
         0,
+        2
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4162,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        3,
+        0,
         3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4174,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        3,
+        0,
+        3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4302,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        3,
+        0,
+        3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4558,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        3,
+        0,
+        3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 8394,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        3,
+        0,
+        3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "block_id": "slab",
+      "material_id": "branches",
+      "pos": [
+        3,
+        0,
+        3
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4162,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        3,
+        0,
+        4
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4166,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        3,
+        0,
+        4
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 4298,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        3,
+        0,
+        4
+      ],
+      "rot": 0,
+      "variant": "0.25"
+    },
+    {
+      "anchor": 8394,
+      "block_id": "cube",
+      "material_id": "branches",
+      "pos": [
+        3,
+        0,
+        4
       ],
       "rot": 0,
       "variant": "0.25"
@@ -300,7 +901,7 @@
     }
   ],
   "construction_cost": {
-    "branches": 26
+    "branches": 76
   },
   "construction_style": "surface",
   "cost_mode": "auto",
@@ -315,43 +916,15 @@
   ],
   "grid_bounds": {
     "x": 5,
-    "y": 2,
+    "y": 1,
     "z": 5
   },
   "id": "warehouse",
   "kind": "building",
   "manual_costs": {},
   "name": "Склад под открытым небом",
-  "objects": [
-    {
-      "appearance": {
-        "banner_color": "d45448",
-        "banner_text": "",
-        "has_banner": true,
-        "has_finial": true,
-        "pole_height": 1.0
-      },
-      "asset_id": "flag",
-      "id": "decor_flag_56938",
-      "owner_zone": "",
-      "pos": [
-        0.0,
-        1.0,
-        0.0
-      ],
-      "rot": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "scale": [
-        1.0,
-        1.0,
-        1.0
-      ]
-    }
-  ],
-  "revision": "6a67cab66ab5",
+  "objects": [],
+  "revision": "6a6ac56ad1c8",
   "role": "warehouse",
   "routes": [],
   "style": "generic",

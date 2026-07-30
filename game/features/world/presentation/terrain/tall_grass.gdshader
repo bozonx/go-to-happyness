@@ -11,8 +11,11 @@ uniform vec2 wind_direction = vec2(0.86, 0.5);
 uniform float wind_strength : hint_range(0.0, 1.0) = 0.32;
 uniform float sway_metres : hint_range(0.0, 0.35) = 0.14;
 uniform vec3 grass_tint : source_color = vec3(0.82, 0.9, 0.72);
+uniform float lod_fade_start = 50.0;
+uniform float lod_fade_end = 64.0;
 
 varying float atlas_column;
+varying vec3 vegetation_world_position;
 
 void vertex() {
 	atlas_column = floor(INSTANCE_CUSTOM.r * max(atlas_columns - 1.0, 0.0) + 0.5);
@@ -21,6 +24,7 @@ void vertex() {
 	float phase = dot(VERTEX.xz, vec2(0.71, 1.13)) + TIME * (1.6 + wind_strength);
 	float gust = sin(phase) * 0.65 + sin(phase * 2.17 + 1.4) * 0.35;
 	VERTEX.xz += axis * gust * sway_metres * wind_strength * height_weight;
+	vegetation_world_position = VERTEX;
 	// Upward-facing foliage normals keep both sides of a crossed card lit alike.
 	NORMAL = vec3(0.0, 1.0, 0.0);
 }
@@ -28,8 +32,15 @@ void vertex() {
 void fragment() {
 	vec2 atlas_uv = vec2((UV.x + atlas_column) / atlas_columns, UV.y);
 	vec4 texel = texture(grass_texture, atlas_uv);
-	ALBEDO = texel.rgb * grass_tint;
+	float root_weight = smoothstep(0.72, 1.0, UV.y);
+	ALBEDO = texel.rgb * grass_tint * mix(1.0, 0.68, root_weight);
 	ROUGHNESS = 0.92;
 	ALPHA = texel.a;
+	float camera_distance = length(CAMERA_POSITION_WORLD.xz - vegetation_world_position.xz);
+	float lod_visibility = 1.0 - smoothstep(lod_fade_start, lod_fade_end, camera_distance);
+	float dither = fract(sin(dot(FRAGCOORD.xy, vec2(12.9898, 78.233))) * 43758.5453);
+	if (dither > lod_visibility) {
+		discard;
+	}
 	ALPHA_SCISSOR_THRESHOLD = 0.5;
 }

@@ -148,37 +148,42 @@ static func _test_variant_changes_only_the_texture_layer() -> void:
 		var weight := TerrainMaterialCatalog.nav_weight_of_index(index)
 		var soil := TerrainMaterialCatalog.soil_of_index(index)
 		var cliff := TerrainMaterialCatalog.cliff_material_of_index(index)
-		var layers: Dictionary = {}
 		for variant in TerrainMaterialVariants.variant_count(index):
 			assert(TerrainMaterialCatalog.repose_class_of_index(index) == repose)
 			assert(is_equal_approx(TerrainMaterialCatalog.nav_weight_of_index(index), weight))
 			assert(TerrainMaterialCatalog.soil_of_index(index) == soil)
 			assert(TerrainMaterialCatalog.cliff_material_of_index(index) == cliff)
 			var layer := TerrainMaterialVariants.layer_of(index, variant)
-			assert(not layers.has(layer))
-			layers[layer] = true
+			assert(layer >= TerrainMaterialVariants.surface_layer_offset(index))
+			assert(layer < TerrainMaterialVariants.surface_layer_offset(index) + TerrainMaterialVariants.surface_style_count(index))
 
 
 static func _test_variant_budget_and_layer_layout() -> void:
 	var seen: Dictionary = {}
+	var expected_offset := 0
 	for index in TerrainMaterialCatalog.count():
 		var count := TerrainMaterialVariants.variant_count(index)
 		assert(count >= 1 and count <= TerrainMaterialVariants.MAX_VARIANTS)
+		assert(TerrainMaterialVariants.surface_layer_offset(index) == expected_offset)
+		for style in TerrainMaterialVariants.surface_style_count(index):
+			var packed_layer := expected_offset + style
+			assert(not seen.has(packed_layer))
+			seen[packed_layer] = true
+		expected_offset += TerrainMaterialVariants.surface_style_count(index)
 		for variant in count:
 			var layer := TerrainMaterialVariants.layer_of(index, variant)
-			assert(layer == index * TerrainMaterialVariants.MAX_VARIANTS + variant)
-			assert(layer < TerrainMaterialVariants.CLIFF_LAYER_BASE)
-			assert(not seen.has(layer))
-			seen[layer] = true
+			assert(layer == TerrainMaterialVariants.surface_layer_offset(index) + TerrainMaterialVariants.surface_style_of(index, variant))
+			assert(layer < TerrainMaterialVariants.surface_layer_count())
 		# A variant past the budget is clamped, never sampled off the end of the
 		# array: a stale save must not point at an empty layer.
 		assert(TerrainMaterialVariants.clamp_variant(index, 15) == count - 1)
-		assert(TerrainMaterialVariants.layer_of(index, 15) == index * TerrainMaterialVariants.MAX_VARIANTS + count - 1)
+		assert(TerrainMaterialVariants.layer_of(index, 15) == TerrainMaterialVariants.layer_of(index, count - 1))
+	assert(expected_offset == TerrainMaterialVariants.surface_layer_count())
 	# Face kinds live in the same array, after the materials — one binding for the
 	# whole world (§7.1).
 	for cliff_index in TerrainMaterialCatalog.cliff_count():
 		var layer := TerrainMaterialVariants.cliff_layer_of(cliff_index)
-		assert(layer >= TerrainMaterialVariants.CLIFF_LAYER_BASE)
+		assert(layer >= TerrainMaterialVariants.surface_layer_count())
 		assert(layer < TerrainMaterialVariants.total_layer_count())
 		assert(not seen.has(layer))
 		seen[layer] = true

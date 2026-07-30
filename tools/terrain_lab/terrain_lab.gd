@@ -583,12 +583,13 @@ func _setup_grass_scene() -> void:
 		for x in range(-9, 10):
 			var cell := Vector2i(x, z)
 			grid.set_material(cell, TerrainMaterialCatalog.GRASS_TALL)
+			grid.set_variant(cell, clampi((z + 5) / 4, 0, 2))
 			if x >= -2 and x <= 3:
 				grid.set_wear(cell, 1)
 			elif x >= 4:
 				grid.set_wear(cell, 2)
 	_republish_navigation()
-	brush.last_message = "grass_tall: dense meadow / wear 1 / bare wear 2"
+	brush.last_message = "grass_tall: meadow / fern / eared × dense / worn / bare"
 
 
 func _setup_medium_grass_scene() -> void:
@@ -598,19 +599,12 @@ func _setup_medium_grass_scene() -> void:
 	water_service.clear_history()
 	history.clear()
 	for z in range(-5, 6):
-		for x in range(-9, 10):
+		for x in range(-12, 12):
 			var cell := Vector2i(x, z)
 			grid.set_material(cell, TerrainMaterialCatalog.GRASS)
-			if x < -5:
-				grid.set_variant(cell, 0) # plain
-			elif x < 0:
-				grid.set_variant(cell, 1) # lush
-			elif x < 5:
-				grid.set_variant(cell, 2) # flowering
-			else:
-				grid.set_variant(cell, 3) # parched
+			grid.set_variant(cell, (x + 12) / 3)
 	_republish_navigation()
-	brush.last_message = "grass variants: plain / lush / flowering / parched"
+	brush.last_message = "grass: plain / lush / parched / white / blue / red / purple / yellow"
 
 
 # --- Demo terrain -----------------------------------------------------------

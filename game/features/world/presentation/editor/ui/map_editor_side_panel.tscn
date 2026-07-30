@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://game/features/world/presentation/editor/ui/map_editor_side_panel.gd" id="1_side_panel"]
+[ext_resource type="Script" path="res://game/features/ui/presentation/editor_property_inspector.gd" id="2_inspector"]
 
 [node name="SidePanel" type="PanelContainer"]
 custom_minimum_size = Vector2(280, 0)
@@ -43,12 +44,17 @@ theme_override_font_sizes/font_size = 12
 
 [node name="InspectorFields" type="VBoxContainer" parent="Margin/Scroll/Rows"]
 theme_override_constants/separation = 4
+script = ExtResource("2_inspector")
 
 [node name="Separator" type="HSeparator" parent="Margin/Scroll/Rows"]
 
 [node name="ListTitle" type="Label" parent="Margin/Scroll/Rows"]
 text = "Объекты"
 theme_override_font_sizes/font_size = 14
+
+[node name="ListSearch" type="LineEdit" parent="Margin/Scroll/Rows"]
+placeholder_text = "Поиск по списку…"
+clear_button_enabled = true
 
 [node name="List" type="ItemList" parent="Margin/Scroll/Rows"]
 custom_minimum_size = Vector2(0, 190)

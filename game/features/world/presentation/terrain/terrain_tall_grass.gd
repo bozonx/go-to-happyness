@@ -9,8 +9,9 @@ extends RefCounted
 ## surface. `GridTerrainWorld` rebuilds only this cheap MultiMesh when surface
 ## details change; the terrain mesh remains untouched.
 
-const TEXTURE_PATH := "res://game/features/world/presentation/terrain/assets/grass_tall_meadow.png"
+const TEXTURE_PATH := "res://game/features/world/presentation/terrain/assets/grass_tall_atlas.png"
 const SHADER_PATH := "res://game/features/world/presentation/terrain/tall_grass.gdshader"
+const VARIANT_COUNT := 3
 
 const CARD_WIDTH := 0.82
 const CARD_HEIGHT := 1.25
@@ -22,6 +23,7 @@ var _material: ShaderMaterial = null
 
 func build_chunk(grid: TerrainGrid, chunk: Vector2i) -> MultiMesh:
 	var transforms: Array[Transform3D] = []
+	var variants: Array[int] = []
 	var origin := grid.chunk_origin_cell(chunk)
 	for local_z in TerrainGrid.CHUNK_CELLS:
 		for local_x in TerrainGrid.CHUNK_CELLS:
@@ -40,17 +42,29 @@ func build_chunk(grid: TerrainGrid, chunk: Vector2i) -> MultiMesh:
 				var z := (float(cell.y) + offset_z) * grid.cell_size
 				var y := grid.height_at(Vector3(x, 0.0, z)) + SURFACE_LIFT
 				var yaw := _unit(seed, 2) * TAU
-				var scale := lerpf(0.78, 1.08, _unit(seed, 3))
-				var basis := Basis(Vector3.UP, yaw).scaled(Vector3(scale, scale, scale))
+				var width_scale := lerpf(0.74, 1.10, _unit(seed, 3))
+				var height_scale := lerpf(0.82, 1.12, _unit(seed, 4))
+				var basis := Basis(Vector3.UP, yaw).scaled(Vector3(width_scale, height_scale, width_scale))
 				transforms.append(Transform3D(basis, Vector3(x, y, z)))
+				variants.append(TerrainMaterialVariants.clamp_variant(
+					TerrainMaterialCatalog.index_of(TerrainMaterialCatalog.GRASS_TALL),
+					grid.variant_at(cell),
+				))
 
 	var multimesh := MultiMesh.new()
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.use_custom_data = true
 	multimesh.mesh = _card_mesh()
 	multimesh.instance_count = transforms.size()
 	for index in transforms.size():
 		multimesh.set_instance_transform(index, transforms[index])
+		multimesh.set_instance_custom_data(index, atlas_custom_data_for(variants[index]))
 	return multimesh
+
+
+static func atlas_custom_data_for(variant: int) -> Color:
+	var clamped := clampi(variant, 0, VARIANT_COUNT - 1)
+	return Color(float(clamped) / float(VARIANT_COUNT - 1), 0.0, 0.0, 0.0)
 
 
 func material() -> ShaderMaterial:
@@ -59,6 +73,8 @@ func material() -> ShaderMaterial:
 	_material = ShaderMaterial.new()
 	_material.shader = load(SHADER_PATH)
 	_material.set_shader_parameter(&"grass_texture", load(TEXTURE_PATH))
+	_material.set_shader_parameter(&"atlas_columns", float(VARIANT_COUNT))
+	_material.set_shader_parameter(&"grass_tint", Vector3(0.78, 0.84, 0.64))
 	return _material
 
 
@@ -66,6 +82,11 @@ func set_wind(direction: Vector2, strength: float) -> void:
 	var axis := direction.normalized() if direction.length_squared() > 0.0001 else Vector2.RIGHT
 	material().set_shader_parameter(&"wind_direction", axis)
 	material().set_shader_parameter(&"wind_strength", clampf(strength, 0.0, 1.0))
+
+
+func set_lod_distance(distance: float) -> void:
+	material().set_shader_parameter(&"lod_fade_start", distance * 0.78)
+	material().set_shader_parameter(&"lod_fade_end", distance)
 
 
 func _shows_grass(grid: TerrainGrid, cell: Vector2i) -> bool:

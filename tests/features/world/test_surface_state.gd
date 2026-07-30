@@ -274,6 +274,9 @@ static func _test_tall_grass_decor_follows_surface_state() -> void:
 	assert(second.instance_count == first.instance_count)
 	for index in first.instance_count:
 		assert(first.get_instance_transform(index) == second.get_instance_transform(index))
+	for variant in TerrainTallGrass.VARIANT_COUNT:
+		var stored := TerrainTallGrass.atlas_custom_data_for(variant).r
+		assert(roundi(stored * float(TerrainTallGrass.VARIANT_COUNT - 1)) == variant)
 
 	assert(service.set_wear(_brush([cells[0]]), TerrainDetailCodec.MAX_WEAR))
 	assert(decor.build_chunk(grid, Vector2i.ZERO).instance_count == 6)
@@ -291,7 +294,7 @@ static func _test_medium_grass_decor_follows_variant_and_surface_state() -> void
 	var decor := TerrainMediumGrass.new()
 	var first := decor.build_chunk(grid, Vector2i.ZERO)
 	var second := decor.build_chunk(grid, Vector2i.ZERO)
-	assert(first.instance_count == 8) # plain 2 + lush 3 + flowering 2 + parched 1
+	assert(first.instance_count == 12) # plain 3 + lush 4 + parched 2 + flowers 3
 	for index in first.instance_count:
 		assert(first.get_instance_transform(index) == second.get_instance_transform(index))
 	# DummyRenderer does not retain per-instance custom buffers for reading back,
@@ -301,9 +304,9 @@ static func _test_medium_grass_decor_follows_variant_and_surface_state() -> void
 		assert(roundi(stored * float(TerrainMediumGrass.VARIANT_COUNT - 1)) == variant)
 
 	grid.set_wear(Vector2i(0, 0), 1)
-	assert(decor.build_chunk(grid, Vector2i.ZERO).instance_count == 7)
+	assert(decor.build_chunk(grid, Vector2i.ZERO).instance_count == 10)
 	grid.set_snow_depth(Vector2i(1, 0), 2)
-	assert(decor.build_chunk(grid, Vector2i.ZERO).instance_count == 4)
+	assert(decor.build_chunk(grid, Vector2i.ZERO).instance_count == 6)
 
 
 # --- Weights in navigation ------------------------------------------------------

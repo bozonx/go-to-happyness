@@ -8,6 +8,9 @@ extends MapEditorMode
 const TOOL_SELECT := &"select"
 const TOOL_PLACE := &"place"
 const TOOLS: Array[StringName] = [TOOL_SELECT, TOOL_PLACE]
+const INSPECTOR_POSITION := &"editor_position"
+const INSPECTOR_YAW := &"editor_yaw"
+const INSPECTOR_SCALE := &"editor_scale"
 
 var _tool: StringName = TOOL_SELECT
 var _archetype_id: StringName = &""
@@ -23,6 +26,7 @@ var _ghost_archetype_id: StringName = &""
 func _init() -> void:
 	id = &"fill"
 	title = "Наполнение"
+	icon = "🪣"
 
 
 func configure(next_context: MapEditorContext) -> void:
@@ -446,7 +450,16 @@ func inspector_properties() -> Array[EntityPropertyDef]:
 	if selected == null:
 		return []
 	var archetype := EntityArchetypeCatalog.get_archetype(selected.archetype_id)
-	return archetype.property_schema if archetype != null else []
+	var position_property := EntityPropertyDef.from_dict({"name": INSPECTOR_POSITION, "label": "Позиция", "type": "vector3", "section": "transform", "unit": "м"})
+	position_property.step = 0.25
+	var properties: Array[EntityPropertyDef] = [
+		position_property,
+		EntityPropertyDef.from_dict({"name": INSPECTOR_YAW, "label": "Поворот Y", "type": "float", "section": "transform", "unit": "°", "min": 0.0, "max": 359.0, "step": 15.0, "default": 0.0}),
+		EntityPropertyDef.from_dict({"name": INSPECTOR_SCALE, "label": "Масштаб", "type": "float", "section": "transform", "min": 0.05, "max": 10.0, "step": 0.05, "default": 1.0}),
+	]
+	if archetype != null:
+		properties.append_array(archetype.property_schema)
+	return properties
 
 
 func inspector_values() -> Dictionary:
@@ -454,13 +467,19 @@ func inspector_values() -> Dictionary:
 	if selected == null:
 		return {}
 	var archetype := EntityArchetypeCatalog.get_archetype(selected.archetype_id)
-	return archetype.resolved_properties(selected.props) if archetype != null else {}
+	var values := archetype.resolved_properties(selected.props) if archetype != null else {}
+	values[INSPECTOR_POSITION] = selected.position
+	values[INSPECTOR_YAW] = selected.yaw_degrees
+	values[INSPECTOR_SCALE] = selected.scale
+	return values
 
 
 func apply_inspector_value(property_name: StringName, value: Variant) -> bool:
 	var primary := context.document.entities.by_id(_selected_id)
 	if primary == null:
 		return false
+	if property_name in [INSPECTOR_POSITION, INSPECTOR_YAW, INSPECTOR_SCALE]:
+		return _apply_transform_value(primary, property_name, value)
 	var archetype := EntityArchetypeCatalog.get_archetype(primary.archetype_id)
 	var definition := archetype.get_property(property_name) if archetype != null else null
 	if definition == null:
@@ -483,6 +502,44 @@ func apply_inspector_value(property_name: StringName, value: Variant) -> bool:
 	return changed
 
 
+func reset_inspector_value(property_name: StringName) -> bool:
+	var primary := context.document.entities.by_id(_selected_id)
+	if primary == null:
+		return false
+	if property_name == INSPECTOR_YAW:
+		return _apply_transform_value(primary, property_name, 0.0)
+	if property_name == INSPECTOR_SCALE:
+		return _apply_transform_value(primary, property_name, 1.0)
+	var archetype := EntityArchetypeCatalog.get_archetype(primary.archetype_id)
+	var definition := archetype.get_property(property_name) if archetype != null else null
+	return apply_inspector_value(property_name, definition.default) if definition != null else false
+
+
+func _apply_transform_value(record: MapEntityRecord, property_name: StringName, value: Variant) -> bool:
+	var before := context.document.entities.to_json()
+	if property_name == INSPECTOR_POSITION:
+		var position := EntityPropertyDef.from_dict({"name": "position", "type": "vector3"}).coerce_value(value) as Vector3
+		var cell := context.terrain.cell_from_position(position)
+		if not context.terrain.is_inside(cell) or context.terrain.is_hole(cell):
+			context.set_status_message("Позиция вне карты или попадает в отверстие.")
+			return false
+		if record.position.is_equal_approx(position):
+			return false
+		record.position = position
+	elif property_name == INSPECTOR_YAW:
+		var yaw := fposmod(float(value), 360.0)
+		if is_equal_approx(record.yaw_degrees, yaw):
+			return false
+		record.yaw_degrees = yaw
+	else:
+		var next_scale := clampf(float(value), 0.05, 10.0)
+		if is_equal_approx(record.scale, next_scale):
+			return false
+		record.scale = next_scale
+	_commit(before, "трансформ сущности")
+	return true
+
+
 func list_title() -> String:
 	return "Сущности карты"
 
@@ -492,6 +549,23 @@ func list_entries() -> Array[String]:
 	for record: MapEntityRecord in context.document.entities.entities:
 		entries.append("● %s · %s" % [record.id, record.archetype_id])
 	return entries
+
+
+func selected_list_index() -> int:
+	for index in context.document.entities.entities.size():
+		if context.document.entities.entities[index].id == _selected_id:
+			return index
+	return -1
+
+
+func select_list_entry(index: int) -> void:
+	if index < 0 or index >= context.document.entities.entities.size():
+		return
+	_selected_id = context.document.entities.entities[index].id
+	_additional_selected.clear()
+	_tool = TOOL_SELECT
+	rebuild_views()
+	notify_ui_changed()
 
 
 func empty_list_hint() -> String:

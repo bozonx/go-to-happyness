@@ -377,6 +377,12 @@
 				],
 				"scale": 1.0,
 				"yaw": 0.0
+			},
+			"props": {
+				"food": 16,
+				"water": 8,
+				"tarp": 1,
+				"construction_gloves": 1
 			}
 		},
 		{

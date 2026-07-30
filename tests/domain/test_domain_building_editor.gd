@@ -233,6 +233,22 @@ static func _test_material_catalog_and_costs() -> void:
 	assert(col.variant == &"0.5")
 	assert(col.anchor == BuildingBlockCatalogScript.ANCHOR_CORNER)
 
+	# Packed three-dimensional anchors must survive serialization.  Otherwise
+	# loading or undo/redo turns every subcube into the legacy CORNER anchor and
+	# the grid model keeps only one duplicate placement.
+	var sub_bp := BuildingBlueprintScript.new()
+	var sub_grid := BuildingGridModelScript.new()
+	var sub_cell := Vector3i(1, 0, 1)
+	for y in [0.0, 0.25, 0.5, 0.75]:
+		var anchor := BuildingBlockCatalogScript.snap_subgrid_anchor_3d(&"cube", &"0.25", Vector3(-0.375, y, -0.375))
+		assert(sub_grid.place(sub_cell, &"cube", 0, &"stone", &"0.25", anchor))
+	sub_grid.write_to_blueprint(sub_bp)
+	var sub_restored := BuildingBlueprintScript.from_json(sub_bp.to_json())
+	assert(sub_restored != null and sub_restored.blocks.size() == 4, "all packed subgrid anchors survive JSON")
+	var reloaded_grid := BuildingGridModelScript.new()
+	reloaded_grid.load_from_blueprint(sub_restored)
+	assert(reloaded_grid.blocks_anchored_at(sub_cell).size() == 4, "loading retains every subcube in the anchor cell")
+
 
 static func _test_material_era_filtering() -> void:
 	# Materials are cumulative: an era offers its own plus every earlier era's.

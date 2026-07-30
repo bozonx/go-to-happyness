@@ -406,6 +406,11 @@ func set_layer(layer: int) -> void:
 
 
 func mark_dirty() -> void:
+	# Frame editing mutates the grid model first.  Keep the serializable blueprint
+	# in sync before taking a history snapshot, otherwise undo/redo records the
+	# old `blocks[]` while the viewport shows the newly placed sub-blocks.
+	if blueprint != null and grid_model != null:
+		grid_model.write_to_blueprint(blueprint)
 	_record_history_change()
 	_mark_dirty()
 

@@ -82,7 +82,11 @@ static func from_dict(data: Dictionary) -> BlueprintBlock:
 	var material_id := StringName(data.get("material_id", "branches"))
 	var rot := ((int(data.get("rot", 0)) % 4) + 4) % 4
 	var variant := StringName(data.get("variant", ""))
-	var anchor := clampi(int(data.get("anchor", 0)), 0, 2)
+	# 0..2 are the legacy centre/edge/corner anchors.  Newer sub-grid anchors
+	# pack X/Y/Z offsets into the same integer and are intentionally larger; do
+	# not collapse them to `ANCHOR_CORNER` while loading a blueprint or history
+	# snapshot.
+	var anchor := maxi(0, int(data.get("anchor", 0)))
 	var rot_x := ((int(data.get("rot_x", 0)) % 4) + 4) % 4
 	var rot_z := ((int(data.get("rot_z", 0)) % 4) + 4) % 4
 	return BlueprintBlock.new(pos, block_id, rot, material_id, variant, anchor, rot_x, rot_z)

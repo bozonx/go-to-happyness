@@ -16,13 +16,17 @@ render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 // the mesher tile seamlessly whatever size they were merged to.
 
 uniform sampler2DArray surface_textures : source_color, filter_linear_mipmap, repeat_enable;
+uniform sampler2DArray surface_normals : hint_normal, filter_linear_mipmap, repeat_enable;
 // Indices, therefore nearest. A linearly filtered index is a different material.
 uniform sampler2D index_map : filter_nearest, repeat_disable;
 uniform sampler2D detail_map : filter_nearest, repeat_disable;
+// Stored material+variant -> packed Texture2DArray layer.
+uniform sampler2D layer_lookup_map : filter_nearest, repeat_disable;
 
 uniform float board_cells = 96.0;
 uniform float cell_size = 1.0;
-uniform float max_variants = 4.0;
+uniform float material_count = 14.0;
+uniform float variant_capacity = 16.0;
 // Metres of world per texture tile.
 uniform float tile_size = 2.0;
 // How sharply the height map wins over the bilinear weight. Low values fade,
@@ -58,6 +62,21 @@ void vertex() {
 // Map coordinate of a cell centre, in the 0..1 space of the two surface maps.
 vec2 map_uv_of_cell(vec2 cell) {
 	return (cell + vec2(board_cells * 0.5) + vec2(0.5)) / board_cells;
+}
+
+// Derivative-built tangent frame keeps the same ground texture and normal map
+// attached to horizontal tops and ramps without authoring a second ramp asset.
+mat3 cotangent_frame(vec3 normal_world, vec3 position_world, vec2 texture_uv) {
+	vec3 dp1 = dFdx(position_world);
+	vec3 dp2 = dFdy(position_world);
+	vec2 duv1 = dFdx(texture_uv);
+	vec2 duv2 = dFdy(texture_uv);
+	vec3 dp2_perp = cross(dp2, normal_world);
+	vec3 dp1_perp = cross(normal_world, dp1);
+	vec3 tangent = dp2_perp * duv1.x + dp1_perp * duv2.x;
+	vec3 bitangent = dp2_perp * duv1.y + dp1_perp * duv2.y;
+	float inverse_scale = inversesqrt(max(max(dot(tangent, tangent), dot(bitangent, bitangent)), 0.00001));
+	return mat3(tangent * inverse_scale, bitangent * inverse_scale, normal_world);
 }
 
 void fragment() {
@@ -100,6 +119,7 @@ void fragment() {
 	vec2 f = centred - base;
 
 	vec4 samples[4];
+	vec3 normal_samples[4];
 	vec4 details[4];
 	float weights[4];
 	float heights[4];
@@ -112,12 +132,17 @@ void fragment() {
 		float material_index = floor(texture(index_map, uv).r * 255.0 + 0.5);
 		vec4 detail = texture(detail_map, uv);
 		float variant = floor(detail.r * 15.0 + 0.5);
-		float layer = material_index * max_variants + variant;
+		vec2 lookup_uv = vec2(
+			(variant + 0.5) / variant_capacity,
+			(material_index + 0.5) / material_count
+		);
+		float layer = floor(texture(layer_lookup_map, lookup_uv).r * 255.0 + 0.5);
 
 		vec4 texel = texture(surface_textures, vec3(tile_uv, layer));
 		float bilinear = mix(1.0 - f.x, f.x, offset.x) * mix(1.0 - f.y, f.y, offset.y);
 
 		samples[i] = texel;
+		normal_samples[i] = texture(surface_normals, vec3(tile_uv, layer)).rgb;
 		details[i] = detail;
 		heights[i] = texel.a;
 		weights[i] = bilinear;
@@ -127,24 +152,37 @@ void fragment() {
 	// Height-based blend (§7.3): only the taps within `blend_sharpness` of the
 	// tallest contribution survive, so the seam follows the texture's own relief.
 	vec3 albedo = vec3(0.0);
+	vec3 normal_map = vec3(0.0);
 	vec3 detail_sum = vec3(0.0);
 	float total = 0.0;
 	for (int i = 0; i < 4; i++) {
 		float weight = max(heights[i] + weights[i] - highest + blend_sharpness, 0.0);
 		albedo += samples[i].rgb * weight;
+		normal_map += normal_samples[i] * weight;
 		detail_sum += details[i].gba * weight;
 		total += weight;
 	}
 	albedo /= max(total, 0.0001);
+	normal_map = normalize(normal_map / max(total, 0.0001) * 2.0 - 1.0);
 	detail_sum /= max(total, 0.0001);
 
 	float wear = detail_sum.x;                 // 0 .. 1, three stored levels
 	float snow = detail_sum.y;                 // 0 .. 1, four stored depths
+	normal_map = normalize(mix(normal_map, vec3(0.0, 0.0, 1.0), smoothstep(0.0, 0.75, snow)));
 
 	// Wear is the ground being rubbed bare: less colour, more soil. Snow lies on
 	// top of whatever that ended up being.
 	albedo = mix(albedo, wear_tint, wear * 0.45);
 	albedo = mix(albedo, snow_colour, smoothstep(0.0, 0.7, snow));
+	// Large-scale colour drift breaks the remaining repetition without changing
+	// material identity or adding another texture lookup.
+	float macro_noise = (sin(world_position.x * 0.19 + world_position.z * 0.07)
+		+ sin(world_position.z * 0.23 - world_position.x * 0.05)) * 0.5;
+	albedo *= 0.98 + macro_noise * 0.025;
+
+	vec3 geometric_world_normal = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+	vec3 detailed_world_normal = normalize(cotangent_frame(geometric_world_normal, world_position, tile_uv) * normal_map);
+	NORMAL = normalize((VIEW_MATRIX * vec4(detailed_world_normal, 0.0)).xyz);
 
 	ALBEDO = albedo;
 	ROUGHNESS = mix(0.95, 0.75, snow);

@@ -95,6 +95,25 @@ func create_body(body_type: WaterBody.Type, surface_height := 0) -> WaterBody:
 	return grid.body(body.id)
 
 
+## Creates a body and fills its initial basin in one undoable transaction.
+func create_and_flood(seed: Vector2i, body_type: WaterBody.Type, surface_height: int) -> WaterBody:
+	if grid == null or terrain == null:
+		_reject(REASON_NO_GRID)
+		return null
+	var next_id := grid.next_free_body_id()
+	if next_id == WaterBody.NO_BODY:
+		_reject(REASON_NOTHING_TO_DO)
+		return null
+	var cells := grid.flood_cells(terrain, seed, surface_height, next_id)
+	if cells.is_empty():
+		_reject(REASON_NOTHING_TO_DO)
+		return null
+	var body := WaterBody.of_type(next_id, body_type)
+	body.surface_height = surface_height
+	_commit_registry_edit(WaterBodyEdit.creation_with_cells(grid, terrain, body, cells))
+	return grid.body(next_id)
+
+
 ## Drops a body and every cell of it as one undoable operation.
 func remove_body(body_id: int) -> bool:
 	if grid == null:

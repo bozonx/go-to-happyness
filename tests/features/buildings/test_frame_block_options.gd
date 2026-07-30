@@ -37,6 +37,7 @@ func _run() -> void:
 	_test_top_face_uses_the_hit_block_cell(editor, frame)
 	_test_quarter_block_stacks_in_the_same_subslot(editor, frame)
 	_test_upper_active_layer_is_not_stolen_by_a_lower_block(editor, frame)
+	_test_subcube_stack_and_history(editor, frame)
 
 	editor.queue_free()
 	print("--- test_frame_block_options.gd PASSED ---")
@@ -89,6 +90,42 @@ func _test_upper_active_layer_is_not_stolen_by_a_lower_block(editor: BuildingEdi
 	var direction := (Vector3(3.5, 2.0, 3.5) - origin).normalized()
 	var hit := frame._placement_block_hit_info_on_ray(origin, direction, 2)
 	assert(hit.is_empty(), "a block behind the active-layer plane cannot replace the cursor target")
+
+
+## Four quarter-cubes share an anchor cell.  Every click must create its own
+## model record and visual node, and history must restore that exact stack.
+func _test_subcube_stack_and_history(editor: BuildingEditor, frame: FrameModeController) -> void:
+	editor.grid_model.clear()
+	editor.blueprint.clear_blocks()
+	editor.reset_history()
+	frame.rebuild_all_block_nodes()
+	frame.select_block(&"cube", &"0.25")
+	var cell := Vector3i(4, 0, 4)
+	var anchors: Array[int] = []
+	for y in [0.0, 0.25, 0.5, 0.75]:
+		anchors.append(BuildingBlockCatalog.snap_subgrid_anchor_3d(&"cube", &"0.25", Vector3(-0.375, y, -0.375)))
+	for anchor in anchors:
+		editor.current_anchor = anchor
+		frame._apply_tool_at_cell(cell)
+
+	assert(editor.grid_model.blocks_anchored_at(cell).size() == 4, "four subcubes can share one anchor cell")
+	assert(editor.blueprint.blocks.size() == 4, "history snapshot receives every placed subcube")
+	assert((frame.get("_block_nodes") as Dictionary).size() == 4, "each subcube has one visual node")
+
+	for expected_count in [3, 2, 1, 0]:
+		assert(editor.undo(), "undo succeeds for subcube placement")
+		var restored_count := editor.grid_model.blocks_anchored_at(cell).size()
+		assert(restored_count == expected_count,
+			"undo restores %d subcubes (got %d)" % [expected_count, restored_count])
+		assert((frame.get("_block_nodes") as Dictionary).size() == expected_count,
+			"undo restores %d subcube visuals" % expected_count)
+
+	for expected_count in [1, 2, 3, 4]:
+		assert(editor.redo(), "redo succeeds for subcube placement")
+		assert(editor.grid_model.blocks_anchored_at(cell).size() == expected_count,
+			"redo restores %d subcubes" % expected_count)
+		assert((frame.get("_block_nodes") as Dictionary).size() == expected_count,
+			"redo restores %d subcube visuals" % expected_count)
 
 
 func _assert_button_labels(frame: FrameModeController, row_name: String, expected: Array[String]) -> void:

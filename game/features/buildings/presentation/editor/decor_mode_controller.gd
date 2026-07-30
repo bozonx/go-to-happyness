@@ -60,7 +60,7 @@ var _inspector_panel: PanelContainer = null
 var _toolbar: HBoxContainer = null
 var _inspector_title: Label = null
 var _object_list: ItemList = null
-var _controls_vbox: VBoxContainer = null
+var _controls_vbox: EditorPropertyInspector = null
 var _pos_x_spin: SpinBox = null
 var _pos_y_spin: SpinBox = null
 var _pos_z_spin: SpinBox = null
@@ -68,8 +68,6 @@ var _yaw_spin: SpinBox = null
 var _pitch_spin: SpinBox = null
 var _roll_spin: SpinBox = null
 var _scale_spin: SpinBox = null
-var _duplicate_btn: Button = null
-var _delete_btn: Button = null
 var _toolbar_delete_btn: Button = null
 var _layer_label: Label = null
 var _collision_overlay_btn: Button = null
@@ -112,8 +110,6 @@ func setup(editor: Node) -> void:
 	_roll_spin = editor.get_node("%DecorRollSpin")
 	_scale_spin = editor.get_node("%DecorScaleSpin")
 	_replace_btn = editor.get_node("%DecorReplaceBtn")
-	_duplicate_btn = editor.get_node("%DecorDuplicateBtn")
-	_delete_btn = editor.get_node("%DecorDeleteBtn")
 	_toolbar_delete_btn = editor.get_node("%DecorDeleteSelectionBtn")
 	_layer_label = editor.get_node("%DecorLayerLabel")
 
@@ -140,10 +136,10 @@ func setup(editor: Node) -> void:
 	_object_list.item_selected.connect(_on_object_list_selected)
 	_zone_option.item_selected.connect(_on_zone_selected)
 	_zone_filter_option.item_selected.connect(_on_zone_filter_selected)
-	_duplicate_btn.pressed.connect(duplicate_selection)
-	_delete_btn.pressed.connect(delete_selection)
 	_toolbar_delete_btn.pressed.connect(delete_selection)
 	_replace_btn.pressed.connect(_replace_selected_object)
+	_controls_vbox.property_committed.connect(_on_appearance_property_committed)
+	_controls_vbox.property_reset_requested.connect(_on_appearance_property_reset)
 	_pos_x_spin.value_changed.connect(_on_transform_spin_changed)
 	_pos_y_spin.value_changed.connect(_on_transform_spin_changed)
 	_pos_z_spin.value_changed.connect(_on_transform_spin_changed)
@@ -891,9 +887,6 @@ func on_zone_deleted(zone_id: StringName) -> void:
 
 
 func _refresh_inspector() -> void:
-	for child in _controls_vbox.get_children():
-		child.queue_free()
-
 	var record := find_record(selected_object_id)
 	if record == null:
 		_set_transform_fields_enabled(false)
@@ -905,15 +898,14 @@ func _refresh_inspector() -> void:
 			_id_label.text = "Категория: %s" % WorldAssetCatalog.category_display_name(selected_asset.category)
 			_asset_label.text = "Размер: %d×%d×%d м" % [selected_asset.size_in_blocks.x, selected_asset.size_in_blocks.y, selected_asset.size_in_blocks.z]
 			_badges_label.text = selected_asset.description
-			for control in selected_asset.appearance_controls:
-				var row := _build_preview_control_row(selected_asset, control)
-				if row != null:
-					_controls_vbox.add_child(row)
+			_controls_vbox.set_fields(
+				_appearance_definitions(selected_asset), selected_asset.default_appearance(), true, false)
 		else:
 			_inspector_title.text = "Инспектор декора"
 			_id_label.text = "ID: —"
 			_asset_label.text = "Выберите ассет в палитре или объект в 3D"
 			_badges_label.text = ""
+			_controls_vbox.set_fields([], {})
 		return
 
 	var asset := WorldAssetCatalog.get_asset(record.asset_id)
@@ -922,100 +914,41 @@ func _refresh_inspector() -> void:
 	_asset_label.text = "Ассет: %s" % (asset.name if asset != null else String(record.asset_id))
 	_set_transform_fields_enabled(true)
 	_sync_transform_fields(record)
+	_refresh_replace_action(record)
 	_refresh_zone_options(record.owner_zone_id, record)
 	_update_badges(record, asset)
 	_update_zone_highlight()
 	if asset == null:
 		return
 
-	for control in asset.appearance_controls:
-		var row := _build_control_row(record, control)
-		if row != null:
-			_controls_vbox.add_child(row)
+	_controls_vbox.set_fields(_appearance_definitions(asset), record.appearance)
 
 
-func _build_preview_control_row(asset: WorldAssetDef, control: Dictionary) -> Control:
-	var property_name := String(control.get("name", ""))
-	if property_name.is_empty():
-		return null
-	var row := HBoxContainer.new()
-	var label := Label.new()
-	label.text = String(control.get("label", property_name)) + ":"
-	label.custom_minimum_size.x = 130
-	row.add_child(label)
-
-	var default_val: Variant = control.get("default", null)
-	match String(control.get("type", WorldAssetDef.TYPE_STRING)):
-		WorldAssetDef.TYPE_BOOL:
-			var check := CheckBox.new()
-			check.button_pressed = bool(default_val)
-			check.disabled = true
-			row.add_child(check)
-		WorldAssetDef.TYPE_FLOAT:
-			var spin := SpinBox.new()
-			spin.min_value = float(control.get("min", 0.0))
-			spin.max_value = float(control.get("max", 10.0))
-			spin.step = float(control.get("step", 0.1))
-			spin.value = float(default_val) if default_val != null else spin.min_value
-			spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			spin.editable = false
-			row.add_child(spin)
-		WorldAssetDef.TYPE_COLOR:
-			var picker := ColorPickerButton.new()
-			if default_val is Color:
-				picker.color = default_val as Color
-			elif default_val is String:
-				picker.color = Color(default_val as String)
-			picker.disabled = true
-			row.add_child(picker)
-		_:
-			var val_label := Label.new()
-			val_label.text = String(default_val)
-			row.add_child(val_label)
-	return row
+func _appearance_definitions(asset: WorldAssetDef) -> Array[EntityPropertyDef]:
+	var definitions: Array[EntityPropertyDef] = []
+	for control: Dictionary in asset.appearance_controls:
+		var source := control.duplicate(true)
+		source["section"] = "appearance"
+		var definition := EntityPropertyDef.from_dict(source)
+		if definition.is_valid():
+			definitions.append(definition)
+	return definitions
 
 
-func _build_control_row(record: DecorObjectRecordScript, control: Dictionary) -> Control:
-	var property_name := String(control.get("name", ""))
-	if property_name.is_empty():
-		return null
-	var row := HBoxContainer.new()
-	var label := Label.new()
-	label.text = String(control.get("label", property_name)) + ":"
-	label.custom_minimum_size.x = 130
-	row.add_child(label)
+func _on_appearance_property_committed(property_name: StringName, value: Variant) -> void:
+	_set_property(String(property_name), DecorObjectRecordScript.json_safe_value(value))
 
-	var stored: Variant = record.appearance.get(property_name, control.get("default", null))
-	match String(control.get("type", WorldAssetDef.TYPE_STRING)):
-		WorldAssetDef.TYPE_BOOL:
-			var check := CheckBox.new()
-			check.button_pressed = bool(stored)
-			check.toggled.connect(func(pressed: bool): _set_property(property_name, pressed))
-			row.add_child(check)
-		WorldAssetDef.TYPE_FLOAT:
-			var spin := SpinBox.new()
-			spin.min_value = float(control.get("min", 0.0))
-			spin.max_value = float(control.get("max", 10.0))
-			spin.step = float(control.get("step", 0.1))
-			spin.value = float(stored) if stored != null else spin.min_value
-			spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			spin.value_changed.connect(func(value: float): _set_property(property_name, value))
-			row.add_child(spin)
-		WorldAssetDef.TYPE_COLOR:
-			var picker := ColorPickerButton.new()
-			picker.color = DecorObjectController._to_color(stored)
-			picker.custom_minimum_size = Vector2(48, 24)
-			picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			# Colours are stored as html strings so the blueprint stays JSON-safe.
-			picker.color_changed.connect(func(color: Color): _set_property(property_name, color.to_html(false)))
-			row.add_child(picker)
-		_:
-			var edit := LineEdit.new()
-			edit.text = String(stored) if stored != null else ""
-			edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			edit.text_changed.connect(func(text: String): _set_property(property_name, text))
-			row.add_child(edit)
-	return row
+
+func _on_appearance_property_reset(property_name: StringName) -> void:
+	var record := find_record(selected_object_id)
+	var asset := WorldAssetCatalog.get_asset(record.asset_id) if record != null else null
+	if asset == null:
+		return
+	for definition: EntityPropertyDef in _appearance_definitions(asset):
+		if definition.name == property_name:
+			_set_property(String(property_name), DecorObjectRecordScript.json_safe_value(definition.default))
+			_refresh_inspector()
+			return
 
 
 func _set_property(property_name: String, value: Variant) -> void:
@@ -1035,9 +968,16 @@ func _set_property(property_name: String, value: Variant) -> void:
 func _set_transform_fields_enabled(enabled: bool) -> void:
 	for spin in [_pos_x_spin, _pos_y_spin, _pos_z_spin, _pitch_spin, _yaw_spin, _roll_spin, _scale_spin]:
 		spin.editable = enabled
-	_duplicate_btn.disabled = not enabled
-	_delete_btn.disabled = not enabled
+	_zone_option.disabled = not enabled
 	_replace_btn.disabled = not enabled
+	if not enabled:
+		_replace_btn.text = "Заменить на выбранный ассет"
+
+
+func _refresh_replace_action(record: DecorObjectRecordScript) -> void:
+	var replacement := WorldAssetCatalog.get_asset(current_asset_id)
+	_replace_btn.disabled = replacement == null or current_asset_id == record.asset_id
+	_replace_btn.text = "Заменить на «%s»" % replacement.name if replacement != null else "Заменить на выбранный ассет"
 
 
 ## Refresh the owner-zone dropdown from the blueprint's owning areas.

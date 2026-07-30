@@ -14,9 +14,9 @@ extends RefCounted
 ## the two spare bits the parent document (§12) had already reserved — so seasons
 ## cost neither a bigger file nor a format version bump.
 ##
-## `variant` is four bits wide while only 0–3 are used (`MAX_VARIANTS`): the extra
-## bit of headroom is what lets the variant budget grow later without touching
-## saved chunks.
+## `variant` is four bits wide, allowing up to sixteen visual variants without
+## touching the saved column format. The GPU packs only the surface styles that
+## are actually used; this field is an authored variant id, not an array layer.
 
 const VARIANT_SHIFT := 4
 const VARIANT_MASK := 0x0F

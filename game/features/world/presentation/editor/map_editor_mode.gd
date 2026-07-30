@@ -64,6 +64,7 @@ signal ui_changed()
 
 var id: StringName = &""
 var title := ""
+var icon := ""
 var context: MapEditorContext = null
 
 
@@ -172,6 +173,10 @@ func apply_inspector_value(_property_name: StringName, _value: Variant) -> bool:
 	return false
 
 
+func reset_inspector_value(_property_name: StringName) -> bool:
+	return false
+
+
 ## Entities of this mode for the side list. Empty until phase 4 brings zones,
 ## points and routes.
 func list_entries() -> Array[String]:
@@ -182,6 +187,14 @@ func list_entries() -> Array[String]:
 ## every mode is about zones and routes while the list is intentionally empty.
 func list_title() -> String:
 	return "Объекты"
+
+
+func selected_list_index() -> int:
+	return -1
+
+
+func select_list_entry(_index: int) -> void:
+	pass
 
 
 func empty_list_hint() -> String:
