@@ -67,6 +67,11 @@ custom_minimum_size = Vector2(38, 0)
 text = "↪"
 tooltip_text = "Повторить (Ctrl+Shift+Z)"
 
+[node name="EyedropperButton" type="Button" parent="Margin/Scroll/Row"]
+custom_minimum_size = Vector2(38, 0)
+text = "🧪"
+tooltip_text = "Пипетка: считать свойства с карты (P)"
+
 [node name="RenderModeButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(100, 0)
 text = "🌿 Полный"

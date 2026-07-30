@@ -374,6 +374,7 @@ func _ground_shader_material() -> ShaderMaterial:
 	_ground_material.set_shader_parameter(&"index_map", _surface_maps.index_texture())
 	_ground_material.set_shader_parameter(&"detail_map", _surface_maps.detail_texture())
 	_ground_material.set_shader_parameter(&"layer_lookup_map", _library.layer_lookup_texture())
+	_ground_material.set_shader_parameter(&"simple_layer_lookup_map", _library.simple_layer_lookup_texture())
 	_ground_material.set_shader_parameter(&"board_cells", float(grid.board_cells))
 	_ground_material.set_shader_parameter(&"cell_size", grid.cell_size)
 	_ground_material.set_shader_parameter(&"material_count", float(TerrainMaterialCatalog.MATERIAL_COUNT))

@@ -25,7 +25,7 @@ const MATERIAL_COLOURS: Array[Color] = [
 	Color(0.32, 0.49, 0.24), Color(0.42, 0.31, 0.20),
 	Color(0.45, 0.45, 0.47), Color(0.76, 0.68, 0.45),
 	Color(0.52, 0.51, 0.48), Color(0.29, 0.24, 0.18),
-	Color(0.36, 0.47, 0.21), Color(0.20, 0.18, 0.17),
+	Color(0.24, 0.38, 0.16), Color(0.20, 0.18, 0.17),
 	Color(0.74, 0.84, 0.90), Color(0.38, 0.37, 0.36),
 	Color(0.48, 0.47, 0.45), Color(0.55, 0.32, 0.20),
 	Color(0.36, 0.24, 0.19), Color(0.62, 0.38, 0.26),
@@ -52,8 +52,10 @@ const HEIGHT_CONTRAST_BY_MATERIAL: Array[float] = [
 var _array: Texture2DArray = null
 var _normal_array: Texture2DArray = null
 var _lookup_texture: ImageTexture = null
+var _simple_lookup_texture: ImageTexture = null
 var _images: Array[Image] = []
 var _authored_layers: Dictionary = {}
+var _simple_layers: Dictionary = {}
 
 
 func texture_array() -> Texture2DArray:
@@ -88,6 +90,25 @@ func layer_lookup_texture() -> ImageTexture:
 	return _lookup_texture
 
 
+func simple_layer_lookup_texture() -> ImageTexture:
+	if _simple_lookup_texture != null:
+		return _simple_lookup_texture
+	_ensure_images()
+	var image := Image.create_empty(LOOKUP_WIDTH, TerrainMaterialCatalog.MATERIAL_COUNT, false, Image.FORMAT_R8)
+	for material_index in TerrainMaterialCatalog.MATERIAL_COUNT:
+		for variant in LOOKUP_WIDTH:
+			var style := TerrainMaterialVariants.surface_style_of(material_index, variant)
+			var key: int = material_index * 16 + style
+			var layer: int
+			if _simple_layers.has(key):
+				layer = int(_simple_layers[key])
+			else:
+				layer = TerrainMaterialVariants.layer_of(material_index, variant)
+			image.set_pixel(variant, material_index, Color(float(layer) / 255.0, 0.0, 0.0, 1.0))
+	_simple_lookup_texture = ImageTexture.create_from_image(image)
+	return _simple_lookup_texture
+
+
 func layer_count() -> int:
 	return TerrainMaterialVariants.total_layer_count()
 
@@ -112,6 +133,13 @@ func _ensure_images() -> void:
 				_authored_layers[layer] = true
 			else:
 				_images.append(_generate_placeholder(material_index, style))
+	for material_index in TerrainMaterialCatalog.MATERIAL_COUNT:
+		if _authored_path(material_index, 0) == "":
+			continue
+		for style in TerrainMaterialVariants.surface_style_count(material_index):
+			var simple_layer := _images.size()
+			_images.append(_generate_placeholder(material_index, style))
+			_simple_layers[material_index * 16 + style] = simple_layer
 	for cliff_index in TerrainMaterialCatalog.cliff_count():
 		_images.append(_generate(CLIFF_COLOURS[cliff_index], 10, 0.8, 1000 + cliff_index))
 

@@ -39,6 +39,24 @@ func hover_brush() -> BaseBrushController:
 	return context.brush if context != null else null
 
 
+func pick_from_cell() -> void:
+	if context == null or context.brush == null or not context.brush.has_hover:
+		return
+	var cell := context.brush.hovered_cell
+	var anchor := _anchor_at(cell)
+	if anchor != null:
+		_tool = TOOL_POINT
+		_anchor_role = anchor.role
+		notify_ui_changed()
+		return
+	for area: ZoneAreaRecord in context.document.zones.areas:
+		if area.bounds.has_point(cell):
+			_tool = TOOL_AREA
+			_area_role = area.role
+			notify_ui_changed()
+			return
+
+
 func process(_delta: float) -> void:
 	context.brush.update_hover(context.camera, context.space_state(), context.mouse_position())
 

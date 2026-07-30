@@ -92,6 +92,15 @@ func adjust_brush_size(delta: int) -> void:
 		context.brush.adjust_brush_size(delta)
 
 
+func pick_from_cell() -> void:
+	if context != null and context.brush != null:
+		context.brush.update_hover(context.camera, context.space_state(), context.mouse_position())
+		context.brush.pick_material()
+		if context.brush.has_hover and context.terrain != null:
+			context.brush.target_level = context.terrain.height_of(context.brush.hovered_cell)
+		notify_ui_changed()
+
+
 func process(_delta: float) -> void:
 	if context.brush != null:
 		context.brush.update_hover(context.camera, context.space_state(), context.mouse_position())

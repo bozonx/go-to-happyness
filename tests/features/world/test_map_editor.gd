@@ -389,6 +389,7 @@ func _test_water_mode(editor: Node) -> void:
 	var topology_before: int = editor._nav_grid.topology_revision()
 	editor._water_brush.hovered_cell = cell
 	editor._water_brush.has_hover = true
+	editor._water_brush.tool = WaterBrushController.TOOL_FLOOD
 	editor._water_brush.level = 0
 	editor._water_brush.auto_level = false
 	# The scene test has no real viewport pointer over this authored cell; drive

@@ -41,7 +41,7 @@ func activate() -> void:
 	if context != null and context.water_service != null:
 		context.water_service.prune_empty_bodies()
 	if context != null and context.water_brush != null:
-		context.water_brush.tool = WaterBrushController.TOOL_FLOOD
+		context.water_brush.tool = WaterBrushController.TOOL_SELECT
 		var bodies := context.water.bodies()
 		var found_non_empty := false
 		for b in bodies:
@@ -178,8 +178,16 @@ func _stroke() -> void:
 		)
 
 
+func pick_from_cell() -> void:
+	if context != null and context.water_brush != null:
+		context.water_brush.update_hover(context.camera, context.space_state(), context.mouse_position())
+		context.water_brush.pick_from_cell()
+		notify_ui_changed()
+
+
 func _edit_label() -> String:
 	match context.water_brush.tool:
+		WaterBrushController.TOOL_SELECT: return "выделение водоёма"
 		WaterBrushController.TOOL_FLOOD: return "наполнение водоёма"
 		WaterBrushController.TOOL_DRAIN: return "осушение"
 		WaterBrushController.TOOL_FREEZE: return "заморозка"
@@ -227,6 +235,7 @@ func select_palette_entry(entry_id: StringName) -> void:
 func tool_options() -> Array:
 	var brush := context.water_brush
 	var options: Array = []
+	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_SELECT]), "Выделить", &"tools", brush.tool == WaterBrushController.TOOL_SELECT))
 	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_FLOOD]), "Залить", &"tools", brush.tool == WaterBrushController.TOOL_FLOOD))
 	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_DRAIN]), "Удалить", &"tools", brush.tool == WaterBrushController.TOOL_DRAIN))
 	options.append(ToolOption.of(OPTION_ACTION_ICE, "Лёд", &"tools", brush.tool in [WaterBrushController.TOOL_FREEZE, WaterBrushController.TOOL_THAW]))

@@ -24,13 +24,14 @@ extends BaseBrushController
 ## body — "one operation per body per season" — so a per-cell ice brush authors a
 ## state the first seasonal pass overwrites wholesale. Freezing stays a button on
 ## the body (`toggle_body_ice`), which is the granularity the mechanic has.
+const TOOL_SELECT := &"select"
 const TOOL_FLOOD := &"flood"
 const TOOL_DRAIN := &"drain"
 const TOOL_FREEZE := &"freeze"
 const TOOL_THAW := &"thaw"
-const TOOLS: Array[StringName] = [TOOL_FLOOD, TOOL_DRAIN, TOOL_FREEZE, TOOL_THAW]
+const TOOLS: Array[StringName] = [TOOL_SELECT, TOOL_FLOOD, TOOL_DRAIN, TOOL_FREEZE, TOOL_THAW]
 
-var tool: StringName = TOOL_FLOOD
+var tool: StringName = TOOL_SELECT
 ## The body strokes go into. Zero until the author makes one — a stroke with no
 ## body is refused rather than quietly inventing a lake.
 var body_id := WaterBody.NO_BODY
@@ -207,6 +208,9 @@ func pick_from_cell() -> void:
 func apply() -> void:
 	if not has_hover or _service == null:
 		return
+	if tool == TOOL_SELECT:
+		_select_hovered_body()
+		return
 	if tool == TOOL_FLOOD:
 		_adopt_body_at_hover()
 		_maybe_retype_hovered_body()
@@ -219,6 +223,23 @@ func apply() -> void:
 			_set_frozen(true)
 		TOOL_THAW:
 			_set_frozen(false)
+
+
+func _select_hovered_body() -> void:
+	if _water == null or not _water.has_water(hovered_cell):
+		body_id = WaterBody.NO_BODY
+		last_message = "водоём не выбран"
+		return
+	var hovered_id := _water.body_id_at(hovered_cell)
+	select_body(hovered_id)
+	var body := _water.body(hovered_id)
+	if body != null:
+		if body.is_lava():
+			liquid_category = &"lava"
+		else:
+			liquid_category = &"water"
+			water_type = body.type
+		last_message = "выбран водоём: %s (%s, уровень %d)" % [body.name, body.type_id(), level]
 
 
 func _flood() -> void:

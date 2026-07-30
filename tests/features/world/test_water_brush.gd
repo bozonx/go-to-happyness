@@ -200,6 +200,8 @@ static func _test_cycle_tool_rotates_the_water_tools() -> void:
 	var world := _make()
 	var brush: WaterBrushController = world["brush"]
 
+	assert(brush.tool == WaterBrushController.TOOL_SELECT)
+	brush.cycle_tool()
 	assert(brush.tool == WaterBrushController.TOOL_FLOOD)
 	brush.cycle_tool()
 	assert(brush.tool == WaterBrushController.TOOL_DRAIN)
@@ -208,7 +210,7 @@ static func _test_cycle_tool_rotates_the_water_tools() -> void:
 	brush.cycle_tool()
 	assert(brush.tool == WaterBrushController.TOOL_THAW)
 	brush.cycle_tool()
-	assert(brush.tool == WaterBrushController.TOOL_FLOOD)
+	assert(brush.tool == WaterBrushController.TOOL_SELECT)
 
 
 # --- Level --------------------------------------------------------------------

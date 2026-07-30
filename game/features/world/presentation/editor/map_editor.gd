@@ -48,6 +48,7 @@ const PLANNED_MODES: Array = [
 @onready var _start_settings_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/StartSettingsButton
 @onready var _undo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/UndoButton
 @onready var _redo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/RedoButton
+@onready var _eyedropper_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/EyedropperButton
 @onready var _render_mode_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/RenderModeButton
 @onready var _validate_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/ValidateButton
 @onready var _test_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/TestButton
@@ -352,6 +353,7 @@ func _connect_ui() -> void:
 	_start_settings_button.pressed.connect(_open_start_settings)
 	_undo_button.pressed.connect(_undo)
 	_redo_button.pressed.connect(_redo)
+	_eyedropper_button.pressed.connect(_on_eyedropper_pressed)
 	_update_render_mode_button()
 	_render_mode_button.pressed.connect(_cycle_render_mode)
 	_validate_button.pressed.connect(_validate_map)
@@ -536,6 +538,9 @@ func _handle_key(event: InputEventKey) -> void:
 		KEY_G:
 			_cycle_render_mode()
 			return
+		KEY_P:
+			_on_eyedropper_pressed()
+			return
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7:
 			var slot := event.keycode - KEY_1
 			if slot < _modes.size():
@@ -548,6 +553,12 @@ func _handle_key(event: InputEventKey) -> void:
 			_return_to_menu()
 			return
 	if _active != null and _active.handle_input(event):
+		_refresh_panels()
+
+
+func _on_eyedropper_pressed() -> void:
+	if _active != null:
+		_active.pick_from_cell()
 		_refresh_panels()
 
 

@@ -113,6 +113,11 @@ func adjust_brush_size(_delta: int) -> void:
 	pass
 
 
+## Samples properties from the hovered cell under the cursor.
+func pick_from_cell() -> void:
+	pass
+
+
 ## Input the camera did not claim. Return true to consume it.
 func handle_input(_event: InputEvent) -> bool:
 	return false

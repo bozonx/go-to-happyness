@@ -60,6 +60,13 @@ func adjust_brush_size(delta: int) -> void:
 		context.brush.adjust_brush_size(delta)
 
 
+func pick_from_cell() -> void:
+	if context != null and context.brush != null:
+		context.brush.update_hover(context.camera, context.space_state(), context.mouse_position())
+		context.brush.pick_material()
+		notify_ui_changed()
+
+
 func process(_delta: float) -> void:
 	var was := context.brush.hovered_cell
 	var had := context.brush.has_hover

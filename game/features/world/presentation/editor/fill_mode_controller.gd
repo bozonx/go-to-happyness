@@ -85,6 +85,12 @@ func handle_input(event: InputEvent) -> bool:
 	return false
 
 
+func pick_from_cell() -> void:
+	if context != null and context.brush != null and context.brush.has_hover:
+		_pick_archetype(context.brush.hovered_cell)
+		notify_ui_changed()
+
+
 func _handle_mouse(event: InputEventMouseButton) -> bool:
 	if not context.brush.has_hover:
 		return false

@@ -22,6 +22,7 @@ uniform sampler2D index_map : filter_nearest, repeat_disable;
 uniform sampler2D detail_map : filter_nearest, repeat_disable;
 // Stored material+variant -> packed Texture2DArray layer.
 uniform sampler2D layer_lookup_map : filter_nearest, repeat_disable;
+uniform sampler2D simple_layer_lookup_map : filter_nearest, repeat_disable;
 
 uniform float board_cells = 96.0;
 uniform float cell_size = 1.0;
@@ -139,7 +140,9 @@ void fragment() {
 			(variant + 0.5) / variant_capacity,
 			(material_index + 0.5) / material_count
 		);
-		float layer = floor(texture(layer_lookup_map, lookup_uv).r * 255.0 + 0.5);
+		float layer = (render_mode_idx > 2.5)
+			? floor(texture(simple_layer_lookup_map, lookup_uv).r * 255.0 + 0.5)
+			: floor(texture(layer_lookup_map, lookup_uv).r * 255.0 + 0.5);
 
 		vec4 texel = texture(surface_textures, vec3(tile_uv, layer));
 		float bilinear = mix(1.0 - f.x, f.x, offset.x) * mix(1.0 - f.y, f.y, offset.y);
