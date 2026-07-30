@@ -114,6 +114,10 @@ func default_properties() -> Dictionary:
 	return values
 
 
+func default_values() -> Dictionary:
+	return default_properties()
+
+
 ## Strips values equal to the archetype default, and anything the schema does not
 ## declare. This is the function that keeps a forest out of `map.json`: without it
 ## every tree would store a full snapshot of its properties.

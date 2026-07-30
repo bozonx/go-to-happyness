@@ -14,7 +14,7 @@ const RECENT_ASSET_LIMIT := 6
 
 var scope: StringName = WorldAssetDef.SCOPE_BUILDING
 
-var _controller: Node = null
+var _controller: Object = null
 var _search_edit: LineEdit = null
 var _recent_label: Label = null
 var _recent_container: HFlowContainer = null

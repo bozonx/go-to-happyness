@@ -92,6 +92,13 @@ custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 text = "🛠 Редактор контента"
 
+[node name="DevModeButton" type="Button" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "🔧 Dev Mode"
+visible = false
+
 [node name="ConfigPanel" type="Panel" parent="MarginContainer/VBoxContainer/ContentSplit"]
 layout_mode = 2
 size_flags_horizontal = 3

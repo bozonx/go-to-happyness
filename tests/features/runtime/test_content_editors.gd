@@ -17,6 +17,7 @@ func _run() -> void:
 	await process_frame
 	assert(menu.game_option.item_count > 0)
 	assert(menu.editor_btn.visible and not menu.editor_btn.disabled)
+	assert(menu.dev_mode_btn != null)
 	assert(menu.game_description_label != null)
 	assert(menu.map_preview_rect != null)
 	assert(menu.saves_btn != null)

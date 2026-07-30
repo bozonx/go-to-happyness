@@ -12,6 +12,7 @@ const UI_THEME = preload("res://game/features/ui/presentation/theme/ui_theme.tre
 @onready var era_panel_title: Label = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/EraPanelTitle
 @onready var era_option: OptionButton = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/EraOption
 @onready var editor_btn: Button = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/EditorButton
+@onready var dev_mode_btn: Button = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/DevModeButton
 
 ## This picker chooses the authored world for the session.
 @onready var game_option: OptionButton = $MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox/GameOption
@@ -101,6 +102,8 @@ func _setup_landscape_options() -> void:
 func _connect_signals() -> void:
 	era_option.item_selected.connect(_on_era_selected)
 	editor_btn.pressed.connect(_on_editor_pressed)
+	dev_mode_btn.visible = OS.has_feature("editor")
+	dev_mode_btn.pressed.connect(_on_dev_mode_pressed)
 
 	game_option.item_selected.connect(_on_game_selected)
 	landscape_option.item_selected.connect(_on_landscape_selected)
@@ -243,6 +246,11 @@ func _on_editor_pressed() -> void:
 	launch_mgr.call("launch_editor_hub", false)
 
 
+func _on_dev_mode_pressed() -> void:
+	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
+	launch_mgr.call("launch_editor_hub", true)
+
+
 func _on_quit_pressed() -> void:
 	get_tree().quit()
 
@@ -312,9 +320,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
 			launch_mgr.call("launch_from_save", SessionSaveCoordinator.QUICKSAVE_PATH)
 			get_viewport().set_input_as_handled()
+
+
+func _input(event: InputEvent) -> void:
 	# F12 opens the Editor Hub in dev mode when running from the Godot editor.
+	# Uses _input (not _unhandled_input) so the key is caught before any focused
+	# OptionButton or other UI control can swallow it.
 	if event is InputEventKey and event.keycode == KEY_F12 and event.pressed and not event.echo:
 		if OS.has_feature("editor"):
 			var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
 			launch_mgr.call("launch_editor_hub", true)
-			get_viewport().set_input_as_handled()
+			var vp := get_viewport()
+			if vp != null:
+				vp.set_input_as_handled()
+			set_process_input(false)
