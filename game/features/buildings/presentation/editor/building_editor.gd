@@ -211,7 +211,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				frame_mode.erase_line(frame_mode.last_paint_cell, cursor_cell)
 				frame_mode.last_paint_cell = cursor_cell
 	elif event is InputEventKey and event.pressed and not event.echo:
-		_handle_key(event)
+		if not _text_input_has_focus():
+			_handle_key(event)
 
 
 func _handle_mouse_button(event: InputEventMouseButton) -> void:
@@ -371,6 +372,11 @@ func _update_cursor() -> void:
 
 func _pointer_over_ui() -> bool:
 	return get_viewport().gui_get_hovered_control() != null
+
+
+func _text_input_has_focus() -> bool:
+	var owner := get_viewport().gui_get_focus_owner()
+	return owner is LineEdit or owner is TextEdit or owner is CodeEdit
 
 
 # ---------------------------------------------------------------------------

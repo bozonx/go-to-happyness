@@ -495,6 +495,11 @@ func _is_pointer_over_view() -> bool:
 	return _viewport_area.get_global_rect().has_point(get_viewport().get_mouse_position())
 
 
+func _text_input_has_focus() -> bool:
+	var owner := get_viewport().gui_get_focus_owner()
+	return owner is LineEdit or owner is TextEdit or owner is CodeEdit
+
+
 ## Tells the camera where the hole is. Re-run on every resize: the panels have
 ## fixed pixel widths, so their share of the window changes as it is resized and a
 ## framing computed once would be wrong at any other size.
@@ -523,6 +528,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		camera.handle_mouse_motion(event as InputEventMouseMotion)
 		return
 	if event is InputEventKey and event.is_pressed() and not event.is_echo():
+		if _text_input_has_focus():
+			return
 		_handle_key(event as InputEventKey)
 
 

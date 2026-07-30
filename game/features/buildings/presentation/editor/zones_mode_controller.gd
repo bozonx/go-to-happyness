@@ -927,7 +927,38 @@ func _anchor_at_cursor() -> ZoneAnchorRecord:
 	return candidates[0]
 
 
+## Eyedropper: sample the anchor point or zone area at cursor and arm its tool and role/function.
+func pick_at_cursor() -> void:
+	if not _editor.cursor_valid:
+		_editor.set_status("Курсор вне сетки.")
+		return
+	var anchor := _anchor_at_cursor()
+	if anchor != null:
+		_arm_tool(TOOL_POINT)
+		_anchor_role = anchor.role
+		var basic_roles: Array[StringName] = [
+			ZoneAnchorRecord.ROLE_DOOR, ZoneAnchorRecord.ROLE_SLOT,
+			ZoneAnchorRecord.ROLE_QUEUE, ZoneAnchorRecord.ROLE_STORAGE]
+		if _anchor_role not in basic_roles and _anchor_role in ZoneAnchorRecord.BUILDING_ROLES:
+			_advanced_check.button_pressed = true
+		_rebuild_role_options()
+		_editor.set_status("Пипетка: выбран точечный якорь роли «%s»." % ZoneAnchorRecord.role_display_name(anchor.role))
+		_refresh_all()
+		return
+	var area := _area_at_cursor()
+	if area != null:
+		_arm_tool(TOOL_AREA)
+		_area_role = area.role
+		_armed_area_function = area.function
+		_rebuild_role_options()
+		_editor.set_status("Пипетка: выбрана область роли «%s»." % ZoneAreaRecord.role_display_name(area.role))
+		_refresh_all()
+		return
+	_editor.set_status("Под курсором нет зоны или точки для пипетки.")
+
+
 func _select_at_cursor() -> void:
+
 	if not _editor.cursor_valid:
 		return
 	var anchor := _anchor_at_cursor()

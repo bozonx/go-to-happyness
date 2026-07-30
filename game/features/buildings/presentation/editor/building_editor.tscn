@@ -134,6 +134,14 @@ custom_minimum_size = Vector2(38, 0)
 text = "↪"
 tooltip_text = "Повторить (Ctrl+Shift+Z)"
 
+[node name="EyedropperBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(38, 0)
+text = "🧪"
+tooltip_text = "Пипетка: считать элемент под курсором (P)"
+
+
 [node name="ModeFrameBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -1418,6 +1426,8 @@ placeholder_text = "my_building_id"
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/SettingsBtn" to="." method="_on_settings_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/UndoBtn" to="." method="_on_undo_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/RedoBtn" to="." method="_on_redo_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/EyedropperBtn" to="." method="_on_eyedropper_pressed"]
+
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/ToolPlaceBtn" to="." method="_on_tool_place_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/ToolEraseBtn" to="." method="_on_tool_erase_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/BrushLineBtn" to="." method="_on_brush_line_pressed"]
