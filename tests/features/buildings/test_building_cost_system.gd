@@ -33,7 +33,6 @@ func _test_era_material_compositions() -> void:
 func _test_auto_cost_calculation_with_ceil() -> void:
 	print("Testing auto cost calculation and ceil rounding...")
 	var bp := BuildingBlueprintScript.new()
-	bp.category = &"earth"
 
 	# Add 3 earth_stone blocks (3 * 0.5 soil = 1.5 -> ceili 2; 3 * 0.5 stone = 1.5 -> ceili 2)
 	for i in range(3):
@@ -51,7 +50,6 @@ func _test_auto_cost_calculation_with_ceil() -> void:
 func _test_extra_non_block_costs() -> void:
 	print("Testing extra non-block costs...")
 	var bp := BuildingBlueprintScript.new()
-	bp.category = &"tent"
 
 	var b := BlueprintBlockScript.new()
 	b.pos = Vector3i(0, 0, 0)
@@ -70,7 +68,6 @@ func _test_extra_non_block_costs() -> void:
 func _test_manual_cost_override() -> void:
 	print("Testing manual cost override...")
 	var bp := BuildingBlueprintScript.new()
-	bp.category = &"wood"
 
 	# Add 10 log blocks
 	for i in range(10):
@@ -94,7 +91,6 @@ func _test_blueprint_json_serialization() -> void:
 	var bp := BuildingBlueprintScript.new()
 	bp.id = &"test_cost_building"
 	bp.name = "Тестовое здание"
-	bp.category = &"earth"
 	bp.cost_mode = &"auto"
 	bp.extra_costs = {"tarp": 1}
 

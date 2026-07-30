@@ -25,8 +25,6 @@ static func run_all() -> void:
 	_test_catalog()
 	_test_mesh_library()
 	_test_material_catalog_and_costs()
-	_test_material_era_filtering()
-	_test_underground_requires_earth_era()
 	_test_zone_function_round_trip()
 	_test_zone_invariants()
 	_test_grid_place_erase()
@@ -42,7 +40,6 @@ static func run_all() -> void:
 	_test_zone_session_state_round_trip()
 	_test_runtime_zone_falls_back_to_centre()
 	_test_invalid_blueprints_are_rejected()
-	_test_era_material_replacement()
 	_test_style_resolver_fallback_chain()
 	_test_content_packs_and_exchange()
 
@@ -137,25 +134,25 @@ static func _approx(a: Vector2, b: Vector2) -> bool:
 static func _test_style_resolver_fallback_chain() -> void:
 	var index := ContentIndexScript.new()
 	for data in [
-		[&"brick", &"roman"], [ &"brick", &"generic"],
-		[&"clay", &"roman"], [ &"tent", &"generic"],
+		[&"premium", &"roman"], [&"premium", &"generic"],
+		[&"default", &"roman"], [&"default", &"generic"],
 	]:
-		var entry := ContentEntryScript.new(&"builtin", StringName("bakery_%s_%s" % data), &"blueprint", "")
+		var entry := ContentEntryScript.new(&"core", StringName("bakery_%s_%s" % data), &"blueprint", "")
 		entry.runtime_key = entry.id
 		entry.kind = &"building"
 		entry.role = &"bakery"
-		entry.era = data[0]
+		entry.variant = data[0]
 		entry.style = data[1]
 		index.entries[entry.runtime_key] = entry
 	var resolver := StyleResolverScript.new(index)
-	assert(resolver.resolve(&"bakery", &"brick", &"roman").style == &"roman")
-	index.entries.erase(&"bakery_brick_roman")
-	assert(resolver.resolve(&"bakery", &"brick", &"roman").style == &"generic")
-	index.entries.erase(&"bakery_brick_generic")
-	assert(resolver.resolve(&"bakery", &"brick", &"roman").era == &"clay")
-	index.entries.erase(&"bakery_clay_roman")
-	assert(resolver.resolve(&"bakery", &"brick", &"roman").era == &"tent")
-	assert(resolver.resolve(&"missing", &"brick", &"roman") == null)
+	assert(resolver.resolve(&"bakery", &"premium", &"roman").style == &"roman")
+	index.entries.erase(&"bakery_premium_roman")
+	assert(resolver.resolve(&"bakery", &"premium", &"roman").style == &"generic")
+	index.entries.erase(&"bakery_premium_generic")
+	assert(resolver.resolve(&"bakery", &"premium", &"roman").variant == &"default")
+	index.entries.erase(&"bakery_default_roman")
+	assert(resolver.resolve(&"bakery", &"premium", &"roman").style == &"generic")
+	assert(resolver.resolve(&"missing", &"premium", &"roman") == null)
 	assert(ContentIdScript.runtime_key(ContentIdScript.split_runtime_key(&"pack:ivan.roman/bakery")["source"], ContentIdScript.split_runtime_key(&"pack:ivan.roman/bakery")["id"]) == &"pack:ivan.roman/bakery")
 
 
@@ -211,7 +208,6 @@ static func _test_material_catalog_and_costs() -> void:
 	assert(BuildingMaterialCatalogScript.resource_id(&"wood") == &"boards")
 	var bp := BuildingBlueprintScript.new()
 	bp.id = &"mixed_frame"
-	bp.category = &"stone"
 	var grid := BuildingGridModelScript.new()
 	assert(grid.place(Vector3i.ZERO, &"cube", 0, &"earth"))
 	assert(grid.place(Vector3i(1, 0, 0), &"slab", 1, &"stone", &"0.5"))
@@ -250,34 +246,6 @@ static func _test_material_catalog_and_costs() -> void:
 	assert(reloaded_grid.blocks_anchored_at(sub_cell).size() == 4, "loading retains every subcube in the anchor cell")
 
 
-static func _test_material_era_filtering() -> void:
-	# Materials are cumulative: an era offers its own plus every earlier era's.
-	var tent := BuildingMaterialCatalogScript.materials_for_era(&"tent")
-	var tent_ids := tent.map(func(m): return m["id"])
-	assert(&"branches" in tent_ids and &"thatch" in tent_ids)
-	assert(&"earth" not in tent_ids and &"stone" not in tent_ids)
-	# Earth era adds soil but still allows the tent materials.
-	assert(BuildingMaterialCatalogScript.is_available_in_era(&"branches", &"earth"))
-	assert(BuildingMaterialCatalogScript.is_available_in_era(&"earth", &"earth"))
-	assert(not BuildingMaterialCatalogScript.is_available_in_era(&"stone", &"earth"))
-	# Each era resolves to a defining default material.
-	assert(BuildingMaterialCatalogScript.default_material_for_era(&"earth") == &"earth")
-	assert(BuildingMaterialCatalogScript.default_material_for_era(&"brick") == &"brick")
-
-
-static func _test_underground_requires_earth_era() -> void:
-	var tent_underground := BuildingBlueprintScript.new()
-	tent_underground.id = &"tent_bunker"
-	tent_underground.category = &"tent"
-	tent_underground.construction_style = &"underground"
-	assert(not tent_underground.validation_errors().is_empty())
-	# The same building becomes valid once it is an earth-era structure.
-	tent_underground.category = &"earth"
-	assert(tent_underground.validation_errors().is_empty())
-
-
-## Meaning comes from a pack, so a "cinema" is a function id plus properties on
-## an ordinary room — not a zone kind the engine has to know about.
 static func _test_zone_function_round_trip() -> void:
 	var bp := BuildingBlueprintScript.new()
 	bp.id = &"town_park"
@@ -370,7 +338,7 @@ static func _test_blueprint_round_trip() -> void:
 	var bp := BuildingBlueprintScript.new()
 	bp.id = &"test_house"
 	bp.name = "Тестовый дом"
-	bp.building_type = "surface"
+	bp.construction_style = &"surface"
 	var grid := BuildingGridModelScript.new()
 	grid.place(Vector3i(0, 0, 0), &"cube")
 	grid.place(Vector3i(1, 0, 0), &"slab", 1, &"branches", &"0.5")
@@ -697,43 +665,9 @@ static func _test_runtime_zone_falls_back_to_centre() -> void:
 
 static func _test_invalid_blueprints_are_rejected() -> void:
 	# to_dict() always writes FORMAT_VERSION, so test unsupported version via a raw dict.
-	var unsupported_dict := {"version": 999, "id": "unsupported", "name": "Unsupported", "category": "tent", "footprint": [4, 4], "blocks": []}
-	assert(BuildingBlueprintScript.from_dict(unsupported_dict).validation_errors().any(
-		func(e: String): return e.contains("Unsupported blueprint format version")),
-		"Version 999 must be rejected")
+	var unsupported_dict := {"version": 999, "id": "unsupported", "name": "Unsupported", "footprint": [4, 4], "blocks": []}
+	assert(BuildingBlueprintScript.from_dict(unsupported_dict) == null, "Version 999 must be rejected")
 	var invalid_material := BuildingBlueprintScript.new()
 	invalid_material.id = &"invalid_material"
 	invalid_material.blocks.append(BlueprintBlockScript.new(Vector3i.ZERO, &"cube", 0, &"unobtainium"))
 	assert(BuildingBlueprintScript.from_json(invalid_material.to_json()) == null)
-
-
-static func _test_era_material_replacement() -> void:
-	var bp := BuildingBlueprintScript.new()
-	bp.id = &"stone_house"
-	bp.category = &"stone"
-
-	var grid := BuildingGridModelScript.new()
-	assert(grid.place(Vector3i.ZERO, &"cube", 0, &"branches"))
-	assert(grid.place(Vector3i(1, 0, 0), &"slab", 0, &"stone", &"0.5"))
-	assert(grid.place(Vector3i(2, 0, 0), &"cube", 0, &"wood"))
-
-	var target_era: StringName = &"tent"
-	var offending_blocks: Array[BlueprintBlockScript] = []
-	for block in grid.all_blocks():
-		if not BuildingMaterialCatalogScript.is_available_in_era(block.material_id, target_era):
-			offending_blocks.append(block)
-
-	assert(offending_blocks.size() == 2, "Stone and wood blocks are unavailable in tent era")
-	var default_mat := BuildingMaterialCatalogScript.default_material_for_era(target_era)
-	assert(BuildingMaterialCatalogScript.is_available_in_era(default_mat, target_era))
-
-	for block in offending_blocks:
-		block.material_id = default_mat
-
-	grid.write_to_blueprint(bp)
-	bp.category = target_era
-	bp.recalculate_construction_cost()
-
-	for block in bp.blocks:
-		assert(BuildingMaterialCatalogScript.is_available_in_era(block.material_id, bp.category))
-	assert(not bp.construction_cost.is_empty())

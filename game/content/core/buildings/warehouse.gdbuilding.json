@@ -907,7 +907,6 @@
   "cost_mode": "auto",
   "custom_material_costs": {},
   "decor_trims": [],
-  "era": "tent",
   "extra_costs": {},
   "fixtures": [],
   "footprint": [
@@ -928,6 +927,7 @@
   "role": "warehouse",
   "routes": [],
   "style": "generic",
+  "variant": "default",
   "surface_finishes": [],
-  "version": 6
+  "version": 7
 }

@@ -7,9 +7,8 @@ const ContentPackScript = preload("res://game/features/content/domain/content_pa
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 
 const BUILTIN_ROOT := "res://game/content"
-const LOCAL_ROOT := "user://content/local"
+const PROJECTS_ROOT := "user://content/projects"
 const INSTALLED_ROOT := "user://content/installed"
-const LEGACY_BLUEPRINTS := "user://custom_buildings"
 const BLUEPRINT_SUFFIX := ".gdbuilding.json"
 const MAP_SUFFIX := ".gdmap"
 const GAME_SUFFIX := ".gdgame.json"
@@ -22,9 +21,8 @@ func rebuild() -> void:
 	entries.clear()
 	errors.clear()
 	packs.clear()
-	_migrate_legacy_player_content()
 	_index_pack_roots(BUILTIN_ROOT, ContentIdScript.SOURCE_CORE)
-	_index_local_pack()
+	_index_pack_roots(PROJECTS_ROOT, &"project")
 	_index_pack_roots(INSTALLED_ROOT, ContentIdScript.SOURCE_INSTALLED)
 
 
@@ -64,21 +62,6 @@ func _index_pack_roots(root: String, source_kind: StringName) -> void:
 		_index_pack(root_path, source)
 
 
-func _index_local_pack() -> void:
-	if not DirAccess.dir_exists_absolute(LOCAL_ROOT):
-		return
-	var local := ContentPackScript.new()
-	local.id = &"local"
-	local.name = "Локальный контент"
-	local.root_path = LOCAL_ROOT
-	local.source = ContentIdScript.SOURCE_LOCAL
-	packs.append(local)
-	_index_blueprints(LOCAL_ROOT.path_join("buildings"), ContentIdScript.SOURCE_LOCAL)
-	_index_maps(LOCAL_ROOT.path_join("maps"), ContentIdScript.SOURCE_LOCAL)
-	_index_maps(LOCAL_ROOT.path_join("prefabs"), ContentIdScript.SOURCE_LOCAL)
-	_index_games(LOCAL_ROOT.path_join("games"), ContentIdScript.SOURCE_LOCAL)
-
-
 func _index_pack(root: String, source: StringName) -> void:
 	var metadata_path := root.path_join("pack.json")
 	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(metadata_path))
@@ -113,8 +96,8 @@ func _index_blueprints(root: String, source: StringName) -> void:
 		entry.runtime_key = ContentIdScript.runtime_key(source, blueprint.id)
 		entry.kind = blueprint.kind
 		entry.role = blueprint.role
-		entry.era = blueprint.era
 		entry.style = blueprint.style
+		entry.variant = blueprint.variant
 		entry.name = blueprint.name
 		entry.metadata = {"pack": _pack_id_for(source)}
 		_register(entry)
@@ -173,33 +156,6 @@ func _register(entry: ContentEntryScript) -> void:
 		return
 	entries[entry.runtime_key] = entry
 
-
-## One-time, copy-then-remove migration.  It only touches the two old player
-## folders and leaves a failed move intact, so interrupted first launch remains
-## recoverable. Built-in files are intentionally never migrated here: the repo
-## owns their relocation and exported builds ship the new layout directly.
-func _migrate_legacy_player_content() -> void:
-	_migrate_legacy_directory(LEGACY_BLUEPRINTS, LOCAL_ROOT.path_join("buildings"))
-
-
-static func _migrate_legacy_directory(old_root: String, new_root: String) -> void:
-	if not DirAccess.dir_exists_absolute(old_root):
-		return
-	if DirAccess.make_dir_recursive_absolute(new_root) != OK:
-		return
-	var old_dir := DirAccess.open(old_root)
-	if old_dir == null:
-		return
-	for file_name in old_dir.get_files():
-		var old_path := old_root.path_join(file_name)
-		var new_path := new_root.path_join(file_name)
-		if not FileAccess.file_exists(new_path) and DirAccess.rename_absolute(old_path, new_path) != OK:
-			push_warning("[content] не удалось перенести %s" % old_path)
-	for directory in old_dir.get_directories():
-		var old_path := old_root.path_join(directory)
-		var new_path := new_root.path_join(directory)
-		if not DirAccess.dir_exists_absolute(new_path) and DirAccess.rename_absolute(old_path, new_path) != OK:
-			push_warning("[content] не удалось перенести %s" % old_path)
 
 static func _files_recursively(root: String, suffix: String) -> Array[String]:
 	var result: Array[String] = []

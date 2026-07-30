@@ -1,10 +1,11 @@
 {
-	"version": 6,
+	"version": 7,
 	"id": "cook_campfire_lvl2",
 	"role": "cook_campfire_lvl2",
+	"style": "generic",
+	"variant": "default",
 	"name": "Костёр для готовки ур. 2",
 	"construction_style": "surface",
-	"era": "tent",
 	"grid_bounds": {
 		"x": 3,
 		"y": 1,
@@ -158,6 +159,8 @@
 			"id": "main",
 			"name": "Помещение",
 			"role": "room",
+			"style": "generic",
+			"variant": "default",
 			"function": "core:workplace",
 			"properties": {
 				"profession": "cook",
@@ -181,6 +184,8 @@
 		{
 			"id": "front_door",
 			"role": "door",
+			"style": "generic",
+			"variant": "default",
 			"pos": [
 				1.5,
 				0,

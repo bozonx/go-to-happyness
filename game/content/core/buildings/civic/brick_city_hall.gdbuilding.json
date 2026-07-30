@@ -1,10 +1,11 @@
 {
-	"version": 6,
+	"version": 7,
 	"id": "brick_city_hall",
 	"role": "brick_city_hall",
+	"style": "generic",
+	"variant": "default",
 	"name": "Кирпичная ратуша",
 	"construction_style": "surface",
-	"era": "brick",
 	"grid_bounds": {
 		"x": 7,
 		"y": 1,
@@ -562,6 +563,8 @@
 			"id": "main",
 			"name": "Помещение",
 			"role": "room",
+			"style": "generic",
+			"variant": "default",
 			"function": "core:civic",
 			"properties": {
 				"profession": "official",
@@ -585,6 +588,8 @@
 		{
 			"id": "front_door",
 			"role": "door",
+			"style": "generic",
+			"variant": "default",
 			"pos": [
 				3.5,
 				0,

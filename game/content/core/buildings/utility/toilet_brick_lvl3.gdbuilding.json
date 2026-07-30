@@ -1,10 +1,11 @@
 {
-	"version": 6,
+	"version": 7,
 	"id": "toilet_brick_lvl3",
 	"role": "toilet_brick_lvl3",
+	"style": "generic",
+	"variant": "default",
 	"name": "Кирпичный туалет ур. 3",
 	"construction_style": "surface",
-	"era": "brick",
 	"grid_bounds": {
 		"x": 3,
 		"y": 1,
@@ -122,6 +123,8 @@
 			"id": "main",
 			"name": "Помещение",
 			"role": "room",
+			"style": "generic",
+			"variant": "default",
 			"function": "core:workplace",
 			"properties": {
 				"profession": "craftsman",
@@ -145,6 +148,8 @@
 		{
 			"id": "front_door",
 			"role": "door",
+			"style": "generic",
+			"variant": "default",
 			"pos": [
 				1.5,
 				0,

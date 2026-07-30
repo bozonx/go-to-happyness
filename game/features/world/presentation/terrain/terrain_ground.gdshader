@@ -113,14 +113,6 @@ void fragment() {
 	if (edge_distances.w + (1.0 - edge_enabled.w) * 10000.0 < bevel_distance) { bevel_normal = bevel_view_3; }
 	vec3 edge_target = mix(smooth_view_normal, bevel_normal.xyz, edge_bevel * bevel_normal.w);
 	NORMAL = normalize(mix(NORMAL, edge_target, normal_blend));
-	if (render_mode_idx > 0.5 && render_mode_idx < 1.5) {
-		// Mode 1: Matte / Clay - neutral flat surface for inspecting slopes & geometry
-		ALBEDO = vec3(0.68, 0.67, 0.65);
-		ROUGHNESS = 0.95;
-		SPECULAR = 0.15;
-		return;
-	}
-
 	vec2 tile_uv = world_position.xz / tile_size;
 
 	// Sample positions are cell CENTRES, so the four taps around a fragment are
@@ -202,8 +194,14 @@ void fragment() {
 	vec3 detailed_world_normal = normalize(cotangent_frame(geometric_world_normal, world_position, tile_uv) * normal_map);
 	NORMAL = normalize((VIEW_MATRIX * vec4(detailed_world_normal, 0.0)).xyz);
 
-	ALBEDO = albedo;
-	ROUGHNESS = mix(0.95, 0.75, snow);
-	SPECULAR = 0.15;
+	if (render_mode_idx > 0.5 && render_mode_idx < 1.5) {
+		// Mode 1: Matte / Clay - neutral flat surface for inspecting slopes & geometry.
+		ALBEDO = vec3(0.68, 0.67, 0.65);
+		ROUGHNESS = 0.95;
+		SPECULAR = 0.15;
+	} else {
+		ALBEDO = albedo;
+		ROUGHNESS = mix(0.95, 0.75, snow);
+		SPECULAR = 0.15;
+	}
 }
-

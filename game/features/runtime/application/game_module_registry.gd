@@ -41,4 +41,12 @@ static func validate_definition(definition: GameDefinition) -> Array[String]:
 	for module_id: StringName in definition.module_ids:
 		if not has_module(module_id):
 			errors.append("неизвестный модуль %s" % module_id)
+	var seen_eras: Dictionary = {}
+	for era: EraDefinition in definition.progression.eras:
+		if seen_eras.has(era.id):
+			errors.append("дубликат эры %s" % era.id)
+		seen_eras[era.id] = true
+		for next_era: StringName in era.next_eras:
+			if definition.progression.era_by_id(next_era) == null:
+				errors.append("эра %s ссылается на неизвестную следующую эру %s" % [era.id, next_era])
 	return errors

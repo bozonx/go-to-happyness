@@ -79,13 +79,6 @@ void fragment() {
 	if (edge_distances.w + (1.0 - edge_enabled.w) * 10000.0 < bevel_distance) { bevel_normal = bevel_view_3; }
 	vec3 edge_target_view = mix(smooth_view_normal, bevel_normal.xyz, edge_bevel * bevel_normal.w);
 	NORMAL = normalize(mix(NORMAL, edge_target_view, normal_blend));
-	if (render_mode_idx > 0.5 && render_mode_idx < 1.5) {
-		// Mode 1: Matte / Clay - cliff face shade
-		ALBEDO = vec3(0.55, 0.54, 0.52);
-		ROUGHNESS = 0.98;
-		SPECULAR = 0.1;
-		return;
-	}
 	vec3 bevel_world_normal = normalize((INV_VIEW_MATRIX * vec4(bevel_normal.xyz, 0.0)).xyz);
 	vec3 edge_target_world = mix(smooth_world_normal, bevel_world_normal, edge_bevel * bevel_normal.w);
 	vec3 blend = abs(normalize(mix(world_normal, edge_target_world, normal_blend)));
@@ -100,7 +93,14 @@ void fragment() {
 	vec3 y_plane = texture(surface_textures, vec3(uv.xz, layer_index)).rgb;
 	vec3 z_plane = texture(surface_textures, vec3(uv.xy, layer_index)).rgb;
 
-	ALBEDO = (x_plane * blend.x + y_plane * blend.y + z_plane * blend.z) * face_shade;
-	ROUGHNESS = 0.98;
-	SPECULAR = 0.1;
+	if (render_mode_idx > 0.5 && render_mode_idx < 1.5) {
+		// Mode 1: Matte / Clay - cliff face shade.
+		ALBEDO = vec3(0.55, 0.54, 0.52);
+		ROUGHNESS = 0.98;
+		SPECULAR = 0.1;
+	} else {
+		ALBEDO = (x_plane * blend.x + y_plane * blend.y + z_plane * blend.z) * face_shade;
+		ROUGHNESS = 0.98;
+		SPECULAR = 0.1;
+	}
 }

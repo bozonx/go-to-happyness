@@ -62,7 +62,7 @@ static func _test_catalog_queries_respect_scope() -> void:
 		# creatures, ambient), but never the other way around.
 		assert(int(building_counts[category_id]) <= int(unfiltered_counts[category_id]))
 
-	var scoped := WorldAssetCatalog.filter_assets(&"", &"", &"", WorldAssetDef.SCOPE_MAP)
+	var scoped := WorldAssetCatalog.filter_assets(&"", &"", WorldAssetDef.SCOPE_MAP)
 	assert(scoped.size() == all_assets.size())
 	assert(WorldAssetCatalog.all_tags(WorldAssetDef.SCOPE_MAP) == WorldAssetCatalog.all_tags())
 

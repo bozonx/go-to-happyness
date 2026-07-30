@@ -1,10 +1,11 @@
 {
-	"version": 6,
+	"version": 7,
 	"id": "clay_cottage",
 	"role": "clay_cottage",
+	"style": "generic",
+	"variant": "default",
 	"name": "Глиняный дом",
 	"construction_style": "surface",
-	"era": "clay",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,
@@ -298,6 +299,8 @@
 			"id": "home",
 			"name": "Жилое помещение",
 			"role": "room",
+			"style": "generic",
+			"variant": "default",
 			"function": "core:housing",
 			"properties": {
 				"residents": 6
@@ -320,6 +323,8 @@
 		{
 			"id": "front_door",
 			"role": "door",
+			"style": "generic",
+			"variant": "default",
 			"pos": [
 				2.5,
 				0,

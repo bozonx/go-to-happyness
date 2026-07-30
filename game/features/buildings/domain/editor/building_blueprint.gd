@@ -15,19 +15,18 @@ const DecorObjectRecordScript = preload("res://game/features/buildings/domain/ed
 const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
 const ContentIdScript = preload("res://game/features/content/domain/content_id.gd")
 
-const FORMAT_VERSION := 6
-const MIN_LOAD_VERSION := FORMAT_VERSION
+const FORMAT_VERSION := 7
 const FILE_EXTENSION := "gdbuilding.json"
 
 var version: int = FORMAT_VERSION
 ## `id` doubles as the in-game building_type key (e.g. "campfire"); the resolver
 ## maps a gameplay building_type to the blueprint file whose id matches.
 var id: StringName = &"new_building"
-## Gameplay identity, availability era and visual variant are deliberately
-## independent from the file id (content_packaging.md §3).
+## Gameplay identity and visual selection are deliberately independent from the
+## file id. Availability and upgrade rules belong to a game progression graph.
 var role: StringName = &"new_building"
-var era: StringName = &"tent"
 var style: StringName = &"generic"
+var variant: StringName = &"default"
 var kind: StringName = &"building"
 var name: String = "Новое здание"
 ## Stamp rewritten on every save, exactly like a map package's (design_docs/engine/
@@ -35,16 +34,6 @@ var name: String = "Новое здание"
 ## session can tell the player the file was edited since — it never blocks loading.
 var revision: String = ""
 var construction_style: StringName = &"surface"  ## &"surface" | &"underground"
-## @deprecated. Source compatibility for the first editor prototype. It is not
-## serialized. Use `construction_style` directly in new code.
-var building_type: String:
-	get: return String(construction_style)
-	set(value): construction_style = StringName(value)
-## Compatibility alias for the pre-v4 editor and construction code. New content
-## is serialized as `era`; callers can migrate at their own pace.
-var category: StringName:
-	get: return era
-	set(value): era = value
 var grid_bounds: Vector3i = Vector3i(8, 4, 8)
 
 ## Footprint on the settlement board. Entrances are **not** stored: they are the
@@ -198,8 +187,8 @@ func to_dict() -> Dictionary:
 		"version": FORMAT_VERSION,
 		"id": String(id),
 		"role": String(role),
-		"era": String(era),
 		"style": String(style),
+		"variant": String(variant),
 		"kind": String(kind),
 		"name": name,
 		"revision": revision,
@@ -227,15 +216,14 @@ func to_json() -> String:
 
 
 static func from_dict(data: Dictionary) -> BuildingBlueprint:
+	if int(data.get("version", 0)) != FORMAT_VERSION:
+		return null
 	var bp := BuildingBlueprint.new()
-	# Old versions (<= FORMAT_VERSION) are migrated up; versions above the
-	# current format are preserved so validation_errors() can reject them.
-	var authored_version := int(data.get("version", FORMAT_VERSION))
-	bp.version = FORMAT_VERSION if authored_version <= FORMAT_VERSION else authored_version
+	bp.version = FORMAT_VERSION
 	bp.id = StringName(data.get("id", "new_building"))
 	bp.role = StringName(data.get("role", bp.id))
-	bp.era = StringName(data.get("era", "tent"))
 	bp.style = StringName(data.get("style", "generic"))
+	bp.variant = StringName(data.get("variant", "default"))
 	bp.kind = StringName(data.get("kind", "building"))
 	bp.name = String(data.get("name", "Новое здание"))
 	bp.revision = String(data.get("revision", ""))
@@ -350,7 +338,7 @@ func content_revision() -> String:
 
 func validation_errors() -> Array[String]:
 	var errors: Array[String] = []
-	if version < MIN_LOAD_VERSION or version > FORMAT_VERSION:
+	if version != FORMAT_VERSION:
 		errors.append("Unsupported blueprint format version: %d" % version)
 	if not _valid_id(String(id)):
 		errors.append("Blueprint id must contain only lowercase latin letters, digits, '_' or '-'")
@@ -360,15 +348,12 @@ func validation_errors() -> Array[String]:
 		errors.append("Unknown construction_style: %s" % construction_style)
 	if not _valid_id(String(role)):
 		errors.append("Invalid blueprint role: %s" % role)
-	if era not in BuildingMaterialCatalogScript.ERA_ORDER:
-		errors.append("Unknown era: %s" % era)
 	if not _valid_id(String(style)):
 		errors.append("Invalid blueprint style: %s" % style)
+	if not _valid_id(String(variant)):
+		errors.append("Invalid blueprint variant: %s" % variant)
 	if kind not in [&"building", &"scenery"]:
 		errors.append("Unknown blueprint kind: %s" % kind)
-	# Underground structures can only be dug from the earth era onward.
-	elif construction_style == &"underground" and BuildingMaterialCatalogScript.era_rank(era) < BuildingMaterialCatalogScript.era_rank(&"earth"):
-		errors.append("Underground construction requires the earth era or later")
 	if grid_bounds.x <= 0 or grid_bounds.y <= 0 or grid_bounds.z <= 0:
 		errors.append("grid_bounds must be positive")
 	if footprint.x <= 0 or footprint.y <= 0:
@@ -379,8 +364,6 @@ func validation_errors() -> Array[String]:
 			errors.append("Unknown block id: %s" % block.block_id)
 		if not BuildingMaterialCatalogScript.has_material(block.material_id):
 			errors.append("Unknown material id: %s" % block.material_id)
-		elif not BuildingMaterialCatalogScript.is_available_in_era(block.material_id, era):
-			errors.append("Material %s requires a later era than %s" % [block.material_id, era])
 		var normalized_variant := BuildingBlockCatalogScript.normalize_variant(block.block_id, block.variant)
 		if block.variant != &"" and normalized_variant != block.variant:
 			errors.append("Unknown size %s for block %s" % [block.variant, block.block_id])

@@ -8,5 +8,6 @@
   "clock": "realtime_pauseable",
   "input_profile": "rts",
   "ui_layout": "",
-  "start": {}
+  "start": {"modules": {}},
+  "progression": {"eras": [], "technologies": {}}
 }

@@ -6,6 +6,11 @@ extends RefCounted
 
 var era_id: StringName = &"tent"
 var era_type: int = 0 # Matches SettlementState.Era.TENT
+var progression_mode: StringName = &"inherit"
+var allowed_eras: Array[StringName] = []
+var allowed_era_types: Array[int] = []
+var era_names: Dictionary = {}
+var progression_enabled := true
 ## Atmosphere and vegetation defaults. Since maps arrived the biome no longer
 ## owns the ground: relief comes from `map_document` (map_editor.md §14.1).
 var biome_id: StringName = &"summer_valley"
@@ -15,7 +20,7 @@ var biome_id: StringName = &"summer_valley"
 var world_style: StringName = &"generic"
 
 ## The map this session runs on, as a runtime key (`core:green_valley` or
-## `user:green_valley`). A playable session always has a map.
+## `pack:author.pack/green_valley`). A playable session always has a map.
 var map_ref: StringName = &"core:green_valley"
 ## The loaded package. `RuntimeLaunchManager` fills it from `map_ref` before the
 ## scene changes, so the bootstrap never waits on disk mid-startup.
@@ -45,13 +50,11 @@ func board_cells() -> int:
 	return map_document.board_cells() if map_document != null else 0
 
 
-## Applies whatever the map states over the era defaults. Fields the map omits are
-## left exactly as the era config set them (§7).
+## Applies game-neutral world properties authored by the map.
 func apply_map_start() -> void:
 	if map_document == null:
 		return
 	var start := map_document.meta.start
-	era_id = start.era
 	world_style = start.style
 
 

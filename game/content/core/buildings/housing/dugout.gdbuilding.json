@@ -1,10 +1,11 @@
 {
-	"version": 6,
+	"version": 7,
 	"id": "dugout",
 	"role": "dugout",
+	"style": "generic",
+	"variant": "default",
 	"name": "Землянка",
 	"construction_style": "underground",
-	"era": "earth",
 	"grid_bounds": {
 		"x": 4,
 		"y": 1,
@@ -199,6 +200,8 @@
 			"id": "home",
 			"name": "Жилое помещение",
 			"role": "room",
+			"style": "generic",
+			"variant": "default",
 			"function": "core:housing",
 			"properties": {
 				"residents": 4
@@ -221,6 +224,8 @@
 		{
 			"id": "front_door",
 			"role": "door",
+			"style": "generic",
+			"variant": "default",
 			"pos": [
 				2.0,
 				0,

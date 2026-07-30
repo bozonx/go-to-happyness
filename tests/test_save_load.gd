@@ -45,7 +45,7 @@ static func run_all() -> void:
 		],
 		"buildings": [{
 			"cell": {"x": 4, "y": 7},
-			"building_type": "user:test_house",
+			"building_type": "pack:test_author.test_pack/test_house",
 			"position": {"x": 4.0, "y": 0.0, "z": 7.0},
 			"rotation_y": 90.0,
 			"blueprint_ref": {

@@ -24,6 +24,7 @@ var build_buttons: Array[Button] = []
 var build_item_buttons: Array[Button] = []
 var role_buttons: Array[Button] = []
 var custom_build_buttons: Array[Button] = []
+var era_category_buttons: Dictionary = {}
 
 
 func _ready() -> void:
@@ -69,6 +70,15 @@ func add_build_category_button(title: String, category: String, y_position: floa
 	add_child(button)
 	build_buttons.append(button)
 	button.set_meta("category_button", category)
+	if category != "custom":
+		era_category_buttons[StringName(category)] = button
+
+
+func apply_era_names(names: Dictionary) -> void:
+	for era_id: Variant in names:
+		var button := era_category_buttons.get(StringName(era_id)) as Button
+		if button != null:
+			button.text = String(names[era_id])
 
 
 func add_build_category_back_button() -> void:
@@ -123,12 +133,12 @@ func _create_buttons() -> void:
 	add_role_button("Assign: employment officer", "official", 408, false, "job")
 
 	# Era category buttons (shown on main build menu)
-	add_build_category_button("Tent era", "tent", 136)
-	add_build_category_button("Earth era", "earth", 170)
-	add_build_category_button("Clay era", "clay", 204)
-	add_build_category_button("Wood era", "wood", 238)
-	add_build_category_button("Stone era", "stone", 272)
-	add_build_category_button("Brick era", "brick", 306)
+	add_build_category_button("tent", "tent", 136)
+	add_build_category_button("earth", "earth", 170)
+	add_build_category_button("clay", "clay", 204)
+	add_build_category_button("wood", "wood", 238)
+	add_build_category_button("stone", "stone", 272)
+	add_build_category_button("brick", "brick", 306)
 	add_build_category_button("Custom buildings", "custom", 340)
 	add_build_category_back_button()
 

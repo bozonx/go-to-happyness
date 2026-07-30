@@ -449,6 +449,8 @@ func start_session(active_config: GameLaunchConfig) -> void:
 		return
 	board_cells = launch_config.board_cells()
 	SettlementBootstrapper.new().run(self)
+	if ui_manager != null and ui_manager.build_menu != null:
+		ui_manager.build_menu.apply_era_names(launch_config.era_names)
 func next_registration_ticket() -> int:
 	return citizen_registration_service.next_registration_ticket() if citizen_registration_service != null else 0
 

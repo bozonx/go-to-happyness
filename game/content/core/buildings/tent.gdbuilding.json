@@ -1,9 +1,8 @@
 {
-	"version": 6,
+	"version": 7,
 	"id": "tent",
 	"name": "Временная палатка на 4 жителя",
 	"construction_style": "surface",
-	"era": "tent",
 	"grid_bounds": {
 		"x": 4,
 		"y": 2,
@@ -182,6 +181,10 @@
 		{
 			"id": "door",
 			"role": "door",
+			"style": "generic",
+			"variant": "default",
+			"style": "generic",
+			"variant": "default",
 			"pos": [
 				2.0,
 				0.0,

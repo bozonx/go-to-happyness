@@ -53,7 +53,7 @@ var _layer_label: Label = null
 var _count_label: Label = null
 var _footprint_x_spin: SpinBox = null
 var _footprint_z_spin: SpinBox = null
-var _category_option: OptionButton = null
+var _variant_edit: LineEdit = null
 ## `construction_style` (surface / underground), not the visual style below.
 var _style_option: OptionButton = null
 var _role_edit: LineEdit = null
@@ -100,7 +100,7 @@ func setup(editor: Node) -> void:
 	_count_label = editor.get_node("%CountLabel")
 	_footprint_x_spin = editor.get_node("%FootprintXSpin")
 	_footprint_z_spin = editor.get_node("%FootprintZSpin")
-	_category_option = editor.get_node("%CategoryOption")
+	_variant_edit = editor.get_node("%VariantEdit")
 	_style_option = editor.get_node("%StyleOption")
 	_role_edit = editor.get_node("%RoleEdit")
 	_visual_style_edit = editor.get_node("%VisualStyleEdit")
@@ -121,18 +121,13 @@ func setup(editor: Node) -> void:
 
 	_build_palette_blocks()
 
-	_category_option.clear()
-	for category_id in BuildingMaterialCatalog.ERA_ORDER:
-		_category_option.add_item(category_id.capitalize())
-		_category_option.set_item_metadata(_category_option.item_count - 1, category_id)
-	_category_option.item_selected.connect(_on_era_changed)
 	_footprint_x_spin.value_changed.connect(_on_footprint_changed)
 	_footprint_z_spin.value_changed.connect(_on_footprint_changed)
 
 	_style_option.clear()
 	for style_info in [
 		{"id": &"surface", "label": "Наземная"},
-		{"id": &"underground", "label": "Подземная (с земляной эры)"},
+		{"id": &"underground", "label": "Подземная"},
 	]:
 		_style_option.add_item(style_info["label"])
 		_style_option.set_item_metadata(_style_option.item_count - 1, style_info["id"])
@@ -144,7 +139,7 @@ func setup(editor: Node) -> void:
 	# The alphabet is enforced as the author types rather than at save time
 	# (content_packaging.md §3.3): a field that silently drops what you typed is
 	# still better than a file named `untitled_building` discovered later.
-	for field: LineEdit in [_editor._id_edit, _role_edit, _visual_style_edit]:
+	for field: LineEdit in [_editor._id_edit, _role_edit, _visual_style_edit, _variant_edit]:
 		if field != null:
 			field.text_changed.connect(_on_id_like_field_changed.bind(field))
 
@@ -785,7 +780,7 @@ func select_anchor(anchor: int) -> void:
 
 
 # ---------------------------------------------------------------------------
-# Material / era
+# Material
 # ---------------------------------------------------------------------------
 
 func rebuild_material_options() -> void:
@@ -793,89 +788,18 @@ func rebuild_material_options() -> void:
 		return
 	_material_option.clear()
 	var current_ok := false
-	for material in BuildingMaterialCatalog.materials_for_era(_editor.blueprint.category):
+	for material in BuildingMaterialCatalog.all():
 		_material_option.add_item(material["name"])
 		_material_option.set_item_metadata(_material_option.item_count - 1, material["id"])
 		if material["id"] == _editor.current_material_id:
 			current_ok = true
 	if not current_ok:
-		_editor.current_material_id = BuildingMaterialCatalog.default_material_for_era(_editor.blueprint.category)
+		_editor.current_material_id = BuildingMaterialCatalog.DEFAULT_ID
 	for i in _material_option.item_count:
 		if _material_option.get_item_metadata(i) == _editor.current_material_id:
 			_material_option.select(i)
 			break
 	refresh_ghost()
-
-
-func _on_era_changed(index: int) -> void:
-	var target_era: StringName = StringName(_category_option.get_item_metadata(index))
-	if target_era == _editor.blueprint.category:
-		return
-
-	var offenders := _get_offending_blocks(target_era)
-	if not offenders.is_empty():
-		var default_mat := BuildingMaterialCatalog.default_material_for_era(target_era)
-		var mat_info := BuildingMaterialCatalog.get_material(default_mat)
-		var default_mat_name: String = String(mat_info.get("name", str(default_mat)))
-
-		var user_confirmed := await _confirm_era_material_replacement(target_era, offenders.size(), default_mat_name)
-		if not user_confirmed:
-			select_category_in_option(_editor.blueprint.category)
-			_editor.set_status("Смена эры отменена.")
-			return
-
-		for block in offenders:
-			block.material_id = default_mat
-		rebuild_all_block_nodes()
-		_editor.grid_model.write_to_blueprint(_editor.blueprint)
-		_editor.blueprint.recalculate_construction_cost()
-
-	_editor.blueprint.category = target_era
-	_editor.mark_dirty()
-	rebuild_material_options()
-	refresh_underground_availability()
-	if not offenders.is_empty():
-		_editor.set_status("Эра изменена на %s (%d блоков заменено)." % [_editor.blueprint.category, offenders.size()])
-	else:
-		_editor.set_status("Эра: %s." % _editor.blueprint.category)
-
-
-func _get_offending_blocks(target_era: StringName) -> Array[BlueprintBlock]:
-	var offenders: Array[BlueprintBlock] = []
-	for block in _editor.grid_model.all_blocks():
-		if not BuildingMaterialCatalog.is_available_in_era(block.material_id, target_era):
-			offenders.append(block)
-	return offenders
-
-
-func _confirm_era_material_replacement(target_era: StringName, count: int, default_mat_name: String) -> bool:
-	var dialog := ConfirmationDialog.new()
-	dialog.title = "Автозамена материалов блоков"
-	dialog.dialog_text = "В здании %d блок(ов) используют материалы, недоступные в эре «%s».\nЗаменить их автоматически на «%s»?" % [count, target_era, default_mat_name]
-	dialog.ok_button_text = "Заменить"
-	dialog.cancel_button_text = "Отмена"
-	return await _editor._run_confirmation_dialog(dialog, Vector2i(420, 140))
-
-
-func select_category_in_option(category: StringName) -> void:
-	if _category_option != null:
-		for i in _category_option.item_count:
-			if _category_option.get_item_metadata(i) == category:
-				_category_option.select(i)
-				break
-
-
-func refresh_underground_availability() -> void:
-	if _style_option == null:
-		return
-	var earth_rank := BuildingMaterialCatalog.era_rank(&"earth")
-	var allowed := BuildingMaterialCatalog.era_rank(_editor.blueprint.category) >= earth_rank
-	for i in _style_option.item_count:
-		if _style_option.get_item_metadata(i) == &"underground":
-			_style_option.set_item_disabled(i, not allowed)
-	if not allowed and _editor.blueprint.construction_style == &"underground":
-		_editor.blueprint.construction_style = &"surface"
-		select_style_in_option(&"surface")
 
 
 func select_style_in_option(style: StringName) -> void:
@@ -1305,6 +1229,8 @@ func sync_metadata_fields() -> void:
 		_role_edit.text = String(_editor.blueprint.role)
 	if _visual_style_edit != null:
 		_visual_style_edit.text = String(_editor.blueprint.style)
+	if _variant_edit != null:
+		_variant_edit.text = String(_editor.blueprint.variant)
 	refresh_path_hint()
 	if _footprint_x_spin != null:
 		_footprint_x_spin.value = _editor.blueprint.footprint.x
@@ -1318,14 +1244,8 @@ func sync_metadata_fields() -> void:
 			var offset := _editor.blueprint.entrance_offset()
 			_editor._entrance_label.text = "Из двери «%s», смещение %d × %d от центра." % [
 				doors[0].id, offset.x, offset.y]
-	if _category_option != null:
-		for i in _category_option.item_count:
-			if _category_option.get_item_metadata(i) == _editor.blueprint.category:
-				_category_option.select(i)
-				break
 	select_style_in_option(_editor.blueprint.construction_style)
 	rebuild_material_options()
-	refresh_underground_availability()
 	_editor._syncing_metadata_fields = false
 	_update_count()
 	refresh_building_grid_visuals()
@@ -1381,8 +1301,9 @@ func collect_metadata_from_ui() -> void:
 	if _visual_style_edit != null:
 		var raw_style := ContentId.normalize_id(_visual_style_edit.text)
 		_editor.blueprint.style = StringName(raw_style) if not raw_style.is_empty() else &"generic"
-	if _category_option != null:
-		_editor.blueprint.category = StringName(_category_option.get_item_metadata(_category_option.selected))
+	if _variant_edit != null:
+		var raw_variant := ContentId.normalize_id(_variant_edit.text)
+		_editor.blueprint.variant = StringName(raw_variant) if not raw_variant.is_empty() else &"default"
 	if _footprint_x_spin != null and _footprint_z_spin != null:
 		_editor.blueprint.footprint = Vector2i(int(_footprint_x_spin.value), int(_footprint_z_spin.value))
 	_editor.grid_model.write_to_blueprint(_editor.blueprint)

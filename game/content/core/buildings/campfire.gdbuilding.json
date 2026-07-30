@@ -1,9 +1,8 @@
 {
-	"version": 6,
+	"version": 7,
 	"id": "campfire",
 	"name": "Главный костер ур. 1",
 	"construction_style": "surface",
-	"era": "tent",
 	"grid_bounds": {
 		"x": 5,
 		"y": 2,
@@ -21,6 +20,10 @@
 		{
 			"id": "door",
 			"role": "door",
+			"style": "generic",
+			"variant": "default",
+			"style": "generic",
+			"variant": "default",
 			"pos": [
 				2.5,
 				0.0,

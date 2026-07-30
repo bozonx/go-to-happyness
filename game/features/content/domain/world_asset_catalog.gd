@@ -7,12 +7,10 @@ extends RefCounted
 ## Assets come from three sources, merged by id (later sources win):
 ##   1. the built-in definitions below;
 ##   2. `WorldAssetDef` resources under `res://game/features/buildings/data/decor`;
-##   3. player-authored resources under `user://custom_decor`.
-
-const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
+## Player-authored asset definitions will be loaded from project packs when their
+## JSON format and editor are introduced; there is no second loose-file source.
 
 const BUILTIN_ASSET_DIR := "res://game/features/buildings/data/decor"
-const CUSTOM_ASSET_DIR := "user://custom_decor"
 const SCENE_DIR := "res://game/features/buildings/presentation/decor/scenes"
 
 const GROUPS: Dictionary = {
@@ -59,12 +57,6 @@ const CATEGORIES: Dictionary = {
 	&"roof_decor": {"name": "Декор крыш", "group": &"architecture"},
 }
 
-## Map old category ids to new ones for backward compatibility.
-const MIGRATED_CATEGORIES: Dictionary = {
-	&"furniture": &"tables_seating",
-	&"lighting": &"lighting",
-}
-
 static var _assets: Dictionary = {}
 
 
@@ -101,12 +93,6 @@ static func get_asset(id: StringName) -> WorldAssetDef:
 static func has_asset(id: StringName) -> bool:
 	_ensure_catalog()
 	return _assets.has(id)
-
-
-## Returns the migrated category for a legacy category id, or the original
-## category if no migration is needed.
-static func migrate_category(category_id: StringName) -> StringName:
-	return MIGRATED_CATEGORIES.get(category_id, category_id)
 
 
 ## How many assets each category holds — the editor greys out empty categories
@@ -187,31 +173,11 @@ static func all_tags(scope: StringName = &"") -> Array[StringName]:
 	return tags
 
 
-## Filter assets by era (design §5.2). Returns all assets if era is empty.
-## An asset is available when its `available_from_era` rank is at or below the
-## selected era's rank — cumulative progression, not exact equality.
-static func get_assets_by_era(era: StringName, scope: StringName = &"") -> Array[WorldAssetDef]:
-	_ensure_catalog()
-	if era == &"":
-		return get_all_assets(scope)
-	var era_rank := BuildingMaterialCatalogScript.era_rank(era)
-	var list: Array[WorldAssetDef] = []
-	for asset: WorldAssetDef in _assets.values():
-		if not asset.is_in_scope(scope):
-			continue
-		if asset.available_from_era == &"":
-			list.append(asset)
-		elif BuildingMaterialCatalogScript.era_rank(asset.available_from_era) <= era_rank:
-			list.append(asset)
-	return list
-
-
 ## Combined filter for catalog UI (design §5.2).
 ## Empty / null filters are ignored.
 static func filter_assets(
 	p_category: StringName = &"",
 	p_tag: StringName = &"",
-	p_era: StringName = &"",
 	p_scope: StringName = &""
 ) -> Array[WorldAssetDef]:
 	_ensure_catalog()
@@ -223,9 +189,6 @@ static func filter_assets(
 			continue
 		if p_tag != &"" and not (p_tag in asset.tags):
 			continue
-		if p_era != &"" and asset.available_from_era != &"":
-			if BuildingMaterialCatalogScript.era_rank(asset.available_from_era) > BuildingMaterialCatalogScript.era_rank(p_era):
-				continue
 		list.append(asset)
 	list.sort_custom(func(a: WorldAssetDef, b: WorldAssetDef) -> bool:
 		return a.name.naturalnocasecmp_to(b.name) < 0)
@@ -244,7 +207,6 @@ static func _ensure_catalog() -> void:
 		return
 	_register_builtin_assets()
 	_scan_directory(BUILTIN_ASSET_DIR)
-	_scan_directory(CUSTOM_ASSET_DIR)
 
 
 static func _scan_directory(dir_path: String) -> void:
@@ -262,9 +224,6 @@ static func _scan_directory(dir_path: String) -> void:
 		if asset == null or asset.id == &"":
 			push_warning("WorldAssetCatalog: skipped invalid asset %s" % clean_name)
 			continue
-		# Migrate legacy category names so old custom assets still load.
-		if MIGRATED_CATEGORIES.has(asset.category):
-			asset.category = MIGRATED_CATEGORIES[asset.category]
 		if not CATEGORIES.has(asset.category):
 			push_warning("WorldAssetCatalog: asset %s has unknown category %s" % [asset.id, asset.category])
 			continue
@@ -318,7 +277,6 @@ static func _register_builtin_assets() -> void:
 	# Additional metadata for campfire
 	var campfire := _assets[&"campfire"] as WorldAssetDef
 	campfire.tags = [&"fire", &"light", &"cooking", &"outdoor"]
-	campfire.available_from_era = &"tent"
 	campfire.scale_mode = WorldAssetDef.SCALE_LOCKED
 	campfire.collision_policy = WorldAssetDef.COLLISION_FOOTPRINT
 	campfire.blocking_navigation = true
@@ -368,7 +326,6 @@ static func _register_builtin_assets() -> void:
 	))
 	var cooking := _assets[&"cooking_campfire"] as WorldAssetDef
 	cooking.tags = [&"fire", &"light", &"cooking", &"outdoor"]
-	cooking.available_from_era = &"tent"
 	cooking.scale_mode = WorldAssetDef.SCALE_LOCKED
 	cooking.collision_policy = WorldAssetDef.COLLISION_FOOTPRINT
 	cooking.blocking_navigation = true
@@ -412,7 +369,6 @@ static func _register_builtin_assets() -> void:
 	))
 	var sign := _assets[&"entrance_sign"] as WorldAssetDef
 	sign.tags = [&"sign", &"town", &"light"]
-	sign.available_from_era = &"tent"
 	sign.scale_mode = WorldAssetDef.SCALE_LOCKED
 	sign.collision_policy = WorldAssetDef.COLLISION_BOX
 	sign.blocking_navigation = true
@@ -462,7 +418,6 @@ static func _register_builtin_assets() -> void:
 	))
 	var flag := _assets[&"flag"] as WorldAssetDef
 	flag.tags = [&"town", &"sign"]
-	flag.available_from_era = &"tent"
 	flag.scale_mode = WorldAssetDef.SCALE_UNIFORM_STEPS
 	flag.allowed_scales = [0.5, 1.0, 2.0]
 	flag.collision_policy = WorldAssetDef.COLLISION_BOX
@@ -496,7 +451,6 @@ static func _register_builtin_assets() -> void:
 	))
 	var backpack := _assets[&"backpack"] as WorldAssetDef
 	backpack.tags = [&"storage", &"equipment", &"outdoor", &"camping"]
-	backpack.available_from_era = &"tent"
 	backpack.scale_mode = WorldAssetDef.SCALE_UNIFORM_STEPS
 	backpack.allowed_scales = [0.8, 1.0, 1.2, 1.5]
 	backpack.collision_policy = WorldAssetDef.COLLISION_BOX

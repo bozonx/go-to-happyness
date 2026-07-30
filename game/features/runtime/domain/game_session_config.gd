@@ -22,24 +22,38 @@ static func create(
 	session.map_ref = p_map_ref
 	session.map_document = p_map_document
 	session.module_parameters = _default_module_parameters(p_definition)
+	if p_map_document != null:
+		_merge_module_parameters(session.module_parameters, p_map_document.meta.start.module_settings)
 	for module_id: Variant in p_module_parameters:
 		var supplied: Variant = p_module_parameters[module_id]
-		if supplied is Dictionary and session.module_parameters.get(module_id, {}) is Dictionary:
-			var merged: Dictionary = (session.module_parameters[module_id] as Dictionary).duplicate(true)
-			merged.merge(supplied as Dictionary, true)
-			session.module_parameters[module_id] = merged
-		else:
-			session.module_parameters[module_id] = supplied.duplicate(true) if supplied is Dictionary else supplied
+		_merge_module_parameter(session.module_parameters, module_id, supplied)
 	return session
 
 
-## Phase-A definitions have one flat `start` object. It belongs to the gameplay
-## module(s), never to `core.world`; every launch route must apply it identically.
 static func _default_module_parameters(definition: GameDefinition) -> Dictionary:
-	var result := {}
-	if definition == null or definition.start_parameters.is_empty():
-		return result
-	for module_id: StringName in definition.module_ids:
-		if module_id != &"core.world":
-			result[module_id] = definition.start_parameters.duplicate(true)
-	return result
+	return definition.start_module_parameters.duplicate(true) if definition != null else {}
+
+
+static func _merge_module_parameters(target: Dictionary, supplied: Dictionary) -> void:
+	for module_id: Variant in supplied:
+		_merge_module_parameter(target, module_id, supplied[module_id])
+
+
+static func _merge_module_parameter(target: Dictionary, module_id: Variant, supplied: Variant) -> void:
+	if supplied is Dictionary and target.get(module_id, {}) is Dictionary:
+		var merged: Dictionary = (target.get(module_id, {}) as Dictionary).duplicate(true)
+		_merge_dictionary(merged, supplied as Dictionary)
+		target[module_id] = merged
+	else:
+		target[module_id] = supplied.duplicate(true) if supplied is Dictionary else supplied
+
+
+static func _merge_dictionary(target: Dictionary, supplied: Dictionary) -> void:
+	for key: Variant in supplied:
+		var value: Variant = supplied[key]
+		if value is Dictionary and target.get(key, {}) is Dictionary:
+			var nested: Dictionary = (target.get(key, {}) as Dictionary).duplicate(true)
+			_merge_dictionary(nested, value as Dictionary)
+			target[key] = nested
+		else:
+			target[key] = value.duplicate(true) if value is Dictionary else value

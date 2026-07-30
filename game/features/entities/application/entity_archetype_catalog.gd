@@ -15,7 +15,7 @@ extends RefCounted
 ## without a commit in GDScript.
 
 const PACK_ROOTS: Array[String] = [
-	"res://game/content", "user://content/local", "user://content/installed",
+	"res://game/content", "user://content/projects", "user://content/installed",
 ]
 const ARCHETYPE_DIR := "archetypes"
 

@@ -78,9 +78,7 @@ static func json_safe_value(value: Variant) -> Variant:
 	return value
 
 
-## Deserializes a decor object from either v1 or v2 dictionary data.
-## v1 migration: `properties` → `appearance`, `anchor` is dropped (the final
-## `pos` already includes the anchor offset), `owner_zone` is added empty.
+## Deserializes an object from the current blueprint format.
 static func from_dict(data: Dictionary) -> DecorObjectRecord:
 	var record := DecorObjectRecord.new()
 	record.id = String(data.get("id", ""))
@@ -89,16 +87,8 @@ static func from_dict(data: Dictionary) -> DecorObjectRecord:
 	record.pos = _arr_to_vec3(data.get("pos", []), Vector3.ZERO)
 	record.rot = _arr_to_vec3(data.get("rot", []), Vector3.ZERO)
 	record.scale = _arr_to_vec3(data.get("scale", []), Vector3.ONE)
-	var raw_appearance: Variant = data.get("appearance", null)
-	if raw_appearance == null:
-		# v1 migration: properties → appearance
-		raw_appearance = data.get("properties", {})
+	var raw_appearance: Variant = data.get("appearance", {})
 	record.appearance = (raw_appearance as Dictionary).duplicate() if raw_appearance is Dictionary else {}
-	# v2 migration: is_lit → visual_flame_visible to avoid semantic clash with
-	# future runtime fire.lit (design_docs/engine/building_furnishing.md).
-	if record.appearance.has("is_lit"):
-		record.appearance["visual_flame_visible"] = record.appearance["is_lit"]
-		record.appearance.erase("is_lit")
 	return record
 
 
@@ -152,4 +142,3 @@ static func _arr_to_vec3(value: Variant, fallback: Vector3) -> Vector3:
 	if value is Array and value.size() >= 3:
 		return Vector3(float(value[0]), float(value[1]), float(value[2]))
 	return fallback
-

@@ -1,8 +1,9 @@
 {
-    "format_version": 1,
+    "format_version": 2,
     "id": "test_user_pack",
     "name": "Test user pack",
-    "author": "gth",
+    "author_id": "gth",
+    "author_name": "Go To Happyness",
     "version": "0.1.0",
     "revision": "test-1",
     "provides": { "styles": [] },

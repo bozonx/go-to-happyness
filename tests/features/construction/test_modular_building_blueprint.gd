@@ -11,13 +11,15 @@ const BuildingCatalogScript = preload("res://game/features/buildings/domain/buil
 const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
 
 const TEST_ID := &"_test_modular_pipeline"
+const TEST_PROJECT_ROOT := "user://content/projects/test_author.test_buildings"
+const TEST_SOURCE := &"pack:test_author.test_buildings"
 
 
 func _init() -> void:
+	_setup_project()
 	var blueprint := BlueprintScript.new()
 	blueprint.id = TEST_ID
 	blueprint.name = "Test modular workshop"
-	blueprint.category = "earth"
 	blueprint.footprint = Vector2i(2, 1)
 	blueprint.grid_bounds = Vector3i(2, 1, 1)
 	blueprint.blocks = [
@@ -44,25 +46,25 @@ func _init() -> void:
 	door.pos = Vector3(0.5, 0.0, 0.0)
 	blueprint.anchors.append(door)
 
-	var repository := RepositoryScript.new(false)
+	var repository := RepositoryScript.new(false, TEST_PROJECT_ROOT, TEST_SOURCE)
 	var save_result: Dictionary = repository.save(blueprint)
 	assert(bool(save_result.get("ok", false)), str(save_result.get("error", "")))
 	# Re-saving verifies atomic replacement of an existing file.
 	assert(bool(repository.save(blueprint).get("ok", false)))
 
 	LibraryScript.refresh()
-	var runtime_key := LibraryScript.runtime_key(LibraryScript.SOURCE_PLAYER, TEST_ID)
-	assert(runtime_key == "user:_test_modular_pipeline")
+	var runtime_key := LibraryScript.runtime_key(TEST_SOURCE, TEST_ID)
+	assert(runtime_key == "pack:test_author.test_buildings/_test_modular_pipeline")
 	assert(LibraryScript.has(runtime_key))
 	var loaded = LibraryScript.get_blueprint(runtime_key)
 	assert(loaded != null)
 	assert(loaded.construction_cost == {"soil": 1, "branches": 1})
-	assert(BuildingCatalogScript.definition_for(String(TEST_ID)).get("category") == "earth")
+	assert(BuildingCatalogScript.definition_for(String(TEST_ID)).get("category") == "custom")
 
 	var game_blueprint: Dictionary = BuildingBlueprintsScript.get_blueprint(runtime_key)
 	assert(game_blueprint.get("modules", []).size() == 2)
 	assert(game_blueprint.get("zones", []).size() == 1)
-	assert(game_blueprint.get("blueprint_ref", {}).get("source") == "local")
+	assert(game_blueprint.get("blueprint_ref", {}).get("source") == String(TEST_SOURCE))
 	assert(game_blueprint.get("blueprint_ref", {}).get("role") == String(TEST_ID))
 
 	var remove_error := DirAccess.remove_absolute(repository.file_path_for(TEST_ID))
@@ -76,14 +78,22 @@ func _init() -> void:
 	_test_save_writes_back_to_the_same_file()
 	_test_read_only_source_is_not_writable()
 	_test_decor_survives_a_round_trip()
+	MapDocumentService._remove_directory(TEST_PROJECT_ROOT)
 	quit(0)
+
+
+func _setup_project() -> void:
+	MapDocumentService._remove_directory(TEST_PROJECT_ROOT)
+	var projects := ContentProjectRepository.new(false)
+	var created := projects.create_project(&"test_author", &"test_buildings", "Test Buildings", "Test Author")
+	assert(not created.is_empty())
 
 
 ## A non-ASCII id used to be stripped character by character down to
 ## `untitled_building`, so every such attempt collided in one file. It is now
 ## refused with a message the author can act on (content_packaging.md §3.3).
 func _test_id_alphabet_is_refused_not_mangled() -> void:
-	var repository := RepositoryScript.new(false)
+	var repository := RepositoryScript.new(false, TEST_PROJECT_ROOT, TEST_SOURCE)
 	var blueprint := BlueprintScript.new()
 	blueprint.id = &"Пекарня"
 	blueprint.role = &"bakery"
@@ -111,7 +121,7 @@ func _test_id_alphabet_is_refused_not_mangled() -> void:
 ## stays there instead of being duplicated at the source root — where the copy
 ## would then be reported as a duplicate id and one of the two would stop opening.
 func _test_save_writes_back_to_the_same_file() -> void:
-	var repository := RepositoryScript.new(false)
+	var repository := RepositoryScript.new(false, TEST_PROJECT_ROOT, TEST_SOURCE)
 	var nested_dir := repository.base_dir() + "/_test_nested"
 	DirAccess.make_dir_recursive_absolute(nested_dir)
 	var nested_path := nested_dir + "/_test_nested_bp.gdbuilding.json"
@@ -140,9 +150,9 @@ func _test_save_writes_back_to_the_same_file() -> void:
 ## Player mode may read the shipped pack and may not write it. This is what lets a
 ## player start from `core:tent` without being able to damage the game.
 func _test_read_only_source_is_not_writable() -> void:
-	var player := RepositoryScript.new(false)
-	assert(player.base_dir() == RepositoryScript.PLAYER_DIR)
-	assert(player.can_write(RepositoryScript.PLAYER_DIR + "/mine.gdbuilding.json"))
+	var player := RepositoryScript.new(false, TEST_PROJECT_ROOT, TEST_SOURCE)
+	assert(player.base_dir() == TEST_PROJECT_ROOT.path_join("buildings"))
+	assert(player.can_write(TEST_PROJECT_ROOT.path_join("buildings/mine.gdbuilding.json")))
 	assert(not player.can_write(RepositoryScript.DEV_DIR + "/tent.gdbuilding.json"))
 
 	var blueprint := BlueprintScript.new()
@@ -163,7 +173,7 @@ func _test_read_only_source_is_not_writable() -> void:
 ## The invariant is asserted rather than assumed because nothing in the save path
 ## mentions `objects` — it works only as long as the whole document is written.
 func _test_decor_survives_a_round_trip() -> void:
-	var repository := RepositoryScript.new(false)
+	var repository := RepositoryScript.new(false, TEST_PROJECT_ROOT, TEST_SOURCE)
 	var blueprint := BlueprintScript.new()
 	blueprint.id = &"_test_decor_round_trip"
 	blueprint.role = &"_test_decor_round_trip"
@@ -203,7 +213,6 @@ func _test_builtin_tent() -> void:
 	assert(LibraryScript.has("tent"), "tent.gdbuilding.json must be indexed")
 	var tent = LibraryScript.get_blueprint("tent")
 	assert(tent != null)
-	assert(tent.category == "tent")
 	assert(tent.footprint == Vector2i(4, 4))
 	var game_blueprint: Dictionary = BuildingBlueprintsScript.get_blueprint("tent")
 	assert(game_blueprint.get("modules", []).size() == 16, "tent should render 16 block modules")

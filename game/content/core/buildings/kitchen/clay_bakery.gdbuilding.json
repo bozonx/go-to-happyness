@@ -1,10 +1,11 @@
 {
-	"version": 6,
+	"version": 7,
 	"id": "clay_bakery",
 	"role": "clay_bakery",
+	"style": "generic",
+	"variant": "default",
 	"name": "Глиняная пекарня",
 	"construction_style": "surface",
-	"era": "clay",
 	"grid_bounds": {
 		"x": 4,
 		"y": 1,
@@ -199,6 +200,8 @@
 			"id": "main",
 			"name": "Помещение",
 			"role": "room",
+			"style": "generic",
+			"variant": "default",
 			"function": "core:workplace",
 			"properties": {
 				"profession": "cook",
@@ -222,6 +225,8 @@
 		{
 			"id": "front_door",
 			"role": "door",
+			"style": "generic",
+			"variant": "default",
 			"pos": [
 				2.0,
 				0,

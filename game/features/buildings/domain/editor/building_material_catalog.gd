@@ -1,37 +1,29 @@
 class_name BuildingMaterialCatalog
 extends RefCounted
 
-## Construction materials available to modular frame blocks. Every material
-## resolves to a real settlement resource and belongs to a building era.
-##
-## Materials are era-scoped: a blueprint of a given era may use any material
-## whose era is that era or earlier (cumulative), so each era offers several
-## materials. The editor chooses the era first; the material list is then
-## derived from the era instead of being picked per block from the full set.
+## Construction materials available to modular frame blocks. A blueprint may
+## use any registered material. Games decide availability through their own
+## unlock/technology data; the reusable building format does not know eras.
 
 const DEFAULT_ID := &"branches"
-
-## Era identifiers, ordered from earliest to latest. Index doubles as the era
-## rank used for "material available in era" checks. Matches SettlementState.Era.
-const ERA_ORDER: Array[StringName] = [&"tent", &"earth", &"clay", &"wood", &"stone", &"brick"]
 
 ## `color` is an albedo hint the presentation mesh library uses to shade blocks
 ## of this material. It lives with the material data (single source of truth)
 ## rather than being duplicated in the renderer.
 const MATERIALS: Array[Dictionary] = [
-	{"id": &"branches", "name": "Палки", "resource_id": &"branches", "units": 1, "category": "tent", "composition": {"branches": 1.0}, "color": Color(0.43, 0.28, 0.15)},
-	{"id": &"tarp", "name": "Брезент", "resource_id": &"tarp", "units": 1, "category": "tent", "composition": {"tarp": 1.0}, "color": Color(0.35, 0.40, 0.42)},
-	{"id": &"thatch", "name": "Солома", "resource_id": &"grass", "units": 1, "category": "tent", "composition": {"grass": 1.0}, "color": Color(0.72, 0.60, 0.28)},
-	{"id": &"earth_stone", "name": "Земля и камень", "resource_id": &"soil", "units": 1, "category": "earth", "composition": {"soil": 0.5, "stone": 0.5}, "color": Color(0.45, 0.38, 0.30)},
-	{"id": &"earth", "name": "Земляные блоки", "resource_id": &"soil", "units": 1, "category": "earth", "composition": {"soil": 1.0}, "color": Color(0.43, 0.31, 0.20)},
-	{"id": &"adobe", "name": "Саманные блоки", "resource_id": &"clay", "units": 1, "category": "clay", "composition": {"clay": 0.5, "grass": 0.5}, "color": Color(0.60, 0.45, 0.28)},
-	{"id": &"clay", "name": "Глиняные блоки", "resource_id": &"clay", "units": 1, "category": "clay", "composition": {"clay": 1.0}, "color": Color(0.58, 0.32, 0.22)},
-	{"id": &"logs", "name": "Брёвна", "resource_id": &"logs", "units": 1, "category": "wood", "composition": {"logs": 1.0}, "color": Color(0.48, 0.34, 0.19)},
-	{"id": &"wood", "name": "Деревянные блоки", "resource_id": &"boards", "units": 1, "category": "wood", "composition": {"boards": 1.0}, "color": Color(0.55, 0.38, 0.20)},
-	{"id": &"stone_mortar", "name": "Камень и раствор", "resource_id": &"stone", "units": 1, "category": "stone", "composition": {"stone": 0.8, "clay": 0.2}, "color": Color(0.50, 0.52, 0.48)},
-	{"id": &"stone", "name": "Каменные блоки", "resource_id": &"stone", "units": 1, "category": "stone", "composition": {"stone": 1.0}, "color": Color(0.47, 0.49, 0.50)},
-	{"id": &"brick_mortar", "name": "Кирпич и раствор", "resource_id": &"bricks", "units": 1, "category": "brick", "composition": {"bricks": 0.8, "clay": 0.2}, "color": Color(0.60, 0.28, 0.22)},
-	{"id": &"brick", "name": "Кирпичные блоки", "resource_id": &"bricks", "units": 1, "category": "brick", "composition": {"bricks": 1.0}, "color": Color(0.58, 0.22, 0.16)},
+	{"id": &"branches", "name": "Палки", "resource_id": &"branches", "units": 1, "family": "tent", "composition": {"branches": 1.0}, "color": Color(0.43, 0.28, 0.15)},
+	{"id": &"tarp", "name": "Брезент", "resource_id": &"tarp", "units": 1, "family": "tent", "composition": {"tarp": 1.0}, "color": Color(0.35, 0.40, 0.42)},
+	{"id": &"thatch", "name": "Солома", "resource_id": &"grass", "units": 1, "family": "tent", "composition": {"grass": 1.0}, "color": Color(0.72, 0.60, 0.28)},
+	{"id": &"earth_stone", "name": "Земля и камень", "resource_id": &"soil", "units": 1, "family": "earth", "composition": {"soil": 0.5, "stone": 0.5}, "color": Color(0.45, 0.38, 0.30)},
+	{"id": &"earth", "name": "Земляные блоки", "resource_id": &"soil", "units": 1, "family": "earth", "composition": {"soil": 1.0}, "color": Color(0.43, 0.31, 0.20)},
+	{"id": &"adobe", "name": "Саманные блоки", "resource_id": &"clay", "units": 1, "family": "clay", "composition": {"clay": 0.5, "grass": 0.5}, "color": Color(0.60, 0.45, 0.28)},
+	{"id": &"clay", "name": "Глиняные блоки", "resource_id": &"clay", "units": 1, "family": "clay", "composition": {"clay": 1.0}, "color": Color(0.58, 0.32, 0.22)},
+	{"id": &"logs", "name": "Брёвна", "resource_id": &"logs", "units": 1, "family": "wood", "composition": {"logs": 1.0}, "color": Color(0.48, 0.34, 0.19)},
+	{"id": &"wood", "name": "Деревянные блоки", "resource_id": &"boards", "units": 1, "family": "wood", "composition": {"boards": 1.0}, "color": Color(0.55, 0.38, 0.20)},
+	{"id": &"stone_mortar", "name": "Камень и раствор", "resource_id": &"stone", "units": 1, "family": "stone", "composition": {"stone": 0.8, "clay": 0.2}, "color": Color(0.50, 0.52, 0.48)},
+	{"id": &"stone", "name": "Каменные блоки", "resource_id": &"stone", "units": 1, "family": "stone", "composition": {"stone": 1.0}, "color": Color(0.47, 0.49, 0.50)},
+	{"id": &"brick_mortar", "name": "Кирпич и раствор", "resource_id": &"bricks", "units": 1, "family": "brick", "composition": {"bricks": 0.8, "clay": 0.2}, "color": Color(0.60, 0.28, 0.22)},
+	{"id": &"brick", "name": "Кирпичные блоки", "resource_id": &"bricks", "units": 1, "family": "brick", "composition": {"bricks": 1.0}, "color": Color(0.58, 0.22, 0.16)},
 ]
 
 const FALLBACK_COLOR := Color(0.7, 0.7, 0.7)
@@ -73,46 +65,3 @@ static func resource_composition(material_id: StringName) -> Dictionary:
 	if res_id != &"":
 		return {String(res_id): float(cost_units(material_id))}
 	return {}
-
-
-static func category(material_id: StringName) -> String:
-	return str(get_material(material_id).get("category", "tent"))
-
-
-## Rank of an era name (0 = tent … 5 = brick). Unknown eras rank as tent.
-static func era_rank(era_name: StringName) -> int:
-	var rank := ERA_ORDER.find(era_name)
-	return rank if rank >= 0 else 0
-
-
-static func material_era_rank(material_id: StringName) -> int:
-	return era_rank(StringName(category(material_id)))
-
-
-## True when a material may be used in a blueprint of the given era: its own era
-## is at or before that era (cumulative availability).
-static func is_available_in_era(material_id: StringName, era_name: StringName) -> bool:
-	return material_era_rank(material_id) <= era_rank(era_name)
-
-
-## Materials usable by a blueprint of `era_name`, ordered as declared. This is
-## what the editor's material list shows once the era is chosen.
-static func materials_for_era(era_name: StringName) -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
-	var limit := era_rank(era_name)
-	for material in MATERIALS:
-		if era_rank(StringName(str(material["category"]))) <= limit:
-			out.append(material)
-	return out
-
-
-## Default (most era-defining) material for an era: the last-declared material
-## whose era equals `era_name`, falling back to the era's newest available one.
-static func default_material_for_era(era_name: StringName) -> StringName:
-	var era_match := &""
-	var fallback := DEFAULT_ID
-	for material in materials_for_era(era_name):
-		fallback = material["id"]
-		if StringName(str(material["category"])) == era_name:
-			era_match = material["id"]
-	return era_match if era_match != &"" else fallback

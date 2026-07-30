@@ -45,6 +45,7 @@ const PLANNED_MODES: Array = [
 @onready var _save_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/SaveButton
 @onready var _save_as_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/SaveAsButton
 @onready var _settings_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/SettingsButton
+@onready var _start_settings_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/StartSettingsButton
 @onready var _undo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/UndoButton
 @onready var _redo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/RedoButton
 @onready var _grass_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/GrassButton
@@ -111,7 +112,9 @@ func _resolve_launch_mode() -> void:
 			and bool(launch_manager.get("editor_mode_forced")):
 		dev = bool(launch_manager.get("editor_dev_mode"))
 	dev_mode = dev
-	_service = MapDocumentService.new(dev)
+	var pack_root := String(launch_manager.get("active_editor_pack_root"))
+	var pack_source := StringName(launch_manager.get("active_editor_pack_source"))
+	_service = MapDocumentService.new(dev, pack_root, pack_source)
 
 
 ## Opens whatever the launcher asked for, or starts a blank map. A map that will
@@ -347,6 +350,7 @@ func _connect_ui() -> void:
 	_save_button.pressed.connect(_save)
 	_save_as_button.pressed.connect(_open_save_as)
 	_settings_button.pressed.connect(_open_settings)
+	_start_settings_button.pressed.connect(_open_start_settings)
 	_undo_button.pressed.connect(_undo)
 	_redo_button.pressed.connect(_redo)
 	_grass_button.button_pressed = terrain_world.grass_visible
@@ -372,6 +376,10 @@ func _connect_ui() -> void:
 
 func _open_settings() -> void:
 	_dialogs.open_properties_dialog(document.meta)
+
+
+func _open_start_settings() -> void:
+	_dialogs.open_start_settings_dialog(document.meta)
 
 
 ## The properties dialog has already written into `document.meta`; everything that
@@ -670,7 +678,10 @@ func _return_to_menu() -> void:
 	if not await _confirm_discard_changes():
 		return
 	var launch_manager: Node = get_node_or_null("/root/GameLaunchManager")
-	launch_manager.call("return_to_main_menu")
+	if not String(launch_manager.get("active_editor_pack_root")).is_empty():
+		launch_manager.call("return_to_editor_hub")
+	else:
+		launch_manager.call("return_to_main_menu")
 
 
 ## Guards every path that throws the document away: New, Open, Back and Esc.
@@ -711,4 +722,3 @@ func _update_render_mode_button() -> void:
 			_render_mode_button.text = "🗿 Матовый"
 		GridTerrainWorld.RenderMode.SIMPLE:
 			_render_mode_button.text = "🖼 Простой"
-

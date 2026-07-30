@@ -1,10 +1,11 @@
 {
-	"version": 6,
+	"version": 7,
 	"id": "brick_house",
 	"role": "brick_house",
+	"style": "generic",
+	"variant": "default",
 	"name": "Кирпичный дом",
 	"construction_style": "surface",
-	"era": "brick",
 	"grid_bounds": {
 		"x": 7,
 		"y": 1,
@@ -562,6 +563,8 @@
 			"id": "home",
 			"name": "Жилое помещение",
 			"role": "room",
+			"style": "generic",
+			"variant": "default",
 			"function": "core:housing",
 			"properties": {
 				"residents": 12
@@ -584,6 +587,8 @@
 		{
 			"id": "front_door",
 			"role": "door",
+			"style": "generic",
+			"variant": "default",
 			"pos": [
 				3.5,
 				0,

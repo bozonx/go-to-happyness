@@ -9,8 +9,8 @@ var runtime_key: StringName
 var content_type: StringName
 var kind: StringName
 var role: StringName
-var era: StringName
 var style: StringName
+var variant: StringName
 var path: String
 var name: String
 var metadata: Dictionary
@@ -23,5 +23,5 @@ func _init(p_source: StringName = &"", p_id: StringName = &"", p_type: StringNam
 
 func to_dict() -> Dictionary:
 	return {"source": source, "id": id, "key": runtime_key, "content_type": content_type,
-		"kind": kind, "role": role, "era": era, "style": style, "path": path,
+		"kind": kind, "role": role, "style": style, "variant": variant, "path": path,
 		"name": name, "metadata": metadata.duplicate(true)}

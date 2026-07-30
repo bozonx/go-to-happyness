@@ -140,16 +140,24 @@ runtime-запрос запуска. Первое описывает игру, �
   "clock": "realtime_pauseable",
   "input_profile": "rts",
   "ui_layout": "settlement_hud",
-  "start": {"entities": [], "parameters": {}}
+  "start": {"modules": {"gth.settlement": {"starting_population": 4}}},
+  "progression": {
+    "eras": [{
+      "id": "tent",
+      "name": {"ru": "Палаточная", "en": "Tent"},
+      "technology_roots": ["campfire"],
+      "next": ["earth"]
+    }],
+    "technologies": {}
+  }
 }
 ```
 
-`GameSessionConfig` содержит ссылку на definition и карту, seed, локальных игроков,
-путь сохранения и только параметры, допустимые definition. Эра, wellbeing,
-население, ресурсы и профессии переезжают в `gth.settlement` как параметры его
-старта. Карта перестаёт включать произвольные булевы `systems`: её `start` хранит
-ссылку на game definition и map-specific overrides, которые валидирует владелец
-модуля.
+`GameSessionConfig` содержит ссылку на definition и карту, seed и параметры модулей.
+Определения/локализация эр и граф технологий принадлежат игре. Карта хранит ссылку на
+game definition и `module_settings`: например, она может разрешить часть эр, зафиксировать
+одну или отключить progression. Здание и зона эр не содержат. Параметры игры, карты и
+конкретного запуска объединяются рекурсивно именно в таком порядке.
 
 ### 3.2. Реестр модулей
 
@@ -332,7 +340,7 @@ Showcase запускается из библиотеки того же прил
 | `GameLaunchManager` | ✅ Стал хост-лаунчером `RuntimeLaunchManager`: entry/scene transition без era/economy. Мёртвый settlement-наследник удалён. | application launch |
 | `SettlementGame` / bootstrapper | ✅ Разобраны на `GameRuntime` и `SettlementGameModule`; константы вынесены в `SettlementConstants`; временная сцена — адаптер модуля. Дальнейшее извлечение bootstrap — по фазам B+. | runtime + module |
 | `SaveData` | ✅ Один import path в секционный формат; compatibility projection убран. | `SessionSaveCoordinator` + modules |
-| `MapStart.mode/systems/economy` | ✅ `game_definition` — граница композиции; `mode`/`systems`/`economy` удалены из формата (v5), экономика перенесена в `start_parameters` game definition. | map + owning module |
+| `MapStart.mode/systems/economy` | ✅ `game_definition` выбирает композицию, `module_settings` содержит overrides карты, общие дефолты лежат в `game.start.modules`. | map + owning module |
 | `UIManager` | ✅ Host и routing отделены (`HostInputController`, `rts` profile); settlement-панели остаются вкладом модуля. Дальнейшее разнесение панелей — фазы B+. | ui host + module UI |
 | `Citizen` | Не обобщать заранее. Вынести только то, что реально нужно второму потребителю. | settlement до появления второго потребителя |
 
@@ -344,7 +352,7 @@ Showcase запускается из библиотеки того же прил
 - ✅ [`map_editor.md`](map_editor.md): `mode`/`systems`/`economy` удалены, формат
   поднят до v5, миграция описана;
 - ✅ [`map_fill_mode.md`](map_fill_mode.md): ссылка на `start.economy.population`
-  обновлена на `start_parameters.starting_population`;
+  обновлена на `start.modules.gth.settlement.starting_population`;
 - [`content_packaging.md`](content_packaging.md): schema pack, entry games и
   dependency/API validation;
 - [`docs/architecture.md`](../../docs/architecture.md): после появления кода

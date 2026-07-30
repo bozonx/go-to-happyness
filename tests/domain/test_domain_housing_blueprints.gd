@@ -40,8 +40,8 @@ static func _test_every_building_blueprint() -> void:
 		found_ids[file_id] = true
 
 		# Version 6
-		assert(int(raw.get("version", 0)) == 6,
-			"%s: version must be 6, got %d" % [file_id, int(raw.get("version", 0))])
+		assert(int(raw.get("version", 0)) == BuildingBlueprint.FORMAT_VERSION,
+			"%s: version must be %d, got %d" % [file_id, BuildingBlueprint.FORMAT_VERSION, int(raw.get("version", 0))])
 
 		# Areas: 0 or 1
 		var areas: Array = raw.get("areas", [])

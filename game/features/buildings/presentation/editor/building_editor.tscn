@@ -1239,13 +1239,15 @@ tooltip_text = "Набор, к которому относится постро�
 [node name="HSepNameId" type="HSeparator" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 layout_mode = 2
 
-[node name="EraLbl" type="Label" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
+[node name="VariantLbl" type="Label" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 layout_mode = 2
-text = "Эра (задаёт материалы):"
+text = "Визуальный вариант:"
 
-[node name="CategoryOption" type="OptionButton" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
+[node name="VariantEdit" type="LineEdit" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 unique_name_in_owner = true
 layout_mode = 2
+text = "default"
+placeholder_text = "default"
 
 [node name="StyleLbl" type="Label" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 layout_mode = 2

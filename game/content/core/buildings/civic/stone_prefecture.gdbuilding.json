@@ -1,10 +1,11 @@
 {
-	"version": 6,
+	"version": 7,
 	"id": "stone_prefecture",
 	"role": "stone_prefecture",
+	"style": "generic",
+	"variant": "default",
 	"name": "Каменная префектура",
 	"construction_style": "surface",
-	"era": "stone",
 	"grid_bounds": {
 		"x": 6,
 		"y": 1,
@@ -419,6 +420,8 @@
 			"id": "main",
 			"name": "Помещение",
 			"role": "room",
+			"style": "generic",
+			"variant": "default",
 			"function": "core:civic",
 			"properties": {
 				"profession": "official",
@@ -442,6 +445,8 @@
 		{
 			"id": "front_door",
 			"role": "door",
+			"style": "generic",
+			"variant": "default",
 			"pos": [
 				3.0,
 				0,

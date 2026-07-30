@@ -2212,7 +2212,7 @@
 		}
 	],
 	"flags": {},
-	"format_version": 5,
+	"format_version": 6,
 	"id": "green_valley",
 	"kind": "map",
 	"map_kind": "map",
@@ -2274,8 +2274,16 @@
 	"rules": [],
 	"start": {
 		"day_of_year": 120,
-		"era": "tent",
 		"game_definition": "core:settlement",
+		"module_settings": {
+			"gth.settlement": {
+				"progression": {
+					"mode": "restricted",
+					"allowed_eras": ["tent", "earth", "clay", "wood", "stone", "brick"],
+					"default_era": "tent"
+				}
+			}
+		},
 		"latitude": 54.0,
 		"style": "generic",
 		"time_of_day": 480,

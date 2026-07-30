@@ -1,10 +1,11 @@
 {
-	"version": 6,
+	"version": 7,
 	"id": "straw_forager_tent",
 	"role": "straw_forager_tent",
+	"style": "generic",
+	"variant": "default",
 	"name": "Соломенная палатка собирателя",
 	"construction_style": "surface",
-	"era": "tent",
 	"grid_bounds": {
 		"x": 3,
 		"y": 1,
@@ -122,6 +123,8 @@
 			"id": "main",
 			"name": "Помещение",
 			"role": "room",
+			"style": "generic",
+			"variant": "default",
 			"function": "core:forager_camp",
 			"properties": {
 				"profession": "forager",
@@ -145,6 +148,8 @@
 		{
 			"id": "front_door",
 			"role": "door",
+			"style": "generic",
+			"variant": "default",
 			"pos": [
 				1.5,
 				0,

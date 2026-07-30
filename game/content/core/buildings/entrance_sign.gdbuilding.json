@@ -1,9 +1,8 @@
 {
-	"version": 6,
+	"version": 7,
 	"id": "entrance_sign",
 	"name": "Въездной знак",
 	"construction_style": "surface",
-	"era": "tent",
 	"grid_bounds": {
 		"x": 2,
 		"y": 3,
@@ -21,6 +20,10 @@
 		{
 			"id": "door",
 			"role": "door",
+			"style": "generic",
+			"variant": "default",
+			"style": "generic",
+			"variant": "default",
 			"pos": [
 				1.0,
 				0.0,

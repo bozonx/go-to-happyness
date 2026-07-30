@@ -1,10 +1,11 @@
 {
-	"version": 6,
+	"version": 7,
 	"id": "toilet_stone",
 	"role": "toilet_stone",
+	"style": "generic",
+	"variant": "default",
 	"name": "Каменный туалет ур. 1",
 	"construction_style": "surface",
-	"era": "stone",
 	"grid_bounds": {
 		"x": 2,
 		"y": 1,
@@ -67,6 +68,8 @@
 			"id": "main",
 			"name": "Помещение",
 			"role": "room",
+			"style": "generic",
+			"variant": "default",
 			"function": "core:workplace",
 			"properties": {
 				"profession": "craftsman",
@@ -90,6 +93,8 @@
 		{
 			"id": "front_door",
 			"role": "door",
+			"style": "generic",
+			"variant": "default",
 			"pos": [
 				1.0,
 				0,

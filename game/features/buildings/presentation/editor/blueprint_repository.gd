@@ -5,7 +5,7 @@ extends RefCounted
 ##
 ## Reading and writing are deliberately asymmetric (content_packaging.md §6.4):
 ## **every source can be opened, only one can be written.** Dev mode writes the
-## core pack, player mode the implicit local pack. Taking a shipped building as a
+## core pack, player mode the selected project pack. Taking a shipped building as a
 ## starting point is the most common first step an author takes, so the open list
 ## must show it; where the result lands is decided by the mode, not by the file.
 ##
@@ -19,28 +19,35 @@ const ContentIdScript = preload("res://game/features/content/domain/content_id.g
 ## Canonical, feature-local blueprint folder. The game's BuildingBlueprintLibrary
 ## also reads from here, so dev edits are exactly what ships in-game.
 const DEV_DIR := "res://game/content/core/buildings"
-const PLAYER_DIR := "user://content/local/buildings"
 
 var dev_mode: bool = false
+var project_root := ""
+var project_source: StringName = &""
 ## Read by the editor after listing, so duplicate ids are actionable instead of
 ## silently selecting whichever recursive traversal happened to win.
 var last_errors: Array[String] = []
 
 
-func _init(p_dev_mode: bool = false) -> void:
+func _init(p_dev_mode: bool = false, p_project_root := "", p_project_source: StringName = &"") -> void:
 	# Gated here rather than in the UI: a forgotten @export in the scene must not
 	# turn into a write that never happened. `res://` is a read-only `.pck` once
 	# exported (content_packaging.md §9).
 	dev_mode = p_dev_mode and OS.has_feature("editor")
+	project_root = p_project_root
+	project_source = p_project_source
 
 
 func base_dir() -> String:
-	return DEV_DIR if dev_mode else PLAYER_DIR
+	if not project_root.is_empty():
+		return project_root.path_join("buildings")
+	return DEV_DIR if dev_mode else ""
 
 
 ## The source name this mode writes under, in runtime-key terms.
 func target_source() -> StringName:
-	return ContentIdScript.SOURCE_CORE if dev_mode else ContentIdScript.SOURCE_LOCAL
+	if not project_source.is_empty():
+		return project_source
+	return ContentIdScript.SOURCE_CORE if dev_mode else &""
 
 
 func file_path_for(blueprint_id: StringName) -> String:
@@ -54,7 +61,7 @@ func file_path_for(blueprint_id: StringName) -> String:
 func can_write(path: String) -> bool:
 	if path.is_empty():
 		return false
-	return path.begins_with(base_dir() + "/")
+	return not base_dir().is_empty() and path.begins_with(base_dir() + "/")
 
 
 ## Returns { ok: bool, path: String, error: String }.

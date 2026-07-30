@@ -19,8 +19,6 @@ signal save_as_requested(id: StringName)
 signal properties_applied
 
 const ContentIdScript = preload("res://game/features/content/domain/content_id.gd")
-const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
-
 @onready var _new_dialog: ConfirmationDialog = $NewDialog
 @onready var _new_id_edit: LineEdit = %NewIdEdit
 @onready var _new_name_edit: LineEdit = %NewNameEdit
@@ -45,12 +43,16 @@ const BuildingMaterialCatalogScript = preload("res://game/features/buildings/dom
 @onready var _prop_board_label: Label = %PropBoardLabel
 @onready var _prop_border_option: OptionButton = %PropBorderOption
 @onready var _prop_border_level_spin: SpinBox = %PropBorderLevelSpin
-@onready var _prop_game_option: OptionButton = %PropGameOption
-@onready var _prop_era_option: OptionButton = %PropEraOption
-@onready var _prop_style_edit: LineEdit = %PropStyleEdit
-@onready var _prop_time_spin: SpinBox = %PropTimeSpin
-@onready var _prop_day_spin: SpinBox = %PropDaySpin
-@onready var _prop_weather_edit: LineEdit = %PropWeatherEdit
+@onready var _start_dialog: ConfirmationDialog = $StartSettingsDialog
+@onready var _start_game_option: OptionButton = %StartGameOption
+@onready var _progression_mode_option: OptionButton = %ProgressionModeOption
+@onready var _allowed_eras_list: ItemList = %AllowedErasList
+@onready var _default_era_option: OptionButton = %DefaultEraOption
+@onready var _start_style_edit: LineEdit = %StartStyleEdit
+@onready var _start_time_spin: SpinBox = %StartTimeSpin
+@onready var _start_day_spin: SpinBox = %StartDaySpin
+@onready var _start_latitude_spin: SpinBox = %StartLatitudeSpin
+@onready var _start_weather_edit: LineEdit = %StartWeatherEdit
 
 ## The meta the properties dialog is currently editing. Held only between opening
 ## and confirming, so a cancelled dialog cannot write anything.
@@ -67,9 +69,12 @@ func _ready() -> void:
 		_on_load_confirmed())
 	_save_as_dialog.confirmed.connect(_on_save_as_confirmed)
 	_properties_dialog.confirmed.connect(_on_properties_confirmed)
+	_start_dialog.confirmed.connect(_on_start_settings_confirmed)
+	_start_game_option.item_selected.connect(func(_index: int) -> void: _refresh_progression_fields())
+	_progression_mode_option.item_selected.connect(func(_index: int) -> void: _update_progression_controls())
 	# Ids are cleaned as they are typed rather than rejected on save
 	# (content_packaging.md §3.3).
-	for field: LineEdit in [_new_id_edit, _save_as_id_edit, _prop_id_edit, _prop_style_edit]:
+	for field: LineEdit in [_new_id_edit, _save_as_id_edit, _prop_id_edit, _start_style_edit]:
 		field.text_changed.connect(_sanitize_field.bind(field))
 
 
@@ -160,12 +165,6 @@ func open_properties_dialog(meta: MapMeta) -> void:
 		meta.board_cells, meta.board_cells, MapMeta.preset_name(meta.board_cells)]
 	_select_metadata(_prop_border_option, meta.border_kind)
 	_prop_border_level_spin.value = meta.border_level
-	_fill_game_options(meta.start.game_definition)
-	_select_metadata(_prop_era_option, meta.start.era)
-	_prop_style_edit.text = String(meta.start.style)
-	_prop_time_spin.value = meta.start.time_of_day
-	_prop_day_spin.value = meta.start.day_of_year
-	_prop_weather_edit.text = String(meta.start.weather_preset)
 	_properties_dialog.popup_centered()
 
 
@@ -186,15 +185,94 @@ func _on_properties_confirmed() -> void:
 	meta.tags = _split_names(_prop_tags_edit.text)
 	meta.border_kind = StringName(_prop_border_option.get_item_metadata(_prop_border_option.selected))
 	meta.border_level = int(_prop_border_level_spin.value)
-	meta.start.game_definition = StringName(_prop_game_option.get_item_metadata(_prop_game_option.selected))
-	meta.start.era = StringName(_prop_era_option.get_item_metadata(_prop_era_option.selected))
-	var style := ContentIdScript.normalize_id(_prop_style_edit.text)
-	meta.start.style = StringName(style) if not style.is_empty() else &"generic"
-	meta.start.time_of_day = int(_prop_time_spin.value)
-	meta.start.day_of_year = int(_prop_day_spin.value)
-	var weather := _prop_weather_edit.text.strip_edges()
-	meta.start.weather_preset = StringName(weather) if not weather.is_empty() else &"clear"
 	properties_applied.emit()
+
+
+# --- Start settings -----------------------------------------------------------
+
+## Gameplay start is intentionally separate from map identity and world bounds:
+## it grows with game modules, while the base properties dialog stays stable.
+func open_start_settings_dialog(meta: MapMeta) -> void:
+	_editing_meta = meta
+	_fill_game_options(meta.start.game_definition)
+	_start_style_edit.text = String(meta.start.style)
+	_start_time_spin.value = meta.start.time_of_day
+	_start_day_spin.value = meta.start.day_of_year
+	_start_latitude_spin.value = meta.start.latitude
+	_start_weather_edit.text = String(meta.start.weather_preset)
+	_refresh_progression_fields(meta.start.module_settings_for(&"gth.settlement").get("progression", {}))
+	_start_dialog.popup_centered()
+
+
+func _on_start_settings_confirmed() -> void:
+	if _editing_meta == null:
+		return
+	var meta := _editing_meta
+	_editing_meta = null
+	meta.start.game_definition = StringName(_start_game_option.get_item_metadata(_start_game_option.selected))
+	var style := ContentIdScript.normalize_id(_start_style_edit.text)
+	meta.start.style = StringName(style) if not style.is_empty() else &"generic"
+	meta.start.time_of_day = int(_start_time_spin.value)
+	meta.start.day_of_year = int(_start_day_spin.value)
+	meta.start.latitude = float(_start_latitude_spin.value)
+	var weather := _start_weather_edit.text.strip_edges()
+	meta.start.weather_preset = StringName(weather) if not weather.is_empty() else &"clear"
+	_write_progression_policy(meta)
+	properties_applied.emit()
+
+
+func _refresh_progression_fields(authored_policy: Dictionary = {}) -> void:
+	_allowed_eras_list.clear()
+	_default_era_option.clear()
+	var game_key := StringName(_start_game_option.get_item_metadata(_start_game_option.selected))
+	var definition := GameModuleRegistry.resolve_definition(game_key)
+	var eras: Array[EraDefinition] = definition.progression.eras if definition != null else []
+	for era: EraDefinition in eras:
+		var item := _allowed_eras_list.add_item(era.display_name())
+		_allowed_eras_list.set_item_metadata(item, era.id)
+		_default_era_option.add_item(era.display_name())
+		_default_era_option.set_item_metadata(_default_era_option.item_count - 1, era.id)
+	var mode := StringName(authored_policy.get("mode", "inherit"))
+	_select_metadata(_progression_mode_option, mode)
+	var allowed: Array = authored_policy.get("allowed_eras", [])
+	for index in _allowed_eras_list.item_count:
+		var era_id: Variant = _allowed_eras_list.get_item_metadata(index)
+		if mode != &"restricted" or allowed.has(String(era_id)) or allowed.has(era_id):
+			_allowed_eras_list.select(index, false)
+	_select_metadata(_default_era_option, StringName(authored_policy.get(
+		"default_era", _default_era_option.get_item_metadata(0) if _default_era_option.item_count > 0 else &"")))
+	_progression_mode_option.disabled = eras.is_empty()
+	_update_progression_controls()
+
+
+func _update_progression_controls() -> void:
+	var has_eras := _default_era_option.item_count > 0
+	var mode := StringName(_progression_mode_option.get_item_metadata(_progression_mode_option.selected))
+	_allowed_eras_list.visible = has_eras
+	_allowed_eras_list.mouse_filter = Control.MOUSE_FILTER_STOP if mode == &"restricted" else Control.MOUSE_FILTER_IGNORE
+	_allowed_eras_list.modulate.a = 1.0 if mode == &"restricted" else 0.55
+	_default_era_option.disabled = not has_eras or mode == &"disabled"
+
+
+func _write_progression_policy(meta: MapMeta) -> void:
+	var settings := meta.start.module_settings_for(&"gth.settlement")
+	if _default_era_option.item_count == 0:
+		settings.erase("progression")
+	else:
+		var mode := StringName(_progression_mode_option.get_item_metadata(_progression_mode_option.selected))
+		var policy := {"mode": String(mode)}
+		if mode == &"restricted":
+			var allowed: Array[String] = []
+			for index: int in _allowed_eras_list.get_selected_items():
+				allowed.append(String(_allowed_eras_list.get_item_metadata(index)))
+			policy["allowed_eras"] = allowed
+		if mode != &"disabled":
+			policy["default_era"] = String(_default_era_option.get_item_metadata(_default_era_option.selected))
+		settings["progression"] = policy
+	if settings.is_empty():
+		meta.start.module_settings.erase(&"gth.settlement")
+	else:
+		meta.start.module_settings[&"gth.settlement"] = settings
 
 
 # --- Option plumbing ----------------------------------------------------------
@@ -218,20 +296,22 @@ func _fill_static_options() -> void:
 		[MapMeta.BORDER_LAVA, "Лава"],
 		[MapMeta.BORDER_NOTHING, "Ничего"],
 	])
-	var eras: Array = []
-	for era: StringName in BuildingMaterialCatalogScript.ERA_ORDER:
-		eras.append([era, String(era).capitalize()])
-	_add_options(_prop_era_option, eras)
+	_add_options(_progression_mode_option, [
+		[&"inherit", "Все эры игры"],
+		[&"restricted", "Только выбранные эры"],
+		[&"fixed", "Одна фиксированная эра"],
+		[&"disabled", "Без эр"],
+	])
 
 
 func _fill_game_options(selected_game: StringName) -> void:
-	_prop_game_option.clear()
+	_start_game_option.clear()
 	var index := ContentIndex.new()
 	index.rebuild()
 	for entry in index.game_entries():
-		_prop_game_option.add_item(entry.name)
-		_prop_game_option.set_item_metadata(_prop_game_option.item_count - 1, entry.runtime_key)
-	_select_metadata(_prop_game_option, selected_game)
+		_start_game_option.add_item(entry.name)
+		_start_game_option.set_item_metadata(_start_game_option.item_count - 1, entry.runtime_key)
+	_select_metadata(_start_game_option, selected_game)
 
 
 static func _add_options(option: OptionButton, pairs: Array) -> void:

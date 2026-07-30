@@ -9,10 +9,66 @@
   "input_profile": "rts",
   "ui_layout": "settlement_hud",
   "start": {
-    "era": "tent",
-    "biome": "summer_valley",
-    "starting_money": 500,
-    "starting_wellbeing": 75,
-    "starting_population": 4
+    "modules": {
+      "gth.settlement": {
+        "biome": "summer_valley",
+        "starting_money": 500,
+        "starting_wellbeing": 75,
+        "starting_population": 4
+      }
+    }
+  },
+  "progression": {
+    "eras": [
+      {
+        "id": "tent",
+        "name": {"ru": "Палаточная", "en": "Tent"},
+        "description": {"ru": "Выживание небольшой группы и первые временные постройки.", "en": "Small-group survival and the first temporary structures."},
+        "tags": ["survival", "pre_industrial"],
+        "technology_roots": ["campfire"],
+        "next": ["earth"]
+      },
+      {
+        "id": "earth",
+        "name": {"ru": "Земляная", "en": "Earth"},
+        "description": {"ru": "Стабилизация быта и первые постоянные ремёсла.", "en": "Stable daily life and the first permanent crafts."},
+        "tags": ["pre_industrial"],
+        "technology_roots": ["earth_buildings"],
+        "next": ["clay"]
+      },
+      {
+        "id": "clay",
+        "name": {"ru": "Глиняная", "en": "Clay"},
+        "description": {"ru": "Ремесло, обжиг и расширение торговли.", "en": "Crafts, firing and expanded trade."},
+        "tags": ["pre_industrial"],
+        "technology_roots": [],
+        "next": ["wood"]
+      },
+      {
+        "id": "wood",
+        "name": {"ru": "Деревянная", "en": "Wood"},
+        "description": {"ru": "Развитая экономика, доски и городской рост.", "en": "A developed economy, boards and town growth."},
+        "tags": ["pre_industrial"],
+        "technology_roots": [],
+        "next": ["stone"]
+      },
+      {
+        "id": "stone",
+        "name": {"ru": "Каменная", "en": "Stone"},
+        "description": {"ru": "Городское управление и долговечное строительство.", "en": "Urban administration and durable construction."},
+        "tags": ["pre_industrial"],
+        "technology_roots": [],
+        "next": ["brick"]
+      },
+      {
+        "id": "brick",
+        "name": {"ru": "Кирпичная", "en": "Brick"},
+        "description": {"ru": "Мануфактуры и плотная городская застройка.", "en": "Manufacturing and dense urban development."},
+        "tags": ["early_industrial"],
+        "technology_roots": [],
+        "next": []
+      }
+    ],
+    "technologies": {}
   }
 }

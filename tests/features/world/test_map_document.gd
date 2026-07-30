@@ -12,15 +12,14 @@ extends RefCounted
 ## half-written package can never replace a good one.
 
 const TEST_ROOT := "user://test_maps"
+const PROJECT_ROOT := "user://content/projects/test_author.test_maps"
+const PROJECT_SOURCE := &"pack:test_author.test_maps"
 const BOARD_CELLS := 32
 
 
 static func run_all() -> void:
 	_test_meta_round_trips_through_json()
 	_test_start_defaults()
-	_test_border_level_migrates_from_version_one()
-	_test_legacy_zone_sections_migrate_to_v3()
-	_test_legacy_objects_migrate_to_entities_v4()
 	print("    [PASS] Map Meta Tests")
 	_test_write_target_follows_the_mode()
 	print("    [PASS] Map Write Target Tests")
@@ -50,12 +49,16 @@ static func _test_meta_round_trips_through_json() -> void:
 	document.meta.tags = [&"survival"]
 	document.meta.border_level = -2
 	document.meta.border_kind = MapMeta.BORDER_NOTHING
-	document.meta.start.era = &"tent"
+	document.meta.start.module_settings = {
+		&"gth.settlement": {"progression": {
+			"mode": "restricted", "allowed_eras": ["tent", "earth"], "default_era": "tent",
+		}},
+	}
 	document.meta.start.style = &"roman"
 	document.meta.start.day_of_year = 200
 	document.meta.start.latitude = 60.0
 	document.meta.start.time_of_day = 540
-	document.meta.required_content = [{"kind": "building", "source": "player", "id": "my_bakery"}]
+	document.meta.required_content = [{"kind": "building", "source": "pack:test_author.test_pack", "id": "my_bakery"}]
 
 	var restored := MapDocument.from_json(document.to_json())
 	assert(restored.meta.id == &"green_valley")
@@ -72,113 +75,16 @@ static func _test_meta_round_trips_through_json() -> void:
 	assert(restored.meta.start.style == &"roman")
 	assert(is_equal_approx(restored.meta.start.latitude, 60.0))
 	assert(restored.meta.start.time_of_day == 540)
+	assert(restored.meta.start.module_settings_for(&"gth.settlement")["progression"]["default_era"] == "tent")
 	assert(restored.meta.required_content.size() == 1)
 	assert(restored.to_json()["format_version"] == MapMeta.FORMAT_VERSION)
 
 
-## v1 wrote `border.level` as a float; v2 made it whole Δh steps. Reading a v1 file
-## as an int would truncate — a sea half a terrace lower than the author left it,
-## silently frozen in place by the next save.
-static func _test_border_level_migrates_from_version_one() -> void:
-	var service := _service()
-	var package := _package_path("legacy_border")
-	DirAccess.make_dir_recursive_absolute(package)
-	var legacy := {
-		"format_version": 1, "kind": "map", "id": "legacy_border", "name": "Старая",
-		"board": {"cells": BOARD_CELLS, "cell_size": 1.0},
-		"border": {"kind": "ocean", "level": -1.5},
-	}
-	var file := FileAccess.open(package.path_join(MapDocumentService.MAP_JSON), FileAccess.WRITE)
-	file.store_string(JSON.stringify(legacy))
-	file.close()
-
-	var loaded := service.load_package(package)
-	assert(loaded != null, "a v1 package still opens")
-	assert(loaded.meta.border_level == -2, "-1.5 rounds to the nearer step, not toward zero: %d" % loaded.meta.border_level)
-
-	# ...and the rounded value is what a resave writes, so the migration happens
-	# once instead of drifting on every open.
-	assert(loaded.to_json()["border"]["level"] == -2)
-	assert(loaded.to_json()["format_version"] == MapMeta.FORMAT_VERSION)
-	_cleanup()
-
-
-## v2 stored `regions`/`markers` as opaque passthrough; v3 promotes records that
-## already have the shared zone shape into the typed `areas`/`anchors`. A record
-## the migration cannot understand stays opaque (§18.1) rather than guessed at —
-## guessing a role would silently change a player's scenario.
-static func _test_legacy_zone_sections_migrate_to_v3() -> void:
-	var service := _service()
-	var package := _package_path("legacy_zones")
-	DirAccess.make_dir_recursive_absolute(package)
-	var legacy := {
-		"format_version": 2, "kind": "map", "id": "legacy_zones", "name": "Старые зоны",
-		"board": {"cells": BOARD_CELLS, "cell_size": 1.0},
-		# A region already shaped like a v3 area: id + role + rects.
-		"regions": [{"id": "gate_yard", "role": "region", "rects": [[2, 3, 4, 2]]}],
-		# A marker already shaped like a v3 anchor: id + role + pos.
-		"markers": [{"id": "hero_start", "role": "spawn", "pos": [2.5, 0.0, 3.5]}],
-		# A marker the migration cannot understand (no `pos`): must survive opaque,
-		# because guessing its meaning would change the player's map silently.
-		"markers_unknown": [{"id": "old_trigger", "kind": "ambience"}],
-	}
-	var file := FileAccess.open(package.path_join(MapDocumentService.MAP_JSON), FileAccess.WRITE)
-	file.store_string(JSON.stringify(legacy))
-	file.close()
-
-	var loaded := service.load_package(package)
-	assert(loaded != null, "a v2 package with legacy zones still opens")
-	# The well-formed records were promoted into the typed layer...
-	assert(loaded.zones.area_by_id(&"gate_yard") != null, "region promoted to area")
-	assert(loaded.zones.anchor_by_id(&"hero_start") != null, "marker promoted to anchor")
-	assert(loaded.zones.validate(BOARD_CELLS).is_empty())
-	# ...and the legacy keys no longer appear in a resave.
-	var resaved := loaded.to_json()
-	assert(not resaved.has("regions"), "regions consumed by migration, not duplicated")
-	assert(not resaved.has("markers"), "markers consumed by migration, not duplicated")
-	assert(resaved.has("areas") and resaved["areas"].size() == 1)
-	assert(resaved.has("anchors") and resaved["anchors"].size() == 1)
-	assert(resaved["format_version"] == MapMeta.FORMAT_VERSION)
-	# The un-understood marker survived as an opaque section.
-	assert(loaded.section("markers_unknown").size() == 1)
-	_cleanup()
-
-
-static func _test_legacy_objects_migrate_to_entities_v4() -> void:
-	var service := _service()
-	var package := _package_path("legacy_objects")
-	DirAccess.make_dir_recursive_absolute(package)
-	var legacy := {
-		"format_version": 3, "kind": "map", "id": "legacy_objects", "name": "Старые объекты",
-		"board": {"cells": BOARD_CELLS, "cell_size": 1.0},
-		"objects": [{
-			"id": "camp_1", "archetype": "core:campfire",
-			"transform": {"position": [1.5, 0.0, 2.5], "yaw": 45.0, "scale": 1.0},
-		}],
-	}
-	var file := FileAccess.open(package.path_join(MapDocumentService.MAP_JSON), FileAccess.WRITE)
-	file.store_string(JSON.stringify(legacy))
-	file.close()
-
-	var loaded := service.load_package(package)
-	assert(loaded != null)
-	assert(loaded.entities.entities.size() == 1)
-	var entity := loaded.entities.entities[0]
-	assert(entity.id == &"camp_1" and entity.archetype_id == &"core:campfire")
-	assert(is_equal_approx(entity.position.x, 1.5) and is_equal_approx(entity.yaw_degrees, 45.0))
-	var resaved := loaded.to_json()
-	assert(resaved.has("entities") and not resaved.has("objects"))
-	_cleanup()
-
-
-## Which folder a save lands in is decided by the mode, never by the document
-## (content_packaging.md §6.4). Player mode must not be able to name a path inside
-## the shipped pack as its own.
 static func _test_write_target_follows_the_mode() -> void:
-	var player := MapDocumentService.new(false)
-	assert(player.target_source() == MapDocumentService.SOURCE_PLAYER)
-	assert(player.base_dir() == MapDocumentService.PLAYER_ROOT)
-	assert(player.can_write(MapDocumentService.PLAYER_ROOT + "/mine.gdmap"))
+	var player := MapDocumentService.new(false, PROJECT_ROOT, PROJECT_SOURCE)
+	assert(player.target_source() == PROJECT_SOURCE)
+	assert(player.base_dir() == PROJECT_ROOT.path_join("maps"))
+	assert(player.can_write(PROJECT_ROOT.path_join("maps/mine.gdmap")))
 	assert(not player.can_write(MapDocumentService.BUILTIN_ROOT + "/green_valley.gdmap"),
 		"a player may open the shipped map but never write it")
 
@@ -188,7 +94,7 @@ static func _test_write_target_follows_the_mode() -> void:
 	if OS.has_feature("editor"):
 		assert(dev.target_source() == MapDocumentService.SOURCE_BUILTIN)
 		assert(dev.can_write(MapDocumentService.BUILTIN_ROOT + "/green_valley.gdmap"))
-		assert(not dev.can_write(MapDocumentService.PLAYER_ROOT + "/mine.gdmap"))
+		assert(not dev.can_write(PROJECT_ROOT.path_join("maps/mine.gdmap")))
 	else:
 		assert(not dev.dev_mode, "dev mode cannot survive outside the Godot editor")
 
@@ -198,11 +104,10 @@ static func _test_write_target_follows_the_mode() -> void:
 	assert(not player.last_error.is_empty(), "and says why")
 
 
-## A map start with no overrides must keep era defaults. The game_definition
-## field defaults to the generic showcase so old maps remain testable.
+## A map start with no overrides is game-neutral and carries no module policy.
 static func _test_start_defaults() -> void:
 	var start := MapStart.from_dict({})
-	assert(start.era == &"tent")
+	assert(start.module_settings.is_empty())
 	assert(start.time_of_day == MapStart.DEFAULT_TIME_OF_DAY)
 	assert(start.game_definition == &"core:world_showcase")
 
@@ -451,7 +356,7 @@ static func _test_unknown_sections_survive_a_save() -> void:
 	var path := _package_path("from_the_future")
 	DirAccess.make_dir_recursive_absolute(path)
 	var future := {
-		"format_version": 1,
+		"format_version": MapMeta.FORMAT_VERSION,
 		"kind": "map",
 		"id": "from_the_future",
 		"name": "Из будущего",
@@ -518,15 +423,14 @@ static func _test_save_replaces_the_package_atomically() -> void:
 
 static func _test_runtime_keys_namespace_player_maps() -> void:
 	assert(MapDocumentService.runtime_key(MapDocumentService.SOURCE_BUILTIN, &"green_valley") == &"core:green_valley")
-	assert(MapDocumentService.runtime_key(MapDocumentService.SOURCE_PLAYER, &"green_valley") == &"user:green_valley")
+	assert(MapDocumentService.runtime_key(PROJECT_SOURCE, &"green_valley") == &"pack:test_author.test_maps/green_valley")
 
 	# A player map can never be mistaken for the shipped map of the same name.
 	var builtin := MapDocumentService.split_key(&"core:green_valley")
 	assert(builtin["source"] == MapDocumentService.SOURCE_BUILTIN and builtin["id"] == &"green_valley")
-	var player := MapDocumentService.split_key(&"user:green_valley")
-	assert(player["source"] == MapDocumentService.SOURCE_PLAYER and player["id"] == &"green_valley")
+	var player := MapDocumentService.split_key(&"pack:test_author.test_maps/green_valley")
+	assert(player["source"] == PROJECT_SOURCE and player["id"] == &"green_valley")
 	assert(MapDocumentService.split_key(&"green_valley")["id"] == &"", "map references require an explicit source")
-	assert(MapDocumentService.package_path(MapDocumentService.SOURCE_PLAYER, &"green_valley").begins_with(MapDocumentService.PLAYER_ROOT))
 
 
 static func _cleanup() -> void:

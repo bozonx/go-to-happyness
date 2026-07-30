@@ -6,7 +6,6 @@ extends RefCounted
 ## building or map formats.
 const ContentPackScript = preload("res://game/features/content/domain/content_pack.gd")
 
-const LOCAL_ROOT := "user://content/local"
 const INSTALLED_ROOT := "user://content/installed"
 const PACK_JSON := "pack.json"
 
@@ -52,7 +51,7 @@ func import_pack(archive_path: String) -> String:
 		reader.close()
 		last_error = "в .gdpack нет корректного pack.json"
 		return ""
-	var folder := _safe_folder_name(pack.author, pack.id)
+	var folder := _safe_folder_name(pack.author_id, pack.id)
 	var final_path := INSTALLED_ROOT.path_join(folder)
 	var staging_path := final_path + ".tmp"
 	_remove_directory(staging_path)
@@ -139,8 +138,8 @@ static func _safe_archive_path(path: String) -> bool:
 	return true
 
 
-static func _safe_folder_name(author: String, id: StringName) -> String:
-	var value := (author + "." + String(id)).to_lower()
+static func _safe_folder_name(author_id: StringName, id: StringName) -> String:
+	var value := (String(author_id) + "." + String(id)).to_lower()
 	var safe := ""
 	for character in value:
 		if character.to_lower() >= "a" and character.to_lower() <= "z" or character >= "0" and character <= "9" or character == "." or character == "_" or character == "-":

@@ -14,6 +14,9 @@ extends SceneTree
 const EditorScene = preload("res://game/features/world/presentation/editor/map_editor.tscn")
 
 const TEST_PACKAGE := "user://test_maps/editor_round_trip.gdmap"
+const TEST_PROJECT_ROOT := "user://content/projects/test_author.test_maps"
+const TEST_PROJECT_MAPS := TEST_PROJECT_ROOT + "/maps"
+const TEST_PROJECT_SOURCE := &"pack:test_author.test_maps"
 
 
 func _initialize() -> void:
@@ -519,7 +522,7 @@ func _test_save_and_reopen(editor: Node) -> void:
 ## it can still be chosen at all (§6.2).
 func _test_new_map_is_unnamed_until_asked() -> void:
 	var blank := MapDocument.create(&"", "Новая карта", MapMeta.DEFAULT_BOARD_CELLS)
-	var service := MapDocumentService.new(false)
+	var service := MapDocumentService.new(false, TEST_PROJECT_ROOT, TEST_PROJECT_SOURCE)
 	assert(service.save_map(blank).is_empty(), "an unnamed map cannot be saved by id")
 	assert(service.last_error.contains("id"), "and the reason names the id: %s" % service.last_error)
 
@@ -537,12 +540,12 @@ func _test_new_map_is_unnamed_until_asked() -> void:
 func _test_save_writes_back_to_the_same_file(editor: Node) -> void:
 	# Inside the writable source on purpose: a subfolder of the player's own maps
 	# is exactly the case the old id-derived path destroyed.
-	var nested_dir := MapDocumentService.PLAYER_ROOT + "/_test_nested/deep"
+	var nested_dir := TEST_PROJECT_MAPS + "/_test_nested/deep"
 	var nested := nested_dir + "/keeps_place.gdmap"
-	MapDocumentService._remove_directory(MapDocumentService.PLAYER_ROOT + "/_test_nested")
+	MapDocumentService._remove_directory(TEST_PROJECT_MAPS + "/_test_nested")
 	DirAccess.make_dir_recursive_absolute(nested_dir)
 
-	var service := MapDocumentService.new(false)
+	var service := MapDocumentService.new(false, TEST_PROJECT_ROOT, TEST_PROJECT_SOURCE)
 	var document := MapDocument.create(&"keeps_place", "На месте", MapMeta.PRESET_ARENA)
 	assert(not service.save_map_to(document, nested).is_empty(), "first write: %s" % service.last_error)
 
@@ -553,7 +556,7 @@ func _test_save_writes_back_to_the_same_file(editor: Node) -> void:
 	var previous_service = editor._service
 	# Run as a player: the scene opened straight from Godot defaults to dev mode,
 	# which writes the shipped pack and would rightly refuse this path.
-	editor._service = MapDocumentService.new(false)
+	editor._service = MapDocumentService.new(false, TEST_PROJECT_ROOT, TEST_PROJECT_SOURCE)
 	editor._on_open_requested(nested)
 	assert(editor.current_path == nested, "opened document remembers its file")
 
@@ -566,14 +569,14 @@ func _test_save_writes_back_to_the_same_file(editor: Node) -> void:
 	var reread := service.load_package(nested)
 	assert(reread != null and reread.meta.name == "Переименована", "the edit landed in the original file")
 	# Nothing was minted at the source root next to it.
-	assert(not DirAccess.dir_exists_absolute(MapDocumentService.PLAYER_ROOT + "/keeps_place.gdmap"),
+	assert(not DirAccess.dir_exists_absolute(TEST_PROJECT_MAPS + "/keeps_place.gdmap"),
 		"a save must not also create a copy under the source root")
 
 	editor._service = previous_service
 	editor.document = previous_document
 	editor.current_path = previous_path
 	editor._build_services()
-	MapDocumentService._remove_directory(MapDocumentService.PLAYER_ROOT + "/_test_nested")
+	MapDocumentService._remove_directory(TEST_PROJECT_MAPS + "/_test_nested")
 	print("  save-to-original-path ok")
 
 
@@ -590,13 +593,13 @@ func _test_read_only_source_detaches(editor: Node) -> void:
 	var previous_path: String = editor.current_path
 	var previous_service = editor._service
 	# Force player mode regardless of how the test process was launched.
-	editor._service = MapDocumentService.new(false)
+	editor._service = MapDocumentService.new(false, TEST_PROJECT_ROOT, TEST_PROJECT_SOURCE)
 
 	editor._on_open_requested(shipped)
 	assert(editor.document != null, "the shipped map opened")
 	assert(editor.current_path.is_empty(),
 		"a map from a source this mode cannot write must detach, got %s" % editor.current_path)
-	assert(editor._binding_line().contains(MapDocumentService.PLAYER_ROOT),
+	assert(editor._binding_line().contains(TEST_PROJECT_MAPS),
 		"and the panel says where a save would go instead: %s" % editor._binding_line())
 
 	editor._service = previous_service

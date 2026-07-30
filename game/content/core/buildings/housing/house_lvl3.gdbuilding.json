@@ -1,10 +1,11 @@
 {
-	"version": 6,
+	"version": 7,
 	"id": "house_lvl3",
 	"role": "house_lvl3",
+	"style": "generic",
+	"variant": "default",
 	"name": "Деревянный дом ур. 3",
 	"construction_style": "surface",
-	"era": "wood",
 	"grid_bounds": {
 		"x": 6,
 		"y": 1,
@@ -419,6 +420,8 @@
 			"id": "main",
 			"name": "Помещение",
 			"role": "room",
+			"style": "generic",
+			"variant": "default",
 			"function": "core:housing",
 			"properties": {
 				"residents": 12
@@ -441,6 +444,8 @@
 		{
 			"id": "front_door",
 			"role": "door",
+			"style": "generic",
+			"variant": "default",
 			"pos": [
 				3.0,
 				0,

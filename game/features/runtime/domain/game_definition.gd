@@ -8,8 +8,8 @@ const FORMAT_VERSION := 1
 
 var id: StringName = &""
 var name := ""
-## Runtime address from ContentIndex (`core:settlement`, `user:...` or
-## `pack:author.pack/game`). It is assigned by the registry, not authored in
+## Runtime address from ContentIndex (`core:settlement` or `pack:author.pack/game`).
+## It is assigned by the registry, not authored in
 ## `.gdgame.json`, because an installed pack's source is chosen on install.
 var runtime_key: StringName = &""
 var pack_id: StringName = &""
@@ -18,7 +18,9 @@ var module_ids: Array[StringName] = []
 var clock_id: StringName = &"realtime_pauseable"
 var input_profile: StringName = &"rts"
 var ui_layout: StringName = &""
-var start_parameters: Dictionary = {}
+## Defaults keyed by the module that owns and validates them.
+var start_module_parameters: Dictionary = {}
+var progression: GameProgressionDefinition = GameProgressionDefinition.new()
 
 
 static func load_from_file(path: String) -> GameDefinition:
@@ -52,7 +54,29 @@ static func from_dict(source: Dictionary) -> GameDefinition:
 	for raw_id: Variant in source.get("modules", []):
 		definition.module_ids.append(StringName(raw_id))
 	var start: Variant = source.get("start", {})
-	definition.start_parameters = (start as Dictionary).duplicate(true) if start is Dictionary else {}
+	if start is Dictionary:
+		var modules: Variant = (start as Dictionary).get("modules", {})
+		if modules is Dictionary:
+			definition.start_module_parameters = (modules as Dictionary).duplicate(true)
+	var progression_source: Variant = source.get("progression", {})
+	if progression_source is Dictionary:
+		definition.progression = GameProgressionDefinition.from_dict(progression_source)
 	if definition.id.is_empty() or definition.pack_id.is_empty() or definition.module_ids.is_empty():
 		return null
 	return definition
+
+
+func to_dict() -> Dictionary:
+	return {
+		"format_version": FORMAT_VERSION,
+		"id": String(id),
+		"name": name,
+		"pack": String(pack_id),
+		"modules": module_ids.map(func(module_id: StringName) -> String: return String(module_id)),
+		"default_map": String(default_map),
+		"clock": String(clock_id),
+		"input_profile": String(input_profile),
+		"ui_layout": String(ui_layout),
+		"start": {"modules": start_module_parameters.duplicate(true)},
+		"progression": progression.to_dict(),
+	}

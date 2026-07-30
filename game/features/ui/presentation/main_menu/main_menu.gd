@@ -2,20 +2,16 @@ class_name MainMenu
 extends Control
 
 ## Host game library. Every installed game definition appears here on equal
-## terms; settlement-specific configuration (era/biome) is driven by the
-## definition's start_parameters, not by hardcoded module or game id checks.
+## terms. The game definition supplies the progression catalogue; the selected
+## map may restrict, fix, or disable it through module-scoped settings.
 
 const UI_THEME = preload("res://game/features/ui/presentation/theme/ui_theme.tres")
 @onready var title_label: Label = $MarginContainer/VBoxContainer/Header/TitleLabel
 @onready var subtitle_label: Label = $MarginContainer/VBoxContainer/Header/SubtitleLabel
 
-@onready var tent_era_btn: Button = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/TentEraButton
-@onready var earth_era_btn: Button = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/EarthEraButton
-@onready var clay_era_btn: Button = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/ClayEraButton
-@onready var wood_era_btn: Button = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/WoodEraButton
-@onready var stone_era_btn: Button = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/StoneEraButton
-@onready var building_editor_btn: Button = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/BuildingEditorButton
-@onready var map_editor_btn: Button = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/MapEditorButton
+@onready var era_panel_title: Label = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/EraPanelTitle
+@onready var era_option: OptionButton = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/EraOption
+@onready var editor_btn: Button = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/EditorButton
 
 ## This picker chooses the authored world for the session.
 @onready var game_option: OptionButton = $MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox/GameOption
@@ -27,7 +23,6 @@ const UI_THEME = preload("res://game/features/ui/presentation/theme/ui_theme.tre
 @onready var quit_btn: Button = $MarginContainer/VBoxContainer/Footer/QuitButton
 
 var selected_era: StringName = &"tent"
-var selected_biome: StringName = &"summer_valley"
 var selected_game: StringName = &"core:settlement"
 ## Runtime key of the chosen playable map.
 var selected_map: StringName = &"core:green_valley"
@@ -40,7 +35,6 @@ func _ready() -> void:
 	_setup_game_options()
 	_setup_landscape_options()
 	_connect_signals()
-	_select_era(&"tent")
 	_select_game_option()
 
 
@@ -94,13 +88,8 @@ func _setup_landscape_options() -> void:
 
 
 func _connect_signals() -> void:
-	tent_era_btn.pressed.connect(func(): _select_era(&"tent"))
-	earth_era_btn.pressed.connect(func(): _select_era(&"earth"))
-	clay_era_btn.pressed.connect(func(): _select_era(&"clay"))
-	wood_era_btn.pressed.connect(func(): _select_era(&"wood"))
-	stone_era_btn.pressed.connect(func(): _select_era(&"stone"))
-	building_editor_btn.pressed.connect(_on_building_editor_pressed)
-	map_editor_btn.pressed.connect(_on_map_editor_pressed)
+	era_option.item_selected.connect(_on_era_selected)
+	editor_btn.pressed.connect(_on_editor_pressed)
 
 	game_option.item_selected.connect(_on_game_selected)
 	landscape_option.item_selected.connect(_on_landscape_selected)
@@ -114,6 +103,7 @@ func _on_landscape_selected(index: int) -> void:
 		return
 	var entry: Dictionary = metadata
 	selected_map = entry.get("map", &"")
+	_refresh_era_options()
 	_update_config_summary()
 
 
@@ -126,14 +116,11 @@ func _on_game_selected(index: int) -> void:
 
 func _select_game_option() -> void:
 	var definition := GameModuleRegistry.resolve_definition(selected_game)
-	# Launch options are module-owned. Phase A has no generic parameter editor,
-	# so the host starts the definition exactly as authored instead of interpreting
-	# settlement fields such as `era` or `biome`.
-	tent_era_btn.get_parent().get_parent().visible = false
 	if definition != null and not definition.default_map.is_empty():
 		_select_default_map(definition.default_map)
 	start_game_btn.text = "▶ Запустить игру"
-	subtitle_label.text = "Главное меню — библиотека установленных игр"
+	subtitle_label.text = "Библиотека игр, карт и пользовательского контента"
+	_refresh_era_options()
 	_update_config_summary()
 
 
@@ -146,27 +133,52 @@ func _select_default_map(map_key: StringName) -> void:
 			return
 
 
-func _select_era(era_id: StringName) -> void:
-	selected_era = era_id
-	_update_era_buttons_state()
+func _on_era_selected(index: int) -> void:
+	selected_era = StringName(era_option.get_item_metadata(index))
 	_update_config_summary()
 
 
-func _update_era_buttons_state() -> void:
-	tent_era_btn.text = "⛺ Палаточная эра" + (" [Выбрано]" if selected_era == &"tent" else "")
-	earth_era_btn.text = "🧱 Земляная эра (Скоро)"
-	clay_era_btn.text = "🏺 Глиняная эра (Скоро)"
-	wood_era_btn.text = "🪵 Деревянная эра (Скоро)"
-	stone_era_btn.text = "🪨 Каменная эра (Скоро)"
-	building_editor_btn.text = "🏗️ Редактор зданий"
-	map_editor_btn.text = "🗺 Редактор территорий"
-
-	earth_era_btn.disabled = true
-	clay_era_btn.disabled = true
-	wood_era_btn.disabled = true
-	stone_era_btn.disabled = true
-	building_editor_btn.disabled = false
-	map_editor_btn.disabled = false
+func _refresh_era_options() -> void:
+	era_option.clear()
+	var definition := GameModuleRegistry.resolve_definition(selected_game)
+	var map := _map_service.load_map(selected_map)
+	if definition == null or map == null or definition.progression.eras.is_empty():
+		era_panel_title.text = "Прогрессия"
+		era_option.add_item("Без эр")
+		era_option.disabled = true
+		selected_era = &""
+		return
+	var policy: Dictionary = map.meta.start.module_settings_for(&"gth.settlement").get("progression", {})
+	var mode := StringName(policy.get("mode", "inherit"))
+	var allowed: Array[StringName] = definition.progression.era_ids()
+	if mode == &"restricted":
+		allowed.clear()
+		for value: Variant in policy.get("allowed_eras", []):
+			var era_id := StringName(value)
+			if definition.progression.era_by_id(era_id) != null:
+				allowed.append(era_id)
+	elif mode == &"fixed":
+		allowed = [StringName(policy.get("default_era", definition.progression.eras[0].id))]
+	elif mode == &"disabled":
+		era_panel_title.text = "Прогрессия карты"
+		era_option.add_item("Эры отключены")
+		era_option.disabled = true
+		selected_era = &""
+		return
+	if allowed.is_empty():
+		allowed = definition.progression.era_ids()
+	var preferred := StringName(policy.get("default_era", selected_era))
+	if not allowed.has(preferred):
+		preferred = allowed[0]
+	for era_id: StringName in allowed:
+		var era := definition.progression.era_by_id(era_id)
+		era_option.add_item(era.display_name())
+		era_option.set_item_metadata(era_option.item_count - 1, era_id)
+		if era_id == preferred:
+			era_option.select(era_option.item_count - 1)
+	selected_era = preferred
+	era_panel_title.text = "Начальная эра"
+	era_option.disabled = mode == &"fixed"
 
 
 func _update_config_summary() -> void:
@@ -175,15 +187,17 @@ func _update_config_summary() -> void:
 		era_description_label.text = "Неизвестная игра"
 		param_summary_label.text = ""
 		return
-	era_description_label.text = definition.name
-	if definition.start_parameters.has("era"):
-		match selected_era:
-			&"tent":
-				param_summary_label.text = "• %s\n• Стартовое население: 4 жителей\n• Монеты: 500\n• Снаряжение: Кремень и огниво\n• Ресурсы и перчатки — на карте" % [_landscape_summary()]
-			_:
-				param_summary_label.text = "• %s\n• Эта эра будет доступна в следующих обновлениях." % [_landscape_summary()]
-	else:
-		param_summary_label.text = "• %s\n• Запускается внутри Go To Happyness" % [_landscape_summary()]
+	var era := definition.progression.era_by_id(selected_era)
+	era_description_label.text = era.display_description() if era != null else definition.name
+	var settlement: Dictionary = definition.start_module_parameters.get(&"gth.settlement", {})
+	var lines: Array[String] = [_landscape_summary()]
+	if era != null:
+		lines.append("Начальная эра: %s" % era.display_name())
+	if settlement.has("population"):
+		lines.append("Стартовое население: %d" % int(settlement["population"]))
+	if settlement.has("money"):
+		lines.append("Монеты: %d" % int(settlement["money"]))
+	param_summary_label.text = "• " + "\n• ".join(lines)
 
 
 ## What the chosen entry actually decides. A map states its own board and start
@@ -198,20 +212,15 @@ func _landscape_summary() -> String:
 
 func _on_start_game_pressed() -> void:
 	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
-	launch_mgr.call("launch_game_definition", selected_game, selected_map)
+	var parameters := {}
+	if not selected_era.is_empty():
+		parameters = {&"gth.settlement": {"progression": {"default_era": selected_era}}}
+	launch_mgr.call("launch_game_definition", selected_game, selected_map, parameters)
 
 
-func _on_building_editor_pressed() -> void:
+func _on_editor_pressed() -> void:
 	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
-	# Player mode: the menu is the player's entry point. Dev mode is reached by
-	# opening the editor scene inside Godot (content_packaging.md §9).
-	launch_mgr.call("launch_building_editor", false)
-
-
-func _on_map_editor_pressed() -> void:
-	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
-	# Editing opens the chosen map when one is chosen, and a new map otherwise.
-	launch_mgr.call("launch_map_editor", selected_map)
+	launch_mgr.call("launch_editor_hub", false)
 
 
 func _on_quit_pressed() -> void:

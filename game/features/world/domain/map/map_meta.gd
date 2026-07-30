@@ -34,11 +34,9 @@ const BORDER_LAVA := &"lava"
 const BORDER_NOTHING := &"nothing"
 const BORDER_KINDS: Array[StringName] = [BORDER_OCEAN, BORDER_LAVA, BORDER_NOTHING]
 
-## 4 — map fill mode promoted opaque `objects[]` into typed `entities[]`.
-## 5 — `mode`/`systems`/`economy` removed from `start`; `game_definition` is
-##     the composition boundary, economy is module-owned via game definition
-##     `start_parameters`.
-const FORMAT_VERSION := 5
+## Game-specific start data is namespaced by its owning module. The map may
+## constrain or disable a game's progression without defining what an era is.
+const FORMAT_VERSION := 6
 
 ## Board presets (§6.2). All are multiples of `TerrainGrid.CHUNK_CELLS` so the
 ## board is whole chunks. The default is the largest one that still loads

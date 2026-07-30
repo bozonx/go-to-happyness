@@ -1,10 +1,11 @@
 {
-	"version": 6,
+	"version": 7,
 	"id": "advanced_dew_collector",
 	"role": "advanced_dew_collector",
+	"style": "generic",
+	"variant": "default",
 	"name": "Улучшенный сборщик росы",
 	"construction_style": "surface",
-	"era": "tent",
 	"grid_bounds": {
 		"x": 2,
 		"y": 1,
@@ -67,6 +68,8 @@
 			"id": "main",
 			"name": "Помещение",
 			"role": "room",
+			"style": "generic",
+			"variant": "default",
 			"function": "core:workplace",
 			"properties": {
 				"profession": "craftsman",
@@ -90,6 +93,8 @@
 		{
 			"id": "front_door",
 			"role": "door",
+			"style": "generic",
+			"variant": "default",
 			"pos": [
 				1.0,
 				0,

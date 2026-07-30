@@ -5,7 +5,7 @@ extends RefCounted
 ## (`.gdbuilding.json`) and exposes the data the construction pipeline needs.
 ##
 ## This is the bridge that lets the game render buildings from the modular
-## editor format. A role resolves through the world's era/style; a namespaced
+## editor format. A role resolves through the world's style/variant; a namespaced
 ## runtime key still addresses one immutable file for saves and map placements.
 
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
@@ -16,7 +16,6 @@ const ContentIdScript = preload("res://game/features/content/domain/content_id.g
 const StyleResolverScript = preload("res://game/features/content/application/style_resolver.gd")
 
 const SOURCE_BUILTIN := &"core"
-const SOURCE_PLAYER := &"local"
 
 static var _index: Dictionary = {}          ## runtime key -> {path, source, id}
 static var _cache: Dictionary = {}          ## building_type(String) -> BuildingBlueprint
@@ -103,11 +102,9 @@ static func blueprint_ref(building_type: String) -> Dictionary:
 
 static func resolve_reference(reference: Dictionary) -> String:
 	_ensure_index()
-	var source := StringName(reference.get("source", "builtin"))
+	var source := StringName(reference.get("source", "core"))
 	var blueprint_id := StringName(reference.get("id", ""))
 	var key := runtime_key(source, blueprint_id)
-	if not _index.has(key) and source == &"builtin":
-		key = runtime_key(SOURCE_BUILTIN, blueprint_id)
 	return key if _index.has(key) else ""
 
 
@@ -122,7 +119,7 @@ static func player_entries() -> Array[Dictionary]:
 	var seen_roles: Dictionary = {}
 	for key in _index:
 		var entry: Dictionary = _index[key]
-		if entry["source"] != SOURCE_PLAYER:
+		if not String(entry["path"]).begins_with(ContentIndexScript.PROJECTS_ROOT + "/"):
 			continue
 		var blueprint := get_blueprint(key)
 		if blueprint != null and blueprint.kind == &"building" and not seen_roles.has(blueprint.role):
@@ -136,7 +133,7 @@ static func player_entries() -> Array[Dictionary]:
 				"id": blueprint.id,
 				"name": blueprint.name,
 				"category": "custom",
-				"era_category": String(blueprint.category),
+				"variant": String(blueprint.variant),
 			})
 	result.sort_custom(func(a: Dictionary, b: Dictionary): return str(a["name"]) < str(b["name"]))
 	return result
@@ -168,7 +165,7 @@ static func _register_definition(role: StringName, blueprint: BuildingBlueprintS
 		return
 	BuildingCatalogScript.register_runtime_definition(String(role), {
 		"name": blueprint.name,
-		"category": String(blueprint.category),
+		"category": "custom",
 		"costs": blueprint.construction_cost.duplicate(true),
 		"requires_village_area": true,
 		"expands_village_area": false,
@@ -185,10 +182,10 @@ static func _resolved_key(building_type: String) -> String:
 	if ":" in building_type:
 		return ""
 	var resolver := StyleResolverScript.new(_content_index)
-	var requested_era := &"brick"
+	var requested_variant := &"default"
 	if BuildingCatalogScript.has_definition(building_type):
-		requested_era = StringName(BuildingCatalogScript.definition_for(building_type).get("category", requested_era))
-	var entry := resolver.resolve(StringName(building_type), requested_era, _world_style)
+		requested_variant = StringName(BuildingCatalogScript.definition_for(building_type).get("variant", requested_variant))
+	var entry := resolver.resolve(StringName(building_type), requested_variant, _world_style)
 	if entry != null:
 		return String(entry.runtime_key)
 	return ""

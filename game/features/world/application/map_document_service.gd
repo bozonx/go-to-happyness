@@ -7,9 +7,7 @@ extends RefCounted
 ## 256×256 and would become megabytes as text. The folder holds `map.json`, the
 ## binary layers and a preview image.
 ##
-## Two sources, exactly as blueprints have them. A built-in map is addressed by
-## its bare id; a player one carries the `user:` namespace, so a downloaded map
-## called `green_valley` cannot quietly replace the shipped one of that name.
+## Maps are addressed through their manifest-backed content source.
 ##
 ## Saving is atomic: the package is written to a sibling temporary folder and only
 ## then swapped in. A crash mid-save leaves the previous map intact rather than a
@@ -20,10 +18,7 @@ const ContentIndexScript = preload("res://game/features/content/application/cont
 const ContentIdScript = preload("res://game/features/content/domain/content_id.gd")
 
 const SOURCE_BUILTIN := &"core"
-const SOURCE_PLAYER := &"local"
-
 const BUILTIN_ROOT := "res://game/content/core/maps"
-const PLAYER_ROOT := "user://content/local/maps"
 
 const PACKAGE_SUFFIX := ".gdmap"
 const MAP_JSON := "map.json"
@@ -34,8 +29,6 @@ const PREVIEW_PNG := "preview.png"
 ## them still knows not to treat them as strays when cleaning up.
 const KNOWN_FILES: Array[String] = [MAP_JSON, TERRAIN_BIN, WATER_BIN, "surface.bin", PREVIEW_PNG]
 
-const USER_NAMESPACE := "user:"
-
 var last_error := ""
 ## Populated by every listing: duplicate ids and unreadable packages, so the editor
 ## can show them instead of letting one of two files quietly disappear.
@@ -45,19 +38,23 @@ var last_errors: Array[String] = []
 ## `tools/make_builtin_maps.gd`, which means the game's own terrain, water and
 ## surface are unavailable to the editor that exists to author them.
 var dev_mode := false
+var project_root := ""
+var project_source: StringName = &""
 var _content_index: ContentIndex
 
 
-func _init(p_dev_mode: bool = false) -> void:
+func _init(p_dev_mode: bool = false, p_project_root := "", p_project_source: StringName = &"") -> void:
 	# Gated in the service, not in the UI: `res://` is a read-only `.pck` once
 	# exported, and a save that silently does nothing is the worst outcome here.
 	dev_mode = p_dev_mode and OS.has_feature("editor")
+	project_root = p_project_root
+	project_source = p_project_source
 
 
 # --- Addressing ---------------------------------------------------------------
 
 ## The key a save file and a launch config store. ContentId keeps the source
-## explicit (`core:` for shipped maps, `user:` for local maps).
+## explicit (`core:` for shipped maps, `pack:<author>.<pack>/` for projects).
 static func runtime_key(source: StringName, id: StringName) -> StringName:
 	return ContentIdScript.runtime_key(source, id)
 
@@ -68,20 +65,25 @@ static func split_key(key: StringName) -> Dictionary:
 
 
 static func root_of(source: StringName) -> String:
-	return PLAYER_ROOT if source == SOURCE_PLAYER else BUILTIN_ROOT
+	return BUILTIN_ROOT if source == SOURCE_BUILTIN else ""
 
 
 static func package_path(source: StringName, id: StringName) -> String:
-	return "%s/%s%s" % [root_of(source), id, PACKAGE_SUFFIX]
+	var root := root_of(source)
+	return "%s/%s%s" % [root, id, PACKAGE_SUFFIX] if not root.is_empty() else ""
 
 
 ## The source this mode writes under, and the folder it writes into.
 func target_source() -> StringName:
-	return SOURCE_BUILTIN if dev_mode else SOURCE_PLAYER
+	if not project_source.is_empty():
+		return project_source
+	return SOURCE_BUILTIN if dev_mode else &""
 
 
 func base_dir() -> String:
-	return root_of(target_source())
+	if not project_root.is_empty():
+		return project_root.path_join("maps")
+	return BUILTIN_ROOT if dev_mode else ""
 
 
 ## Whether this mode may write `path`. A player who opened a shipped map gets
@@ -90,7 +92,7 @@ func base_dir() -> String:
 func can_write(path: String) -> bool:
 	if path.is_empty():
 		return false
-	return path.begins_with(base_dir() + "/")
+	return not base_dir().is_empty() and path.begins_with(base_dir() + "/")
 
 
 # --- Listing ------------------------------------------------------------------
@@ -175,11 +177,10 @@ func load_package(path: String) -> MapDocument:
 		last_error = "map.json не читается: %s" % path
 		return null
 
-	var version := int(parsed.get("format_version", MapMeta.FORMAT_VERSION))
-	if version > MapMeta.FORMAT_VERSION:
-		last_error = "карта создана более новой версией формата (%d)" % version
+	var version := int(parsed.get("format_version", 0))
+	if version != MapMeta.FORMAT_VERSION:
+		last_error = "неподдерживаемая версия карты (%d, требуется %d)" % [version, MapMeta.FORMAT_VERSION]
 		return null
-	parsed = _migrate(parsed, version)
 
 	var document := MapDocument.from_json(parsed)
 	var terrain_path := path.path_join(TERRAIN_BIN)
@@ -204,106 +205,6 @@ func load_package(path: String) -> MapDocument:
 	return document
 
 
-## Files of past versions are brought forward here; writing always emits the
-## current version.
-##
-## v1 → v2: `border.level` became whole Δh steps (`map_editor.md` §6.1). A v1 file
-## could hold a fraction, and reading it as an int would truncate silently — the
-## sea would drop by part of a terrace on the first resave, which is exactly the
-## kind of change nobody notices until a coastline is wrong. Rounding is explicit
-## and to the nearest step, because the author picked a level, not a floor.
-static func _migrate(parsed: Dictionary, from_version: int) -> Dictionary:
-	if from_version < 2:
-		var border: Variant = parsed.get("border", {})
-		if border is Dictionary and (border as Dictionary).has("level"):
-			var migrated := (border as Dictionary).duplicate()
-			migrated["level"] = roundi(float(migrated["level"]))
-			parsed = parsed.duplicate()
-			parsed["border"] = migrated
-	if from_version < 3:
-		parsed = _promote_legacy_zone_sections(parsed)
-	if from_version < 4:
-		parsed = _promote_legacy_objects(parsed)
-	if from_version < 5:
-		parsed = _strip_legacy_mode(parsed)
-	return parsed
-
-
-## v2 → v3 adopts only records that already have the shared zone shape. Old
-## experimental records whose meaning cannot be known are deliberately retained
-## as opaque data: guessing a role would silently change a player's scenario.
-static func _promote_legacy_zone_sections(parsed: Dictionary) -> Dictionary:
-	var migrated := parsed.duplicate(true)
-	if not migrated.has("areas") and _legacy_zone_records_promote(migrated, "regions", ["id", "role", "rects"]):
-		migrated["areas"] = migrated["regions"]
-		migrated.erase("regions")
-	if not migrated.has("anchors") and _legacy_zone_records_promote(migrated, "markers", ["id", "role", "pos"]):
-		migrated["anchors"] = migrated["markers"]
-		migrated.erase("markers")
-	return migrated
-
-
-## v3 → v4 gives the former opaque object section one typed owner.  Legacy
-## experimental entries without an archetype cannot be interpreted safely, so
-## they are retained as a future-compatible empty entity list rather than guessed
-## into a different gameplay object.
-static func _promote_legacy_objects(parsed: Dictionary) -> Dictionary:
-	var migrated := parsed.duplicate(true)
-	if migrated.has("entities"):
-		migrated.erase("objects")
-		return migrated
-	var promoted: Array = []
-	var legacy: Variant = migrated.get("objects", [])
-	if legacy is Array:
-		for raw: Variant in legacy as Array:
-			if not (raw is Dictionary):
-				continue
-			var entry := raw as Dictionary
-			if String(entry.get("id", "")).is_empty() or String(entry.get("archetype", "")).is_empty():
-				continue
-			promoted.append(entry.duplicate(true))
-	migrated["entities"] = promoted
-	migrated.erase("objects")
-	return migrated
-
-
-## v4 → v5 drops `mode`/`systems` and `economy` from `start`. The
-## `game_definition` field is the composition boundary now; mode and per-system
-## switches are gone. Economy (money, population, resources, equipment) is
-## settlement-specific and moved to module parameters in the game definition.
-static func _strip_legacy_mode(parsed: Dictionary) -> Dictionary:
-	var migrated := parsed.duplicate(true)
-	var start: Variant = migrated.get("start", {})
-	if start is Dictionary:
-		var start_dict := start as Dictionary
-		start_dict.erase("mode")
-		start_dict.erase("economy")
-		migrated["start"] = start_dict
-	return migrated
-
-
-## True only when `parsed[key]` is present and every record in it already has the
-## shared zone shape. An absent key or an empty list means nothing to promote and
-## must return `false` — otherwise the caller dereferences a missing key, and a
-## map with no legacy sections would crash on every load.
-static func _legacy_zone_records_promote(parsed: Dictionary, key: String, fields: Array[String]) -> bool:
-	if not parsed.has(key):
-		return false
-	var value: Variant = parsed[key]
-	if not (value is Array):
-		return false
-	var records := value as Array
-	if records.is_empty():
-		return false
-	for entry: Variant in records:
-		if not (entry is Dictionary):
-			return false
-		for field in fields:
-			if not (entry as Dictionary).has(field):
-				return false
-	return true
-
-
 # --- Saving -------------------------------------------------------------------
 
 ## Writes to the package folder this source and id address. An empty `source` means
@@ -321,7 +222,9 @@ func save_map(document: MapDocument, source: StringName = &"", preview: Image = 
 		last_error = "ID карты может содержать только латинские строчные буквы, цифры, «_» и «-»"
 		return ""
 	var effective := source if not String(source).is_empty() else target_source()
-	return save_map_to(document, package_path(effective, document.meta.id), preview)
+	var target := base_dir().path_join("%s%s" % [document.meta.id, PACKAGE_SUFFIX]) \
+		if effective == target_source() else package_path(effective, document.meta.id)
+	return save_map_to(document, target, preview)
 
 
 ## Writes the package atomically and returns the path, or "" on failure. The

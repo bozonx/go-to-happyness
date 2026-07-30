@@ -1,10 +1,11 @@
 {
-	"version": 6,
+	"version": 7,
 	"id": "tarp_warehouse",
 	"role": "tarp_warehouse",
+	"style": "generic",
+	"variant": "default",
 	"name": "Склад с брезентовым навесом",
 	"construction_style": "surface",
-	"era": "tent",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,
@@ -298,6 +299,8 @@
 			"id": "main",
 			"name": "Помещение",
 			"role": "room",
+			"style": "generic",
+			"variant": "default",
 			"function": "core:storage",
 			"properties": {
 				"capacity": 200
@@ -320,6 +323,8 @@
 		{
 			"id": "front_door",
 			"role": "door",
+			"style": "generic",
+			"variant": "default",
 			"pos": [
 				2.5,
 				0,

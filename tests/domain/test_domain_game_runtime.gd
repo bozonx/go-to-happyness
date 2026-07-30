@@ -28,14 +28,14 @@ static func test_core_settlement_definition_is_indexed() -> void:
 static func test_session_keeps_settlement_values_module_scoped() -> void:
 	var definition := GameModuleRegistry.resolve_definition(&"core:settlement")
 	assert(definition != null)
-	assert(definition.start_parameters.has("era"))
-	assert(definition.start_parameters["era"] == "tent")
+	assert(definition.progression.era_ids() == [&"tent", &"earth", &"clay", &"wood", &"stone", &"brick"])
+	assert(definition.progression.era_by_id(&"tent").display_name("ru") == "Палаточная")
 	var session := GameSessionConfig.create(definition, definition.default_map, null, {
-		&"gth.settlement": definition.start_parameters.duplicate(true),
+		&"gth.settlement": {"progression": {"mode": "restricted", "default_era": "earth"}},
 	})
 	assert(session.map_ref == &"core:green_valley")
 	var settlement_parameters: Dictionary = session.module_parameters[&"gth.settlement"]
-	assert(settlement_parameters["era"] == "tent")
+	assert(settlement_parameters["progression"]["default_era"] == "earth")
 	assert(settlement_parameters["biome"] == "summer_valley")
 
 
@@ -75,7 +75,7 @@ static func test_installed_user_pack_game_is_indexed_and_resolvable() -> void:
 	assert(definition.runtime_key == _TEST_PACK_RUNTIME_KEY)
 	assert(definition.default_map == &"core:green_valley")
 	assert(definition.module_ids == [&"core.world", &"gth.world_showcase"])
-	assert(definition.start_parameters.is_empty(), "showcase game has no start parameters")
+	assert(definition.start_module_parameters.is_empty(), "showcase game has no module start parameters")
 	_teardown_test_pack()
 
 
@@ -85,10 +85,11 @@ static func _setup_test_pack() -> void:
 		DirAccess.make_dir_recursive_absolute("user://content")
 	DirAccess.make_dir_recursive_absolute(_TEST_PACK_DIR.path_join("games"))
 	var pack_json := {
-		"format_version": 1,
+		"format_version": 2,
 		"id": "test_pack",
 		"name": "Test Pack",
-		"author": "test_author",
+		"author_id": "test_author",
+		"author_name": "Test Author",
 		"version": "1.0",
 	}
 	_write_json(_TEST_PACK_DIR.path_join("pack.json"), pack_json)

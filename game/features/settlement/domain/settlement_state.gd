@@ -22,6 +22,9 @@ var unlock_state := UnlockState.new()
 var era: Era:
 	get: return era_progress.era as Era
 	set(value): era_progress.era = value
+var progression_enabled := true
+var allowed_era_ids: Array[StringName] = [&"tent", &"earth", &"clay", &"wood", &"stone", &"brick"]
+var allowed_era_types: Array[int] = [Era.TENT, Era.EARTH, Era.CLAY, Era.WOOD, Era.STONE, Era.BRICK]
 var money := 20
 
 var storage := StorageState.new()
@@ -143,6 +146,9 @@ func apply_launch_config(config: GameLaunchConfigScript, reset_progress := true)
 	if config == null:
 		config = GameLaunchConfigScript.for_tent_era()
 	era = config.era_type as Era
+	progression_enabled = config.progression_enabled
+	allowed_era_ids = config.allowed_eras.duplicate()
+	allowed_era_types = config.allowed_era_types.duplicate()
 	money = config.starting_money
 	branches = 0
 	grass = 0
@@ -499,6 +505,8 @@ func has_building(building_type: String) -> bool:
 
 
 func is_building_unlocked(building_type: String) -> bool:
+	if not progression_enabled:
+		return true
 	return unlock_state.is_building_unlocked(building_type, era)
 
 
@@ -519,6 +527,8 @@ func sell(resource_type: String, quantity: int, unit_price: int) -> bool:
 
 
 func can_advance_to(next_era: Era, population: int, housing_slots: int) -> bool:
+	if not progression_enabled or int(next_era) not in allowed_era_types:
+		return false
 	var context := {
 		"has_tools": _has_tools,
 		"is_research_completed": is_research_completed,
@@ -531,6 +541,8 @@ func can_advance_to(next_era: Era, population: int, housing_slots: int) -> bool:
 
 
 func advance_era(next_era: Era, population: int, housing_slots: int) -> bool:
+	if not progression_enabled or int(next_era) not in allowed_era_types:
+		return false
 	var context := {
 		"has_tools": _has_tools,
 		"is_research_completed": is_research_completed,

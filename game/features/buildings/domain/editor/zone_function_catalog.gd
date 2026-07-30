@@ -37,7 +37,7 @@ extends RefCounted
 
 const FILE_NAME := "zone_functions.json"
 const PACK_ROOTS: Array[String] = [
-	"res://game/content", "user://content/local", "user://content/installed",
+	"res://game/content", "user://content/projects", "user://content/installed",
 ]
 
 ## What a function can be attached to.

@@ -66,8 +66,6 @@ const SCOPES: Array[StringName] = [SCOPE_BUILDING, SCOPE_MAP, SCOPE_BOTH]
 @export var description: String = ""
 ## Search tags for catalog filtering (design §5.1).
 @export var tags: Array[StringName] = []
-## Era when this asset becomes available (design §4).
-@export var available_from_era: StringName = &""
 ## Allowed rotation axes, e.g. ["x", "y", "z"]. Empty means all axes.
 @export var rotation_axes: Array[String] = []
 ## Quick rotation step in degrees (design §4.1).

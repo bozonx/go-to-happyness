@@ -6,7 +6,7 @@ extends Node3D
 ## Runs in two modes (see design_docs/engine/modular_building_editor.md §5):
 ##   * Dev mode  — launched by opening this scene directly in Godot; saves to
 ##     res://game/content/core/buildings and exposes the developer panel.
-##   * Player mode — launched from the main menu; saves to user://custom_buildings.
+##   * Player mode — launched through Editor Hub; saves to the selected project pack.
 
 signal back_requested
 
@@ -116,7 +116,10 @@ func _ready() -> void:
 	_resolve_launch_mode()
 	grid_model = BuildingGridModel.new()
 	blueprint = BuildingBlueprint.new()
-	repository = BlueprintRepository.new(dev_mode)
+	var launch_mgr := get_node_or_null("/root/GameLaunchManager")
+	var pack_root := String(launch_mgr.get("active_editor_pack_root")) if launch_mgr != null else ""
+	var pack_source := StringName(launch_mgr.get("active_editor_pack_source")) if launch_mgr != null else &""
+	repository = BlueprintRepository.new(dev_mode, pack_root, pack_source)
 	mesh_library = BlockMeshLibrary.new()
 
 	_init_world()
@@ -141,7 +144,10 @@ func _resolve_launch_mode() -> void:
 
 func _connect_back_navigation() -> void:
 	var launch_mgr := get_node_or_null("/root/GameLaunchManager")
-	back_requested.connect(launch_mgr.return_to_main_menu)
+	if launch_mgr != null and not String(launch_mgr.get("active_editor_pack_root")).is_empty():
+		back_requested.connect(launch_mgr.return_to_editor_hub)
+	else:
+		back_requested.connect(launch_mgr.return_to_main_menu)
 
 
 # ---------------------------------------------------------------------------

@@ -1120,9 +1120,9 @@ func _refresh_building_summary() -> void:
 	if _building_summary_label == null or _editor.blueprint == null:
 		return
 	var bp: BuildingBlueprint = _editor.blueprint
-	_building_summary_label.text = "%s%s\n%s · %d×%d×%d · эра %s\n%d областей · %d точек · отмен: %d" % [
+	_building_summary_label.text = "%s%s\n%s · %d×%d×%d · %s / %s\n%d областей · %d точек · отмен: %d" % [
 		bp.name, " *" if _editor.is_document_dirty() else "", bp.id,
-		bp.grid_bounds.x, bp.grid_bounds.y, bp.grid_bounds.z, bp.era,
+		bp.grid_bounds.x, bp.grid_bounds.y, bp.grid_bounds.z, bp.style, bp.variant,
 		bp.areas.size(), bp.anchors.size(), _editor.undo_step_count()]
 
 

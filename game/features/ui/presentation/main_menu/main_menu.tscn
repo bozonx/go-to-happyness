@@ -52,7 +52,7 @@ horizontal_alignment = 1
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 theme_override_colors/font_color = Color(0.7, 0.75, 0.8, 1)
-text = "Главное меню — Выберите эру для начала игры"
+text = "Главное меню — библиотека игр и контента"
 horizontal_alignment = 1
 
 [node name="ContentSplit" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
@@ -81,47 +81,16 @@ theme_override_constants/separation = 12
 [node name="EraPanelTitle" type="Label" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
-text = "Доступные Эры"
+text = "Начальная эра"
 
-[node name="TentEraButton" type="Button" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
+[node name="EraOption" type="OptionButton" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
-text = "⛺ Палаточная эра"
 
-[node name="EarthEraButton" type="Button" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
+[node name="EditorButton" type="Button" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
-disabled = true
-text = "🧱 Земляная эра (Скоро)"
-
-[node name="ClayEraButton" type="Button" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
-disabled = true
-text = "🏺 Глиняная эра (Скоро)"
-
-[node name="WoodEraButton" type="Button" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
-disabled = true
-text = "🪵 Деревянная эра (Скоро)"
-
-[node name="StoneEraButton" type="Button" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
-disabled = true
-text = "🪨 Каменная эра (Скоро)"
-
-[node name="BuildingEditorButton" type="Button" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
-disabled = true
-text = "🏗️ Редактор зданий (Скоро)"
-
-[node name="MapEditorButton" type="Button" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
-text = "🗺 Редактор территорий"
+text = "🛠 Редактор контента"
 
 [node name="ConfigPanel" type="Panel" parent="MarginContainer/VBoxContainer/ContentSplit"]
 layout_mode = 2

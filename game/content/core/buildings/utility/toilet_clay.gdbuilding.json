@@ -1,10 +1,11 @@
 {
-	"version": 6,
+	"version": 7,
 	"id": "toilet_clay",
 	"role": "toilet_clay",
+	"style": "generic",
+	"variant": "default",
 	"name": "Глиняный туалет ур. 1",
 	"construction_style": "surface",
-	"era": "clay",
 	"grid_bounds": {
 		"x": 2,
 		"y": 1,
@@ -67,6 +68,8 @@
 			"id": "main",
 			"name": "Помещение",
 			"role": "room",
+			"style": "generic",
+			"variant": "default",
 			"function": "core:workplace",
 			"properties": {
 				"profession": "craftsman",
@@ -90,6 +93,8 @@
 		{
 			"id": "front_door",
 			"role": "door",
+			"style": "generic",
+			"variant": "default",
 			"pos": [
 				1.0,
 				0,

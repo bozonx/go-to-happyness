@@ -6,6 +6,8 @@ extends Node
 
 const BUILDING_EDITOR_SCENE := "res://game/features/buildings/presentation/editor/building_editor.tscn"
 const MAP_EDITOR_SCENE := "res://game/features/world/presentation/editor/map_editor.tscn"
+const EDITOR_HUB_SCENE := "res://game/features/content/presentation/editor/editor_hub.tscn"
+const GAME_EDITOR_SCENE := "res://game/features/runtime/presentation/editor/game_editor.tscn"
 const GAME_RUNTIME_SCENE := "res://game/bootstrap/game_runtime.tscn"
 
 var active_session: GameSessionConfig = null
@@ -16,6 +18,8 @@ var pending_editor_map: StringName = &""
 ## In-memory hand-off for F5 from the map editor. It is intentionally not a
 ## save: a test run must see unsaved edits and must not mutate the document.
 var pending_editor_document: MapDocument = null
+var active_editor_pack_root := ""
+var active_editor_pack_source: StringName = &""
 
 var _map_service := MapDocumentService.new()
 
@@ -105,6 +109,30 @@ func launch_map_editor(map_key: StringName = &"", dev_mode := false) -> void:
 	pending_editor_map = map_key
 	_set_editor_mode(dev_mode)
 	get_tree().change_scene_to_file(MAP_EDITOR_SCENE)
+
+
+func launch_editor_hub(dev_mode := false) -> void:
+	pending_save_path = ""
+	active_editor_pack_root = ""
+	active_editor_pack_source = &""
+	_set_editor_mode(dev_mode)
+	get_tree().change_scene_to_file(EDITOR_HUB_SCENE)
+
+
+func select_editor_pack(root: String, source: StringName) -> void:
+	active_editor_pack_root = root
+	active_editor_pack_source = source
+
+
+func launch_game_editor() -> void:
+	if active_editor_pack_root.is_empty():
+		push_warning("[editor] game editor requires an active project pack")
+		return
+	get_tree().change_scene_to_file(GAME_EDITOR_SCENE)
+
+
+func return_to_editor_hub() -> void:
+	get_tree().change_scene_to_file(EDITOR_HUB_SCENE)
 
 
 func return_to_main_menu() -> void:

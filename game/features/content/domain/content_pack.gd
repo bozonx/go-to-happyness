@@ -3,11 +3,12 @@ extends RefCounted
 
 ## Metadata for one authored content package.  The index owns discovery; this
 ## record deliberately knows nothing about buildings or maps.
-const FORMAT_VERSION := 1
+const FORMAT_VERSION := 2
 
 var id: StringName = &""
 var name := ""
-var author := ""
+var author_id: StringName = &""
+var author_name := ""
 var version := ""
 var revision := ""
 var styles: Array[StringName] = []
@@ -23,7 +24,10 @@ func read_from_dict(data: Dictionary, path: String = "", p_source: StringName = 
 	if String(id).is_empty():
 		return false
 	name = String(data.get("name", id))
-	author = String(data.get("author", ""))
+	author_id = StringName(data.get("author_id", ""))
+	author_name = String(data.get("author_name", author_id))
+	if String(author_id).is_empty():
+		return false
 	version = String(data.get("version", ""))
 	revision = String(data.get("revision", ""))
 	root_path = path
@@ -41,7 +45,8 @@ func read_from_dict(data: Dictionary, path: String = "", p_source: StringName = 
 func to_dict() -> Dictionary:
 	return {
 		"format_version": FORMAT_VERSION,
-		"id": String(id), "name": name, "author": author,
+		"id": String(id), "name": name,
+		"author_id": String(author_id), "author_name": author_name,
 		"version": version, "revision": revision,
 		"provides": {"styles": styles.map(func(style: StringName) -> String: return String(style))},
 		"requires": requires.duplicate(true),

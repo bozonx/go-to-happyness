@@ -50,6 +50,11 @@ custom_minimum_size = Vector2(38, 0)
 text = "⚙"
 tooltip_text = "Настройки карты"
 
+[node name="StartSettingsButton" type="Button" parent="Margin/Scroll/Row"]
+custom_minimum_size = Vector2(38, 0)
+text = "▶⚙"
+tooltip_text = "Настройки старта на карте"
+
 [node name="VSep1" type="VSeparator" parent="Margin/Scroll/Row"]
 
 [node name="UndoButton" type="Button" parent="Margin/Scroll/Row"]

@@ -1,6 +1,6 @@
 # Authored building content
 
-Every new building is a version 6 `*.gdbuilding.json`. Subdirectories are
+Every new building is a version 7 `*.gdbuilding.json`. Subdirectories are
 content categories only; IDs remain pack-wide and must be unique.
 
 ## Runtime access contract
