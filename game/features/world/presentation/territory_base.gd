@@ -78,3 +78,14 @@ func add_landscape_object(node: Node) -> void:
 			landscape_objects.add_child(node)
 	else:
 		add_child(node)
+
+
+## Session-owned visuals are attached beside the static territory scene. They
+## must be disposed explicitly before the session root goes away; otherwise a
+## host scene transition leaves those detached map-entity and ambient nodes as
+## ObjectDB orphans.
+func clear_session_landscape_objects() -> void:
+	if landscape_objects == null:
+		return
+	for node: Node in landscape_objects.get_children():
+		node.free()

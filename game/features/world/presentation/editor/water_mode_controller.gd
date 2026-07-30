@@ -65,7 +65,9 @@ func adjust_brush_size(delta: int) -> void:
 
 
 func _brush_has_size() -> bool:
-	return context != null and context.water_brush != null and context.water_brush.tool != WaterBrushController.TOOL_FLOOD
+	if context == null or context.water_brush == null:
+		return false
+	return context.water_brush.tool in [WaterBrushController.TOOL_FREEZE, WaterBrushController.TOOL_THAW]
 
 
 func process(_delta: float) -> void:
@@ -84,6 +86,7 @@ func handle_input(event: InputEvent) -> bool:
 			return true
 		if button.button_index == MOUSE_BUTTON_RIGHT:
 			if button.pressed and button.shift_pressed:
+				context.water_brush.update_hover(context.camera, context.space_state(), context.mouse_position())
 				context.set_edit_label("вода")
 				context.water_brush.apply_secondary()
 				notify_ui_changed()
@@ -113,11 +116,14 @@ func _handle_key(event: InputEventKey) -> bool:
 			if _brush_has_size():
 				brush.adjust_brush_size(1)
 		KEY_EQUAL, KEY_KP_ADD:
-			brush.adjust_level(1)
+			if brush.tool == WaterBrushController.TOOL_FLOOD:
+				brush.adjust_level(1)
 		KEY_MINUS, KEY_KP_SUBTRACT:
-			brush.adjust_level(-1)
+			if brush.tool == WaterBrushController.TOOL_FLOOD:
+				brush.adjust_level(-1)
 		KEY_G:
-			brush.pick_level_from_ground()
+			if brush.tool == WaterBrushController.TOOL_FLOOD:
+				brush.pick_level_from_ground()
 		KEY_F:
 			brush.tool = WaterBrushController.TOOL_FREEZE
 		KEY_R:
@@ -140,6 +146,9 @@ func _handle_key(event: InputEventKey) -> bool:
 func _stroke() -> void:
 	context.set_edit_label(_edit_label())
 	var brush := context.water_brush
+	# A mouse press may arrive before this frame's hover update. Refresh it here
+	# so drain always resolves the body actually clicked, not the previous cell.
+	brush.update_hover(context.camera, context.space_state(), context.mouse_position())
 	brush.apply()
 	if brush.tool == WaterBrushController.TOOL_FLOOD and _flow_strength > 0 and _selected_body_is_river():
 		context.water_service.set_flow(
@@ -153,6 +162,7 @@ func _stroke() -> void:
 func _edit_label() -> String:
 	match context.water_brush.tool:
 		WaterBrushController.TOOL_FLOOD: return "наполнение водоёма"
+		WaterBrushController.TOOL_DRAIN: return "осушение"
 		WaterBrushController.TOOL_FREEZE: return "заморозка"
 		WaterBrushController.TOOL_THAW: return "разморозка"
 	return "вода"
@@ -214,15 +224,17 @@ func tool_options() -> Array:
 	for tool: StringName in WaterBrushController.TOOLS:
 		var label: String = {
 			WaterBrushController.TOOL_FLOOD: "Наполнить",
+			WaterBrushController.TOOL_DRAIN: "Осушить",
 			WaterBrushController.TOOL_FREEZE: "Заморозить",
 			WaterBrushController.TOOL_THAW: "Разморозить",
 		}.get(tool, String(tool))
 		options.append(ToolOption.of(
 			StringName("%s%s" % [OPTION_TOOL_PREFIX, tool]), label, &"tools", brush.tool == tool,
 		))
-	options.append(ToolOption.of(&"water_level", "Уровень %d" % brush.level, &"level", false, true))
-	options.append(ToolOption.of(OPTION_LEVEL_DOWN, "−", &"level"))
-	options.append(ToolOption.of(OPTION_LEVEL_UP, "+", &"level"))
+	if brush.tool == WaterBrushController.TOOL_FLOOD:
+		options.append(ToolOption.of(&"water_level", "Уровень %d" % brush.level, &"level", false, true))
+		options.append(ToolOption.of(OPTION_LEVEL_DOWN, "−", &"level"))
+		options.append(ToolOption.of(OPTION_LEVEL_UP, "+", &"level"))
 	if _brush_has_size():
 		options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (brush.brush_size - 1), &"brush", false, true))
 		options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", &"brush"))
@@ -272,7 +284,8 @@ func inspector_lines() -> Array[String]:
 	lines.append("Инструмент: %s" % brush.tool)
 	if _brush_has_size():
 		lines.append("Кисть: %d×%d" % [brush.brush_size * 2 - 1, brush.brush_size * 2 - 1])
-	lines.append("Уровень: %d (%.1f м)" % [brush.level, float(brush.level) * TerrainGrid.HEIGHT_STEP])
+	if brush.tool == WaterBrushController.TOOL_FLOOD:
+		lines.append("Уровень: %d (%.1f м)" % [brush.level, float(brush.level) * TerrainGrid.HEIGHT_STEP])
 	lines.append("")
 	if body == null:
 		lines.append("Водоём не выбран — создайте его в палитре")
@@ -294,7 +307,7 @@ func inspector_lines() -> Array[String]:
 	lines.append("")
 	lines.append("Flood: ЛКМ по водоёму другого типа сменит тип всего водоёма")
 	lines.append("Наполнение использует уровень и заменяет контур выбранного водоёма")
-	lines.append("Заморозка и разморозка рисуются кистью; Shift+ПКМ — осушить весь водоём")
+	lines.append("Осушение: клик или Shift+ПКМ удаляет весь водоём; океан защищён")
 	return lines
 
 

@@ -25,9 +25,10 @@ extends BaseBrushController
 ## state the first seasonal pass overwrites wholesale. Freezing stays a button on
 ## the body (`toggle_body_ice`), which is the granularity the mechanic has.
 const TOOL_FLOOD := &"flood"
+const TOOL_DRAIN := &"drain"
 const TOOL_FREEZE := &"freeze"
 const TOOL_THAW := &"thaw"
-const TOOLS: Array[StringName] = [TOOL_FLOOD, TOOL_FREEZE, TOOL_THAW]
+const TOOLS: Array[StringName] = [TOOL_FLOOD, TOOL_DRAIN, TOOL_FREEZE, TOOL_THAW]
 
 var tool: StringName = TOOL_FLOOD
 ## The body strokes go into. Zero until the author makes one — a stroke with no
@@ -115,6 +116,8 @@ func apply() -> void:
 	match tool:
 		TOOL_FLOOD:
 			_flood()
+		TOOL_DRAIN:
+			_drain_body_at_hover()
 		TOOL_FREEZE:
 			_set_frozen(true)
 		TOOL_THAW:

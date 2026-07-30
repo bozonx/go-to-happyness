@@ -15,6 +15,7 @@ static func run_all() -> void:
 	_test_flood_writes_through_the_service()
 	_test_flood_auto_picks_level_on_flat_ground()
 	_test_reverse_flood_drains_whole_body()
+	_test_drain_tool_removes_whole_body_at_any_level()
 	_test_no_hover_means_no_edit()
 	_test_no_body_means_refusal()
 	_test_cycle_tool_rotates_the_water_tools()
@@ -142,6 +143,25 @@ static func _test_reverse_flood_drains_whole_body() -> void:
 	assert(not water.has_body(brush.body_id))
 
 
+static func _test_drain_tool_removes_whole_body_at_any_level() -> void:
+	var world := _make()
+	var terrain: TerrainGrid = world["terrain"]
+	var water: WaterGrid = world["water"]
+	var brush: WaterBrushController = world["brush"]
+	var centre := Vector2i(0, 0)
+	terrain.set_height(centre, -4)
+	var body := _make_body(world)
+	brush.level = 3
+	_hover(brush, centre)
+	brush.apply()
+	assert(water.has_water(centre))
+	assert(water.height_of(centre) == 3)
+	brush.tool = WaterBrushController.TOOL_DRAIN
+	brush.apply()
+	assert(not water.has_water(centre))
+	assert(not water.has_body(body.id))
+
+
 # --- Guards -------------------------------------------------------------------
 
 static func _test_no_hover_means_no_edit() -> void:
@@ -175,6 +195,8 @@ static func _test_cycle_tool_rotates_the_water_tools() -> void:
 	var brush: WaterBrushController = world["brush"]
 
 	assert(brush.tool == WaterBrushController.TOOL_FLOOD)
+	brush.cycle_tool()
+	assert(brush.tool == WaterBrushController.TOOL_DRAIN)
 	brush.cycle_tool()
 	assert(brush.tool == WaterBrushController.TOOL_FREEZE)
 	brush.cycle_tool()

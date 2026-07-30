@@ -56,3 +56,17 @@ func publish_navigation() -> void:
 		world_setup.water_grid,
 	)
 	world_setup.water_access.configure(world_setup.water_grid, world_setup.terrain_grid, nav_grid)
+
+
+## The world projects some visuals into the game host and territory, outside
+## `WorldSetup`'s own node subtree. Release those projections before the host
+## destroys its scene so a stopped session cannot leave orphan ObjectDB/RID
+## objects behind.
+func dispose() -> void:
+	if world_setup != null:
+		world_setup.dispose()
+		if is_instance_valid(world_setup):
+			world_setup.free()
+	world_setup = null
+	entity_runtime = MapEntityRuntime.new()
+	terrain_navigation_publisher = TerrainNavigationPublisher.new()

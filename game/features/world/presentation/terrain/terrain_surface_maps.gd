@@ -7,7 +7,7 @@ extends RefCounted
 ## | Map | Format | Content |
 ## | :-- | :-- | :-- |
 ## | index | `R8`, nearest | material index of the column |
-## | detail | `RGBA8` | variant, wear, snow depth, (reserved: moisture) |
+## | detail | `RGBA8` | variant, wear, snow depth, unused alpha |
 ##
 ## Both are board-sized — 96×96 is 9 KB and 36 KB — and that is the whole reason
 ## painting a material is not a mesh operation any more: the brush writes one

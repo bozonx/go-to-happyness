@@ -449,6 +449,11 @@ func _update_hover_marker() -> void:
 	if brush == null or not brush.has_hover:
 		return
 	var centre := document.terrain.cell_center(brush.hovered_cell)
+	# Water-state brushes operate on the water sheet, not visually on its bed.
+	# The cell still comes from the terrain ray (open water has no collider), but
+	# its cursor is drawn where the authored water surface actually is.
+	if brush is WaterBrushController and document.water.has_water(brush.hovered_cell):
+		centre.y = float(document.water.height_of(brush.hovered_cell)) * TerrainGrid.HEIGHT_STEP
 	hover_marker.position = Vector3(centre.x, centre.y + 0.03, centre.z)
 	var span := float(brush.brush_size * 2 - 1)
 	hover_marker.scale = Vector3(span, 1.0, span)

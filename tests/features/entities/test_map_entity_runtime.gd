@@ -35,6 +35,8 @@ func _run() -> void:
 	assert(view != null and view.get_meta("map_entity_state") == &"cold")
 	var fire := view.get_node_or_null("Fire") as Node3D
 	assert(fire != null and not fire.visible, "cold state reached the launched view")
+	runtime.stop_session()
+	root.remove_child(runtime)
 	runtime.free()
 	await process_frame
 	await physics_frame

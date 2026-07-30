@@ -47,6 +47,8 @@ func _run() -> void:
 	settlement.settlement.money = 1
 	assert(SessionSaveCoordinator.load_pending(runtime, SessionSaveCoordinator.QUICKSAVE_PATH))
 	assert(settlement.settlement.money == saved_money)
+	runtime.stop_session()
+	root.remove_child(runtime)
 	runtime.free()
 	await process_frame
 	await physics_frame
@@ -85,6 +87,8 @@ func _assert_world_showcase(launch_manager: Node) -> void:
 	showcase.camera_controller.camera_yaw = 90.0
 	assert(SessionSaveCoordinator.load_pending(runtime, SessionSaveCoordinator.QUICKSAVE_PATH))
 	assert(showcase.camera_controller.camera_yaw == 17.0)
+	runtime.stop_session()
+	root.remove_child(runtime)
 	runtime.free()
 	await process_frame
 	await physics_frame

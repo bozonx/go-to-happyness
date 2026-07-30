@@ -29,3 +29,9 @@ func start(_runtime: GameRuntime, session: GameSessionConfig) -> bool:
 		return false
 	_runtime.world_session = WorldSession.new(session.map_document)
 	return true
+
+
+func stop(runtime: GameRuntime) -> void:
+	if runtime != null and runtime.world_session != null:
+		runtime.world_session.dispose()
+		runtime.world_session = null

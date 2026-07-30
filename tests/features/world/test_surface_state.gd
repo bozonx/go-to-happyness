@@ -10,10 +10,8 @@ extends RefCounted
 ## would still be right and only the frame time or the citizens' routes would go
 ## wrong.
 ##
-## Seasonal accumulation and melt (§6.2), regrowth of `scorched` (§6.4) and map
-## regions (§8) are deliberately not covered: the services that produce them do
-## not exist yet, and the state they write is checked here through the authoring
-## path instead.
+## Seasonal accumulation and melt (§6.2) are deliberately not covered: the
+## weather producer does not exist yet. Scorched regrowth is covered below.
 
 const BOARD_CELLS := 32
 
@@ -32,6 +30,7 @@ static func run_all() -> void:
 	print("    [PASS] Surface Wear Tests")
 	_test_snow_changes_weight_and_not_passability()
 	_test_material_weight_reaches_navigation()
+	_test_scorched_regrows_to_grass()
 	print("    [PASS] Surface Weight Tests")
 
 
@@ -294,3 +293,18 @@ static func _test_material_weight_reaches_navigation() -> void:
 	# under a paved road must not be charged twice (§1).
 	nav_grid.set_road_cell_weights({cell: 1.0})
 	assert(is_equal_approx(nav_grid.get_cell_weight(cell), 1.0))
+
+
+static func _test_scorched_regrows_to_grass() -> void:
+	var world := _make()
+	var grid: TerrainGrid = world["grid"]
+	var service: TerrainService = world["service"]
+	var regrowth := ScorchedRegrowthService.new()
+	regrowth.configure(service)
+	var cell := Vector2i(0, 0)
+	assert(service.paint_material(_brush([cell]), TerrainMaterialCatalog.SCORCHED))
+	assert(regrowth.regrow_day(1, 0.0).is_empty())
+	assert(grid.material_of(cell) == TerrainMaterialCatalog.SCORCHED)
+	var restored := regrowth.regrow_day(1, 1.0)
+	assert(restored == [cell])
+	assert(grid.material_of(cell) == TerrainMaterialCatalog.GRASS)

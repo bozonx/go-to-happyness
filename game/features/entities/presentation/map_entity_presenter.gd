@@ -15,14 +15,15 @@ func present(runtime: MapEntityRuntime, territory: TerritoryBase) -> void:
 	if runtime == null or territory == null:
 		return
 	for entity: MapEntityRuntime.RuntimeEntity in runtime.all():
-		var view := _make_view(entity)
 		if not entity.active:
 			continue
 		# Interactive natural entities are instantiated by AmbientSpawner, which
 		# also registers them with harvesting and foraging services. A generic
-		# visual here would create a second, inert copy.
+		# visual here would create a second, inert copy. Test this before creating
+		# a scene instance: the former order leaked every skipped view as an orphan.
 		if entity.archetype.has_component(&"settlement_natural"):
 			continue
+		var view := _make_view(entity)
 		territory.add_landscape_object(view)
 		_views[entity.id] = view
 		# Fireflies are an ambient effect, not a settlement_natural object, so

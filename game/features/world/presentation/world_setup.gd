@@ -85,6 +85,38 @@ func build(parent: Node) -> void:
 	_build_selection_marker(parent)
 
 
+## Frees the projections which are deliberately attached to the game host and
+## territory rather than below this setup node. `WorldSession.dispose()` calls
+## this before either parent is removed from the scene tree.
+func dispose() -> void:
+	if _territory != null:
+		_territory.clear_session_landscape_objects()
+	for node: Node in [
+		village_boundary_markers,
+		village_territory_overlay,
+		rain_effect,
+		sky_and_weather_controller,
+		trail_overlay,
+		selection_marker,
+		preview_entrance_marker,
+		preview_back_entrance_marker,
+		hero_build_radius_marker,
+	]:
+		if is_instance_valid(node):
+			node.free()
+	village_boundary_markers = null
+	village_territory_overlay = null
+	rain_effect = null
+	sky_and_weather_controller = null
+	trail_overlay = null
+	selection_marker = null
+	preview_entrance_marker = null
+	preview_back_entrance_marker = null
+	hero_build_radius_marker = null
+	map_entity_presenter = null
+	_territory = null
+
+
 func update_daylight(
 	game_minutes: float,
 	cloud_cover: float,

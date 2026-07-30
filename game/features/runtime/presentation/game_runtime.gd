@@ -49,13 +49,20 @@ func abort_session() -> void:
 		session_content = null
 
 
-func _exit_tree() -> void:
+## Stops module-owned resources in reverse dependency order. This is public
+## lifecycle API for the host, not an incidental side effect of freeing a node.
+func stop_session() -> void:
 	var module_ids: Array = active_modules.keys()
 	module_ids.reverse()
 	for module_id: StringName in module_ids:
 		var module: GameModule = active_modules[module_id]
 		module.stop(self)
 	active_modules.clear()
+	active_session = null
+
+
+func _exit_tree() -> void:
+	stop_session()
 
 
 func _restore_pending_save() -> void:

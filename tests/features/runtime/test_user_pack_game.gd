@@ -60,6 +60,8 @@ func _run() -> void:
 	assert(showcase != null, "the user-pack game must not instantiate SettlementGame")
 	assert(showcase.world_setup != null)
 
+	runtime.stop_session()
+	root.remove_child(runtime)
 	runtime.free()
 	await process_frame
 	await physics_frame
