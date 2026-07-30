@@ -15,9 +15,6 @@ const TENT_STARTING_FOOD := 16
 const TENT_STARTING_WATER := 8
 const TENT_STARTING_POPULATION := 4
 const TENT_STARTING_WELLBEING := 75
-const TENT_STARTING_EQUIPMENT := {
-	"flint_steel": {"owned": true},
-}
 
 var era_progress := EraProgress.new()
 var unlock_state := UnlockState.new()

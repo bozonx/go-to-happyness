@@ -37,9 +37,6 @@ static func for_tent_era() -> GameLaunchConfig:
 	config.starting_money = 500
 	config.starting_wellbeing = 75
 	config.starting_population = 4
-	config.starting_equipment = {
-		"flint_steel": {"owned": true},
-	}
 	return config
 
 

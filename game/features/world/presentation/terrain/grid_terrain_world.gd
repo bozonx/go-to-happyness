@@ -37,8 +37,15 @@ signal rebuild_finished()
 @export var lod_distance := 64.0
 @export var full_smoothing := false
 @export_range(0.0, 1.0, 0.01) var edge_rounding := 0.0
+enum RenderMode {
+	TEXTURED = 0,
+	MATTE = 1,
+	SIMPLE = 2,
+}
+
 @export var edge_bevel := false
 @export var grass_visible := true
+@export var render_mode: RenderMode = RenderMode.TEXTURED
 
 var grid: TerrainGrid = null
 ## Optional: without it every chunk is built at full detail.
@@ -267,20 +274,45 @@ func _chunk_body(chunk: Vector2i, create_if_missing: bool) -> StaticBody3D:
 	return body
 
 
+func set_render_mode(mode: RenderMode) -> void:
+	if render_mode == mode:
+		return
+	render_mode = mode
+	_sync_render_mode_parameters()
+	_update_grass_visibility()
+
+
 func set_grass_visible(enabled: bool) -> void:
 	if grass_visible == enabled:
 		return
 	grass_visible = enabled
+	_update_grass_visibility()
+
+
+func _is_grass_effective() -> bool:
+	return grass_visible and (render_mode != RenderMode.MATTE)
+
+
+func _update_grass_visibility() -> void:
+	var effective := _is_grass_effective()
 	for child: Node in _chunk_bodies.values():
 		var body := child as StaticBody3D
 		if body == null:
 			continue
 		var tall: MultiMeshInstance3D = body.get_node_or_null(^"TallGrass")
 		if tall != null:
-			tall.visible = grass_visible
+			tall.visible = effective
 		var med: MultiMeshInstance3D = body.get_node_or_null(^"MediumGrass")
 		if med != null:
-			med.visible = grass_visible
+			med.visible = effective
+
+
+func _sync_render_mode_parameters() -> void:
+	var mode_val := float(render_mode)
+	if _ground_material != null:
+		_ground_material.set_shader_parameter(&"render_mode_idx", mode_val)
+	if _cliff_material != null:
+		_cliff_material.set_shader_parameter(&"render_mode_idx", mode_val)
 
 
 func _rebuild_tall_grass(body: StaticBody3D, chunk: Vector2i, lod: int) -> void:
@@ -298,7 +330,7 @@ func _rebuild_tall_grass(body: StaticBody3D, chunk: Vector2i, lod: int) -> void:
 		instance.extra_cull_margin = TerrainTallGrass.CARD_HEIGHT
 		instance.material_override = _tall_grass.material()
 		body.add_child(instance)
-	instance.visible = grass_visible
+	instance.visible = _is_grass_effective()
 	instance.multimesh = _tall_grass.build_chunk(grid, chunk)
 
 
@@ -315,7 +347,7 @@ func _rebuild_medium_grass(body: StaticBody3D, chunk: Vector2i, lod: int) -> voi
 		instance.extra_cull_margin = TerrainMediumGrass.CARD_HEIGHT
 		instance.material_override = _medium_grass.material()
 		body.add_child(instance)
-	instance.visible = grass_visible
+	instance.visible = _is_grass_effective()
 	instance.multimesh = _medium_grass.build_chunk(grid, chunk)
 
 
@@ -348,6 +380,7 @@ func _ground_shader_material() -> ShaderMaterial:
 	_ground_material.set_shader_parameter(&"full_smoothing", 1.0 if full_smoothing else 0.0)
 	_ground_material.set_shader_parameter(&"edge_rounding", edge_rounding)
 	_ground_material.set_shader_parameter(&"edge_bevel", 1.0 if edge_bevel else 0.0)
+	_ground_material.set_shader_parameter(&"render_mode_idx", float(render_mode))
 	return _ground_material
 
 
@@ -360,4 +393,5 @@ func _cliff_shader_material() -> ShaderMaterial:
 	_cliff_material.set_shader_parameter(&"full_smoothing", 1.0 if full_smoothing else 0.0)
 	_cliff_material.set_shader_parameter(&"edge_rounding", edge_rounding)
 	_cliff_material.set_shader_parameter(&"edge_bevel", 1.0 if edge_bevel else 0.0)
+	_cliff_material.set_shader_parameter(&"render_mode_idx", float(render_mode))
 	return _cliff_material

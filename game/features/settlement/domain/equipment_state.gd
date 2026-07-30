@@ -1,20 +1,16 @@
 class_name EquipmentState
 extends RefCounted
 
-## Tracks owned tools, tool usage counters, and special equipment (gloves, flint).
+## Tracks owned tools, tool usage counters, and special equipment (gloves).
 
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
-
-const TENT_STARTING_EQUIPMENT := {
-	"flint_steel": {"owned": true},
-}
 
 var tools := {
 	"axe": false, "hand_saw": false, "shovel": false,
 	"bucket": false, "hoe": false, "pickaxe": false,
 }
 var tool_uses := {}
-var equipment: Dictionary = TENT_STARTING_EQUIPMENT.duplicate(true)
+var equipment: Dictionary = {}
 
 
 func reset() -> void:
@@ -23,7 +19,7 @@ func reset() -> void:
 		"bucket": false, "hoe": false, "pickaxe": false,
 	}
 	tool_uses = {}
-	equipment = TENT_STARTING_EQUIPMENT.duplicate(true)
+	equipment = {}
 
 
 func has_tools(required: Array) -> bool:

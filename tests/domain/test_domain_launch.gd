@@ -121,7 +121,7 @@ static func test_apply_launch_config_reset_progress_false() -> void:
 
 static func test_apply_launch_config_with_equipment() -> void:
 	var state := SettlementStateScript.new()
-	var custom_eq := {"flint_steel": {"owned": true}, "pickaxe": {"sets": 2, "active_durability": 80.0}}
+	var custom_eq := {"pickaxe": {"sets": 2, "active_durability": 80.0}}
 	var config := GameLaunchConfigScript.create_custom(
 		&"tent", 0, &"summer_valley",
 		500, 75, 4,
@@ -129,7 +129,6 @@ static func test_apply_launch_config_with_equipment() -> void:
 		custom_eq
 	)
 	state.apply_launch_config(config)
-	assert(state.equipment_state.equipment.has("flint_steel"))
 	assert(state.equipment_state.equipment.has("pickaxe"))
 
 

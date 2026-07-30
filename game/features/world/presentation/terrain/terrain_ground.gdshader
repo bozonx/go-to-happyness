@@ -39,6 +39,9 @@ uniform float edge_rounding : hint_range(0.0, 1.0) = 0.0;
 // 0 makes a curved normal transition; 1 makes a constant-width flat bevel.
 uniform float edge_bevel : hint_range(0.0, 1.0) = 0.0;
 
+// 0 = Textured, 1 = Matte/Clay, 2 = Simple
+uniform float render_mode_idx : hint_range(0.0, 2.0) = 0.0;
+
 uniform vec3 snow_colour : source_color = vec3(0.88, 0.91, 0.96);
 uniform vec3 wear_tint : source_color = vec3(0.52, 0.44, 0.33);
 
@@ -110,6 +113,14 @@ void fragment() {
 	if (edge_distances.w + (1.0 - edge_enabled.w) * 10000.0 < bevel_distance) { bevel_normal = bevel_view_3; }
 	vec3 edge_target = mix(smooth_view_normal, bevel_normal.xyz, edge_bevel * bevel_normal.w);
 	NORMAL = normalize(mix(NORMAL, edge_target, normal_blend));
+	if (render_mode_idx > 0.5 && render_mode_idx < 1.5) {
+		// Mode 1: Matte / Clay - neutral flat surface for inspecting slopes & geometry
+		ALBEDO = vec3(0.68, 0.67, 0.65);
+		ROUGHNESS = 0.95;
+		SPECULAR = 0.15;
+		return;
+	}
+
 	vec2 tile_uv = world_position.xz / tile_size;
 
 	// Sample positions are cell CENTRES, so the four taps around a fragment are
@@ -166,6 +177,11 @@ void fragment() {
 	normal_map = normalize(normal_map / max(total, 0.0001) * 2.0 - 1.0);
 	detail_sum /= max(total, 0.0001);
 
+	if (render_mode_idx > 1.5) {
+		// Mode 2: Simple - simplified shader textures without normal map noise
+		normal_map = vec3(0.0, 0.0, 1.0);
+	}
+
 	float wear = detail_sum.x;                 // 0 .. 1, three stored levels
 	float snow = detail_sum.y;                 // 0 .. 1, four stored depths
 	normal_map = normalize(mix(normal_map, vec3(0.0, 0.0, 1.0), smoothstep(0.0, 0.75, snow)));
@@ -176,9 +192,11 @@ void fragment() {
 	albedo = mix(albedo, snow_colour, smoothstep(0.0, 0.7, snow));
 	// Large-scale colour drift breaks the remaining repetition without changing
 	// material identity or adding another texture lookup.
-	float macro_noise = (sin(world_position.x * 0.19 + world_position.z * 0.07)
-		+ sin(world_position.z * 0.23 - world_position.x * 0.05)) * 0.5;
-	albedo *= 0.98 + macro_noise * 0.025;
+	if (render_mode_idx <= 1.5) {
+		float macro_noise = (sin(world_position.x * 0.19 + world_position.z * 0.07)
+			+ sin(world_position.z * 0.23 - world_position.x * 0.05)) * 0.5;
+		albedo *= 0.98 + macro_noise * 0.025;
+	}
 
 	vec3 geometric_world_normal = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	vec3 detailed_world_normal = normalize(cotangent_frame(geometric_world_normal, world_position, tile_uv) * normal_map);
@@ -188,3 +206,4 @@ void fragment() {
 	ROUGHNESS = mix(0.95, 0.75, snow);
 	SPECULAR = 0.15;
 }
+

@@ -48,6 +48,7 @@ const PLANNED_MODES: Array = [
 @onready var _undo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/UndoButton
 @onready var _redo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/RedoButton
 @onready var _grass_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/GrassButton
+@onready var _render_mode_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/RenderModeButton
 @onready var _validate_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/ValidateButton
 @onready var _test_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/TestButton
 @onready var _dialogs: MapEditorDialogs = $UI/Dialogs
@@ -351,6 +352,8 @@ func _connect_ui() -> void:
 	_grass_button.button_pressed = terrain_world.grass_visible
 	_grass_button.toggled.connect(func(toggled_on: bool) -> void:
 		terrain_world.set_grass_visible(toggled_on))
+	_update_render_mode_button()
+	_render_mode_button.pressed.connect(_cycle_render_mode)
 	_validate_button.pressed.connect(_validate_map)
 	_test_button.pressed.connect(_test_run)
 	_validate_button.disabled = false
@@ -692,3 +695,20 @@ func _confirm_discard_changes() -> bool:
 		await get_tree().process_frame
 	dialog.queue_free()
 	return confirmed[0]
+
+
+func _cycle_render_mode() -> void:
+	var next_mode := (int(terrain_world.render_mode) + 1) % 3
+	terrain_world.set_render_mode(next_mode as GridTerrainWorld.RenderMode)
+	_update_render_mode_button()
+
+
+func _update_render_mode_button() -> void:
+	match terrain_world.render_mode:
+		GridTerrainWorld.RenderMode.TEXTURED:
+			_render_mode_button.text = "🎨 Текстуры"
+		GridTerrainWorld.RenderMode.MATTE:
+			_render_mode_button.text = "🗿 Матовый"
+		GridTerrainWorld.RenderMode.SIMPLE:
+			_render_mode_button.text = "🖼 Простой"
+

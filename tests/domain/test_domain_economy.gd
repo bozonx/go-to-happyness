@@ -74,7 +74,8 @@ static func _test_tent_start_config() -> void:
 	assert(state.amount("food") == 0)
 	assert(state.amount("water") == 0)
 	assert(state.branches == 0 and state.grass == 0)
-	assert(bool(state.equipment.flint_steel.owned))
+	# Equipment is now empty by default — everything comes from the map.
+	assert(state.equipment.is_empty())
 	# Construction gloves now come from the map backpack entity as a physical resource.
 	assert(not state.construction_gloves_available())
 	assert(state.wear_construction_gloves(100.0) == false)
