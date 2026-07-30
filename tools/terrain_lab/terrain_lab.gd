@@ -125,6 +125,7 @@ const CAPTURE_VIEWS: Array = [
 	{"name": "water_lava_closeup", "nav": &"", "target": Vector3(17.5, 1.0, 8.0), "yaw": 130.0, "pitch": 26.0, "distance": 15.0},
 	{"name": "materials_catalog", "setup": &"demo", "nav": &"", "target": Vector3(-11.0, 0.0, 17.0), "yaw": 0.0, "pitch": 65.0, "distance": 30.0},
 	{"name": "materials_blend_closeup", "target": Vector3(-17.0, 0.0, 14.0), "yaw": 25.0, "pitch": 30.0, "distance": 11.0},
+	{"name": "grass_tall_closeup", "setup": &"grass", "target": Vector3(-1.0, 0.45, 0.0), "yaw": 34.0, "pitch": 24.0, "distance": 12.0},
 ]
 
 ## Frames to let the renderer settle before a capture: the chunk budget rebuilds
@@ -514,6 +515,8 @@ func _process_capture() -> void:
 				_setup_cascade_scene()
 			&"demo":
 				_generate_demo()
+			&"grass":
+				_setup_grass_scene()
 		# A capture has three frames to settle, and the chunk budget rebuilds two
 		# per frame — a fresh board would be photographed half-meshed.
 		terrain.rebuild_pending_now()
@@ -562,6 +565,27 @@ func _setup_cascade_scene() -> void:
 		service.apply_operation(TerrainEditOperation.offset([center] as Array[Vector2i], 5))
 	terrain.rebuild_pending_now()
 	brush.last_message = "cascade: mud / sand / rock, +5 steps each"
+
+
+## A repeatable foliage case: untouched meadow on the left, thinned wear level 1
+## in the middle, and a bare wear level 2 path on the right. It proves silhouette,
+## density derivation and the absence of a second saved grass layer in one view.
+func _setup_grass_scene() -> void:
+	grid.configure(CELL_SIZE, BOARD_CELLS)
+	water.configure(CELL_SIZE, BOARD_CELLS)
+	service.clear_history()
+	water_service.clear_history()
+	history.clear()
+	for z in range(-5, 6):
+		for x in range(-9, 10):
+			var cell := Vector2i(x, z)
+			grid.set_material(cell, TerrainMaterialCatalog.GRASS_TALL)
+			if x >= -2 and x <= 3:
+				grid.set_wear(cell, 1)
+			elif x >= 4:
+				grid.set_wear(cell, 2)
+	_republish_navigation()
+	brush.last_message = "grass_tall: dense meadow / wear 1 / bare wear 2"
 
 
 # --- Demo terrain -----------------------------------------------------------

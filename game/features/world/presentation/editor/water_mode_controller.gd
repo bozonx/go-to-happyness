@@ -40,10 +40,25 @@ func _init() -> void:
 
 func activate() -> void:
 	_painting = false
+	if context != null and context.water_service != null:
+		context.water_service.prune_empty_bodies()
+	if context != null and context.water_brush != null:
+		context.water_brush.tool = WaterBrushController.TOOL_FLOOD
+		var bodies := context.water.bodies()
+		var found_non_empty := false
+		for b in bodies:
+			if context.water.cells_of_body(b.id).size() > 0:
+				context.water_brush.select_body(b.id)
+				found_non_empty = true
+				break
+		if not found_non_empty:
+			context.water_brush.body_id = WaterBody.NO_BODY
 
 
 func deactivate() -> void:
 	_painting = false
+	if context != null and context.water_service != null:
+		context.water_service.prune_empty_bodies()
 	if context != null and context.water_brush != null:
 		context.water_brush.clear_hover()
 
@@ -58,7 +73,7 @@ func hover_brush() -> BaseBrushController:
 
 
 ## Flood takes its extent from the basin, not from the brush, so the size control
-## belongs to the two tools that stamp a square.
+## belongs to the tools that stamp a square.
 func adjust_brush_size(delta: int) -> void:
 	if context != null and context.water_brush != null and _brush_has_size():
 		context.water_brush.adjust_brush_size(delta)
@@ -94,6 +109,11 @@ func handle_input(event: InputEvent) -> bool:
 			return false
 		if button.button_index != MOUSE_BUTTON_LEFT:
 			return false
+		if button.pressed and button.shift_pressed:
+			context.water_brush.update_hover(context.camera, context.space_state(), context.mouse_position())
+			context.water_brush.pick_from_cell()
+			notify_ui_changed()
+			return true
 		_painting = button.pressed
 		if button.pressed:
 			_stroke()
@@ -102,6 +122,7 @@ func handle_input(event: InputEvent) -> bool:
 	if event is InputEventKey and event.is_pressed() and not event.is_echo():
 		return _handle_key(event as InputEventKey)
 	return false
+
 
 
 func _handle_key(event: InputEventKey) -> bool:
@@ -322,7 +343,8 @@ func empty_list_hint() -> String:
 func list_entries() -> Array[String]:
 	var entries: Array[String] = []
 	for body: WaterBody in context.water.bodies():
-		entries.append("%d · %s · %s · уровень %d" % [body.id, body.name, body.type_id(), body.surface_height])
+		if context.water.cells_of_body(body.id).size() > 0:
+			entries.append("%d · %s · %s · уровень %d" % [body.id, body.name, body.type_id(), body.surface_height])
 	return entries
 
 

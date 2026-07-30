@@ -224,9 +224,8 @@ func set_body_level(body_id: int, level: int) -> bool:
 ## passability change, which is why it is a transaction and republishes.
 ##
 ## Cells whose body cannot freeze (lava, a fast river reach, a body flagged as
-## never freezing) are skipped, so one call over a whole lake produces exactly the
-## natural result: the still water sets and the current stays open.
-func set_frozen(cells: Array[Vector2i], frozen: bool, thickness: int = WaterGrid.MAX_ICE_THICKNESS) -> bool:
+## never freezing) are skipped unless `force` is set (editor brush tool).
+func set_frozen(cells: Array[Vector2i], frozen: bool, thickness: int = WaterGrid.MAX_ICE_THICKNESS, force: bool = false) -> bool:
 	if grid == null:
 		return _reject(REASON_NO_GRID)
 	var delta := WaterDelta.new()
@@ -235,7 +234,7 @@ func set_frozen(cells: Array[Vector2i], frozen: bool, thickness: int = WaterGrid
 		if not grid.is_inside(cell) or not grid.has_water(cell):
 			continue
 		var body := grid.body_at(cell)
-		if frozen and (body == null or not body.can_freeze_at(cell)):
+		if frozen and not force and (body == null or not body.can_freeze_at(cell)):
 			refused_any = true
 			continue
 		var old_state := WaterDelta.state_of(grid, cell)
@@ -250,6 +249,40 @@ func set_frozen(cells: Array[Vector2i], frozen: bool, thickness: int = WaterGrid
 	if delta.is_empty() and refused_any:
 		return _reject(REASON_NOT_FREEZABLE)
 	return _commit_or_reject(delta)
+
+
+## Drains water from specified cells as one undoable transaction.
+func drain_cells(cells: Array[Vector2i]) -> bool:
+	if grid == null:
+		return _reject(REASON_NO_GRID)
+	var delta := WaterDelta.new()
+	for cell: Vector2i in CellUtils.sorted_unique(cells):
+		if not grid.is_inside(cell) or not grid.has_water(cell):
+			continue
+		var old_state := WaterDelta.state_of(grid, cell)
+		var new_state := WaterDelta.make_state(WaterBody.NO_BODY, 0, 0)
+		if old_state == new_state:
+			continue
+		delta.record(cell, old_state, new_state)
+	if delta.is_empty():
+		return _reject(REASON_NOTHING_TO_DO)
+	var ok := _commit_or_reject(delta)
+	if ok:
+		prune_empty_bodies()
+	return ok
+
+
+## Removes any registered body that has 0 wet cells remaining.
+func prune_empty_bodies() -> void:
+	if grid == null:
+		return
+	var empty_ids: Array[int] = []
+	for body in grid.bodies():
+		if grid.cells_of_body(body.id).is_empty():
+			empty_ids.append(body.id)
+	for body_id in empty_ids:
+		grid.remove_body(body_id)
+
 
 
 ## Season's worth of freezing or thawing over a whole body, as ONE transaction

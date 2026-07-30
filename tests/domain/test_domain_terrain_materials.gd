@@ -246,6 +246,8 @@ static func _test_wear_changes_weight_only_where_declared() -> void:
 	# Grass grows back, rock does not — ever (§6.1).
 	assert(TerrainMaterialCatalog.recovers_from_wear(TerrainMaterialCatalog.index_of(TerrainMaterialCatalog.GRASS)))
 	assert(not TerrainMaterialCatalog.recovers_from_wear(TerrainMaterialCatalog.index_of(TerrainMaterialCatalog.STONE)))
+	assert(TerrainMaterialCatalog.supports_wear(TerrainMaterialCatalog.index_of(TerrainMaterialCatalog.GRASS_TALL)))
+	assert(not TerrainMaterialCatalog.supports_wear(TerrainMaterialCatalog.index_of(TerrainMaterialCatalog.ICE)))
 
 
 ## §6.2: snow multiplies the surface under it rather than replacing it — which is

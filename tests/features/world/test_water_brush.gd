@@ -26,6 +26,8 @@ static func run_all() -> void:
 	_test_freeze_and_thaw()
 	_test_fill_replaces_a_body_with_the_selected_level()
 	_test_freeze_and_thaw_brushes_are_cell_local()
+	_test_eyedropper_picks_water_and_frozen_properties()
+	_test_retype_body_on_flood_converts_lake_to_lava()
 	print("    [PASS] Water Brush Tests")
 
 
@@ -339,3 +341,42 @@ static func _test_freeze_and_thaw_brushes_are_cell_local() -> void:
 	brush.tool = WaterBrushController.TOOL_THAW
 	brush.apply()
 	assert(not water.is_frozen(Vector2i.ZERO))
+
+
+static func _test_eyedropper_picks_water_and_frozen_properties() -> void:
+	var world := _make()
+	var terrain: TerrainGrid = world["terrain"]
+	var water: WaterGrid = world["water"]
+	var brush: WaterBrushController = world["brush"]
+	terrain.set_height(Vector2i.ZERO, -2)
+	var body := _make_body(world, WaterBody.Type.LAKE)
+	brush.level = 2
+	_hover(brush, Vector2i.ZERO)
+	brush.apply()
+	brush.toggle_body_ice()
+
+	# Pick from liquid/frozen cell
+	brush.pick_from_cell()
+	assert(brush.body_id == body.id)
+	assert(brush.level == 2)
+	assert(brush.tool == WaterBrushController.TOOL_FREEZE)
+
+
+static func _test_retype_body_on_flood_converts_lake_to_lava() -> void:
+	var world := _make()
+	var terrain: TerrainGrid = world["terrain"]
+	var water: WaterGrid = world["water"]
+	var brush: WaterBrushController = world["brush"]
+	terrain.set_height(Vector2i.ZERO, -2)
+	var lake_body := _make_body(world, WaterBody.Type.LAKE)
+	brush.level = 0
+	_hover(brush, Vector2i.ZERO)
+	brush.apply()
+	assert(water.body_at(Vector2i.ZERO).type == WaterBody.Type.LAKE)
+
+	# Create lava body and flood over lake
+	var lava_body := _make_body(world, WaterBody.Type.LAVA)
+	_hover(brush, Vector2i.ZERO)
+	brush.apply()
+	assert(water.body_at(Vector2i.ZERO).type == WaterBody.Type.LAVA)
+

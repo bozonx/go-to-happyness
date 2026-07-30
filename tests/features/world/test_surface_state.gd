@@ -27,6 +27,7 @@ static func run_all() -> void:
 	_test_wear_needs_traffic_not_a_single_walker()
 	_test_wear_recovers_after_quiet_days_but_rock_never_does()
 	_test_tall_grass_weight_falls_from_two_to_one()
+	_test_tall_grass_decor_follows_surface_state()
 	print("    [PASS] Surface Wear Tests")
 	_test_snow_changes_weight_and_not_passability()
 	_test_material_weight_reaches_navigation()
@@ -255,6 +256,28 @@ static func _test_tall_grass_weight_falls_from_two_to_one() -> void:
 	assert(is_equal_approx(grid.surface_weight_at(cell), 1.5))
 	assert(service.set_wear(_brush([cell]), 2))
 	assert(is_equal_approx(grid.surface_weight_at(cell), 1.0))
+
+
+## §7.4 decoration is derived from the same cells as navigation: no saved grass
+## list may survive after wear or snow says that the surface is bare.
+static func _test_tall_grass_decor_follows_surface_state() -> void:
+	var world := _make()
+	var grid: TerrainGrid = world["grid"]
+	var service: TerrainService = world["service"]
+	var cells := _brush([Vector2i(1, 1), Vector2i(2, 1), Vector2i(1, 2), Vector2i(2, 2)])
+	assert(service.paint_material(cells, TerrainMaterialCatalog.GRASS_TALL))
+	var decor := TerrainTallGrass.new()
+	var first := decor.build_chunk(grid, Vector2i.ZERO)
+	var second := decor.build_chunk(grid, Vector2i.ZERO)
+	assert(first.instance_count == 8)
+	assert(second.instance_count == first.instance_count)
+	for index in first.instance_count:
+		assert(first.get_instance_transform(index) == second.get_instance_transform(index))
+
+	assert(service.set_wear(_brush([cells[0]]), TerrainDetailCodec.MAX_WEAR))
+	assert(decor.build_chunk(grid, Vector2i.ZERO).instance_count == 6)
+	assert(service.set_snow_depth(_brush([cells[1]]), 2))
+	assert(decor.build_chunk(grid, Vector2i.ZERO).instance_count == 4)
 
 
 # --- Weights in navigation ------------------------------------------------------

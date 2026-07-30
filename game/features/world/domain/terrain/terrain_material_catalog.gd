@@ -300,6 +300,13 @@ static func recovers_from_wear(material_index: int) -> bool:
 	return wear_recovery_days(material_index) > 0
 
 
+## The editor exposes the wear brush only where traffic leaves a meaningful,
+## recoverable surface trace. Rock, gravel, ice and extraterrestrial ground do
+## not get a generic brown "path" painted over them.
+static func supports_wear(material_index: int) -> bool:
+	return recovers_from_wear(material_index)
+
+
 # --- Digging and faces --------------------------------------------------------
 
 ## What one step of this column yields when dug in survival (parent §8).

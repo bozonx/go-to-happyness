@@ -49,6 +49,7 @@ var _pending_chunks: Array[Vector2i] = []
 var _queued_lookup: Dictionary = {}
 var _library := TerrainMaterialLibrary.new()
 var _surface_maps := TerrainSurfaceMaps.new()
+var _tall_grass := TerrainTallGrass.new()
 var _ground_material: ShaderMaterial = null
 var _cliff_material: ShaderMaterial = null
 
@@ -83,7 +84,7 @@ func _process(_delta: float) -> void:
 	# Surface texels first and unconditionally: they are cheap, they are not
 	# subject to the chunk budget, and a painted material has to show up on the
 	# frame it was painted even while a cascade is still remeshing behind it.
-	_surface_maps.sync(grid)
+	_sync_surface_visuals()
 	_collect_dirty()
 	_collect_lod_changes()
 	if _pending_chunks.is_empty():
@@ -102,7 +103,7 @@ func _process(_delta: float) -> void:
 func rebuild_pending_now() -> void:
 	if grid == null:
 		return
-	_surface_maps.sync(grid)
+	_sync_surface_visuals()
 	_collect_dirty()
 	_collect_lod_changes()
 	while not _pending_chunks.is_empty():
@@ -132,6 +133,13 @@ func set_edge_bevel(enabled: bool) -> void:
 	_sync_smoothing_parameters()
 
 
+## Weather, water and vegetation receive the same authored wind vector. This
+## presentation boundary accepts the resolved values without depending on the
+## simulation's WeatherState directly.
+func set_wind(direction: Vector2, strength: float) -> void:
+	_tall_grass.set_wind(direction, strength)
+
+
 func _sync_smoothing_parameters() -> void:
 	var full_amount := 1.0 if full_smoothing else 0.0
 	if _ground_material != null:
@@ -153,6 +161,23 @@ func _collect_dirty() -> void:
 		return
 	for chunk: Vector2i in grid.take_dirty_chunks():
 		_queue(chunk)
+
+
+## Surface painting never remeshes terrain, but derived decoration follows it.
+## Drain the dirty cells once, then hand the same set to both GPU maps and the
+## affected chunk MultiMeshes so neither presentation keeps a second state list.
+func _sync_surface_visuals() -> void:
+	if not grid.has_dirty_surface_cells():
+		return
+	var cells := grid.take_dirty_surface_cells()
+	_surface_maps.update_cells(grid, cells)
+	var chunks: Dictionary = {}
+	for cell: Vector2i in cells:
+		chunks[grid.chunk_of(cell)] = true
+	for chunk: Vector2i in chunks:
+		var body: StaticBody3D = _chunk_bodies.get(chunk)
+		if body != null:
+			_rebuild_tall_grass(body, chunk, lod_of_chunk(chunk))
 
 
 ## Re-queues chunks whose distance to the camera crossed the LOD boundary.
@@ -209,6 +234,7 @@ func _rebuild_chunk(chunk: Vector2i) -> void:
 	else:
 		collision.shape = null
 		collision.disabled = true
+	_rebuild_tall_grass(body, chunk, lod)
 	chunk_rebuilt.emit(chunk)
 
 
@@ -232,6 +258,24 @@ func _chunk_body(chunk: Vector2i, create_if_missing: bool) -> StaticBody3D:
 	add_child(body)
 	_chunk_bodies[chunk] = body
 	return body
+
+
+func _rebuild_tall_grass(body: StaticBody3D, chunk: Vector2i, lod: int) -> void:
+	var instance: MultiMeshInstance3D = body.get_node_or_null(^"TallGrass")
+	if lod == TerrainChunkMesher.Lod.TOP_ONLY:
+		if instance != null:
+			instance.multimesh = null
+		return
+	if instance == null:
+		instance = MultiMeshInstance3D.new()
+		instance.name = "TallGrass"
+		# Thousands of alpha-cutout blades produce noisy shadow-map pinholes and
+		# cost another overdraw pass. The painted dark base already grounds them.
+		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		instance.extra_cull_margin = TerrainTallGrass.CARD_HEIGHT
+		instance.material_override = _tall_grass.material()
+		body.add_child(instance)
+	instance.multimesh = _tall_grass.build_chunk(grid, chunk)
 
 
 ## Two surfaces, two shaders (§7.2): tops read the index map, faces are triplanar

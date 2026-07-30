@@ -334,11 +334,11 @@ func set_height(cell: Vector2i, height: int) -> bool:
 ## body that cannot freeze — lava, a fast river reach, a tropical sea — is
 ## refused rather than silently ignored, so a seasonal pass can count what it
 ## actually changed.
-func set_frozen(cell: Vector2i, frozen: bool, thickness: int = MAX_ICE_THICKNESS) -> bool:
+func set_frozen(cell: Vector2i, frozen: bool, thickness: int = MAX_ICE_THICKNESS, force: bool = false) -> bool:
 	if not has_water(cell):
 		return false
 	var found := body_at(cell)
-	if frozen and (found == null or not found.can_freeze_at(cell)):
+	if frozen and not force and (found == null or not found.can_freeze_at(cell)):
 		return false
 	var next_flags := flags_of(cell) & ~(FLAG_FROZEN | (ICE_THICKNESS_MASK << ICE_THICKNESS_SHIFT))
 	if frozen:

@@ -89,13 +89,14 @@ func handle_input(event: InputEvent) -> bool:
 func _handle_key(event: InputEventKey) -> bool:
 	match event.keycode:
 		KEY_TAB:
-			_tool = TOOLS[(TOOLS.find(_tool) + 1) % TOOLS.size()]
+			_cycle_tool()
 		KEY_B:
 			context.set_edit_label("вариант")
 			context.brush.cycle_variant()
 		KEY_U:
-			_wear_level = (_wear_level + 1) % (TerrainDetailCodec.MAX_WEAR + 1)
-			_tool = TOOL_WEAR
+			if _selected_material_supports_wear():
+				_wear_level = (_wear_level + 1) % (TerrainDetailCodec.MAX_WEAR + 1)
+				_tool = TOOL_WEAR
 		KEY_J:
 			_snow_level = (_snow_level + 1) % (TerrainDetailCodec.MAX_SNOW_DEPTH + 1)
 			_tool = TOOL_SNOW
@@ -115,8 +116,11 @@ func _paint() -> void:
 			context.set_edit_label("покраска")
 			context.brush.apply_material()
 		TOOL_WEAR:
-			context.set_edit_label("износ")
-			context.brush.paint_wear(_wear_level)
+			if _selected_material_supports_wear():
+				context.set_edit_label("износ")
+				context.brush.paint_wear(_wear_level)
+			else:
+				_tool = TOOL_MATERIAL
 		TOOL_SNOW:
 			context.set_edit_label("снег")
 			_paint_snow()
@@ -173,6 +177,8 @@ func select_palette_entry(entry_id: StringName) -> void:
 	var index := TerrainMaterialCatalog.index_of(entry_id)
 	if index >= 0:
 		context.brush.set_material_index(index)
+		if _tool == TOOL_WEAR and not _selected_material_supports_wear():
+			_tool = TOOL_MATERIAL
 		notify_ui_changed()
 
 
@@ -188,8 +194,10 @@ func tool_options() -> Array:
 			String(TerrainMaterialVariants.variant_name(context.brush.material_index, variant_index)),
 			&"variants", variant_index == context.brush.variant,
 		))
-	# The level is part of the brush, so it is shown on the button that selects it.
-	options.append(ToolOption.of(OPTION_WEAR, "Износ: %d" % _wear_level))
+	# The wear brush is only useful on recoverable natural cover; do not offer a
+	# misleading brown path on rock, ice or extraterrestrial ground.
+	if _selected_material_supports_wear():
+		options.append(ToolOption.of(OPTION_WEAR, "Износ: %d" % _wear_level))
 	options.append(ToolOption.of(OPTION_SNOW, "Снег: %d" % _snow_level))
 	return options
 
@@ -206,6 +214,8 @@ func activate_option(option_id: StringName) -> void:
 		OPTION_BRUSH_DOWN:
 			context.brush.adjust_brush_size(-1)
 		OPTION_WEAR:
+			if not _selected_material_supports_wear():
+				return
 			# Pressing it again steps the level, so one button both picks the
 			# tool and sets what it paints.
 			if _tool == TOOL_WEAR:
@@ -216,6 +226,17 @@ func activate_option(option_id: StringName) -> void:
 				_snow_level = (_snow_level + 1) % (TerrainDetailCodec.MAX_SNOW_DEPTH + 1)
 			_tool = TOOL_SNOW
 	notify_ui_changed()
+
+
+func _selected_material_supports_wear() -> bool:
+	return TerrainMaterialCatalog.supports_wear(context.brush.material_index)
+
+
+func _cycle_tool() -> void:
+	var available: Array[StringName] = [TOOL_MATERIAL, TOOL_SNOW]
+	if _selected_material_supports_wear():
+		available.insert(1, TOOL_WEAR)
+	_tool = available[(available.find(_tool) + 1) % available.size()] if available.has(_tool) else available[0]
 
 
 func _variant_option_id(variant_index: int) -> StringName:

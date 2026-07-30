@@ -102,6 +102,54 @@ func create_body(body_type: WaterBody.Type) -> WaterBody:
 	return body
 
 
+func update_hover(camera: Camera3D, space: PhysicsDirectSpaceState3D, mouse: Vector2) -> bool:
+	var base_result := super.update_hover(camera, space, mouse)
+	if not base_result or camera == null or _water == null or _terrain == null:
+		return base_result
+	var origin := camera.project_ray_origin(mouse)
+	var dir := camera.project_ray_normal(mouse)
+	if dir.y == 0.0:
+		return base_result
+
+	var target_height := level
+	if _water.has_water(hovered_cell):
+		target_height = _water.height_of(hovered_cell)
+
+	var plane_y := float(target_height) * TerrainGrid.HEIGHT_STEP
+	var t := (plane_y - origin.y) / dir.y
+	if t > 0.0:
+		var point := origin + dir * t
+		var water_cell := _terrain.cell_from_position(point)
+		if _terrain.is_inside(water_cell) and (_water.has_water(water_cell) or tool == TOOL_FLOOD):
+			hovered_cell = water_cell
+			has_hover = true
+
+	return has_hover
+
+
+# --- Eyedropper ---------------------------------------------------------------
+
+func pick_from_cell() -> void:
+	if not has_hover or _water == null:
+		return
+	if _water.has_water(hovered_cell):
+		var target_body_id := _water.body_id_at(hovered_cell)
+		select_body(target_body_id)
+		level = _water.height_of(hovered_cell)
+		if _water.is_frozen(hovered_cell):
+			tool = TOOL_FREEZE
+			ice_thickness = _water.ice_thickness_at(hovered_cell)
+		else:
+			tool = TOOL_FLOOD
+		var found_body := _water.body(target_body_id)
+		last_message = "пипетка: %s (уровень %d)" % [found_body.name if found_body != null else "водоём", level]
+	else:
+		if _terrain != null:
+			level = _terrain.height_of(hovered_cell) + 1
+		tool = TOOL_FLOOD
+		last_message = "пипетка: рельеф -> уровень %d" % level
+
+
 # --- Strokes ------------------------------------------------------------------
 
 ## What the left button does, dispatched by tool. Called on press and again on
@@ -128,33 +176,30 @@ func _flood() -> void:
 	if body_id == WaterBody.NO_BODY:
 		last_message = "create a body first"
 		return
+	if _water != null and _water.has_water(hovered_cell):
+		var cell_body_id := _water.body_id_at(hovered_cell)
+		var cell_height := _water.height_of(hovered_cell)
+		if cell_body_id == body_id and cell_height == level:
+			last_message = "уже на этом уровне (%d)" % level
+			return
 	if _service.flood(hovered_cell, body_id, level):
 		last_message = "flooded basin: %d cells" % _service.last_delta_size()
 		return
 	# If the ground is at or above the level, the basin has no depth to fill.
-	# Pick the level from the ground (one step above it) and try again, so
-	# flood works on flat terrain without forcing the author to raise the
-	# level manually first.
+	# Pick the level from the ground (one step above it) and try again only if dry ground.
 	if _terrain != null and _service.last_rejection() == WaterService.REASON_NOTHING_TO_DO:
-		var ground := _terrain.height_of(hovered_cell)
-		if level <= ground:
-			level = ground + 1
-			if _service.flood(hovered_cell, body_id, level):
-				last_message = "flooded basin (level %d): %d cells" % [level, _service.last_delta_size()]
-				return
+		if _water != null and not _water.has_water(hovered_cell):
+			var ground := _terrain.height_of(hovered_cell)
+			if level <= ground:
+				level = ground + 1
+				if _service.flood(hovered_cell, body_id, level):
+					last_message = "flooded basin (level %d): %d cells" % [level, _service.last_delta_size()]
+					return
 	last_message = "basin did not flood (%s)" % _service.last_rejection()
 
 
-## Moves the surface of the water already under the brush, without changing which
-## body it belongs to. This is the one operation Flood cannot express: re-flooding
-## at a lower level reaches fewer cells and leaves the rest standing at the old
-## one, so a lake could be raised and never lowered.
-## Erase removes the whole body under the cursor, not a patch of cells. Water is
-## authored per body — a lake is one entity with one level — so erasing a cell at a
-## time would leave a half-drained body with no surface, which is not a state the
-## author can meaningfully inspect or continue editing.
 func _set_frozen(frozen: bool) -> void:
-	if _service.set_frozen(brush_cells(hovered_cell), frozen, ice_thickness):
+	if _service.set_frozen(brush_cells(hovered_cell), frozen, ice_thickness, true):
 		last_message = "%s: %d cells" % ["froze" if frozen else "thawed", _service.last_delta_size()]
 		return
 	last_message = "ice unchanged (%s)" % _service.last_rejection()
@@ -166,6 +211,21 @@ func apply_secondary() -> void:
 	if not has_hover or _service == null:
 		return
 	_drain_body_at_hover()
+
+
+func _drain_cells_at_hover() -> void:
+	if _border != null and _water != null:
+		var body_at := _water.body_id_at(hovered_cell)
+		if body_at != WaterBody.NO_BODY and _border.is_border_body(body_at):
+			last_message = "border body cannot be drained — raise the ground above the level"
+			return
+	var cells := brush_cells(hovered_cell)
+	if _service.drain_cells(cells):
+		if body_id != WaterBody.NO_BODY and _water != null and not _water.has_body(body_id):
+			body_id = WaterBody.NO_BODY
+		last_message = "drained %d cells" % _service.last_delta_size()
+		return
+	last_message = "could not drain (%s)" % _service.last_rejection()
 
 
 func _drain_body_at_hover() -> void:
@@ -193,7 +253,7 @@ func _maybe_retype_hovered_body() -> void:
 	if selected == null:
 		return
 	var hovered_id := _water.body_id_at(hovered_cell)
-	if hovered_id == WaterBody.NO_BODY or hovered_id == body_id:
+	if hovered_id == WaterBody.NO_BODY:
 		return
 	var hovered_body := _water.body(hovered_id)
 	if hovered_body == null or hovered_body.type == selected.type:
@@ -202,6 +262,8 @@ func _maybe_retype_hovered_body() -> void:
 		last_message = "border body cannot be retyped"
 		return
 	if _service.retype_body(hovered_id, selected.type):
+		body_id = hovered_id
+		level = hovered_body.surface_height
 		last_message = "retyped %s to %s" % [hovered_body.name, selected.type_id()]
 
 
@@ -234,3 +296,4 @@ func undo() -> void:
 
 func redo() -> void:
 	last_message = "redo" if _service.redo() else "nothing to redo"
+
