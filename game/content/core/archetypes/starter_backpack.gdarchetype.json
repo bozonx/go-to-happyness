@@ -1,1 +1,1 @@
-{"version":1,"id":"starter_backpack","name":"Стартовый рюкзак","asset":"","content_class":"object","category":"world_props","components":{"settlement_natural":{"kind":"starter_backpack"}}}
+{"version":1,"id":"starter_backpack","name":"Стартовый рюкзак","asset":"backpack","content_class":"object","category":"world_props","components":{"settlement_natural":{"kind":"starter_backpack"}}}

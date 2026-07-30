@@ -31,25 +31,30 @@ extends RefCounted
 ## the same transaction and the same undo record as the cascade that preceded it.
 
 ## Hard cap on the cells one boundary may claim, whatever the material says.
-const MAX_CHAIN_CELLS := 16
+const MAX_CHAIN_CELLS := 64
 
 
 ## Assigns slopes around `seed_cells` (the columns an operation moved). Returns
 ## the number of boundaries that got a ramp; the rest stay cliffs.
-static func assign_slopes(region: TerrainWorkingRegion, seed_cells: Array[Vector2i]) -> int:
+static func assign_slopes(
+	region: TerrainWorkingRegion, seed_cells: Array[Vector2i],
+	requested_class: int = RampConnectionPlan.AUTO_CLASS,
+) -> int:
 	var assigner := SlopeAssigner.new()
-	return assigner._assign(region, seed_cells)
+	return assigner._assign(region, seed_cells, requested_class)
 
 
 var _region: TerrainWorkingRegion = null
 ## Cells already claimed by a ramp during this pass, so two boundaries cannot
 ## both reshape the same ground.
 var _claimed: Dictionary = {}
+var _requested_class := RampConnectionPlan.AUTO_CLASS
 
 
-func _assign(region: TerrainWorkingRegion, seed_cells: Array[Vector2i]) -> int:
+func _assign(region: TerrainWorkingRegion, seed_cells: Array[Vector2i], requested_class: int) -> int:
 	_region = region
 	_claimed = {}
+	_requested_class = requested_class if SlopeCatalog.is_ramp_class(requested_class) else RampConnectionPlan.AUTO_CLASS
 	var placed := 0
 	for cell: Vector2i in _candidates(seed_cells):
 		for direction: int in SlopeCatalog.ORTHOGONAL_DIRECTIONS:
@@ -98,7 +103,12 @@ func _try_boundary(low_cell: Vector2i, direction: int) -> bool:
 		return false
 
 	var budget := _budget_for(low_cell, drop)
-	for slope_class: int in SlopeCatalog.RAMP_CLASSES:
+	var classes: Array[int] = []
+	if SlopeCatalog.is_ramp_class(_requested_class):
+		classes.append(_requested_class)
+	else:
+		classes.append_array(SlopeCatalog.RAMP_CLASSES)
+	for slope_class: int in classes:
 		var rise := SlopeCatalog.rise_of_class(slope_class)
 		if drop % rise != 0:
 			continue
@@ -117,6 +127,11 @@ func _try_boundary(low_cell: Vector2i, direction: int) -> bool:
 ## How much ground this boundary may claim: what the material's own angle of
 ## repose would have spent on the same drop, never more than `MAX_CHAIN_CELLS`.
 func _budget_for(low_cell: Vector2i, drop: int) -> int:
+	if SlopeCatalog.is_ramp_class(_requested_class):
+		var rise := SlopeCatalog.rise_of_class(_requested_class)
+		if drop % rise != 0:
+			return 0
+		return mini((drop / rise) * SlopeCatalog.run_of_class(_requested_class), MAX_CHAIN_CELLS)
 	var repose := TerrainMaterialCatalog.repose_steps_per_cell_of_index(_region.material_index_at(low_cell))
 	if is_inf(repose) or repose <= 0.0:
 		return 1

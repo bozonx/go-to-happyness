@@ -23,21 +23,33 @@ var cells: Array[Vector2i] = []
 var height_delta: int = 0
 ## LEVEL: absolute height every brush cell is brought to.
 var target_height: int = 0
+## AUTO keeps the material's natural angle of repose. A ramp class forces the
+## cascade to spend exactly that profile's footprint, after which SlopeAssigner
+## writes chains of the same class. TERRACE mode ignores this field.
+var slope_class := RampConnectionPlan.AUTO_CLASS
 
 
-static func offset(brush_cells: Array[Vector2i], delta: int, mode: int = Mode.SCULPT) -> TerrainEditOperation:
+static func offset(
+	brush_cells: Array[Vector2i], delta: int, mode: int = Mode.SCULPT,
+	p_slope_class: int = RampConnectionPlan.AUTO_CLASS,
+) -> TerrainEditOperation:
 	var operation := TerrainEditOperation.new()
 	operation.mode = mode
 	operation.cells = brush_cells.duplicate()
 	operation.height_delta = delta
+	operation.slope_class = p_slope_class
 	return operation
 
 
-static func level(brush_cells: Array[Vector2i], height: int) -> TerrainEditOperation:
+static func level(
+	brush_cells: Array[Vector2i], height: int,
+	p_slope_class: int = RampConnectionPlan.AUTO_CLASS,
+) -> TerrainEditOperation:
 	var operation := TerrainEditOperation.new()
 	operation.mode = Mode.LEVEL
 	operation.cells = brush_cells.duplicate()
 	operation.target_height = height
+	operation.slope_class = p_slope_class
 	return operation
 
 

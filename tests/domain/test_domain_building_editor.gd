@@ -97,17 +97,16 @@ static func _test_catalog() -> void:
 
 static func _test_anchoring() -> void:
 	var C := BuildingBlockCatalogScript
-	# A 0.5m column is thin on both axes: centre + edge + corner. A full cube has
-	# only centre. A railing/half-slab is thin on one axis: centre + edge, no corner.
-	assert(C.available_anchors(&"column_square", &"0.5") == [C.ANCHOR_CENTER, C.ANCHOR_EDGE, C.ANCHOR_CORNER])
-	assert(C.available_anchors(&"cube", &"1") == [C.ANCHOR_CENTER])
-	assert(C.available_anchors(&"railing", &"full") == [C.ANCHOR_CENTER, C.ANCHOR_EDGE])
-	assert(C.available_anchors(&"slab", &"0.5") == [C.ANCHOR_CENTER])
-	assert(C.available_anchors(&"column_half", &"1") == [C.ANCHOR_EDGE])
-	assert(C.available_anchors(&"column_half", &"0.5") == [C.ANCHOR_EDGE, C.ANCHOR_CORNER])
-	assert(C.normalize_anchor(&"column_half", &"1", C.ANCHOR_CENTER) == C.ANCHOR_EDGE)
-	# Centre stays centred; corner snaps the 0.5m block flush to a corner and
-	# rotation pivots it around the cell centre to the opposite corner.
+	# Subgrid anchor packing / unpacking
+	var packed_slot1 := C.snap_subgrid_anchor(&"cube", &"0.25", Vector2(-0.35, -0.35))
+	var offset1 := C.anchor_base_offset(&"cube", &"0.25", packed_slot1)
+	assert(_approx(offset1, Vector2(-0.375, -0.375)))
+
+	var packed_slot2 := C.snap_subgrid_anchor(&"cube", &"0.25", Vector2(-0.10, 0.10))
+	var offset2 := C.anchor_base_offset(&"cube", &"0.25", packed_slot2)
+	assert(_approx(offset2, Vector2(-0.125, 0.125)))
+
+	# Legacy anchor compatibility (ANCHOR_CORNER / ANCHOR_EDGE)
 	assert(C.cell_offset(&"column_square", &"0.5", C.ANCHOR_CENTER, 0) == Vector2(0.5, 0.5))
 	assert(_approx(C.cell_offset(&"column_square", &"0.5", C.ANCHOR_CORNER, 0), Vector2(0.25, 0.25)))
 	assert(_approx(C.cell_offset(&"column_square", &"0.5", C.ANCHOR_CORNER, 2), Vector2(0.75, 0.75)))

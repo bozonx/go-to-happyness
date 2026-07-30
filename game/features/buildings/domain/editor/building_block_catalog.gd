@@ -445,24 +445,32 @@ static func occupied_aabb(
 
 
 # ---------------------------------------------------------------------------
-# In-cell anchoring
+# In-cell sub-grid anchoring
 # ---------------------------------------------------------------------------
-#
-# A sub-cell block (thinner than 1m on an axis) can be snapped inside its 1×1
-# cell instead of always centring. Under 90° rotation symmetry the nine grid
-# points collapse to just three distinct kinds — the other corners/edges are
-# reached by rotating the block, which pivots it around the cell centre:
-#   ANCHOR_CENTER — middle of the cell;
-#   ANCHOR_EDGE   — flush against one cell side (its thinner axis);
-#   ANCHOR_CORNER — tucked into one cell corner (needs slack on both axes).
-# The stored `anchor` is one of these kinds; the concrete side/corner is picked
-# by the block's rotation. A block with slack on only one axis (e.g. a railing
-# panel, full-width and thin) offers only CENTER + EDGE — a corner degenerates
-# into the same edge.
 
 const ANCHOR_CENTER := 0
 const ANCHOR_EDGE := 1
 const ANCHOR_CORNER := 2
+
+const SUBGRID_STEP := 0.0625
+
+
+static func pack_subgrid_anchor(off_x: float, off_z: float) -> int:
+	var ix := clampi(int(round(off_x / SUBGRID_STEP)), -8, 8)
+	var iz := clampi(int(round(off_z / SUBGRID_STEP)), -8, 8)
+	if ix == 0 and iz == 0:
+		return 0
+	return (ix + 8) | ((iz + 8) << 5)
+
+
+static func unpack_subgrid_anchor(anchor_kind: int) -> Vector2:
+	if anchor_kind == 0:
+		return Vector2.ZERO
+	if anchor_kind > 2:
+		var ix := (anchor_kind & 31) - 8
+		var iz := ((anchor_kind >> 5) & 31) - 8
+		return Vector2(float(ix) * SUBGRID_STEP, float(iz) * SUBGRID_STEP)
+	return Vector2.ZERO
 
 
 ## Free space (in cell units) between the block face and the cell side on each
@@ -472,26 +480,15 @@ static func _free_extents(block_id: StringName, variant_id: StringName) -> Vecto
 	return Vector2(maxf(0.0, 0.5 - size.x * 0.5), maxf(0.0, 0.5 - size.z * 0.5))
 
 
-## Anchor kinds that make sense for this block/variant (always contains CENTER).
-## Multi-cell blocks anchor only at their centre (their span fills whole cells).
 static func available_anchors(block_id: StringName, variant_id: StringName) -> Array:
-	if is_multicell(block_id, variant_id):
-		return [ANCHOR_CENTER]
-	if block_id == &"column_half":
-		var half_free := _free_extents(block_id, variant_id)
-		return [ANCHOR_EDGE, ANCHOR_CORNER] if half_free.x > 0.001 else [ANCHOR_EDGE]
 	var f := _free_extents(block_id, variant_id)
-	var out: Array = [ANCHOR_CENTER]
-	if f.x > 0.001 or f.y > 0.001:
-		out.append(ANCHOR_EDGE)
-	if f.x > 0.001 and f.y > 0.001:
-		out.append(ANCHOR_CORNER)
-	return out
+	if f.x <= 0.001 and f.y <= 0.001:
+		return [ANCHOR_CENTER]
+	return [ANCHOR_CENTER]
 
 
-static func normalize_anchor(block_id: StringName, variant_id: StringName, anchor_kind: int) -> int:
-	var anchors := available_anchors(block_id, variant_id)
-	return anchor_kind if anchor_kind in anchors else anchors[0]
+static func normalize_anchor(_block_id: StringName, _variant_id: StringName, anchor_kind: int) -> int:
+	return anchor_kind
 
 
 ## Public accessor for the rot=0 in-cell anchor offset (see `_anchor_base_offset`),
@@ -500,9 +497,9 @@ static func anchor_base_offset(block_id: StringName, variant_id: StringName, anc
 	return _anchor_base_offset(block_id, variant_id, anchor_kind)
 
 
-## Offset from the cell centre (rot=0 frame) that realises an anchor kind. Edge
-## pushes toward the block's thinner axis so it actually reaches a side.
 static func _anchor_base_offset(block_id: StringName, variant_id: StringName, anchor_kind: int) -> Vector2:
+	if anchor_kind > 2:
+		return unpack_subgrid_anchor(anchor_kind)
 	var f := _free_extents(block_id, variant_id)
 	match anchor_kind:
 		ANCHOR_EDGE:
@@ -513,10 +510,34 @@ static func _anchor_base_offset(block_id: StringName, variant_id: StringName, an
 			return Vector2.ZERO
 
 
+## Calculates the closest valid sub-grid anchor (packed int) for a block given
+## a local mouse offset (unrotated frame, -0.5..+0.5 range).
+static func snap_subgrid_anchor(block_id: StringName, variant_id: StringName, local_pos_rot0: Vector2) -> int:
+	var sz := size_of(block_id, variant_id)
+	var free_x := maxf(0.0, 1.0 - sz.x)
+	var free_z := maxf(0.0, 1.0 - sz.z)
+	if free_x <= 0.001 and free_z <= 0.001:
+		return 0
+
+	var step_x := 0.25 if sz.x <= 0.5 else 0.125
+	var step_z := 0.25 if sz.z <= 0.5 else 0.125
+
+	var lx := local_pos_rot0.x + 0.5
+	var lz := local_pos_rot0.y + 0.5
+
+	var desired_left_x := lx - sz.x * 0.5
+	var snapped_left_x := clampf(roundf(desired_left_x / step_x) * step_x, 0.0, free_x)
+	var off_x := snapped_left_x + sz.x * 0.5 - 0.5
+
+	var desired_left_z := lz - sz.z * 0.5
+	var snapped_left_z := clampf(roundf(desired_left_z / step_z) * step_z, 0.0, free_z)
+	var off_z := snapped_left_z + sz.z * 0.5 - 0.5
+
+	return pack_subgrid_anchor(off_x, off_z)
+
+
 ## Horizontal position (X, Z in [0,1]) of the block's mesh origin inside its
-## cell for the given variant, anchor kind and rotation. Rotation pivots the
-## anchored offset around the cell centre (same turn the mesh gets), so a corner
-## anchor cycles through all four corners as the block is rotated.
+## cell for the given variant, anchor kind and rotation.
 static func cell_offset(block_id: StringName, variant_id: StringName, anchor_kind: int, rot: int) -> Vector2:
 	var base := _anchor_base_offset(block_id, variant_id, anchor_kind)
 	var rotated := Basis(Vector3.UP, deg_to_rad(90.0 * float(rot))) * Vector3(base.x, 0.0, base.y)

@@ -213,11 +213,29 @@ func process(_delta: float) -> void:
 	if shift_erasing:
 		_editor._orbiting = false
 	refresh_shift_hover()
-	if _editor.cursor_valid and (_editor.cursor_cell != _ghost_cell or _editor.current_tool != _ghost_tool or _editor.current_rot != _ghost_rot or _editor.cursor_valid != _ghost_valid):
-		refresh_ghost()
+	if _editor.cursor_valid:
+		var prev_anchor := _editor.current_anchor
+		_update_current_subgrid_anchor()
+		if _editor.cursor_cell != _ghost_cell or _editor.current_tool != _ghost_tool or _editor.current_rot != _ghost_rot or _editor.cursor_valid != _ghost_valid or _editor.current_anchor != prev_anchor:
+			refresh_ghost()
+
+
+func _update_current_subgrid_anchor() -> void:
+	if not _editor.cursor_valid or _editor.current_block_id.is_empty():
+		return
+	var hit_cell := _editor.cursor_cell
+	var hit_pos := _editor.cursor_hit_pos
+	var cell_center_x := float(hit_cell.x) + 0.5
+	var cell_center_z := float(hit_cell.z) + 0.5
+	var local_p := Vector2(hit_pos.x - cell_center_x, hit_pos.z - cell_center_z)
+	var rot_basis := Basis(Vector3.UP, deg_to_rad(-90.0 * float(_editor.current_rot)))
+	var unrot_p3 := rot_basis * Vector3(local_p.x, 0.0, local_p.y)
+	var unrot_p := Vector2(unrot_p3.x, unrot_p3.z)
+	_editor.current_anchor = BuildingBlockCatalog.snap_subgrid_anchor(_editor.current_block_id, _editor.current_variant, unrot_p)
 
 
 func refresh_ghost() -> void:
+	_update_current_subgrid_anchor()
 	_ghost_cell = _editor.cursor_cell
 	_ghost_tool = _editor.current_tool
 	_ghost_rot = _editor.current_rot
@@ -795,13 +813,7 @@ func _rebuild_brush_inspector() -> void:
 	_move_brush_inspector_under_selection()
 
 	var variants: Array = BuildingBlockCatalog.variants(_editor.current_block_id)
-	var kinds: Array = BuildingBlockCatalog.available_anchors(_editor.current_block_id, _editor.current_variant)
-	if kinds.size() <= 1:
-		_editor.current_anchor = kinds[0]
-	else:
-		_editor.current_anchor = BuildingBlockCatalog.normalize_anchor(_editor.current_block_id, _editor.current_variant, _editor.current_anchor)
-
-	if variants.is_empty() and kinds.size() <= 1:
+	if variants.is_empty():
 		return
 
 	var toolbar := HBoxContainer.new()
@@ -826,15 +838,6 @@ func _rebuild_brush_inspector() -> void:
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	toolbar.add_child(spacer)
-
-	if kinds.size() > 1:
-		for kind in kinds:
-			var abtn := Button.new()
-			abtn.toggle_mode = true
-			abtn.text = _anchor_label(kind)
-			abtn.button_pressed = kind == _editor.current_anchor
-			abtn.pressed.connect(select_anchor.bind(kind))
-			toolbar.add_child(abtn)
 
 	if grouped_options:
 		var seen_lengths: Dictionary = {}

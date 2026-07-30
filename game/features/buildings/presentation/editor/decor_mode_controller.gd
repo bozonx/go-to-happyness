@@ -166,6 +166,7 @@ func activate() -> void:
 	current_category = WorldAssetCatalog.first_populated_category(current_category)
 	_catalog_panel.activate()
 	_panel.visible = true
+	_inspector_panel.visible = true
 	_toolbar.visible = true
 	rebuild_nodes()
 	_refresh_zone_filter_options()
@@ -762,7 +763,7 @@ func _on_collision_overlay_toggled(pressed: bool) -> void:
 
 func select_object(object_id: String) -> void:
 	selected_object_id = object_id if find_record(object_id) != null else ""
-	_inspector_panel.visible = is_active() and not selected_object_id.is_empty()
+	_inspector_panel.visible = is_active()
 	_toolbar_delete_btn.disabled = selected_object_id.is_empty()
 	_sync_object_list_selection()
 	_refresh_inspector()
@@ -895,13 +896,24 @@ func _refresh_inspector() -> void:
 
 	var record := find_record(selected_object_id)
 	if record == null:
-		_inspector_title.text = "Объект не выбран"
 		_set_transform_fields_enabled(false)
-		_id_label.text = "ID: —"
-		_asset_label.text = "Ассет: —"
-		_badges_label.text = ""
-		_refresh_zone_options(&"", record)
+		_refresh_zone_options(&"", null)
 		_update_zone_highlight()
+		var selected_asset := WorldAssetCatalog.get_asset(current_asset_id)
+		if selected_asset != null:
+			_inspector_title.text = "Ассет: %s" % selected_asset.name
+			_id_label.text = "Категория: %s" % WorldAssetCatalog.category_display_name(selected_asset.category)
+			_asset_label.text = "Размер: %d×%d×%d м" % [selected_asset.size_in_blocks.x, selected_asset.size_in_blocks.y, selected_asset.size_in_blocks.z]
+			_badges_label.text = selected_asset.description
+			for control in selected_asset.appearance_controls:
+				var row := _build_preview_control_row(selected_asset, control)
+				if row != null:
+					_controls_vbox.add_child(row)
+		else:
+			_inspector_title.text = "Инспектор декора"
+			_id_label.text = "ID: —"
+			_asset_label.text = "Выберите ассет в палитре или объект в 3D"
+			_badges_label.text = ""
 		return
 
 	var asset := WorldAssetCatalog.get_asset(record.asset_id)
@@ -920,6 +932,47 @@ func _refresh_inspector() -> void:
 		var row := _build_control_row(record, control)
 		if row != null:
 			_controls_vbox.add_child(row)
+
+
+func _build_preview_control_row(asset: WorldAssetDef, control: Dictionary) -> Control:
+	var property_name := String(control.get("name", ""))
+	if property_name.is_empty():
+		return null
+	var row := HBoxContainer.new()
+	var label := Label.new()
+	label.text = String(control.get("label", property_name)) + ":"
+	label.custom_minimum_size.x = 130
+	row.add_child(label)
+
+	var default_val: Variant = control.get("default", null)
+	match String(control.get("type", WorldAssetDef.TYPE_STRING)):
+		WorldAssetDef.TYPE_BOOL:
+			var check := CheckBox.new()
+			check.button_pressed = bool(default_val)
+			check.disabled = true
+			row.add_child(check)
+		WorldAssetDef.TYPE_FLOAT:
+			var spin := SpinBox.new()
+			spin.min_value = float(control.get("min", 0.0))
+			spin.max_value = float(control.get("max", 10.0))
+			spin.step = float(control.get("step", 0.1))
+			spin.value = float(default_val) if default_val != null else spin.min_value
+			spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			spin.editable = false
+			row.add_child(spin)
+		WorldAssetDef.TYPE_COLOR:
+			var picker := ColorPickerButton.new()
+			if default_val is Color:
+				picker.color = default_val as Color
+			elif default_val is String:
+				picker.color = Color(default_val as String)
+			picker.disabled = true
+			row.add_child(picker)
+		_:
+			var val_label := Label.new()
+			val_label.text = String(default_val)
+			row.add_child(val_label)
+	return row
 
 
 func _build_control_row(record: DecorObjectRecordScript, control: Dictionary) -> Control:

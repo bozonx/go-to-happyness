@@ -320,20 +320,7 @@ func activate_option(option_id: StringName) -> void:
 
 
 func inspector_lines() -> Array[String]:
-	var lines: Array[String] = []
-	lines.append("Инструмент: %s" % _tool)
-	if _tool != TOOL_RAMP:
-		lines.append("Кисть: %d" % (context.brush.brush_size - 1))
-	if _tool == TOOL_SCULPT:
-		lines.append("Режим высоты: %s" % TerrainEditOperation.mode_name(context.brush.edit_mode))
-		if context.brush.edit_mode == TerrainEditOperation.Mode.LEVEL:
-			lines.append("Цель Level: %d" % context.brush.level_target_height())
-	if _tool == TOOL_HOLE:
-		lines.append("Режим кисти: %s" % ("вырез" if _hole_cutting else "засыпка"))
-	if _tool == TOOL_RAMP:
-		lines.append("Пандус: %s" % _ramp_class_label())
-	lines.append("Навигация: %s (%s)" % [_overlay_state(), NAV_PROFILES[_nav_profile_index]])
-	return lines
+	return []
 
 
 func status_text() -> String:
@@ -494,8 +481,8 @@ static func _ramp_class_name(slope_id: StringName) -> String:
 
 
 func list_title() -> String:
-	return "Объекты рельефа"
+	return ""
 
 
 func empty_list_hint() -> String:
-	return "В режиме «Рельеф» объектов в списке пока нет"
+	return ""

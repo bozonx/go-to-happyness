@@ -314,11 +314,11 @@ func status_text() -> String:
 
 
 func list_title() -> String:
-	return "Объекты поверхности"
+	return ""
 
 
 func empty_list_hint() -> String:
-	return "В режиме «Поверхность» объектов в списке пока нет"
+	return ""
 
 
 ## The palette reads the same generated swatch as terrain rendering. Keeping a

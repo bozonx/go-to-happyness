@@ -471,6 +471,41 @@ static func _register_builtin_assets() -> void:
 		[AssetPlacementPolicy.SURFACE_GROUND, AssetPlacementPolicy.SURFACE_ICE],
 		SlopeCatalog.CLASS_MODERATE
 	)
+
+	_register(WorldAssetDef.new(
+		&"backpack",
+		"Рюкзак",
+		&"world_props",
+		&"world",
+		SCENE_DIR.path_join("backpack.tscn"),
+		Vector3i(1, 1, 1),
+		1.0,
+		[
+			{
+				"name": "bag_color", "label": "Цвет рюкзака", "type": "color",
+				"default": Color("8b5a2b"),
+				"bind": [{"node": "Body", "prop": WorldAssetDef.PROP_ALBEDO}],
+			},
+			{
+				"name": "has_pocket", "label": "Передний карман", "type": "bool", "default": true,
+				"bind": [{"node": "Pocket", "prop": "visible"}],
+			},
+		],
+		Vector3(0.5, 0.6, 0.4),
+		"Походный рюкзак с карманами и ремнями для хранения предметов."
+	))
+	var backpack := _assets[&"backpack"] as WorldAssetDef
+	backpack.tags = [&"storage", &"equipment", &"outdoor", &"world_props"]
+	backpack.available_from_era = &"tent"
+	backpack.scale_mode = WorldAssetDef.SCALE_UNIFORM_STEPS
+	backpack.allowed_scales = [0.8, 1.0, 1.2, 1.5]
+	backpack.collision_policy = WorldAssetDef.COLLISION_BOX
+	backpack.scope = WorldAssetDef.SCOPE_BOTH
+	backpack.placement = AssetPlacementPolicy.of_surfaces(
+		[AssetPlacementPolicy.SURFACE_GROUND, AssetPlacementPolicy.SURFACE_ICE],
+		SlopeCatalog.CLASS_MODERATE
+	)
+
 	_register_natural_assets()
 
 
@@ -486,7 +521,7 @@ static func _register_natural_assets() -> void:
 		[&"fireflies", "Светлячки", &"ambient", "res://game/features/world/presentation/fireflies_effect.tscn", Vector3(4.0, 3.0, 4.0), false],
 	]:
 		var asset := WorldAssetDef.new(data[0], data[1], data[2], &"world", data[3], Vector3i.ONE, 1.0, [], data[4])
-		asset.scope = WorldAssetDef.SCOPE_MAP
+		asset.scope = WorldAssetDef.SCOPE_MAP if data[0] in [&"rabbit", &"fireflies"] else WorldAssetDef.SCOPE_BOTH
 		asset.rotation_axes = ["y"]
 		asset.collision_policy = WorldAssetDef.COLLISION_SCENE if data[0] != &"fireflies" else WorldAssetDef.COLLISION_NONE
 		asset.blocking_navigation = bool(data[5])

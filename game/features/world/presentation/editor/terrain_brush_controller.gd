@@ -16,6 +16,7 @@ extends BaseBrushController
 ## published navigation field in step.
 
 var edit_mode := TerrainEditOperation.Mode.SCULPT
+var terrain_slope_class := RampConnectionPlan.AUTO_CLASS
 var material_index := 0
 var variant := 0
 var ramp_class := SlopeCatalog.CLASS_GENTLE
@@ -83,9 +84,9 @@ func apply_height_brush(delta: int) -> void:
 	if edit_mode == TerrainEditOperation.Mode.LEVEL:
 		if not _has_level_target:
 			_capture_level_target()
-		operation = TerrainEditOperation.level(cells, _level_target_height)
+		operation = TerrainEditOperation.level(cells, _level_target_height, terrain_slope_class)
 	else:
-		operation = TerrainEditOperation.offset(cells, delta, edit_mode)
+		operation = TerrainEditOperation.offset(cells, delta, edit_mode, terrain_slope_class)
 	if _service.apply_operation(operation):
 		if edit_mode == TerrainEditOperation.Mode.LEVEL:
 			last_message = "%s → %d — %d cells changed" % [
@@ -136,7 +137,7 @@ func apply_flatten() -> void:
 	if not has_hover:
 		return
 	var target := _grid.height_of(hovered_cell)
-	if _service.apply_operation(TerrainEditOperation.level(brush_cells(hovered_cell), target)):
+	if _service.apply_operation(TerrainEditOperation.level(brush_cells(hovered_cell), target, terrain_slope_class)):
 		last_message = "levelled to %d" % target
 		return
 	last_message = "level REFUSED (%s)" % _service.last_rejection()
@@ -145,6 +146,17 @@ func apply_flatten() -> void:
 func cycle_edit_mode() -> void:
 	edit_mode = (edit_mode + 1) % TerrainEditOperation.Mode.size()
 	last_message = "mode %s" % TerrainEditOperation.mode_name(edit_mode)
+
+
+func cycle_terrain_slope_class() -> void:
+	var profiles: Array[int] = [RampConnectionPlan.AUTO_CLASS]
+	profiles.append_array(SlopeCatalog.RAMP_CLASSES)
+	var position := profiles.find(terrain_slope_class)
+	terrain_slope_class = profiles[(position + 1) % profiles.size()] if position >= 0 else profiles[0]
+	last_message = (
+		"terrain slope natural" if terrain_slope_class == RampConnectionPlan.AUTO_CLASS
+		else "terrain slope %s" % SlopeCatalog.id_of_class(terrain_slope_class)
+	)
 
 
 # --- Surface ----------------------------------------------------------------

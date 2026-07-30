@@ -45,6 +45,7 @@ var _pending: Dictionary = {}
 ## Every column whose height this operation moved — the seeds of the slope pass.
 var _moved: Dictionary = {}
 var _processed := 0
+var _requested_slope_class := RampConnectionPlan.AUTO_CLASS
 
 
 ## Convenience for callers that only care about the outcome (§14: `(grid, op) -> delta | null`).
@@ -61,9 +62,11 @@ func solve(grid: TerrainGrid, operation: TerrainEditOperation) -> TerrainDelta:
 	_pending = {}
 	_moved = {}
 	_processed = 0
+	_requested_slope_class = RampConnectionPlan.AUTO_CLASS
 	if grid == null or operation == null or operation.cells.is_empty():
 		rejection_reason = REASON_NOTHING_TO_DO
 		return null
+	_requested_slope_class = operation.slope_class if SlopeCatalog.is_ramp_class(operation.slope_class) else RampConnectionPlan.AUTO_CLASS
 	_region = TerrainWorkingRegion.new(grid)
 
 	var raised: Array[Vector2i] = []
@@ -79,7 +82,7 @@ func solve(grid: TerrainGrid, operation: TerrainEditOperation) -> TerrainDelta:
 		# Terrace mode wants the bare vertical face and says so (§4.1); every
 		# other mode gets the gentlest slope that fits (§3.2), which for Level is
 		# exactly the auto-skirt of §4.5.
-		SlopeAssigner.assign_slopes(_region, _moved_cells())
+		SlopeAssigner.assign_slopes(_region, _moved_cells(), _requested_slope_class)
 
 	return _build_delta()
 
@@ -165,7 +168,11 @@ func _relax_neighbours(cell: Vector2i, direction: int) -> bool:
 		var neighbour := cell + SlopeCatalog.direction_offset(neighbour_direction)
 		if not _region.is_inside(neighbour) or _region.is_hole(neighbour):
 			continue
-		var repose := TerrainMaterialCatalog.repose_steps_per_cell_of_index(_region.material_index_at(neighbour))
+		var repose := (
+			SlopeCatalog.steps_per_cell_of_class(_requested_slope_class)
+			if SlopeCatalog.is_ramp_class(_requested_slope_class)
+			else TerrainMaterialCatalog.repose_steps_per_cell_of_index(_region.material_index_at(neighbour))
+		)
 		if is_inf(repose):
 			continue
 		var allowed := limit - repose * float(direction)

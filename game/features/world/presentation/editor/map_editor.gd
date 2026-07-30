@@ -407,8 +407,6 @@ func _refresh_panels() -> void:
 		"%s%s" % [document.meta.name, "*" if document.dirty else ""],
 		"id: %s" % (document.meta.id if not String(document.meta.id).is_empty() else "— не задан"),
 		"доска %d×%d" % [document.meta.board_cells, document.meta.board_cells],
-		_binding_line(),
-		"отмен в стеке: %d" % history.undo_depth(),
 	])
 	_side_panel.set_inspector("Инспектор — %s" % _active.title, _active.inspector_lines())
 	_side_panel.set_property_fields(_active.inspector_properties(), _active.inspector_values())

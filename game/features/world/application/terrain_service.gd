@@ -114,17 +114,43 @@ func connect_ramp(first_cell: Vector2i, second_cell: Vector2i, requested_class: 
 	var plan := RampConnectionPlan.between(_grid, first_cell, second_cell, requested_class)
 	if not plan.is_valid():
 		return _reject(plan.reason)
+	_commit_ramp_plan(plan)
+	return true
+
+
+## Changes the profile of the complete connected ramp chain under `ramp_cell`,
+## keeping its low and high levels. The footprint may grow or shrink; old cells
+## outside the new run are flattened inside the same undo record.
+func reshape_ramp(ramp_cell: Vector2i, requested_class: int) -> bool:
+	if _grid == null:
+		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
+	var plan := RampConnectionPlan.reshape(_grid, ramp_cell, requested_class)
+	if not plan.is_valid():
+		return _reject(plan.reason)
+	_commit_ramp_plan(plan)
+	return true
+
+
+func _commit_ramp_plan(plan: RampConnectionPlan) -> void:
 	var delta := TerrainDelta.new()
+	var footprint: Dictionary = {}
+	for cell: Vector2i in plan.cells:
+		footprint[cell] = true
+	for old_ramp_cell: Vector2i in plan.replacement_cells:
+		if footprint.has(old_ramp_cell):
+			continue
+		var old_state := TerrainDelta.state_of(_grid, old_ramp_cell)
+		delta.record(old_ramp_cell, old_state, TerrainDelta.flattened(old_state, _grid.height_of(old_ramp_cell)))
+	var segment_run := SlopeCatalog.run_of_class(plan.slope_class)
 	for step in plan.cells.size():
 		var cell: Vector2i = plan.cells[step]
 		var old_state := TerrainDelta.state_of(_grid, cell)
 		delta.record(cell, old_state, TerrainDelta.make_state(
-			plan.base_height, plan.slope_class, plan.direction, step,
+			plan.expected_height_at_step(step), plan.slope_class, plan.direction, step % segment_run,
 			old_state[TerrainDelta.STATE_MATERIAL], old_state[TerrainDelta.STATE_FLAGS],
 			old_state[TerrainDelta.STATE_DETAIL],
 		))
 	_commit(delta)
-	return true
 
 
 ## Dissolves the ramp under `cell` back into flat columns, as one undoable step.

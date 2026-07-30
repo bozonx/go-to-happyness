@@ -246,6 +246,8 @@ func select_asset(asset_id: StringName) -> void:
 		_select_snap_step(asset.default_snap_step)
 		add_recent_asset(asset_id)
 	_controller.refresh_ghost()
+	if _controller.selected_object_id.is_empty():
+		_controller._refresh_inspector()
 
 
 func clear_asset_selection() -> void:
@@ -255,6 +257,8 @@ func clear_asset_selection() -> void:
 	for button in _recent_buttons.values():
 		(button as Button).button_pressed = false
 	_controller.refresh_ghost()
+	if _controller.selected_object_id.is_empty():
+		_controller._refresh_inspector()
 
 
 func _on_search_changed(_new_text: String) -> void:

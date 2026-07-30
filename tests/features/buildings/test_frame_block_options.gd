@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Scene coverage for the column option rows and the half-column anchor rules.
+## Scene coverage for the column option rows and subgrid anchoring.
 
 const EditorScene = preload("res://game/features/buildings/presentation/editor/building_editor.tscn")
 
@@ -18,7 +18,7 @@ func _run() -> void:
 
 	frame.select_block(&"column_square")
 	await process_frame
-	_assert_button_labels(frame, "BrushToolbar", ["0.5 м", "0.25 м", "Центр", "К грани", "В угол"])
+	_assert_button_labels(frame, "BrushToolbar", ["0.5 м", "0.25 м"])
 	_assert_button_labels(frame, "LengthToolbar", ["Полная", "1/2"])
 
 	frame.select_block(&"column_round", &"0.5_quarter")
@@ -29,12 +29,10 @@ func _run() -> void:
 	frame.select_block(&"column_half", &"1")
 	await process_frame
 	_assert_button_labels(frame, "BrushToolbar", ["1 м", "0.5 м", "0.25 м"])
-	assert(editor.current_anchor == BuildingBlockCatalog.ANCHOR_EDGE)
 
 	frame.select_block(&"column_half", &"0.5")
 	await process_frame
-	_assert_button_labels(frame, "BrushToolbar", ["1 м", "0.5 м", "0.25 м", "К грани", "В угол"])
-	assert(editor.current_anchor != BuildingBlockCatalog.ANCHOR_CENTER)
+	_assert_button_labels(frame, "BrushToolbar", ["1 м", "0.5 м", "0.25 м"])
 
 	editor.queue_free()
 	print("--- test_frame_block_options.gd PASSED ---")
@@ -50,4 +48,4 @@ func _assert_button_labels(frame: FrameModeController, row_name: String, expecte
 	for child in row.get_children():
 		if child is Button:
 			labels.append(child.text)
-	assert(labels == expected, "%s labels: %s" % [row_name, labels])
+	assert(labels == expected, "%s labels: %s (expected %s)" % [row_name, labels, expected])

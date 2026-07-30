@@ -25,11 +25,17 @@ signal property_committed(property_name: StringName, value: Variant)
 
 @onready var _map_title: Label = $Margin/Scroll/Rows/MapTitleRow/MapTitle
 @onready var _map_info: Label = $Margin/Scroll/Rows/MapInfo
+@onready var _map_separator: HSeparator = $Margin/Scroll/Rows/MapSeparator
 @onready var _inspector_title: Label = $Margin/Scroll/Rows/InspectorTitle
 @onready var _inspector: Label = $Margin/Scroll/Rows/Inspector
 @onready var _inspector_fields: VBoxContainer = $Margin/Scroll/Rows/InspectorFields
+@onready var _separator: HSeparator = $Margin/Scroll/Rows/Separator
 @onready var _list_title: Label = $Margin/Scroll/Rows/ListTitle
 @onready var _list: ItemList = $Margin/Scroll/Rows/List
+
+var _has_inspector_lines: bool = false
+var _has_inspector_properties: bool = false
+var _has_list: bool = false
 
 
 func _ready() -> void:
@@ -44,6 +50,8 @@ func set_map_info(lines: Array[String]) -> void:
 func set_inspector(title: String, lines: Array[String]) -> void:
 	_inspector_title.text = title
 	_inspector.text = "\n".join(lines)
+	_has_inspector_lines = not lines.is_empty()
+	_update_section_visibilities()
 
 
 ## Generic schema-driven inspector for map entities. The panel knows control
@@ -51,23 +59,25 @@ func set_inspector(title: String, lines: Array[String]) -> void:
 func set_property_fields(properties: Array[EntityPropertyDef], values: Dictionary) -> void:
 	for child in _inspector_fields.get_children():
 		child.queue_free()
-	if properties.is_empty():
-		return
-	var sections: Dictionary = {}
-	for property: EntityPropertyDef in properties:
-		if property.is_visible_for(values):
-			if not sections.has(property.section):
-				sections[property.section] = []
-			sections[property.section].append(property)
-	for section: StringName in EntityPropertyDef.SECTIONS:
-		if not sections.has(section):
-			continue
-		var heading := Label.new()
-		heading.text = _section_name(section)
-		heading.add_theme_font_size_override("font_size", 12)
-		_inspector_fields.add_child(heading)
-		for property: EntityPropertyDef in sections[section]:
-			_add_property_control(property, values.get(property.name, property.default))
+	_has_inspector_properties = false
+	if not properties.is_empty():
+		var sections: Dictionary = {}
+		for property: EntityPropertyDef in properties:
+			if property.is_visible_for(values):
+				if not sections.has(property.section):
+					sections[property.section] = []
+				sections[property.section].append(property)
+				_has_inspector_properties = true
+		for section: StringName in EntityPropertyDef.SECTIONS:
+			if not sections.has(section):
+				continue
+			var heading := Label.new()
+			heading.text = _section_name(section)
+			heading.add_theme_font_size_override("font_size", 12)
+			_inspector_fields.add_child(heading)
+			for property: EntityPropertyDef in sections[section]:
+				_add_property_control(property, values.get(property.name, property.default))
+	_update_section_visibilities()
 
 
 func _add_property_control(property: EntityPropertyDef, value: Variant) -> void:
@@ -188,10 +198,24 @@ static func _section_name(section: StringName) -> String:
 func set_entries(title: String, entries: Array[String], empty_hint := "") -> void:
 	_list_title.text = title
 	_list.clear()
-	if entries.is_empty():
-		if not empty_hint.is_empty():
-			var index := _list.add_item(empty_hint)
-			_list.set_item_disabled(index, true)
-		return
-	for entry: String in entries:
-		_list.add_item(entry)
+	_has_list = not title.is_empty() and (not entries.is_empty() or not empty_hint.is_empty())
+	if _has_list:
+		if entries.is_empty():
+			if not empty_hint.is_empty():
+				var index := _list.add_item(empty_hint)
+				_list.set_item_disabled(index, true)
+		else:
+			for entry: String in entries:
+				_list.add_item(entry)
+	_update_section_visibilities()
+
+
+func _update_section_visibilities() -> void:
+	var has_inspector := _has_inspector_lines or _has_inspector_properties
+	_inspector_title.visible = has_inspector
+	_inspector.visible = _has_inspector_lines
+	_inspector_fields.visible = _has_inspector_properties
+	_list_title.visible = _has_list
+	_list.visible = _has_list
+	_map_separator.visible = has_inspector or _has_list
+	_separator.visible = has_inspector and _has_list

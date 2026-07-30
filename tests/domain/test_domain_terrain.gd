@@ -44,6 +44,7 @@ static func run_all() -> void:
 	_test_auto_skirt_descends_from_a_levelled_plateau()
 	_test_auto_slope_refuses_occupied_ground()
 	_test_auto_slope_never_moves_an_anchor()
+	_test_requested_slope_profile_shapes_full_footprint()
 	_test_grass_hillside_closes_every_corner()
 	_test_hillsides_grow_no_wedges()
 	_test_terrace_mode_assigns_no_slopes()
@@ -242,6 +243,27 @@ static func _test_ramp_connection_reshapes_ground_atomically() -> void:
 	assert(RampConnectionPlan.between(
 		grid, Vector2i.ZERO, Vector2i(4, 0), SlopeCatalog.CLASS_MODERATE,
 	).reason == RampConnectionPlan.REASON_WRONG_RUN)
+
+	# A larger height difference is a chain, and dragging a new footprint to the
+	# same top replaces the old ramp atomically instead of reporting it occupied.
+	var chained := _make_grid()
+	var chain_service := TerrainService.new()
+	chain_service.configure(chained)
+	chained.set_height(Vector2i(8, 0), 2)
+	assert(chain_service.connect_ramp(Vector2i.ZERO, Vector2i(8, 0), SlopeCatalog.CLASS_GENTLE))
+	assert(chained.is_ramp_valid_at(Vector2i(1, 0)))
+	assert(chained.is_ramp_valid_at(Vector2i(5, 0)))
+	# Same top, gentler profile: two shallow segments occupy sixteen cells and
+	# add the missing lower ground to the footprint.
+	assert(chain_service.connect_ramp(Vector2i(-8, 0), Vector2i(8, 0), SlopeCatalog.CLASS_SHALLOW))
+	assert(chained.slope_class_at(Vector2i(-8, 0)) == SlopeCatalog.CLASS_SHALLOW)
+	assert(chained.is_ramp_valid_at(Vector2i(4, 0)))
+	# Steepen again. Cells no longer used by the short profile are flattened in
+	# the same transaction, not left as orphaned pieces of the old ramp.
+	assert(chain_service.reshape_ramp(Vector2i(4, 0), SlopeCatalog.CLASS_STEEP))
+	assert(chained.slope_class_at(Vector2i(6, 0)) == SlopeCatalog.CLASS_STEEP)
+	assert(chained.slope_class_at(Vector2i.ZERO) == SlopeCatalog.CLASS_FLAT)
+	assert(chained.is_ramp_valid_at(Vector2i(7, 0)))
 
 
 static func _test_ramp_unrolls_into_fractional_corners_only() -> void:
@@ -682,6 +704,28 @@ static func _test_auto_slope_never_moves_an_anchor() -> void:
 	assert(grid.height_of(Vector2i(2, 0)) == 0)
 	assert(grid.slope_of(Vector2i(2, 0)) == SlopeCatalog.FLAT)
 	assert(not grid.is_anchor(Vector2i(1, 0)))
+
+
+static func _test_requested_slope_profile_shapes_full_footprint() -> void:
+	var grid := _make_grid()
+	var solver := CascadeSolver.new()
+	var operation := TerrainEditOperation.offset(
+		[Vector2i.ZERO] as Array[Vector2i], 3,
+		TerrainEditOperation.Mode.SCULPT, SlopeCatalog.CLASS_GENTLE,
+	)
+	var delta := solver.solve(grid, operation)
+	assert(delta != null)
+	delta.apply(grid)
+	# A forced 1:4 profile spends four cells on each of the three half-metre
+	# steps. The cascade creates the missing terraces and SlopeAssigner writes
+	# three matching ramp objects over them.
+	for x in range(4, 16, 4):
+		assert(grid.slope_class_at(Vector2i(x, 0)) == SlopeCatalog.CLASS_GENTLE)
+		assert(grid.is_ramp_valid_at(Vector2i(x, 0)))
+	assert(grid.height_of(Vector2i(3, 0)) == 3)
+	assert(grid.height_of(Vector2i(7, 0)) == 2)
+	assert(grid.height_of(Vector2i(11, 0)) == 1)
+	assert(grid.height_of(Vector2i(15, 0)) == 0)
 
 
 ## Every corner of a sculpted grass hill, seen from both cells that share it.
