@@ -92,16 +92,38 @@ func add_rect(rect: Rect2i) -> void:
 		rects.append(normalized)
 
 
-## Removes every rectangle covering the cell. Erasing works on whole rectangles,
-## never on single cells: an area is composed of rectangles, so a partial erase
-## would have to split them and silently change what the author drew.
+## Removes one cell while preserving the rest of the area. A rectangle covering
+## the cell is deterministically split into at most four rectangles.
+func remove_cell(cell: Vector2i) -> bool:
+	var changed := false
+	var next_rects: Array[Rect2i] = []
+	for rect in rects:
+		if not rect.has_point(cell):
+			next_rects.append(rect)
+			continue
+		changed = true
+		var top_height := cell.y - rect.position.y
+		var bottom_height := rect.end.y - cell.y - 1
+		var left_width := cell.x - rect.position.x
+		var right_width := rect.end.x - cell.x - 1
+		if top_height > 0:
+			next_rects.append(Rect2i(rect.position, Vector2i(rect.size.x, top_height)))
+		if bottom_height > 0:
+			next_rects.append(Rect2i(
+				Vector2i(rect.position.x, cell.y + 1), Vector2i(rect.size.x, bottom_height)))
+		if left_width > 0:
+			next_rects.append(Rect2i(
+				Vector2i(rect.position.x, cell.y), Vector2i(left_width, 1)))
+		if right_width > 0:
+			next_rects.append(Rect2i(
+				Vector2i(cell.x + 1, cell.y), Vector2i(right_width, 1)))
+	if changed:
+		rects = next_rects
+	return changed
+
+
 func remove_rect_at(cell: Vector2i) -> bool:
-	var removed := false
-	for index in range(rects.size() - 1, -1, -1):
-		if rects[index].has_point(cell):
-			rects.remove_at(index)
-			removed = true
-	return removed
+	return remove_cell(cell)
 
 
 func contains_cell(cell: Vector2i) -> bool:

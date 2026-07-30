@@ -40,7 +40,7 @@ const ROLES: Array[StringName] = [
 
 ## Roles a building author uses; the map editor offers the rest.
 const BUILDING_ROLES: Array[StringName] = [
-	ROLE_DOOR, ROLE_SLOT, ROLE_QUEUE, ROLE_STORAGE, ROLE_POI, ROLE_SPAWN,
+	ROLE_DOOR, ROLE_SLOT, ROLE_QUEUE, ROLE_STORAGE, ROLE_WAYPOINT, ROLE_POI, ROLE_SPAWN,
 ]
 
 # Poses of a `slot` — what the occupant's body does there.

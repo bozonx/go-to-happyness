@@ -43,8 +43,9 @@ const PACK_ROOTS: Array[String] = [
 ## What a function can be attached to.
 const SCOPE_AREA := &"area"
 const SCOPE_ACTIVITY := &"activity"
+const SCOPE_ANCHOR := &"anchor"
 
-const SCOPES: Array[StringName] = [SCOPE_AREA, SCOPE_ACTIVITY]
+const SCOPES: Array[StringName] = [SCOPE_AREA, SCOPE_ACTIVITY, SCOPE_ANCHOR]
 
 ## Cached across calls; `reload()` drops it when packs change.
 static var _functions: Dictionary = {}
@@ -90,6 +91,37 @@ static func activities() -> Array[Dictionary]:
 		if entry.get("scope", SCOPE_AREA) == SCOPE_ACTIVITY:
 			result.append(entry)
 	return result
+
+
+static func for_anchor_role(anchor_role: StringName) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for entry in all():
+		if entry.get("scope", SCOPE_AREA) != SCOPE_ANCHOR:
+			continue
+		var roles: Array = entry.get("roles", [])
+		if roles.is_empty() or anchor_role in roles:
+			result.append(entry)
+	return result
+
+
+static func supports_area_role(function_id: StringName, area_role: StringName) -> bool:
+	if function_id == &"":
+		return true
+	return for_area_role(area_role).any(func(entry: Dictionary) -> bool:
+		return entry.get("id", &"") == function_id)
+
+
+static func supports_anchor_role(function_id: StringName, anchor_role: StringName) -> bool:
+	if function_id == &"":
+		return true
+	return for_anchor_role(anchor_role).any(func(entry: Dictionary) -> bool:
+		return entry.get("id", &"") == function_id)
+
+
+static func is_activity(function_id: StringName) -> bool:
+	if function_id == &"":
+		return true
+	return StringName(get_function(function_id).get("scope", &"")) == SCOPE_ACTIVITY
 
 
 static func get_function(function_id: StringName) -> Dictionary:

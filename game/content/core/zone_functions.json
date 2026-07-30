@@ -118,6 +118,17 @@
 		{"id": "craft", "label": "Ремесло", "scope": "activity"},
 		{"id": "study", "label": "Учёба", "scope": "activity"},
 		{"id": "sleep", "label": "Сон", "scope": "activity"},
-		{"id": "rest", "label": "Отдых", "scope": "activity"}
+		{"id": "rest", "label": "Отдых", "scope": "activity"},
+		{"id": "main_entrance", "label": "Главный вход", "scope": "anchor", "roles": ["door"]},
+		{"id": "hero_start", "label": "Старт героя", "scope": "anchor", "roles": ["spawn"]},
+		{
+			"id": "interaction_point",
+			"label": "Точка взаимодействия",
+			"scope": "anchor",
+			"roles": ["poi"],
+			"properties": [
+				{"key": "prompt", "label": "Подсказка", "type": "string", "default": "Взаимодействовать"}
+			]
+		}
 	]
 }

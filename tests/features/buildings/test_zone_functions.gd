@@ -47,6 +47,10 @@ func _test_catalog_loads_from_pack() -> void:
 	assert(room_functions.any(func(e: Dictionary) -> bool: return e["id"] == KITCHEN))
 	assert(ZoneFunctionCatalog.activities().any(func(e: Dictionary) -> bool:
 		return e["id"] == &"core:cook"))
+	assert(ZoneFunctionCatalog.for_anchor_role(ZoneAnchorRecord.ROLE_SPAWN).any(
+		func(e: Dictionary) -> bool: return e["id"] == &"core:hero_start"))
+	assert(not ZoneFunctionCatalog.supports_anchor_role(
+		&"core:hero_start", ZoneAnchorRecord.ROLE_DOOR))
 	print("  catalog loads from pack ok")
 
 

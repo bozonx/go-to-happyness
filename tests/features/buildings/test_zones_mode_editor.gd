@@ -27,6 +27,9 @@ func _run() -> void:
 	editor._select_mode(editor.EditMode.ZONES)
 	assert(zones.is_active(), "zones palette visible")
 	assert(editor.get_node("%ZonesInspectorPanel").visible, "inspector visible")
+	assert(editor.get_node("%ZonesToolbar").anchor_left == 0.0, "creation palette is anchored left")
+	assert(editor.get_node("%ZonesInspectorPanel").anchor_left == 1.0,
+		"zone tree and inspector are anchored right")
 	assert(not editor.get_node("%PalettePanel").visible, "frame palette yields to the zones palette")
 	print("  mode switch ok")
 
@@ -37,9 +40,16 @@ func _run() -> void:
 	assert(role_option.get_item_metadata(0) == ZoneAreaRecord.ROLE_ROOM)
 	zones.handle_key(_key(KEY_W))
 	assert(editor.get_node("%ToolPointBtn").button_pressed, "W arms the point tool")
+	assert(role_option.item_count == 4, "point tool starts with the four everyday roles")
+	assert(not editor.get_node("%ZoneCreationFunctionRow").visible,
+		"area function controls do not linger for the point tool")
+	var advanced: CheckBox = editor.get_node("%ZoneAdvancedCheck")
+	advanced.button_pressed = true
 	assert(role_option.item_count == ZoneAnchorRecord.BUILDING_ROLES.size(),
-		"point tool offers point roles, got %d" % role_option.item_count)
+		"advanced toggle exposes all point roles, got %d" % role_option.item_count)
 	zones.handle_key(_key(KEY_Q))
+	assert(editor.get_node("%ZoneCreationFunctionRow").visible,
+		"room creation offers functions from content packs")
 	print("  contextual role list ok")
 
 	# Draw a room with the rectangle drag, the way the UI does.
@@ -54,7 +64,22 @@ func _run() -> void:
 	assert(room.is_room())
 	assert(room.function == &"", "new areas start without a function")
 	assert(room.cell_count() == 6, "3x2 cells, got %d" % room.cell_count())
+	var issues: VBoxContainer = editor.get_node("%ZoneIssuesContainer")
+	assert(issues.get_child_count() > 0 and issues.get_child(0) is Button,
+		"zone diagnostics are actionable controls, not an unstructured text dump")
 	print("  rectangle drag ok, cells=", room.cell_count())
+
+	# Every drag starts a new area unless the explicit append toggle is enabled.
+	editor.cursor_cell = Vector3i(0, 0, 3)
+	zones.handle_mouse_button(_click(true))
+	zones.handle_mouse_button(_click(false))
+	assert(editor.blueprint.areas.size() == 2, "a new gesture creates a new room")
+	# Shift+RMB must travel through BuildingEditor to the zones eraser and remove
+	# exactly the hovered cell/area instead of starting camera orbit.
+	editor._handle_mouse_button(_right_click(true, true))
+	editor._handle_mouse_button(_right_click(false, true))
+	assert(editor.blueprint.areas.size() == 1, "host forwards Shift+RMB to zone erasing")
+	assert(not editor._orbiting, "zone erasing does not orbit the camera")
 
 	# The function list comes from a pack and is set in the inspector, not the toolbar.
 	zones._selected_area_id = room.id
@@ -70,6 +95,15 @@ func _run() -> void:
 	zones._on_inspector_function_selected(kitchen_index)
 	assert(room.function == &"core:kitchen", "the function was applied to the selected area")
 	assert(room.properties.get("profession") == "cook", "pack defaults filled in")
+	room.properties["stale"] = "old function"
+	var housing_index := -1
+	for i in function_option.item_count:
+		if function_option.get_item_metadata(i) == &"core:housing":
+			housing_index = i
+	zones._on_inspector_function_selected(housing_index)
+	assert(room.properties.size() == 1 and int(room.properties.get("residents", 0)) == 1,
+		"function change replaces stale properties, got %s" % room.properties)
+	zones._on_inspector_function_selected(kitchen_index)
 	print("  inspector function selection ok")
 
 	# A door and a slot. The slot must adopt the room under it automatically.
@@ -92,6 +126,12 @@ func _run() -> void:
 	zones._refresh_inspector()
 	assert(editor.get_node("%ZoneAnchorProps").get_child_count() >= 3,
 		"slot inspector exposes facing, arc and ownership")
+	# Selecting without moving is not an edit and must not dirty the document.
+	editor._dirty = false
+	editor.cursor_cell = Vector3i(2, 0, 1)
+	zones.handle_mouse_button(_click(true))
+	zones.handle_mouse_button(_click(false))
+	assert(not editor._dirty, "selecting a point without moving keeps the document clean")
 	editor.cursor_cell = Vector3i(3, 0, 1)
 	zones._move_selected_anchor_to_cursor()
 	assert(slot.cell() == Vector2i(3, 1), "selected point moves to the cursor")
@@ -113,6 +153,14 @@ func _run() -> void:
 	zones._selected_anchor_id = editor.blueprint.anchors[0].id
 	zones._selected_area_id = &""
 	zones._refresh_inspector()
+	var anchor_function_option: OptionButton = editor.get_node("%ZoneInspectorFunctionOption")
+	var entrance_index := -1
+	for i in anchor_function_option.item_count:
+		if anchor_function_option.get_item_metadata(i) == &"core:main_entrance":
+			entrance_index = i
+	assert(entrance_index > 0, "door functions from the content pack are offered")
+	zones._on_inspector_function_selected(entrance_index)
+	assert(editor.blueprint.anchors[0].function == &"core:main_entrance")
 	zones._start_linking()
 	assert(zones._linking, "linking mode is active")
 	editor.cursor_cell = Vector3i(2, 0, 1)
@@ -121,7 +169,8 @@ func _run() -> void:
 	assert(editor.blueprint.routes.size() == 1)
 	assert(editor.blueprint.routes[0].stops == [&"door_1", slot.id])
 	assert(zones._selected_route_id == editor.blueprint.routes[0].id)
-	zones._stop_linking()
+	editor._handle_mouse_button(_right_click(true))
+	assert(not zones._linking, "RMB through the host finishes route linking")
 	print("  route linking ok")
 
 	# Entrances derive from the door; the format carries no entrance fields.
@@ -188,6 +237,14 @@ func _click(pressed: bool) -> InputEventMouseButton:
 	var event := InputEventMouseButton.new()
 	event.button_index = MOUSE_BUTTON_LEFT
 	event.pressed = pressed
+	return event
+
+
+func _right_click(pressed: bool, shifted := false) -> InputEventMouseButton:
+	var event := InputEventMouseButton.new()
+	event.button_index = MOUSE_BUTTON_RIGHT
+	event.pressed = pressed
+	event.shift_pressed = shifted
 	return event
 
 

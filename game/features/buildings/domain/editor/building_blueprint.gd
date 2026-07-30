@@ -433,12 +433,25 @@ func _zone_errors() -> Array[String]:
 		area_ids[area.id] = true
 		if area.role not in ZoneAreaRecord.ROLES:
 			errors.append("Неизвестная роль области %s: %s" % [area.id, area.role])
+		if area.is_empty():
+			errors.append("Область %s не содержит ни одной клетки" % area.id)
+		for rect in area.rects:
+			if rect.position.x < 0 or rect.position.y < 0 \
+					or rect.end.x > footprint.x or rect.end.y > footprint.y:
+				errors.append("Область %s выходит за границы здания" % area.id)
+				break
 		if area.function != &"" and not ZoneFunctionCatalog.has_function(area.function):
 			errors.append("Область %s ссылается на неизвестную функцию: %s" % [area.id, area.function])
+		elif not ZoneFunctionCatalog.supports_area_role(area.function, area.role):
+			errors.append("Функция %s неприменима к области %s" % [area.function, area.id])
 		if area.function != &"" and area.is_overlay():
 			errors.append("Оверлей %s не может нести функцию: он ничего не адресует" % area.id)
 		if area.y_max < area.y_min:
 			errors.append("У области %s перевёрнут диапазон высот" % area.id)
+		# y_min addresses an editable floor. y_max is the inclusive head-room range
+		# and may extend one level above the last construction layer.
+		elif area.y_min < 0 or area.y_min >= grid_bounds.y or area.y_max > grid_bounds.y + 1:
+			errors.append("Область %s выходит за вертикальные границы здания" % area.id)
 		for audience in area.allow + area.deny:
 			if not ZoneAccess.is_known_audience(audience) and not _valid_id(String(audience).replace(":", "_")):
 				errors.append("Область %s ссылается на недопустимую аудиторию: %s" % [area.id, audience])
@@ -467,6 +480,17 @@ func _zone_errors() -> Array[String]:
 		zone_ids[anchor.id] = true
 		if anchor.role not in ZoneAnchorRecord.ROLES:
 			errors.append("Неизвестная роль точки %s: %s" % [anchor.id, anchor.role])
+		if anchor.function != &"" and not ZoneFunctionCatalog.has_function(anchor.function):
+			errors.append("Точка %s ссылается на неизвестную функцию: %s" % [anchor.id, anchor.function])
+		elif not ZoneFunctionCatalog.supports_anchor_role(anchor.function, anchor.role):
+			errors.append("Функция %s неприменима к точке %s" % [anchor.function, anchor.id])
+		if anchor.function != &"" and anchor.role not in [ZoneAnchorRecord.ROLE_DOOR,
+				ZoneAnchorRecord.ROLE_SPAWN, ZoneAnchorRecord.ROLE_POI, ZoneAnchorRecord.ROLE_SLOT]:
+			errors.append("Роль точки %s не поддерживает функции" % anchor.id)
+		if anchor.activity != &"" and not ZoneFunctionCatalog.is_activity(anchor.activity):
+			errors.append("Действие %s неприменимо к месту %s" % [anchor.activity, anchor.id])
+		if anchor.activity != &"" and not anchor.is_slot():
+			errors.append("Действие можно назначить только месту, а %s — %s" % [anchor.id, anchor.role])
 		if anchor.owner_id != &"" and not area_ids.has(anchor.owner_id):
 			errors.append("Точка %s принадлежит несуществующей области: %s" % [anchor.id, anchor.owner_id])
 		if anchor.owner_id != &"" and area_ids.has(anchor.owner_id):
@@ -474,6 +498,8 @@ func _zone_errors() -> Array[String]:
 			if owner_area != null and not owner_area.owns_content():
 				errors.append("Точка %s принадлежит области %s, которая ничем не владеет" % [
 					anchor.id, anchor.owner_id])
+			elif owner_area != null and (anchor.pos.y < owner_area.y_min or anchor.pos.y > owner_area.y_max):
+				errors.append("Точка %s находится вне этажей своей комнаты %s" % [anchor.id, anchor.owner_id])
 		if anchor.is_slot():
 			slot_ids[anchor.id] = true
 		if anchor.is_door() and anchor.owner_id != &"":
@@ -482,14 +508,27 @@ func _zone_errors() -> Array[String]:
 			errors.append("У поддона %s неизвестное направление: %s" % [anchor.id, anchor.direction])
 		if anchor.fixture_id != &"" and not _has_fixture(anchor.fixture_id):
 			errors.append("Точка %s ссылается на несуществующий предмет: %s" % [anchor.id, anchor.fixture_id])
-		if not _cell_in_bounds(anchor.cell()):
+		if anchor.fixture_id != &"" and not anchor.is_slot():
+			errors.append("Fixture можно привязать только к месту, а %s — %s" % [anchor.id, anchor.role])
+		if not _anchor_cell_in_bounds(anchor):
 			errors.append("Точка %s стоит за пределами доски" % anchor.id)
+		if anchor.pos.y < 0.0 or anchor.pos.y >= float(grid_bounds.y):
+			errors.append("Точка %s стоит за пределами этажей 0…%d" % [anchor.id, grid_bounds.y - 1])
 		# A slot standing where its own audience is denied can never be worked.
 		if anchor.is_slot() and not _cell_permits(anchor.cell(), ZoneAccess.AUDIENCE_STAFF):
 			errors.append("Место %s стоит там, куда персоналу вход запрещён" % anchor.id)
 	for anchor in anchors:
 		if anchor.is_queue() and not slot_ids.has(anchor.target_id):
 			errors.append("Очередь %s ссылается на несуществующее место: %s" % [anchor.id, anchor.target_id])
+	var queue_places: Dictionary = {}
+	for anchor in anchors:
+		if not anchor.is_queue() or anchor.target_id == &"":
+			continue
+		var queue_key := "%s:%d" % [anchor.target_id, anchor.index]
+		if queue_places.has(queue_key):
+			errors.append("Очереди %s и %s занимают одно место %d у %s" % [
+				queue_places[queue_key], anchor.id, anchor.index, anchor.target_id])
+		queue_places[queue_key] = anchor.id
 
 	var route_ids: Dictionary = {}
 	for route in routes:
@@ -568,10 +607,15 @@ func _fixture_errors() -> Array[String]:
 	return errors
 
 
-func _cell_in_bounds(cell: Vector2i) -> bool:
-	# A door is allowed to sit on the rim or one cell outside: that is the cell
-	# one enters from (modular_building_editor.md §7.1).
-	return cell.x >= -1 and cell.y >= -1 and cell.x <= footprint.x and cell.y <= footprint.y
+func _anchor_cell_in_bounds(anchor: ZoneAnchorRecord) -> bool:
+	var cell := anchor.cell()
+	if not anchor.is_door():
+		return cell.x >= 0 and cell.y >= 0 and cell.x < footprint.x and cell.y < footprint.y
+	# A door may sit on the rim or one cell outside, but still has to touch a side.
+	var within_x := cell.x >= 0 and cell.x < footprint.x
+	var within_z := cell.y >= 0 and cell.y < footprint.y
+	return (within_x and cell.y >= -1 and cell.y <= footprint.y) \
+		or (within_z and cell.x >= -1 and cell.x <= footprint.x)
 
 
 ## Non-fatal remarks shown next to the zone list (§8.2). The file still runs.
@@ -609,6 +653,13 @@ func validation_warnings() -> Array[String]:
 		if slot_count > 0 and declared > slot_count:
 			warnings.append("Комната «%s»: работников %d, а мест %d" % [
 				area.display_name(), declared, slot_count])
+		var allowed_properties: Dictionary = {}
+		for descriptor in ZoneFunctionCatalog.property_schema(area.function):
+			allowed_properties[String(descriptor.get("key", ""))] = true
+		for property_name in area.properties:
+			if not allowed_properties.has(String(property_name)):
+				warnings.append("Комната «%s»: свойство «%s» не объявлено выбранной функцией" % [
+					area.display_name(), property_name])
 	for anchor in anchors:
 		# An anchor sitting inside exactly one room but owned by nobody reads as a
 		# forgotten `owner`, which is the most common authoring slip.
@@ -617,11 +668,27 @@ func validation_warnings() -> Array[String]:
 			if containing.size() == 1 and not anchor.is_door():
 				warnings.append("Точка «%s» стоит в комнате «%s», но ничьей не является" % [
 					anchor.id, containing[0].display_name()])
+		elif not anchor.is_door():
+			var owner := area_by_id(anchor.owner_id)
+			if owner != null and not owner.contains_cell(anchor.cell()):
+				warnings.append("Точка «%s» принадлежит комнате «%s», но стоит вне её клеток" % [
+					anchor.id, owner.display_name()])
 		# A work place closed to visitors is normal; closed to everyone is a slip.
 		if (anchor.is_spawn() or anchor.is_slot()) \
 				and not _cell_permits(anchor.cell(), ZoneAccess.AUDIENCE_VISITOR) \
 				and not _cell_permits(anchor.cell(), ZoneAccess.AUDIENCE_STAFF):
 			warnings.append("Точка «%s» закрыта оверлеем для всех аудиторий" % anchor.id)
+		if anchor.is_slot() and anchor.activity != &"" and not referenced_slots.has(anchor.id):
+			var activity_label := ZoneFunctionCatalog.label_for(anchor.activity).to_lower()
+			if activity_label.contains("обслуж") or String(anchor.activity).contains("serve"):
+				warnings.append("Место «%s» обслуживает посетителей, но у него нет очереди" % anchor.id)
+		var allowed_anchor_properties: Dictionary = {}
+		for descriptor in ZoneFunctionCatalog.property_schema(anchor.function):
+			allowed_anchor_properties[String(descriptor.get("key", ""))] = true
+		for property_name in anchor.properties:
+			if not allowed_anchor_properties.has(String(property_name)):
+				warnings.append("Точка «%s»: свойство «%s» не объявлено выбранной функцией" % [
+					anchor.id, property_name])
 	for area in areas:
 		if area.is_overlay() and not area.is_active_overlay():
 			warnings.append("Оверлей «%s» ничего не запрещает и ничего не меняет" % area.display_name())

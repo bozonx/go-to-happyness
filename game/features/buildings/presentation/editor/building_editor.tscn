@@ -326,77 +326,175 @@ toggle_mode = true
 text = "🔲 Коллизии"
 tooltip_text = "Показать коллизии и blocking navigation"
 
-[node name="ZonesToolbar" type="HBoxContainer" parent="EditorUI/Root/TopBar/Margin/HBox"]
+[node name="ZonesToolbar" type="PanelContainer" parent="EditorUI/Root"]
 unique_name_in_owner = true
 visible = false
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 1
+anchors_preset = 9
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 60.0
+offset_right = 248.0
+offset_bottom = -48.0
+grow_vertical = 2
+
+[node name="Scroll" type="ScrollContainer" parent="EditorUI/Root/ZonesToolbar"]
 layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="Rows" type="VBoxContainer" parent="EditorUI/Root/ZonesToolbar/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_constants/separation = 6
 
-[node name="ToolAreaBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+[node name="Title" type="Label" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
+layout_mode = 2
+text = "РАЗМЕТКА ЗОН"
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
+
+[node name="ToolAreaBtn" type="Button" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "▣ Q"
+text = "▣  Область    Q"
 toggle_mode = true
 tooltip_text = "Область (Q)"
 
-[node name="ToolPointBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+[node name="ToolPointBtn" type="Button" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "◆ W"
+text = "◆  Точка       W"
 toggle_mode = true
 tooltip_text = "Точка (W)"
 
-[node name="ToolRouteBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+[node name="RoleTitle" type="Label" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
+layout_mode = 2
+text = "Роль создаваемого"
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+
+[node name="ZoneRoleOption" type="OptionButton" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "／ E"
-toggle_mode = true
-tooltip_text = "Линия (E)"
-
-[node name="ToolSelectBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "↖ R"
-toggle_mode = true
-tooltip_text = "Выделить (R)"
-
-[node name="VSepZonesRole" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
-layout_mode = 2
-
-[node name="ZoneRoleOption" type="OptionButton" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-custom_minimum_size = Vector2(120, 0)
 tooltip_text = "Роль"
 
-[node name="VSepZonesLayer" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
-layout_mode = 2
-
-[node name="ZoneLayerLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+[node name="ZoneRoleHint" type="Label" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
 unique_name_in_owner = true
 layout_mode = 2
+autowrap_mode = 2
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.65, 0.7, 0.75, 1)
+
+[node name="ZoneAdvancedCheck" type="CheckBox" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Расширенные роли точек"
+tooltip_text = "Путевые точки, появления и точки интереса"
+
+[node name="ZoneCreationFunctionRow" type="VBoxContainer" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="CreationFunctionTitle" type="Label" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows/ZoneCreationFunctionRow"]
+layout_mode = 2
+text = "Функция новой области"
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+
+[node name="ZoneCreationFunctionOption" type="OptionButton" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows/ZoneCreationFunctionRow"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ZoneCreationPackLabel" type="Label" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows/ZoneCreationFunctionRow"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.55, 0.7, 0.55, 1)
+
+[node name="ZoneAppendAreaCheck" type="CheckBox" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Добавлять к выбранной области"
+tooltip_text = "Если выключено, каждый жест создаёт новую область"
+
+[node name="LayerRow" type="HBoxContainer" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
+layout_mode = 2
+
+[node name="ZoneLayerLabel" type="Label" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows/LayerRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
 text = "Слой Y: 0"
 
-[node name="ZoneLayerDownBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+[node name="ZoneLayerDownBtn" type="Button" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows/LayerRow"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "−"
 tooltip_text = "Слой ниже"
 
-[node name="ZoneLayerUpBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+[node name="ZoneLayerUpBtn" type="Button" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows/LayerRow"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "+"
 tooltip_text = "Слой выше"
 
-[node name="VSepZonesDelete" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+[node name="DisplayTitle" type="Label" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
 layout_mode = 2
+text = "Отображение"
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 
-[node name="ZoneDeleteSelectionBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+[node name="ZoneShowRoomsCheck" type="CheckBox" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+button_pressed = true
+text = "Комнаты"
+
+[node name="ZoneShowOverlaysCheck" type="CheckBox" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+button_pressed = true
+text = "Права и эффекты"
+
+[node name="ZoneShowAnchorsCheck" type="CheckBox" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+button_pressed = true
+text = "Точки"
+
+[node name="ZoneShowRoutesCheck" type="CheckBox" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+button_pressed = true
+text = "Маршруты"
+
+[node name="ZoneXrayCheck" type="CheckBox" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+button_pressed = true
+text = "Полупрозрачный каркас"
+tooltip_text = "Делает конструкцию полупрозрачной, чтобы видеть зоны и точки внутри"
+
+[node name="ZoneOverlayLegend" type="Label" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
+layout_mode = 2
+text = "Красный — запрет · фиолетовый — эффект · серый — пустой оверлей"
+autowrap_mode = 2
+theme_override_font_sizes/font_size = 10
+theme_override_colors/font_color = Color(0.62, 0.66, 0.7, 1)
+
+[node name="ZoneValidateBtn" type="Button" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "✔ Проверить зоны"
+
+[node name="ZoneDeleteSelectionBtn" type="Button" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
 unique_name_in_owner = true
 layout_mode = 2
 disabled = true
-text = "🗑"
+text = "🗑 Удалить выбранное"
 tooltip_text = "Удалить выделенную зону (Delete)"
 
 [node name="Spacer" type="Control" parent="EditorUI/Root/TopBar/Margin/HBox"]
@@ -451,11 +549,13 @@ unique_name_in_owner = true
 visible = false
 custom_minimum_size = Vector2(300, 0)
 layout_mode = 1
-anchors_preset = 9
+anchors_preset = 11
+anchor_left = 1.0
+anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 8.0
+offset_left = -328.0
 offset_top = 60.0
-offset_right = 308.0
+offset_right = -8.0
 offset_bottom = -48.0
 grow_vertical = 2
 
@@ -467,6 +567,13 @@ horizontal_scroll_mode = 0
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 6
+
+[node name="ZoneBuildingSummaryLabel" type="Label" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.62, 0.68, 0.74, 1)
 
 [node name="ZoneInspectorTitle" type="Label" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
@@ -534,6 +641,18 @@ autowrap_mode = 2
 text = ""
 
 [node name="ZonePropsContainer" type="VBoxContainer" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="ZoneEquipmentTitle" type="Label" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Оснащение и связи"
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
+
+[node name="ZoneEquipmentContainer" type="VBoxContainer" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 2
@@ -607,13 +726,16 @@ custom_minimum_size = Vector2(0, 220)
 allow_rmb_select = true
 hide_root = true
 
-[node name="ZoneWarningsLabel" type="Label" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox"]
+[node name="ZoneIssuesTitle" type="Label" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox"]
+layout_mode = 2
+text = "ДИАГНОСТИКА"
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
+
+[node name="ZoneIssuesContainer" type="VBoxContainer" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_colors/font_color = Color(0.85, 0.75, 0.4, 1)
-theme_override_font_sizes/font_size = 11
-autowrap_mode = 2
-text = ""
+theme_override_constants/separation = 2
 
 [node name="DecorPanel" type="PanelContainer" parent="EditorUI/Root"]
 unique_name_in_owner = true
@@ -1047,7 +1169,7 @@ layout_mode = 2
 
 [node name="ShortcutTooltip" parent="EditorUI/Root/StatusBar/HBox" instance=ExtResource("4_shortcuts")]
 layout_mode = 2
-shortcuts_text = "Общее\nЛКМ — строить / выбрать · Shift+ЛКМ — пипетка\nShift+ПКМ — стереть · ПКМ — камера · СКМ — панорама · Колесо — зум\nWASD/QE — движение камеры · Ctrl+Z / Ctrl+Y — отменить / повторить\n\nКаркас\nE — ластик · L — линия · M — прямоугольник · Z/X/C — поворот\nPageUp/PageDown — слой выше / ниже · Shift+СКМ — взять кисть\n\nДекор\nC/R, X, Z — поворот по осям · Ctrl+D — дублировать · Delete — удалить\n\nЗоны\nQ/W/E/R — область / точка / маршрут / выбор · Tab — следующая роль · F — поворот · Delete — удалить"
+shortcuts_text = "Общее\nЛКМ — строить / выбрать · Shift+ЛКМ — пипетка\nShift+ПКМ — стереть · ПКМ — камера · СКМ — панорама · Колесо — зум\nWASD/QE — движение камеры · Ctrl+Z / Ctrl+Y — отменить / повторить\n\nКаркас\nE — ластик · L — линия · M — прямоугольник · Z/X/C — поворот\nPageUp/PageDown — слой выше / ниже · Shift+СКМ — взять кисть\n\nДекор\nC/R, X, Z — поворот по осям · Ctrl+D — дублировать · Delete — удалить\n\nЗоны\nQ/W — область / точка · Tab — следующая роль · F — поворот точки\nEsc — снять выделение / режим выбора · Shift+ПКМ — стереть клетку · Delete — удалить выбранное"
 
 [node name="MetadataPanel" type="ConfirmationDialog" parent="EditorUI/Root"]
 unique_name_in_owner = true

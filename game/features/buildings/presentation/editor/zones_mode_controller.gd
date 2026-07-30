@@ -41,18 +41,30 @@ var _editor: Node = null
 var _zones_visual_root: Node3D = null
 
 # Top toolbar
-var _toolbar: HBoxContainer = null
+var _toolbar: Control = null
 var _tool_area_btn: Button = null
 var _tool_point_btn: Button = null
-var _tool_select_btn: Button = null
 var _role_option: OptionButton = null
+var _role_hint: Label = null
+var _append_area_check: CheckBox = null
+var _advanced_check: CheckBox = null
+var _creation_function_option: OptionButton = null
+var _creation_pack_label: Label = null
+var _creation_function_row: VBoxContainer = null
 var _layer_label: Label = null
 var _layer_down_btn: Button = null
 var _layer_up_btn: Button = null
 var _delete_selection_btn: Button = null
+var _validate_btn: Button = null
+var _show_rooms_check: CheckBox = null
+var _show_overlays_check: CheckBox = null
+var _show_anchors_check: CheckBox = null
+var _show_routes_check: CheckBox = null
+var _xray_check: CheckBox = null
 
 # Right inspector
 var _inspector_panel: PanelContainer = null
+var _building_summary_label: Label = null
 var _inspector_title: Label = null
 var _inspector_body: VBoxContainer = null
 var _id_edit: LineEdit = null
@@ -62,6 +74,8 @@ var _function_row: VBoxContainer = null
 var _inspector_function_option: OptionButton = null
 var _inspector_pack_label: Label = null
 var _props_container: VBoxContainer = null
+var _equipment_title: Label = null
+var _equipment_container: VBoxContainer = null
 var _overlay_row: VBoxContainer = null
 var _overlay_permissions_container: HFlowContainer = null
 var _overlay_effects_container: VBoxContainer = null
@@ -69,13 +83,14 @@ var _anchor_props: VBoxContainer = null
 var _req_checklist: VBoxContainer = null
 var _req_empty_label: Label = null
 var _zone_tree: Tree = null
-var _warnings_label: Label = null
+var _issues_container: VBoxContainer = null
 
 # Mode state
 var _tool: StringName = TOOL_AREA
 ## Role armed for the next created zone; contextual to the tool.
 var _area_role: StringName = ZoneAreaRecord.ROLE_ROOM
 var _anchor_role: StringName = ZoneAnchorRecord.ROLE_SLOT
+var _armed_area_function: StringName = &""
 ## Selection is either an area or an anchor; ids are unique per collection.
 var _selected_area_id: StringName = &""
 var _selected_anchor_id: StringName = &""
@@ -92,6 +107,9 @@ var _link_route_id: StringName = &""
 var _dragging: bool = false
 var _drag_start: Vector2i = Vector2i.ZERO
 var _moving_anchor: bool = false
+var _move_start_pos: Vector3 = Vector3.INF
+var _erasing: bool = false
+var _last_erased_cell: Vector3i = Vector3i(-999999, -999999, -999999)
 
 # Ghost preview of the active tool under the cursor.
 var _ghost: MeshInstance3D = null
@@ -112,23 +130,26 @@ func setup(editor: Node) -> void:
 	_toolbar = editor.get_node("%ZonesToolbar")
 	_tool_area_btn = editor.get_node("%ToolAreaBtn")
 	_tool_point_btn = editor.get_node("%ToolPointBtn")
-	_tool_select_btn = editor.get_node("%ToolSelectBtn")
-	# The select tool is gone — selection is now hybrid in the area and point
-	# tools, and TOOL_NONE is the idle mode reached by Esc. Hide the legacy
-	# button if the scene still carries it.
-	if _tool_select_btn != null:
-		_tool_select_btn.visible = false
-	# The route tool is gone — routes are built by linking anchors from the
-	# inspector (§11). Hide the legacy button if the scene still carries it.
-	if editor.has_node("%ToolRouteBtn"):
-		editor.get_node("%ToolRouteBtn").visible = false
 	_role_option = editor.get_node("%ZoneRoleOption")
+	_role_hint = editor.get_node("%ZoneRoleHint")
+	_append_area_check = editor.get_node("%ZoneAppendAreaCheck")
+	_advanced_check = editor.get_node("%ZoneAdvancedCheck")
+	_creation_function_option = editor.get_node("%ZoneCreationFunctionOption")
+	_creation_pack_label = editor.get_node("%ZoneCreationPackLabel")
+	_creation_function_row = editor.get_node("%ZoneCreationFunctionRow")
 	_layer_label = editor.get_node("%ZoneLayerLabel")
 	_layer_down_btn = editor.get_node("%ZoneLayerDownBtn")
 	_layer_up_btn = editor.get_node("%ZoneLayerUpBtn")
 	_delete_selection_btn = editor.get_node("%ZoneDeleteSelectionBtn")
+	_validate_btn = editor.get_node("%ZoneValidateBtn")
+	_show_rooms_check = editor.get_node("%ZoneShowRoomsCheck")
+	_show_overlays_check = editor.get_node("%ZoneShowOverlaysCheck")
+	_show_anchors_check = editor.get_node("%ZoneShowAnchorsCheck")
+	_show_routes_check = editor.get_node("%ZoneShowRoutesCheck")
+	_xray_check = editor.get_node("%ZoneXrayCheck")
 
 	_inspector_panel = editor.get_node("%ZonesInspectorPanel")
+	_building_summary_label = editor.get_node("%ZoneBuildingSummaryLabel")
 	_inspector_title = editor.get_node("%ZoneInspectorTitle")
 	_inspector_body = editor.get_node("%ZoneInspectorBody")
 	_id_edit = editor.get_node("%ZoneIdEdit")
@@ -138,6 +159,8 @@ func setup(editor: Node) -> void:
 	_inspector_function_option = editor.get_node("%ZoneInspectorFunctionOption")
 	_inspector_pack_label = editor.get_node("%ZoneInspectorPackLbl")
 	_props_container = editor.get_node("%ZonePropsContainer")
+	_equipment_title = editor.get_node("%ZoneEquipmentTitle")
+	_equipment_container = editor.get_node("%ZoneEquipmentContainer")
 	_overlay_row = editor.get_node("%ZoneOverlayRow")
 	_overlay_permissions_container = editor.get_node("%ZoneOverlayPermissionsContainer")
 	_overlay_effects_container = editor.get_node("%ZoneOverlayEffectsContainer")
@@ -145,19 +168,36 @@ func setup(editor: Node) -> void:
 	_req_checklist = editor.get_node("%ZoneReqChecklist")
 	_req_empty_label = editor.get_node("%ZoneReqEmptyLabel")
 	_zone_tree = editor.get_node("%ZoneTree")
-	_warnings_label = editor.get_node("%ZoneWarningsLabel")
+	_issues_container = editor.get_node("%ZoneIssuesContainer")
 	_zones_visual_root = editor.get_node("%ZonesVisual")
+	# Existing entities are the primary navigation in an editor. Keep their tree at
+	# the top of the right rail, with the selected entity's inspector below it.
+	var inspector_rows := _zone_tree.get_parent()
+	var zone_list_title := editor.get_node("EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneListTitle")
+	var issues_title := editor.get_node("EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneIssuesTitle")
+	inspector_rows.move_child(_building_summary_label, 0)
+	inspector_rows.move_child(zone_list_title, 1)
+	inspector_rows.move_child(_zone_tree, 2)
+	inspector_rows.move_child(issues_title, 3)
+	inspector_rows.move_child(_issues_container, 4)
 
 	_tool_area_btn.pressed.connect(func() -> void: _arm_tool(TOOL_AREA))
 	_tool_point_btn.pressed.connect(func() -> void: _arm_tool(TOOL_POINT))
 	_role_option.item_selected.connect(_on_palette_role_selected)
+	_advanced_check.toggled.connect(func(_pressed: bool) -> void: _rebuild_role_options())
+	_creation_function_option.item_selected.connect(_on_creation_function_selected)
 	_layer_down_btn.pressed.connect(func() -> void: _editor.set_layer(_editor.active_layer - 1))
 	_layer_up_btn.pressed.connect(func() -> void: _editor.set_layer(_editor.active_layer + 1))
 	_delete_selection_btn.pressed.connect(_delete_selection)
+	_validate_btn.pressed.connect(_run_validation)
+	for check in [_show_rooms_check, _show_overlays_check, _show_anchors_check, _show_routes_check]:
+		check.toggled.connect(func(_pressed: bool) -> void: _refresh_visuals())
+	_xray_check.toggled.connect(func(_pressed: bool) -> void: _apply_xray())
 
 	_id_edit.text_submitted.connect(_on_id_submitted)
 	_id_edit.focus_exited.connect(func() -> void: _on_id_submitted(_id_edit.text))
-	_name_edit.text_changed.connect(_on_name_changed)
+	_name_edit.text_submitted.connect(_on_name_changed)
+	_name_edit.focus_exited.connect(func() -> void: _on_name_changed(_name_edit.text))
 	_inspector_role_option.item_selected.connect(_on_inspector_role_selected)
 	_inspector_function_option.item_selected.connect(_on_inspector_function_selected)
 	_zone_tree.item_selected.connect(_on_tree_item_selected)
@@ -172,6 +212,7 @@ func setup(editor: Node) -> void:
 func activate() -> void:
 	_toolbar.visible = true
 	_inspector_panel.visible = true
+	_apply_xray()
 	_refresh_all()
 	_editor.set_status("Режим зон: Q — область, W — точка, Esc — снять выделение / холостой режим.")
 
@@ -180,12 +221,14 @@ func deactivate() -> void:
 	_toolbar.visible = false
 	_inspector_panel.visible = false
 	_dragging = false
+	_erasing = false
 	_linking = false
 	_link_route_id = &""
 	_hide_ghost()
 	_hide_drag_preview()
 	_clear_visuals()
 	_clear_selection()
+	_set_frame_transparency(0.0)
 
 
 func is_active() -> bool:
@@ -198,14 +241,24 @@ func is_active() -> bool:
 
 ## Returns true when the mouse button was consumed by zones mode.
 func handle_mouse_button(event: InputEventMouseButton) -> bool:
+	if event.button_index == MOUSE_BUTTON_RIGHT and not event.pressed and _erasing:
+		_erasing = false
+		return true
 	if event.button_index == MOUSE_BUTTON_RIGHT and event.shift_pressed:
-		if event.pressed and not _editor.is_pointer_over_ui():
-			_erase_at_cursor()
+		if event.pressed:
+			if _editor.is_pointer_over_ui():
+				return false
+			_erasing = true
+			_last_erased_cell = Vector3i(-999999, -999999, -999999)
+			_erase_once_at_cursor()
+		else:
+			_erasing = false
 		return true
 	if event.button_index == MOUSE_BUTTON_RIGHT:
 		if _linking and event.pressed:
 			_stop_linking()
-		return true
+			return true
+		return false
 	if event.button_index != MOUSE_BUTTON_LEFT:
 		return false
 	if event.pressed:
@@ -239,12 +292,15 @@ func handle_mouse_button(event: InputEventMouseButton) -> bool:
 					_selected_route_id = &""
 					_refresh_all()
 					_moving_anchor = true
+					_move_start_pos = anchor.pos
 				else:
 					_place_anchor_at_cursor()
 			TOOL_NONE:
 				# Idle mode: select whatever is under the cursor.
 				_select_at_cursor()
 				_moving_anchor = _selected_anchor() != null
+				if _moving_anchor:
+					_move_start_pos = _selected_anchor().pos
 		return true
 	if _dragging:
 		_dragging = false
@@ -253,12 +309,15 @@ func handle_mouse_button(event: InputEventMouseButton) -> bool:
 	elif _moving_anchor:
 		_moving_anchor = false
 		_move_selected_anchor_to_cursor()
+		_move_start_pos = Vector3.INF
 	return true
 
 
 func on_mouse_motion(_event: InputEventMouseMotion) -> void:
-	if _dragging or _moving_anchor:
+	if _dragging or _moving_anchor or _erasing:
 		_editor.update_cursor()
+	if _erasing:
+		_erase_once_at_cursor()
 	_refresh_cursor_status()
 
 
@@ -297,7 +356,7 @@ func handle_key(event: InputEventKey) -> bool:
 
 
 func is_painting() -> bool:
-	return _dragging or _moving_anchor
+	return _dragging or _moving_anchor or _erasing
 
 
 func process(_delta: float) -> void:
@@ -348,6 +407,9 @@ func refresh_ghost() -> void:
 			_ghost.position = pos + Vector3(0.0, 0.02, 0.0)
 			_ghost.rotation = Vector3.ZERO
 		TOOL_POINT:
+			if not _anchor_cursor_in_bounds(_anchor_role):
+				_hide_ghost()
+				return
 			var style: Dictionary = ANCHOR_STYLE.get(_anchor_role, ANCHOR_STYLE[&"poi"])
 			_ghost.mesh = BoxMesh.new()
 			(_ghost.mesh as BoxMesh).size = style["size"]
@@ -482,13 +544,21 @@ func _rebuild_role_options() -> void:
 			if role == _area_role:
 				_role_option.select(_role_option.item_count - 1)
 	elif _tool == TOOL_POINT:
-		for role in ZoneAnchorRecord.BUILDING_ROLES:
+		var basic_roles: Array[StringName] = [
+			ZoneAnchorRecord.ROLE_DOOR, ZoneAnchorRecord.ROLE_SLOT,
+			ZoneAnchorRecord.ROLE_QUEUE, ZoneAnchorRecord.ROLE_STORAGE]
+		var roles: Array[StringName] = ZoneAnchorRecord.BUILDING_ROLES if \
+			_advanced_check.button_pressed else basic_roles
+		if _anchor_role not in roles:
+			_anchor_role = ZoneAnchorRecord.ROLE_SLOT
+		for role in roles:
 			_role_option.add_item(ZoneAnchorRecord.role_display_name(role))
 			_role_option.set_item_metadata(_role_option.item_count - 1, role)
 			if role == _anchor_role:
 				_role_option.select(_role_option.item_count - 1)
 	_suppress_ui_events = false
 	_update_role_hint()
+	_rebuild_creation_functions()
 
 
 func _on_palette_role_selected(index: int) -> void:
@@ -500,10 +570,40 @@ func _on_palette_role_selected(index: int) -> void:
 	else:
 		_anchor_role = role
 	_update_role_hint()
+	_rebuild_creation_functions()
 
 
 func _update_role_hint() -> void:
-	pass
+	if _role_hint == null:
+		return
+	if _tool == TOOL_AREA:
+		_role_hint.text = ZoneAreaRecord.role_hint(_area_role)
+	elif _tool == TOOL_POINT:
+		_role_hint.text = ZoneAnchorRecord.role_hint(_anchor_role)
+	else:
+		_role_hint.text = "Инструмент отключён: щелчок только выделяет."
+	_append_area_check.visible = _tool == TOOL_AREA
+	_advanced_check.visible = _tool == TOOL_POINT
+
+
+func _rebuild_creation_functions() -> void:
+	var visible := _tool == TOOL_AREA and _area_role != ZoneAreaRecord.ROLE_OVERLAY
+	_creation_function_row.visible = visible
+	if not visible:
+		return
+	var entries := ZoneFunctionCatalog.for_area_role(_area_role)
+	if not ZoneFunctionCatalog.supports_area_role(_armed_area_function, _area_role):
+		_armed_area_function = &""
+	_fill_function_option(_creation_function_option, entries, _armed_area_function)
+	_update_pack_label(_creation_pack_label, _armed_area_function, entries.is_empty())
+
+
+func _on_creation_function_selected(index: int) -> void:
+	if _suppress_ui_events:
+		return
+	_armed_area_function = _creation_function_option.get_item_metadata(index)
+	_update_pack_label(_creation_pack_label, _armed_area_function,
+		_creation_function_option.item_count <= 1)
 
 
 func _cycle_role() -> void:
@@ -553,7 +653,7 @@ func _commit_area_rect(from_cell: Vector2i, to_cell: Vector2i) -> void:
 	to_cell.x = clampi(to_cell.x, 0, fp.x - 1)
 	to_cell.y = clampi(to_cell.y, 0, fp.y - 1)
 	var rect := Rect2i(from_cell, Vector2i.ONE).merge(Rect2i(to_cell, Vector2i.ONE))
-	var area := _selected_area()
+	var area := _selected_area() if _append_area_check.button_pressed else null
 	if area == null or area.role != _area_role:
 		area = _create_area()
 	area.add_rect(rect)
@@ -575,6 +675,9 @@ func _create_area() -> ZoneAreaRecord:
 	area.area_name = template % (_editor.blueprint.areas.size() + 1)
 	area.y_min = _editor.active_layer
 	area.y_max = _editor.active_layer
+	if area.role != ZoneAreaRecord.ROLE_OVERLAY:
+		area.function = _armed_area_function
+		area.properties = ZoneFunctionCatalog.default_properties(_armed_area_function)
 	if _area_role == ZoneAreaRecord.ROLE_OVERLAY:
 		# An overlay that forbids nobody is a no-op; start from the case the
 		# author almost always wants and let them widen it.
@@ -586,6 +689,9 @@ func _create_area() -> ZoneAreaRecord:
 func _place_anchor_at_cursor() -> void:
 	if not _editor.cursor_valid:
 		return
+	if not _anchor_cursor_in_bounds(_anchor_role):
+		_editor.set_status("Эту точку нельзя поставить за границами здания. Дверь допускается на его кромке.")
+		return
 	var anchor := ZoneAnchorRecord.new()
 	anchor.id = _unique_id(String(_anchor_role), func(candidate: StringName) -> bool:
 		return _editor.blueprint.zone_id_taken(candidate))
@@ -596,16 +702,19 @@ func _place_anchor_at_cursor() -> void:
 	# the room under the point. Doors stay building-wide unless retargeted.
 	if not anchor.is_door():
 		for area in _editor.blueprint.rooms():
-			if area.contains_cell(_cursor_cell_2d()):
+			if area.contains_cell_3d(Vector3i(
+					_cursor_cell_2d().x, _editor.active_layer, _cursor_cell_2d().y)):
 				anchor.owner_id = area.id
 				break
 	if anchor.is_slot():
 		anchor.capacity = 50
 	if anchor.is_queue():
-		var target := _nearest_slot(anchor.pos)
-		if target != null:
-			anchor.target_id = target.id
-			anchor.index = _next_queue_index(target.id)
+		var target := _nearest_slot(anchor.pos, anchor.owner_id)
+		if target == null:
+			_editor.set_status("Сначала поставьте место на этом этаже и в этой комнате.")
+			return
+		anchor.target_id = target.id
+		anchor.index = _next_queue_index(target.id)
 	_editor.blueprint.anchors.append(anchor)
 	_selected_anchor_id = anchor.id
 	_selected_area_id = &""
@@ -688,17 +797,35 @@ static func _anchor_can_route(anchor: ZoneAnchorRecord) -> bool:
 		ZoneAnchorRecord.ROLE_WAYPOINT]
 
 
-func _nearest_slot(pos: Vector3) -> ZoneAnchorRecord:
+func _nearest_slot(pos: Vector3, owner_id: StringName = &"") -> ZoneAnchorRecord:
 	var best: ZoneAnchorRecord = null
 	var best_distance := INF
 	for anchor in _editor.blueprint.anchors:
 		if not anchor.is_slot():
+			continue
+		if owner_id != &"" and anchor.owner_id != owner_id:
+			continue
+		if not is_equal_approx(anchor.pos.y, pos.y):
 			continue
 		var distance: float = anchor.pos.distance_to(pos)
 		if distance < best_distance:
 			best_distance = distance
 			best = anchor
 	return best
+
+
+func _anchor_cursor_in_bounds(role: StringName) -> bool:
+	if not _editor.cursor_valid or _editor.active_layer < 0 \
+			or _editor.active_layer >= _editor.blueprint.grid_bounds.y:
+		return false
+	var cell := _cursor_cell_2d()
+	var fp: Vector2i = _editor.blueprint.footprint
+	if role != ZoneAnchorRecord.ROLE_DOOR:
+		return cell.x >= 0 and cell.y >= 0 and cell.x < fp.x and cell.y < fp.y
+	var within_x := cell.x >= 0 and cell.x < fp.x
+	var within_z := cell.y >= 0 and cell.y < fp.y
+	return (within_x and cell.y >= -1 and cell.y <= fp.y) \
+		or (within_z and cell.x >= -1 and cell.x <= fp.x)
 
 
 func _next_queue_index(target_id: StringName) -> int:
@@ -709,64 +836,114 @@ func _next_queue_index(target_id: StringName) -> int:
 	return index
 
 
+func _erase_once_at_cursor() -> void:
+	if not _editor.cursor_valid or _editor.cursor_cell == _last_erased_cell:
+		return
+	_last_erased_cell = _editor.cursor_cell
+	_erase_at_cursor()
+
+
 func _erase_at_cursor() -> void:
 	if not _editor.cursor_valid:
 		return
+	if _tool == TOOL_POINT:
+		_erase_anchor_at_cursor()
+		return
+	if _tool == TOOL_NONE and _selected_anchor() != null:
+		_erase_anchor_at_cursor()
+		return
+	_erase_area_at_cursor()
+
+
+func _erase_anchor_at_cursor() -> void:
+	var anchor := _anchor_at_cursor()
+	if anchor != null:
+		_remove_anchor(anchor)
+
+
+func _erase_area_at_cursor() -> void:
 	var cell := _cursor_cell_2d()
-	for anchor in _editor.blueprint.anchors:
-		if anchor.cell() == cell:
-			_remove_anchor(anchor)
-			return
-	# Erasing works on whole rectangles: an area is composed of them, and a
-	# partial erase would have to split what the author actually drew.
-	for area in _editor.blueprint.areas:
-		if area.remove_rect_at(cell):
-			if area.is_empty():
-				_remove_area(area)
-			else:
-				_editor.mark_dirty()
-				_refresh_all()
-			return
+	var area := _selected_area()
+	if area == null or not area.contains_cell_3d(Vector3i(cell.x, _editor.active_layer, cell.y)):
+		area = null
+		for candidate in _editor.blueprint.areas:
+			if candidate.role == _area_role and candidate.contains_cell_3d(
+					Vector3i(cell.x, _editor.active_layer, cell.y)):
+				area = candidate
+				break
+	if area == null:
+		for candidate in _editor.blueprint.areas:
+			if candidate.contains_cell_3d(Vector3i(cell.x, _editor.active_layer, cell.y)):
+				area = candidate
+				break
+	if area == null:
+		return
+	# Area erasing removes exactly one cell; ZoneAreaRecord preserves the rest by
+	# splitting its rectangles deterministically.
+	if area.cell_count() == 1 and _area_has_owned_content(area.id):
+		_editor.set_status("Последнюю клетку занятой комнаты удаляйте кнопкой — будет показан состав изменений.")
+		return
+	if area.remove_cell(cell):
+		if area.is_empty():
+			_remove_area(area)
+		else:
+			_editor.mark_dirty()
+			_refresh_all()
 
 
 func _area_at_cursor() -> ZoneAreaRecord:
 	if not _editor.cursor_valid:
 		return null
 	var cell := _cursor_cell_2d()
+	var candidates: Array[ZoneAreaRecord] = []
 	for area in _editor.blueprint.areas:
-		if area.contains_cell(cell):
-			return area
-	return null
+		if area.contains_cell_3d(Vector3i(cell.x, _editor.active_layer, cell.y)):
+			candidates.append(area)
+	if candidates.is_empty():
+		return null
+	# Prefer the role armed by the current tool, then cycle repeated clicks through
+	# overlapping areas instead of making the later one unreachable.
+	candidates.sort_custom(func(left: ZoneAreaRecord, right: ZoneAreaRecord) -> bool:
+		return (left.role == _area_role) and right.role != _area_role)
+	for index in candidates.size():
+		if candidates[index].id == _selected_area_id:
+			return candidates[(index + 1) % candidates.size()]
+	return candidates[0]
 
 
 func _anchor_at_cursor() -> ZoneAnchorRecord:
 	if not _editor.cursor_valid:
 		return null
 	var cell := _cursor_cell_2d()
+	var candidates: Array[ZoneAnchorRecord] = []
 	for anchor in _editor.blueprint.anchors:
-		if anchor.cell() == cell:
-			return anchor
-	return null
+		if anchor.cell() == cell and int(floor(anchor.pos.y)) == _editor.active_layer:
+			candidates.append(anchor)
+	if candidates.is_empty():
+		return null
+	for index in candidates.size():
+		if candidates[index].id == _selected_anchor_id:
+			return candidates[(index + 1) % candidates.size()]
+	return candidates[0]
 
 
 func _select_at_cursor() -> void:
 	if not _editor.cursor_valid:
 		return
-	var cell := _cursor_cell_2d()
-	for anchor in _editor.blueprint.anchors:
-		if anchor.cell() == cell:
-			_selected_anchor_id = anchor.id
-			_selected_area_id = &""
-			_selected_route_id = &""
-			_refresh_all()
-			return
-	for area in _editor.blueprint.areas:
-		if area.contains_cell(cell):
-			_selected_area_id = area.id
-			_selected_anchor_id = &""
-			_selected_route_id = &""
-			_refresh_all()
-			return
+	var anchor := _anchor_at_cursor()
+	if anchor != null:
+		_selected_anchor_id = anchor.id
+		_selected_area_id = &""
+		_selected_route_id = &""
+		_refresh_all()
+		return
+	var area := _area_at_cursor()
+	if area != null:
+		_selected_area_id = area.id
+		_selected_anchor_id = &""
+		_selected_route_id = &""
+		_refresh_all()
+		return
 	_clear_selection()
 	_refresh_all()
 
@@ -784,8 +961,14 @@ func _move_selected_anchor_to_cursor() -> void:
 	var anchor := _selected_anchor()
 	if anchor == null or not _editor.cursor_valid:
 		return
-	anchor.pos = Vector3(_editor.cursor_cell) + Vector3(0.5, 0.0, 0.5)
-	anchor.pos.y = float(_editor.active_layer)
+	if not _anchor_cursor_in_bounds(anchor.role):
+		_editor.set_status("Точка оставлена на месте: новая позиция вне допустимых границ.")
+		return
+	var next_pos := Vector3(_editor.cursor_cell) + Vector3(0.5, 0.0, 0.5)
+	next_pos.y = float(_editor.active_layer)
+	if next_pos.is_equal_approx(anchor.pos):
+		return
+	anchor.pos = next_pos
 	_editor.mark_dirty()
 	_refresh_all()
 
@@ -797,6 +980,23 @@ func _delete_selection() -> void:
 		return
 	var area := _selected_area()
 	if area != null:
+		var anchors_count: int = _editor.blueprint.anchors_of(area.id).size()
+		var fixtures_count := 0
+		var objects_count := 0
+		for fixture in _editor.blueprint.fixtures:
+			if fixture.owner_zone_id == area.id:
+				fixtures_count += 1
+		for decor_object in _editor.blueprint.objects:
+			if decor_object.owner_zone_id == area.id:
+				objects_count += 1
+		if anchors_count + fixtures_count + objects_count > 0:
+			var confirmed: bool = await _editor.confirm_action(
+				"Будет удалена область «%s» и %d принадлежащих ей точек. " % [
+					area.display_name(), anchors_count]
+				+ "%d fixtures и %d предметов станут общими для здания." % [fixtures_count, objects_count],
+				"Удалить область?")
+			if not confirmed:
+				return
 		_inspector_role_option.disabled = false
 		_remove_area(area)
 		return
@@ -906,12 +1106,24 @@ func _refresh_delete_button() -> void:
 
 func _refresh_all() -> void:
 	on_layer_changed()
+	_refresh_building_summary()
 	_refresh_inspector()
 	_refresh_tree()
 	_refresh_requirements()
 	_refresh_warnings()
 	_refresh_visuals()
 	_refresh_delete_button()
+	_apply_xray()
+
+
+func _refresh_building_summary() -> void:
+	if _building_summary_label == null or _editor.blueprint == null:
+		return
+	var bp: BuildingBlueprint = _editor.blueprint
+	_building_summary_label.text = "%s%s\n%s · %d×%d×%d · эра %s\n%d областей · %d точек · отмен: %d" % [
+		bp.name, " *" if _editor.is_document_dirty() else "", bp.id,
+		bp.grid_bounds.x, bp.grid_bounds.y, bp.grid_bounds.z, bp.era,
+		bp.areas.size(), bp.anchors.size(), _editor.undo_step_count()]
 
 
 ## Shows the fields of the selected role and nothing else. The old panel showed
@@ -941,7 +1153,8 @@ func _refresh_inspector() -> void:
 		_fill_function_option(_inspector_function_option,
 			ZoneFunctionCatalog.for_area_role(area.role), area.function)
 		_update_pack_label(_inspector_pack_label, area.function, false)
-		_build_property_rows(area)
+		_build_property_rows(area.properties, area.function)
+		_refresh_equipment(area)
 		_overlay_row.visible = area.is_overlay()
 		if area.is_overlay():
 			_build_permission_checkboxes(area.deny, func(list: Array[StringName]) -> void:
@@ -956,12 +1169,17 @@ func _refresh_inspector() -> void:
 		_name_edit.editable = false
 		_fill_role_option(_inspector_role_option, ZoneAnchorRecord.BUILDING_ROLES, anchor.role,
 			func(r: StringName) -> String: return ZoneAnchorRecord.role_display_name(r))
-		_function_row.visible = anchor.is_slot()
+		var anchor_functions := ZoneFunctionCatalog.for_anchor_role(anchor.role)
+		_function_row.visible = anchor.is_slot() or not anchor_functions.is_empty() or anchor.function != &""
 		if anchor.is_slot():
 			_fill_function_option(_inspector_function_option,
 				ZoneFunctionCatalog.activities(), anchor.activity)
 			_update_pack_label(_inspector_pack_label, anchor.activity, false)
-		_clear_container(_props_container)
+		elif _function_row.visible:
+			_fill_function_option(_inspector_function_option, anchor_functions, anchor.function)
+			_update_pack_label(_inspector_pack_label, anchor.function, anchor_functions.is_empty())
+		_build_property_rows(anchor.properties, anchor.function)
+		_refresh_equipment(null)
 		_overlay_row.visible = anchor.is_door()
 		if anchor.is_door():
 			_build_permission_checkboxes(anchor.deny, func(list: Array[StringName]) -> void:
@@ -977,13 +1195,22 @@ func _refresh_inspector() -> void:
 		_inspector_role_option.disabled = true
 		_function_row.visible = false
 		_clear_container(_props_container)
+		_refresh_equipment(null)
 		_overlay_row.visible = false
 		_build_route_rows(route)
 	_suppress_ui_events = false
 
 
 func _role_glyph(role: StringName) -> String:
-	return "▽" if role == ZoneAnchorRecord.ROLE_DOOR else "◆"
+	match role:
+		ZoneAnchorRecord.ROLE_DOOR: return "▽"
+		ZoneAnchorRecord.ROLE_SLOT: return "◆"
+		ZoneAnchorRecord.ROLE_QUEUE: return "•"
+		ZoneAnchorRecord.ROLE_STORAGE: return "▰"
+		ZoneAnchorRecord.ROLE_WAYPOINT: return "○"
+		ZoneAnchorRecord.ROLE_SPAWN: return "✦"
+		ZoneAnchorRecord.ROLE_POI: return "◇"
+		_: return "◆"
 
 
 func _fill_role_option(option: OptionButton, roles: Array, current: StringName, labeller: Callable) -> void:
@@ -1009,9 +1236,9 @@ func _fill_function_option(option: OptionButton, entries: Array[Dictionary], cur
 
 ## Property rows are generated from the schema the pack declared, so a pack can
 ## add a field without a single line of editor code.
-func _build_property_rows(area: ZoneAreaRecord) -> void:
+func _build_property_rows(properties: Dictionary, function_id: StringName) -> void:
 	_clear_container(_props_container)
-	for descriptor in ZoneFunctionCatalog.property_schema(area.function):
+	for descriptor in ZoneFunctionCatalog.property_schema(function_id):
 		var key := String(descriptor.get("key", ""))
 		if key.is_empty():
 			continue
@@ -1020,7 +1247,7 @@ func _build_property_rows(area: ZoneAreaRecord) -> void:
 		label.text = String(descriptor.get("label", key))
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(label)
-		var value: Variant = area.properties.get(key, descriptor.get("default", ""))
+		var value: Variant = properties.get(key, descriptor.get("default", ""))
 		match String(descriptor.get("type", "string")):
 			"int":
 				var spin := SpinBox.new()
@@ -1028,8 +1255,11 @@ func _build_property_rows(area: ZoneAreaRecord) -> void:
 				spin.max_value = float(descriptor.get("max", 999))
 				spin.value = float(value)
 				spin.value_changed.connect(func(v: float) -> void:
-					area.properties[key] = int(v)
-					_editor.mark_dirty())
+					if int(properties.get(key, descriptor.get("default", 0))) == int(v):
+						return
+					properties[key] = int(v)
+					_editor.mark_dirty()
+					_refresh_warnings())
 				row.add_child(spin)
 			"enum":
 				var option := OptionButton.new()
@@ -1040,16 +1270,21 @@ func _build_property_rows(area: ZoneAreaRecord) -> void:
 					if String(options[i]) == String(value):
 						option.select(i)
 				option.item_selected.connect(func(index: int) -> void:
-					area.properties[key] = String(option.get_item_metadata(index))
+					properties[key] = String(option.get_item_metadata(index))
 					_editor.mark_dirty())
 				row.add_child(option)
 			_:
 				var edit := LineEdit.new()
 				edit.text = String(value)
 				edit.custom_minimum_size = Vector2(120, 0)
-				edit.text_changed.connect(func(text: String) -> void:
-					area.properties[key] = text
-					_editor.mark_dirty())
+				var commit_text := func(text: String) -> void:
+					if String(properties.get(key, "")) == text:
+						return
+					properties[key] = text
+					_editor.mark_dirty()
+					_refresh_warnings()
+				edit.text_submitted.connect(commit_text)
+				edit.focus_exited.connect(func() -> void: commit_text.call(edit.text))
 				row.add_child(edit)
 		_props_container.add_child(row)
 
@@ -1077,6 +1312,19 @@ func _build_anchor_rows(anchor: ZoneAnchorRecord) -> void:
 			anchor.pose = pose_option.get_item_metadata(index)
 			_editor.mark_dirty())
 		_add_anchor_row("Поза", pose_option)
+		var fixture_option := OptionButton.new()
+		fixture_option.add_item("— без fixture —")
+		fixture_option.set_item_metadata(0, &"")
+		for fixture in _editor.blueprint.fixtures:
+			fixture_option.add_item(String(fixture.id))
+			fixture_option.set_item_metadata(fixture_option.item_count - 1, fixture.id)
+			if fixture.id == anchor.fixture_id:
+				fixture_option.select(fixture_option.item_count - 1)
+		fixture_option.item_selected.connect(func(index: int) -> void:
+			anchor.fixture_id = fixture_option.get_item_metadata(index)
+			_editor.mark_dirty()
+			_refresh_warnings())
+		_add_anchor_row("Fixture", fixture_option)
 	elif anchor.is_storage():
 		var direction_option := OptionButton.new()
 		for i in ZoneAnchorRecord.DIRECTIONS.size():
@@ -1143,6 +1391,43 @@ func _build_anchor_rows(anchor: ZoneAnchorRecord) -> void:
 		link_btn.tooltip_text = "Связать эту точку с другими в маршрут"
 		link_btn.pressed.connect(_start_linking)
 		_anchor_props.add_child(link_btn)
+
+
+func _refresh_equipment(area: ZoneAreaRecord) -> void:
+	_clear_container(_equipment_container)
+	_equipment_title.visible = area != null
+	_equipment_container.visible = area != null
+	if area == null:
+		return
+	var found := false
+	for fixture in _editor.blueprint.fixtures:
+		if fixture.owner_zone_id != area.id:
+			continue
+		found = true
+		var label := Label.new()
+		label.text = "◆ Fixture %s · %s" % [fixture.id, ", ".join(
+			fixture.capabilities.map(func(cap: StringName) -> String: return String(cap)))]
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_equipment_container.add_child(label)
+	for decor_object in _editor.blueprint.objects:
+		if decor_object.owner_zone_id != area.id:
+			continue
+		found = true
+		var label := Label.new()
+		label.text = "▧ Предмет %s" % decor_object.id
+		_equipment_container.add_child(label)
+	if not found:
+		var empty := Label.new()
+		empty.text = "Нет принадлежащих комнате fixtures или предметов."
+		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		empty.modulate = Color(0.65, 0.68, 0.72)
+		_equipment_container.add_child(empty)
+	var decor_btn := Button.new()
+	decor_btn.text = "Перейти к оснащению в декоре"
+	decor_btn.pressed.connect(func() -> void:
+		_editor.select_mode(_editor.EditMode.DECOR)
+		_editor.set_status("Выберите предмет или fixture и назначьте ему зону «%s»." % area.display_name()))
+	_equipment_container.add_child(decor_btn)
 
 
 func _build_route_rows(route: ZoneRouteRecord) -> void:
@@ -1320,6 +1605,8 @@ func _on_name_changed(text: String) -> void:
 	var area := _selected_area()
 	if area == null:
 		return
+	if area.area_name == text:
+		return
 	area.area_name = text
 	_editor.mark_dirty()
 	_refresh_tree()
@@ -1351,10 +1638,16 @@ func _on_inspector_role_selected(index: int) -> void:
 			for other in _editor.blueprint.anchors.duplicate():
 				if other.is_queue() and other.target_id == anchor.id:
 					_editor.blueprint.anchors.erase(other)
-		if role not in [ZoneAnchorRecord.ROLE_WAYPOINT,
-				ZoneAnchorRecord.ROLE_SLOT, ZoneAnchorRecord.ROLE_DOOR]:
-			_remove_route_stops([anchor.id])
-		anchor.role = role
+			if role not in [ZoneAnchorRecord.ROLE_WAYPOINT,
+					ZoneAnchorRecord.ROLE_SLOT, ZoneAnchorRecord.ROLE_DOOR]:
+				_remove_route_stops([anchor.id])
+			anchor.role = role
+			if not anchor.is_slot():
+				anchor.activity = &""
+				anchor.fixture_id = &""
+			if not ZoneFunctionCatalog.supports_anchor_role(anchor.function, role):
+				anchor.function = &""
+				anchor.properties.clear()
 	_editor.mark_dirty()
 	_refresh_all()
 
@@ -1380,15 +1673,16 @@ func _on_inspector_function_selected(index: int) -> void:
 		area.function = function_id
 		# Defaults come from the pack, so a freshly picked function is complete
 		# instead of starting as an empty dictionary the author must guess at.
-		var defaults := ZoneFunctionCatalog.default_properties(function_id)
-		for key in defaults:
-			if not area.properties.has(key):
-				area.properties[key] = defaults[key]
+		area.properties = ZoneFunctionCatalog.default_properties(function_id)
 	else:
 		var anchor := _selected_anchor()
 		if anchor == null:
 			return
-		anchor.activity = function_id
+		if anchor.is_slot():
+			anchor.activity = function_id
+		else:
+			anchor.function = function_id
+			anchor.properties = ZoneFunctionCatalog.default_properties(function_id)
 	_editor.mark_dirty()
 	_refresh_all()
 
@@ -1404,9 +1698,15 @@ func _refresh_tree() -> void:
 	_zone_tree.clear()
 	var root := _zone_tree.create_item()
 	var selected_item: TreeItem = null
+	var errors: Array[String] = _editor.blueprint.zone_validation_errors()
+	var warnings: Array[String] = _editor.blueprint.validation_warnings()
 	for area in _editor.blueprint.areas:
 		var item := _zone_tree.create_item(root)
-		item.set_text(0, "▣ %s" % area.display_name())
+		var issue_count := _issues_for([String(area.id), area.display_name()], errors, warnings)
+		item.set_text(0, "▣ %s%s" % [area.display_name(),
+			"  ⚠%d" % issue_count if issue_count > 0 else ""])
+		item.set_tooltip_text(0, "%s · Y%d…%d · %d клеток" % [
+			ZoneAreaRecord.role_display_name(area.role), area.y_min, area.y_max, area.cell_count()])
 		item.set_metadata(0, {"kind": "area", "id": area.id})
 		if area.is_overlay():
 			item.set_custom_color(0, OVERLAY_COLOR)
@@ -1414,7 +1714,11 @@ func _refresh_tree() -> void:
 			selected_item = item
 		for anchor in _editor.blueprint.anchors_of(area.id):
 			var child := _zone_tree.create_item(item)
-			child.set_text(0, "%s %s" % [_role_glyph(anchor.role), anchor.id])
+			var anchor_issues := _issues_for([String(anchor.id)], errors, warnings)
+			child.set_text(0, "%s %s%s" % [_role_glyph(anchor.role), anchor.id,
+				"  ⚠%d" % anchor_issues if anchor_issues > 0 else ""])
+			child.set_tooltip_text(0, "%s · Y%d" % [
+				ZoneAnchorRecord.role_display_name(anchor.role), floori(anchor.pos.y)])
 			child.set_metadata(0, {"kind": "anchor", "id": anchor.id})
 			if anchor.id == _selected_anchor_id:
 				selected_item = child
@@ -1428,7 +1732,9 @@ func _refresh_tree() -> void:
 		loose.set_selectable(0, false)
 		for anchor in loose_anchors:
 			var child := _zone_tree.create_item(loose)
-			child.set_text(0, "%s %s" % [_role_glyph(anchor.role), anchor.id])
+			var anchor_issues := _issues_for([String(anchor.id)], errors, warnings)
+			child.set_text(0, "%s %s%s" % [_role_glyph(anchor.role), anchor.id,
+				"  ⚠%d" % anchor_issues if anchor_issues > 0 else ""])
 			child.set_metadata(0, {"kind": "anchor", "id": anchor.id})
 			if anchor.id == _selected_anchor_id:
 				selected_item = child
@@ -1444,6 +1750,16 @@ func _refresh_tree() -> void:
 				selected_item = child
 	if selected_item != null:
 		selected_item.select(0)
+
+
+func _issues_for(tokens: Array[String], errors: Array[String], warnings: Array[String]) -> int:
+	var count := 0
+	for issue in errors + warnings:
+		for token in tokens:
+			if not token.is_empty() and issue.contains(token):
+				count += 1
+				break
+	return count
 
 
 func _on_tree_item_selected() -> void:
@@ -1493,17 +1809,73 @@ func _refresh_requirements() -> void:
 
 
 func _refresh_warnings() -> void:
-	if _warnings_label == null:
+	if _issues_container == null:
 		return
+	_clear_container(_issues_container)
 	var errors: Array[String] = _editor.blueprint.zone_validation_errors()
 	var warnings: Array[String] = _editor.blueprint.validation_warnings()
-	var lines: Array[String] = []
 	for error in errors:
-		lines.append("✖ %s" % error)
+		_add_issue_button("✖", error, Color(0.95, 0.5, 0.5))
 	for warning in warnings:
-		lines.append("⚠ %s" % warning)
-	_warnings_label.text = "\n".join(lines)
-	_warnings_label.visible = not lines.is_empty()
+		_add_issue_button("⚠", warning, Color(0.9, 0.75, 0.4))
+	if errors.is_empty() and warnings.is_empty():
+		var ok := Label.new()
+		ok.text = "✔ Проблем не найдено"
+		ok.add_theme_color_override("font_color", Color(0.55, 0.85, 0.55))
+		_issues_container.add_child(ok)
+
+
+func _add_issue_button(glyph: String, issue: String, color: Color) -> void:
+	var target := _issue_target(issue)
+	var button := Button.new()
+	button.text = "%s %s" % [glyph, issue]
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	button.tooltip_text = issue + ("\nНажмите, чтобы выбрать объект." if not target.is_empty() else "")
+	button.add_theme_color_override("font_color", color)
+	button.disabled = target.is_empty()
+	if not target.is_empty():
+		button.pressed.connect(func() -> void: _select_issue_target(target))
+	_issues_container.add_child(button)
+
+
+func _issue_target(issue: String) -> Dictionary:
+	for anchor in _editor.blueprint.anchors:
+		if issue.contains(String(anchor.id)) or issue.contains("«%s»" % anchor.id):
+			return {"kind": "anchor", "id": anchor.id}
+	for area in _editor.blueprint.areas:
+		if issue.contains(String(area.id)) or issue.contains("«%s»" % area.display_name()):
+			return {"kind": "area", "id": area.id}
+	for route in _editor.blueprint.routes:
+		if issue.contains(String(route.id)):
+			return {"kind": "route", "id": route.id}
+	return {}
+
+
+func _select_issue_target(target: Dictionary) -> void:
+	_clear_selection()
+	match String(target.get("kind", "")):
+		"area":
+			_selected_area_id = target.get("id", &"")
+		"anchor":
+			_selected_anchor_id = target.get("id", &"")
+		"route":
+			_selected_route_id = target.get("id", &"")
+	_refresh_all()
+
+
+func _run_validation() -> void:
+	_refresh_requirements()
+	_refresh_warnings()
+	var errors: Array[String] = _editor.blueprint.zone_validation_errors()
+	var warnings: Array[String] = _editor.blueprint.validation_warnings()
+	if errors.is_empty() and warnings.is_empty():
+		_editor.set_status("Проверка зон пройдена: ошибок и предупреждений нет.")
+	elif errors.is_empty():
+		_editor.set_status("Проверка зон: предупреждений %d. Подробности справа." % warnings.size())
+	else:
+		_editor.set_status("Проверка зон: ошибок %d, предупреждений %d. Подробности справа." % [
+			errors.size(), warnings.size()])
 
 
 func _refresh_cursor_status() -> void:
@@ -1517,8 +1889,45 @@ func _refresh_cursor_status() -> void:
 			rooms.append(area)
 	if not rooms.is_empty():
 		parts.append("комната «%s»" % rooms[0].display_name())
-	parts.append("ошибок: %d" % _editor.blueprint.zone_validation_errors().size())
+	var denied: Array[String] = []
+	var allowed_only: Array[String] = []
+	var effects: Array[String] = []
+	for area in _editor.blueprint.overlays():
+		if not area.contains_cell_3d(Vector3i(cell.x, _editor.active_layer, cell.y)):
+			continue
+		for audience in area.deny:
+			if String(audience) not in denied:
+				denied.append(String(audience))
+		for audience in area.allow:
+			if String(audience) not in allowed_only:
+				allowed_only.append(String(audience))
+		for effect in area.effects:
+			if String(effect) not in effects:
+				effects.append(String(effect))
+	if not denied.is_empty():
+		parts.append("нельзя: %s" % ", ".join(denied))
+	if not allowed_only.is_empty():
+		parts.append("только: %s" % ", ".join(allowed_only))
+	if not effects.is_empty():
+		parts.append("эффекты: %s" % ", ".join(effects))
+	var issue_count: int = _editor.blueprint.zone_validation_errors().size() \
+		+ _editor.blueprint.validation_warnings().size()
+	parts.append("замечаний: %d" % issue_count)
 	_editor.set_status(" · ".join(parts))
+
+
+func _apply_xray() -> void:
+	if not is_active():
+		return
+	_set_frame_transparency(0.72 if _xray_check.button_pressed else 0.0)
+
+
+func _set_frame_transparency(value: float) -> void:
+	var blocks_root := _editor.get_node_or_null("BlocksRoot")
+	if blocks_root == null:
+		return
+	for node in blocks_root.find_children("*", "GeometryInstance3D", true, false):
+		(node as GeometryInstance3D).transparency = value
 
 
 # ---------------------------------------------------------------------------
@@ -1541,17 +1950,25 @@ func _refresh_visuals() -> void:
 		return
 	var color_index := 0
 	for area in _editor.blueprint.areas:
+		if area.is_overlay() and not _show_overlays_check.button_pressed and area.id != _selected_area_id:
+			continue
+		if not area.is_overlay() and not _show_rooms_check.button_pressed and area.id != _selected_area_id:
+			continue
 		var color := OVERLAY_COLOR
 		var height := 0.04
 		if not area.is_overlay():
 			color = AREA_COLORS[color_index % AREA_COLORS.size()]
 			color_index += 1
 		else:
-			# Overlays that block visitors are highlighted; the rest are dimmed.
-			if not area.permits(ZoneAccess.AUDIENCE_VISITOR):
+			# Permission overlays are red; effect-only overlays are purple and remain
+			# visible. An author must be able to select what the file will apply.
+			if not area.deny.is_empty() or not area.allow.is_empty():
 				height = 0.12
+			elif not area.effects.is_empty():
+				color = Color(0.72, 0.38, 1.0)
+				height = 0.08
 			else:
-				continue
+				color = Color(0.55, 0.55, 0.55)
 		if area.id == _selected_area_id:
 			color = color.lerp(SELECTION_COLOR, 0.5)
 		# Areas are flat markers; draw them on the current layer when it falls inside
@@ -1564,6 +1981,8 @@ func _refresh_visuals() -> void:
 				Vector3(0.94, height, 0.94), true)
 	var fp: Vector2i = _editor.blueprint.footprint
 	for anchor in _editor.blueprint.anchors:
+		if not _show_anchors_check.button_pressed and anchor.id != _selected_anchor_id:
+			continue
 		# Anchors belong on the floor they were placed on; hide ones outside the
 		# current layer or the building footprint so a upper floor stays clean.
 		if int(floor(anchor.pos.y)) != _editor.active_layer:
@@ -1578,6 +1997,8 @@ func _refresh_visuals() -> void:
 		_add_marker(anchor.pos, color, style["size"],
 			anchor.role == ZoneAnchorRecord.ROLE_STORAGE, anchor.facing)
 	for route in _editor.blueprint.routes:
+		if not _show_routes_check.button_pressed and route.id != _selected_route_id:
+			continue
 		var route_color := Color(1.0, 0.85, 0.25)
 		if route.id == _selected_route_id:
 			route_color = route_color.lerp(SELECTION_COLOR, 0.5)

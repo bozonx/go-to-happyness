@@ -190,13 +190,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			_camera_controller.rotate_yaw_pitch(event.relative)
 		elif _panning:
 			_camera_controller.pan(event.relative)
+		elif current_mode == EditMode.ZONES and zones_mode.is_painting():
+			zones_mode.on_mouse_motion(event)
 		elif frame_mode.is_painting():
 			_update_cursor()
 			if cursor_valid:
 				if current_mode == EditMode.DECOR:
 					decor_mode.on_drag()
-				elif current_mode == EditMode.ZONES:
-					zones_mode.on_mouse_motion(event)
 				elif current_mode == EditMode.FRAME and current_brush == Brush.RECT:
 					frame_mode.paint_rect(frame_mode.paint_anchor, cursor_cell)
 				else:
@@ -216,6 +216,9 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 		return
 	match event.button_index:
 		MOUSE_BUTTON_RIGHT:
+			if current_mode == EditMode.ZONES and zones_mode.handle_mouse_button(event):
+				_orbiting = false
+				return
 			if frame_mode.is_shift_erasing():
 				if not event.pressed:
 					frame_mode.shift_erasing = false
@@ -392,7 +395,8 @@ func _is_cell_in_bounds(cell: Vector3i) -> bool:
 # ---------------------------------------------------------------------------
 
 func _set_layer(layer: int) -> void:
-	active_layer = maxi(0, layer)
+	var max_layer := maxi(0, blueprint.grid_bounds.y - 1) if blueprint != null else 0
+	active_layer = clampi(layer, 0, max_layer)
 	frame_mode.refresh_layer_plane()
 	if decor_mode != null:
 		decor_mode.on_layer_changed()
@@ -434,6 +438,14 @@ func can_redo() -> bool:
 	return not _redo_stack.is_empty()
 
 
+func undo_step_count() -> int:
+	return _undo_stack.size()
+
+
+func is_document_dirty() -> bool:
+	return _dirty
+
+
 func redo() -> bool:
 	if _redo_stack.is_empty():
 		_update_status("Повторять нечего.")
@@ -462,6 +474,19 @@ func _refresh_undo_redo_buttons() -> void:
 
 func set_status(message: String) -> void:
 	_update_status(message)
+
+
+func select_mode(mode: int) -> void:
+	_select_mode(mode)
+
+
+func confirm_action(message: String, title := "Подтверждение") -> bool:
+	var dialog := ConfirmationDialog.new()
+	dialog.title = title
+	dialog.dialog_text = message
+	dialog.ok_button_text = "Продолжить"
+	dialog.cancel_button_text = "Отмена"
+	return await _run_confirmation_dialog(dialog, Vector2i(440, 150))
 
 
 func is_pointer_over_ui() -> bool:
