@@ -727,6 +727,38 @@ static func _test_requested_slope_profile_shapes_full_footprint() -> void:
 	assert(grid.height_of(Vector2i(11, 0)) == 1)
 	assert(grid.height_of(Vector2i(15, 0)) == 0)
 
+	# Lowering uses the same profile mirrored: missing blocks are cut away from
+	# the pit and the authored class is preserved on both steps.
+	var lowered := _make_grid()
+	for z in range(-16, 16):
+		for x in range(-16, 16):
+			lowered.set_height(Vector2i(x, z), 3)
+	var lower_delta := CascadeSolver.new().solve(lowered, TerrainEditOperation.offset(
+		[Vector2i.ZERO] as Array[Vector2i], -2,
+		TerrainEditOperation.Mode.SCULPT, SlopeCatalog.CLASS_GENTLE,
+	))
+	assert(lower_delta != null)
+	lower_delta.apply(lowered)
+	assert(lowered.height_of(Vector2i(3, 0)) == 1)
+	assert(lowered.height_of(Vector2i(7, 0)) == 2)
+	assert(lowered.is_ramp_valid_at(Vector2i(1, 0)))
+	assert(lowered.is_ramp_valid_at(Vector2i(5, 0)))
+
+	# Level shares the same slope policy instead of silently falling back to
+	# the material's natural repose angle.
+	var levelled := _make_grid()
+	var level_delta := CascadeSolver.new().solve(levelled, TerrainEditOperation.level(
+		[Vector2i.ZERO] as Array[Vector2i], 2, SlopeCatalog.CLASS_GENTLE,
+	))
+	assert(level_delta != null)
+	level_delta.apply(levelled)
+	assert(levelled.height_of(Vector2i(3, 0)) == 2)
+	assert(levelled.height_of(Vector2i(7, 0)) == 1)
+	assert(levelled.slope_class_at(Vector2i(4, 0)) == SlopeCatalog.CLASS_GENTLE)
+	assert(levelled.slope_class_at(Vector2i(8, 0)) == SlopeCatalog.CLASS_GENTLE)
+	assert(levelled.is_ramp_valid_at(Vector2i(4, 0)))
+	assert(levelled.is_ramp_valid_at(Vector2i(8, 0)))
+
 
 ## Every corner of a sculpted grass hill, seen from both cells that share it.
 ## Returns how many disagree — a disagreement is a vertical wedge in the mesh.

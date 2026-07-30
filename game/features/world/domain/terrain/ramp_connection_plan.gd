@@ -137,7 +137,8 @@ static func reshape(
 	# Walk backward to the true low plateau.
 	guard = 0
 	while true:
-		var previous := Vector2i(2147483647, 2147483647)
+		var previous := Vector2i.ZERO
+		var found_previous := false
 		for touching: Vector2i in grid.ramps_touching(bottom):
 			if (
 				touching != bottom
@@ -147,8 +148,9 @@ static func reshape(
 				and grid.ramp_top_anchor_at(touching) == bottom
 			):
 				previous = grid.ramp_cells_at(touching)[0]
+				found_previous = true
 				break
-		if previous.x == 2147483647:
+		if not found_previous:
 			break
 		bottom = previous
 		guard += 1

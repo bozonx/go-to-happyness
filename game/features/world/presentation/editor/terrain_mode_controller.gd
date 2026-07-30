@@ -16,6 +16,9 @@ const OPTION_MODE := &"edit_mode"
 const OPTION_BRUSH_UP := &"brush_up"
 const OPTION_BRUSH_DOWN := &"brush_down"
 const OPTION_RAMP_CLASS := &"ramp_class"
+const OPTION_TERRAIN_SLOPE := &"terrain_slope"
+const OPTION_RAMP_GENTLER := &"ramp_gentler"
+const OPTION_RAMP_STEEPER := &"ramp_steeper"
 const OPTION_NAV_NONE := &"nav_none"
 const OPTION_NAV_PEDESTRIAN := &"nav_pedestrian"
 const OPTION_NAV_CART := &"nav_cart"
@@ -223,6 +226,11 @@ func _handle_key(event: InputEventKey) -> bool:
 				return false
 			_cycle_ramp_profile()
 			context.set_status_message(_ramp_message())
+		KEY_V:
+			if _tool != TOOL_SCULPT or context.brush.edit_mode == TerrainEditOperation.Mode.TERRACE:
+				return false
+			context.brush.cycle_terrain_slope_class()
+			context.set_status_message("Откос: %s" % _terrain_slope_label())
 		_:
 			return false
 	notify_ui_changed()
@@ -286,6 +294,8 @@ func tool_options() -> Array:
 	options.append(ToolOption.of(OPTION_NAV_CART, "Cart", &"navigation", _overlay_profile_is(&"cart")))
 	if _tool == TOOL_SCULPT:
 		options.append(ToolOption.of(OPTION_MODE, "Режим: %s" % TerrainEditOperation.mode_name(context.brush.edit_mode)))
+		if context.brush.edit_mode != TerrainEditOperation.Mode.TERRACE:
+			options.append(ToolOption.of(OPTION_TERRAIN_SLOPE, "Откос: %s" % _terrain_slope_label()))
 	if _tool != TOOL_RAMP:
 		options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (context.brush.brush_size - 1), &"brush", false, true))
 		options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", &"brush"))
@@ -294,6 +304,8 @@ func tool_options() -> Array:
 		options.append(ToolOption.of(OPTION_HOLE_MODE, "Режим: %s" % ("вырез" if _hole_cutting else "засыпка")))
 	if _tool == TOOL_RAMP:
 		options.append(ToolOption.of(OPTION_RAMP_CLASS, "Уклон: %s" % _ramp_class_label()))
+		options.append(ToolOption.of(OPTION_RAMP_GENTLER, "Пологее", &"ramp_shape"))
+		options.append(ToolOption.of(OPTION_RAMP_STEEPER, "Круче", &"ramp_shape"))
 	return options
 
 
@@ -308,6 +320,13 @@ func activate_option(option_id: StringName) -> void:
 		OPTION_RAMP_CLASS:
 			_cycle_ramp_profile()
 			context.set_status_message(_ramp_message())
+		OPTION_TERRAIN_SLOPE:
+			context.brush.cycle_terrain_slope_class()
+			context.set_status_message("Откос: %s" % _terrain_slope_label())
+		OPTION_RAMP_GENTLER:
+			_reshape_hovered_ramp(true)
+		OPTION_RAMP_STEEPER:
+			_reshape_hovered_ramp(false)
 		OPTION_NAV_NONE:
 			_set_overlay_profile(&"")
 		OPTION_NAV_PEDESTRIAN:
@@ -388,6 +407,32 @@ func _ramp_class_label() -> String:
 	]
 
 
+func _terrain_slope_label() -> String:
+	if context.brush.terrain_slope_class == RampConnectionPlan.AUTO_CLASS:
+		return "естественная"
+	var slope_id := SlopeCatalog.id_of_class(context.brush.terrain_slope_class)
+	return "%s — %d кл. на +%.1f м" % [
+		_ramp_class_name(slope_id), SlopeCatalog.run_of(slope_id),
+		float(SlopeCatalog.rise_of(slope_id)) * TerrainGrid.HEIGHT_STEP,
+	]
+
+
+func _reshape_hovered_ramp(gentler: bool) -> void:
+	context.set_edit_label("пандус пологее" if gentler else "пандус круче")
+	context.brush.reshape_hovered_ramp(gentler)
+	var message := context.brush.last_message
+	if message == "no ramp under cursor":
+		_set_ramp_status("Пандус: наведите курсор на существующий склон")
+	elif message.begins_with("ramp reshaped"):
+		_set_ramp_status("Пандус перестроен: %s" % message.trim_prefix("ramp reshaped to "))
+	elif message.contains("already"):
+		_set_ramp_status("Пандус уже имеет предельный профиль")
+	else:
+		_set_ramp_status("Пандус не перестроен: %s" % message)
+	_redraw_overlay()
+	_update_ramp_preview()
+
+
 func _ramp_message() -> String:
 	if _ramp_dragging and context.brush != null and context.brush.has_hover:
 		return _ramp_preview_message(RampConnectionPlan.between(
@@ -413,6 +458,8 @@ func _ramp_preview_message(plan: RampConnectionPlan) -> String:
 		return "Пандус: %s" % _connection_rejection_message(plan)
 	var slope_id := SlopeCatalog.id_of_class(plan.slope_class)
 	var action := "будет изменено клеток: %d" % plan.reshaped_cells if plan.reshaped_cells > 0 else "земля уже подготовлена"
+	if not plan.replacement_cells.is_empty():
+		action += " · заменяется пандус"
 	return "Пандус: %s · %d кл. · +%.1f м · %s · %s" % [
 		_ramp_class_name(slope_id), plan.run,
 		float(plan.rise) * TerrainGrid.HEIGHT_STEP,

@@ -401,7 +401,7 @@ func _binding_line() -> String:
 func _refresh_panels() -> void:
 	if _active == null:
 		return
-	_palette.set_selected(_active.selected_palette_entry())
+	_rebuild_palette()
 	_palette.set_options(_active.tool_options())
 	_side_panel.set_map_info([
 		"%s%s" % [document.meta.name, "*" if document.dirty else ""],

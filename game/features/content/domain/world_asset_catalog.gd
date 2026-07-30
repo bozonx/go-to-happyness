@@ -475,8 +475,8 @@ static func _register_builtin_assets() -> void:
 	_register(WorldAssetDef.new(
 		&"backpack",
 		"Рюкзак",
-		&"world_props",
-		&"world",
+		&"camping",
+		&"outdoor",
 		SCENE_DIR.path_join("backpack.tscn"),
 		Vector3i(1, 1, 1),
 		1.0,
@@ -495,7 +495,7 @@ static func _register_builtin_assets() -> void:
 		"Походный рюкзак с карманами и ремнями для хранения предметов."
 	))
 	var backpack := _assets[&"backpack"] as WorldAssetDef
-	backpack.tags = [&"storage", &"equipment", &"outdoor", &"world_props"]
+	backpack.tags = [&"storage", &"equipment", &"outdoor", &"camping"]
 	backpack.available_from_era = &"tent"
 	backpack.scale_mode = WorldAssetDef.SCALE_UNIFORM_STEPS
 	backpack.allowed_scales = [0.8, 1.0, 1.2, 1.5]

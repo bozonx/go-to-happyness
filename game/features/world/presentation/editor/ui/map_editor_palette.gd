@@ -18,6 +18,7 @@ signal entry_selected(entry_id: StringName)
 signal option_activated(option_id: StringName)
 
 @onready var _title: Label = $Margin/Rows/Title
+@onready var _scroll: ScrollContainer = $Margin/Rows/Scroll
 @onready var _entries: VBoxContainer = $Margin/Rows/Scroll/Entries
 @onready var _options: VBoxContainer = $Margin/Rows/Options
 
@@ -30,6 +31,7 @@ func set_title(text: String) -> void:
 
 ## `entries` is an array of `MapEditorMode.PaletteEntry`.
 func set_entries(entries: Array, selected: StringName) -> void:
+	var prev_scroll := _scroll.scroll_vertical if _scroll != null else 0
 	for child in _entries.get_children():
 		child.queue_free()
 	_entry_buttons.clear()
@@ -59,6 +61,8 @@ func set_entries(entries: Array, selected: StringName) -> void:
 		button.pressed.connect(func() -> void: entry_selected.emit(entry_id))
 		_entries.add_child(button)
 		_entry_buttons[entry_id] = button
+	if _scroll != null:
+		_scroll.scroll_vertical = prev_scroll
 
 
 ## Cheap refresh for when only the selection moved — rebuilding the whole row

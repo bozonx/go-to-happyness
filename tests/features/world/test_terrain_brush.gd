@@ -293,6 +293,13 @@ static func _test_ramp_cycles_stay_inside_the_catalog() -> void:
 		assert(not directions.has(brush.ramp_direction))
 		directions.append(brush.ramp_direction)
 		assert(TerrainBrushController.direction_name(brush.ramp_direction).length() == 1)
+	var terrain_profiles: Array[int] = []
+	for _step in SlopeCatalog.ramp_ids().size() + 1:
+		brush.cycle_terrain_slope_class()
+		terrain_profiles.append(brush.terrain_slope_class)
+	assert(terrain_profiles.has(RampConnectionPlan.AUTO_CLASS))
+	for slope_class: int in SlopeCatalog.RAMP_CLASSES:
+		assert(terrain_profiles.has(slope_class))
 
 
 ## The message is the only thing a host has to report an outcome with, so an

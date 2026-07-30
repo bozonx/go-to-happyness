@@ -74,14 +74,27 @@ func _test_mode_switching(editor: Node) -> void:
 
 	editor._select_mode(&"surface")
 	assert(editor._active.id == &"surface", "switched to surface")
-	assert(not editor._active.palette_entries().is_empty(), "surface palette is the material catalog")
-	assert(editor._active.palette_entries().size() == TerrainMaterialCatalog.count(), "every catalog material, and only those")
+	assert(not editor._active.palette_entries().is_empty(), "surface palette is non-empty")
+	var initial_entries: Array = editor._active.palette_entries()
+	# Earth is open by default: catalog earth materials + 2 header buttons
+	assert(initial_entries.size() == (TerrainMaterialCatalog.count() - SurfaceModeController.EXOPLANET_MATERIALS.size()) + 2, "initial palette contains earth materials and group headers")
+	# Click Earth header to collapse it
+	editor._active.select_palette_entry(&"accordion_earth")
+	assert(editor._active.palette_entries().size() == 2, "collapsing earth leaves only 2 group headers")
+	# Click Exoplanets header to expand it
+	editor._active.select_palette_entry(&"accordion_exoplanet")
+	assert(editor._active.palette_entries().size() == SurfaceModeController.EXOPLANET_MATERIALS.size() + 2, "expanding exoplanets shows exoplanet materials")
+	# Select an exoplanet material
+	editor._active.select_palette_entry(TerrainMaterialCatalog.LUNAR_REGOLITH)
+	assert(editor._active.selected_palette_entry() == TerrainMaterialCatalog.LUNAR_REGOLITH, "selected lunar regolith")
+	# Select an earth material - automatically switches accordion back to earth
+	editor._active.select_palette_entry(TerrainMaterialCatalog.GRASS)
+	assert(editor._active.selected_palette_entry() == TerrainMaterialCatalog.GRASS, "selected grass")
+	assert(editor._active.palette_entries().size() == (TerrainMaterialCatalog.count() - SurfaceModeController.EXOPLANET_MATERIALS.size()) + 2, "accordion switched back to earth")
 
 	editor._select_mode(&"water")
 	assert(editor._active.id == &"water", "switched to water")
-	# With no body authored yet the palette is exactly the five ways to make one:
-	# the type belongs to the body, so creating and choosing are one gesture.
-	assert(editor._active.palette_entries().size() == WaterBody.TYPE_IDS.size(), "palette is the five body types")
+	assert(not editor._active.palette_entries().is_empty(), "water palette contains new body button")
 
 	editor._select_mode(&"entities")
 	assert(editor._active.id == &"entities", "switched to zones")

@@ -200,11 +200,11 @@ func selected_palette_entry() -> StringName:
 
 func select_palette_entry(entry_id: StringName) -> void:
 	if entry_id == ACCORDION_EARTH:
-		_expanded_accordion = &"earth"
+		_expanded_accordion = &"" if _expanded_accordion == &"earth" else &"earth"
 		notify_ui_changed()
 		return
 	elif entry_id == ACCORDION_EXOPLANET:
-		_expanded_accordion = &"exoplanet"
+		_expanded_accordion = &"" if _expanded_accordion == &"exoplanet" else &"exoplanet"
 		notify_ui_changed()
 		return
 

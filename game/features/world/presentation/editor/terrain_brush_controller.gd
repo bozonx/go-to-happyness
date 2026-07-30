@@ -330,6 +330,39 @@ func connect_ramp(first_cell: Vector2i, second_cell: Vector2i, requested_class: 
 	last_message = "ramp refused: %s" % _service.last_rejection()
 
 
+## Makes the complete connected ramp under the cursor longer/gentler or
+## shorter/steeper while keeping its true low and high levels.
+func reshape_hovered_ramp(gentler: bool) -> void:
+	if not has_hover or not _grid.is_ramp_cell(hovered_cell):
+		last_message = "no ramp under cursor"
+		return
+	var current_class := _grid.slope_class_at(hovered_cell)
+	var current := RampConnectionPlan.reshape(_grid, hovered_cell, current_class)
+	if not current.is_valid():
+		last_message = "ramp chain is invalid"
+		return
+	var target_class := RampConnectionPlan.AUTO_CLASS
+	var target_run := 2147483647 if gentler else -1
+	for candidate: int in SlopeCatalog.RAMP_CLASSES:
+		var candidate_rise := SlopeCatalog.rise_of_class(candidate)
+		if current.rise % candidate_rise != 0:
+			continue
+		var footprint := (current.rise / candidate_rise) * SlopeCatalog.run_of_class(candidate)
+		if gentler and footprint > current.run and footprint < target_run:
+			target_class = candidate
+			target_run = footprint
+		elif not gentler and footprint < current.run and footprint > target_run:
+			target_class = candidate
+			target_run = footprint
+	if target_class == RampConnectionPlan.AUTO_CLASS:
+		last_message = "ramp is already the %s available profile" % ("gentlest" if gentler else "steepest")
+		return
+	if _service.reshape_ramp(hovered_cell, target_class):
+		last_message = "ramp reshaped to %s" % SlopeCatalog.id_of_class(target_class)
+		return
+	last_message = "ramp reshape refused: %s" % _service.last_rejection()
+
+
 func dissolve_ramp() -> void:
 	if not has_hover:
 		return

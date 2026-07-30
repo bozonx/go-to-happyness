@@ -105,11 +105,11 @@ func create_starter_backpack() -> void:
 		return
 	var spawn: MapEntityRecord = null
 	for entity: MapEntityRecord in game.launch_config.map_document.entities.entities:
-		if entity.archetype_id == &"core:starter_backpack":
+		if entity.archetype_id in [&"core:backpack", &"core:starter_backpack", &"backpack", &"starter_backpack"]:
 			spawn = entity
 			break
 	if spawn == null:
-		push_error("[launch] Map requires one core:starter_backpack entity")
+		# Backpack is an optional placement on maps; if absent, start without a ground backpack pile.
 		return
 	game.backpack_position = spawn.position
 	var terrain_height := game.terrain_height_at(game.backpack_position.x, game.backpack_position.z, 0.0)
