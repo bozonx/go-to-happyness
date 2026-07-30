@@ -27,9 +27,10 @@ extends BaseBrushController
 const TOOL_SELECT := &"select"
 const TOOL_FLOOD := &"flood"
 const TOOL_DRAIN := &"drain"
+const TOOL_FLOW := &"flow"
 const TOOL_FREEZE := &"freeze"
 const TOOL_THAW := &"thaw"
-const TOOLS: Array[StringName] = [TOOL_SELECT, TOOL_FLOOD, TOOL_DRAIN, TOOL_FREEZE, TOOL_THAW]
+const TOOLS: Array[StringName] = [TOOL_SELECT, TOOL_FLOOD, TOOL_DRAIN, TOOL_FLOW, TOOL_FREEZE, TOOL_THAW]
 
 var tool: StringName = TOOL_FLOOD
 ## The body strokes go into. Zero until the author makes one — a stroke with no
@@ -73,15 +74,23 @@ func cycle_water_type() -> void:
 	last_message = "тип воды: %s" % WaterBody.type_id_of(water_type)
 
 
+var flow_direction := SlopeCatalog.DIR_E
+var flow_strength := 1
+
+
 func select_liquid_category(category: StringName) -> void:
 	liquid_category = &"lava" if category == &"lava" else &"water"
 	last_message = "жидкость: %s" % ("лава" if liquid_category == &"lava" else "вода")
+	if tool == TOOL_SELECT and body_id != WaterBody.NO_BODY and _service != null:
+		_service.retype_body(body_id, active_body_type())
 
 
 func select_water_type(body_type: WaterBody.Type) -> void:
 	liquid_category = &"water"
 	water_type = body_type if body_type != WaterBody.Type.LAVA else WaterBody.Type.LAKE
 	last_message = "тип воды: %s" % WaterBody.type_id_of(water_type)
+	if tool == TOOL_SELECT and body_id != WaterBody.NO_BODY and _service != null:
+		_service.retype_body(body_id, water_type)
 
 var _terrain: TerrainGrid
 var _water: WaterGrid
@@ -105,6 +114,8 @@ func cycle_tool() -> void:
 func adjust_level(delta: int) -> void:
 	level = clampi(level + delta, WaterGrid.MIN_HEIGHT, WaterGrid.MAX_HEIGHT)
 	last_message = "level %d (%.1f m)" % [level, float(level) * TerrainGrid.HEIGHT_STEP]
+	if tool == TOOL_SELECT and body_id != WaterBody.NO_BODY and _service != null:
+		_service.set_body_level(body_id, level)
 
 
 ## Takes the level from the ground under the cursor, one step above it — the
@@ -116,6 +127,9 @@ func pick_level_from_ground() -> void:
 	last_message = "level from ground: %d" % level
 
 
+signal body_selected(body_id: int)
+
+
 func select_body(next_body_id: int) -> void:
 	if _water == null or not _water.has_body(next_body_id):
 		return
@@ -124,6 +138,7 @@ func select_body(next_body_id: int) -> void:
 	if body != null:
 		level = body.surface_height
 		last_message = "body: %s" % body.name
+	body_selected.emit(body_id)
 
 
 ## Creates a registry entry and selects it. It has no visible water until Flood
@@ -219,10 +234,28 @@ func apply() -> void:
 			_flood()
 		TOOL_DRAIN:
 			_drain_body_at_hover()
+		TOOL_FLOW:
+			_apply_flow()
 		TOOL_FREEZE:
 			_set_frozen(true)
 		TOOL_THAW:
 			_set_frozen(false)
+
+
+func _apply_flow() -> void:
+	if _service == null or _water == null or not has_hover:
+		return
+	if not _water.has_water(hovered_cell):
+		last_message = "нет воды под курсором"
+		return
+	var target_body := _water.body_id_at(hovered_cell)
+	if target_body == WaterBody.NO_BODY:
+		return
+	var cells := brush_cells(hovered_cell)
+	if _service.set_flow(cells, target_body, flow_direction, flow_strength):
+		last_message = "течение: %d клеток" % _service.last_delta_size()
+		return
+	last_message = "течение не изменилось (%s)" % _service.last_rejection()
 
 
 func _select_hovered_body() -> void:

@@ -4,6 +4,7 @@
 [ext_resource type="Script" uid="uid://cs0y6i5eh2tic" path="res://game/features/world/presentation/terrain/grid_terrain_world.gd" id="2_terrain"]
 [ext_resource type="Script" uid="uid://c80qmlapc4ehj" path="res://game/features/routing/presentation/nav_terrain_overlay.gd" id="3_nav_overlay"]
 [ext_resource type="Script" uid="uid://bxko5vni8obv7" path="res://game/features/world/presentation/editor/map_editor_camera.gd" id="4_camera"]
+[ext_resource type="Script" path="res://game/features/world/presentation/editor/ramp_preview.gd" id="5_ramp_preview"]
 [ext_resource type="Theme" path="res://game/features/ui/presentation/theme/ui_theme.tres" id="5_theme"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_top_bar.tscn" id="6_top_bar"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_side_panel.tscn" id="8_side_panel"]
@@ -11,7 +12,7 @@
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_status_bar.tscn" id="10_status_bar"]
 [ext_resource type="Script" uid="uid://dvuwd0lsd080y" path="res://game/features/world/presentation/water/water_world.gd" id="11_water"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_dialogs.tscn" id="12_dialogs"]
-[ext_resource type="Script" path="res://game/features/world/presentation/editor/ramp_preview.gd" id="13_ramp_preview"]
+[ext_resource type="Script" path="res://game/features/world/presentation/water/water_body_highlight.gd" id="14_water_highlight"]
 
 [sub_resource type="Environment" id="env_map_editor"]
 background_mode = 1
@@ -49,7 +50,12 @@ cast_shadow = 0
 [node name="RampPreview" type="MeshInstance3D" parent="."]
 visible = false
 cast_shadow = 0
-script = ExtResource("13_ramp_preview")
+script = ExtResource("5_ramp_preview")
+
+[node name="WaterHighlight" type="MeshInstance3D" parent="."]
+visible = false
+cast_shadow = 0
+script = ExtResource("14_water_highlight")
 
 [node name="Camera3D" type="Camera3D" parent="." unique_id=1817952013]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 40, 40)

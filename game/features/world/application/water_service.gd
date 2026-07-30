@@ -327,8 +327,8 @@ func set_flow(cells: Array[Vector2i], body_id: int, direction: int, strength: in
 	if not grid.has_body(body_id):
 		return _reject(REASON_NO_BODY)
 	var body := grid.body(body_id)
-	if body == null or (body.type != WaterBody.Type.RIVER and body.type != WaterBody.Type.LAVA):
-		return _reject(REASON_FLOW_REQUIRES_RIVER)
+	if body == null:
+		return _reject(REASON_NO_BODY)
 	var clamped_strength := clampi(strength, 0, WaterBody.MAX_FLOW_STRENGTH)
 	var new_flow_value := (direction & WaterBody.FLOW_DIR_MASK) | (clamped_strength << WaterBody.FLOW_STRENGTH_SHIFT)
 	var edit_cells: Array[Vector2i] = []

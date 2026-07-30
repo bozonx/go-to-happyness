@@ -424,7 +424,26 @@ func _test_water_mode(editor: Node) -> void:
 	assert(editor._nav_grid.is_walkable(cell), "draining republished navigation")
 	editor._undo()
 	assert(water.has_body(body_id) and water.is_wet(terrain, cell), "undo restored the flooded body")
-	print("  water fill + shared undo + republished navigation ok")
+
+	# Test flow brush (Течение)
+	editor._water_brush.tool = WaterBrushController.TOOL_FLOW
+	editor._water_brush.flow_direction = SlopeCatalog.DIR_E
+	editor._water_brush.flow_strength = 2
+	editor._water_brush.hovered_cell = cell
+	editor._water_brush.has_hover = true
+	editor._water_brush.apply()
+	var body_after_flow := water.body(body_id)
+	assert(body_after_flow != null and body_after_flow.flow_strength_at(cell) == 2, "flow brush applied flow strength")
+	assert(body_after_flow.flow_direction_at(cell) == SlopeCatalog.DIR_E, "flow brush applied flow direction")
+
+	# Test select mode retyping and level adjustments
+	editor._water_brush.tool = WaterBrushController.TOOL_SELECT
+	editor._water_brush.select_body(body_id)
+	assert(editor.water_highlight.visible, "water highlight visible when body selected")
+	editor._active.activate_option(WaterModeController.OPTION_RIVER)
+	assert(water.body(body_id).type == WaterBody.Type.RIVER, "retyped body to river in select mode")
+
+	print("  water fill + flow brush + highlight + shared undo ok")
 
 
 func _test_ocean_boundary_floods_only_from_the_edge(editor: Node) -> void:

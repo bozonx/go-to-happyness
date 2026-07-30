@@ -204,6 +204,8 @@ static func _test_cycle_tool_rotates_the_water_tools() -> void:
 	brush.cycle_tool()
 	assert(brush.tool == WaterBrushController.TOOL_DRAIN)
 	brush.cycle_tool()
+	assert(brush.tool == WaterBrushController.TOOL_FLOW)
+	brush.cycle_tool()
 	assert(brush.tool == WaterBrushController.TOOL_FREEZE)
 	brush.cycle_tool()
 	assert(brush.tool == WaterBrushController.TOOL_THAW)

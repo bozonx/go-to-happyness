@@ -32,7 +32,7 @@ static func run_all() -> void:
 	_test_lava_is_impassable_at_any_depth()
 	_test_committed_water_edits_republish_themselves()
 	_test_registry_removal_republishes_and_is_undoable()
-	_test_flow_requires_a_river()
+	_test_flow_allows_all_water_types()
 	_test_level_brush_can_lower_a_lake()
 	_test_remove_body_takes_water_away_and_undo_brings_it_back()
 	_test_creating_a_body_publishes_nothing()
@@ -377,7 +377,7 @@ static func _test_registry_removal_republishes_and_is_undoable() -> void:
 	assert(not nav.is_walkable(Vector2i.ZERO))
 
 
-static func _test_flow_requires_a_river() -> void:
+static func _test_flow_allows_all_water_types() -> void:
 	var terrain := _terrain()
 	var water := _water_over(terrain)
 	var service := WaterService.new()
@@ -385,8 +385,7 @@ static func _test_flow_requires_a_river() -> void:
 	assert(terrain.set_height(Vector2i.ZERO, -1))
 	var lake := service.create_body(WaterBody.Type.LAKE, 0)
 	assert(service.flood(Vector2i.ZERO, lake.id, 0))
-	assert(not service.set_flow([Vector2i.ZERO], lake.id, SlopeCatalog.DIR_E, 1))
-	assert(service.last_rejection() == WaterService.REASON_FLOW_REQUIRES_RIVER)
+	assert(service.set_flow([Vector2i.ZERO], lake.id, SlopeCatalog.DIR_E, 1))
 
 
 # --- Level and erase: the two operations Flood cannot express -------------------

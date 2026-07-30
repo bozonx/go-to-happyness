@@ -7,11 +7,6 @@ extends MapEditorMode
 ## primary choice — water or lava — while clicks resolve that intent to the
 ## `WaterBody` registry automatically. Existing liquid selects its body; dry
 ## ground creates a new one. The registry remains visible in the side list.
-##
-## What the mode does NOT do is decide passability. Depth against the ground, the
-## ford rule and the load the ice carries all live in the published navigation
-## field (§9.7), so the overlay in this editor answers "can anyone cross this
-## river" with the same code the game runs.
 
 const OPTION_BRUSH_UP := &"brush_up"
 const OPTION_BRUSH_DOWN := &"brush_down"
@@ -23,11 +18,22 @@ const OPTION_FLOW_DIR := &"flow_dir"
 const OPTION_FLOW_STRENGTH := &"flow_strength"
 const OPTION_ACTION_ICE := &"action_ice"
 
+const OPTION_WATER := &"liquid_water"
+const OPTION_LAVA := &"liquid_lava"
+const OPTION_LAKE := &"type_lake"
+const OPTION_RIVER := &"type_river"
+const OPTION_SEA := &"type_sea"
+const OPTION_AUTO_LEVEL := &"auto_level"
+
+const ROW_BODY_TOOLS := &"row_body_tools"
+const ROW_LIQUID_CAT := &"row_liquid_cat"
+const ROW_WATER_TYPE := &"row_water_type"
+const ROW_LEVEL := &"row_level"
+const ROW_BRUSH_TOOLS := &"row_brush_tools"
+const ROW_FLOW_PARAMS := &"row_flow_params"
+const ROW_BRUSH_SIZE := &"row_brush_size"
+
 var _painting := false
-## What a river stroke writes into the body's sparse flow map (§9.3). Brush state,
-## not a separate tool: an author draws the channel and its current in one pass.
-var _flow_direction := SlopeCatalog.DIR_E
-var _flow_strength := 0
 
 
 func _init() -> void:
@@ -40,7 +46,11 @@ func activate() -> void:
 	_painting = false
 	if context != null and context.water_service != null:
 		context.water_service.prune_empty_bodies()
+		if not context.water_service.edit_committed.is_connected(_on_water_edit_committed):
+			context.water_service.edit_committed.connect(_on_water_edit_committed)
 	if context != null and context.water_brush != null:
+		if not context.water_brush.body_selected.is_connected(_on_body_selected):
+			context.water_brush.body_selected.connect(_on_body_selected)
 		context.water_brush.tool = WaterBrushController.TOOL_SELECT
 		var bodies := context.water.bodies()
 		var found_non_empty := false
@@ -51,14 +61,29 @@ func activate() -> void:
 				break
 		if not found_non_empty:
 			context.water_brush.body_id = WaterBody.NO_BODY
+	_update_highlight()
+
+
+func _on_body_selected(_body_id: int) -> void:
+	_update_highlight()
+
+
+func _on_water_edit_committed(_delta: Variant) -> void:
+	_update_highlight()
 
 
 func deactivate() -> void:
 	_painting = false
 	if context != null and context.water_service != null:
 		context.water_service.prune_empty_bodies()
+		if context.water_service.edit_committed.is_connected(_on_water_edit_committed):
+			context.water_service.edit_committed.disconnect(_on_water_edit_committed)
 	if context != null and context.water_brush != null:
 		context.water_brush.clear_hover()
+		if context.water_brush.body_selected.is_connected(_on_body_selected):
+			context.water_brush.body_selected.disconnect(_on_body_selected)
+	if context != null and context.water_highlight != null:
+		context.water_highlight.hide_highlight()
 
 
 func clear_hover() -> void:
@@ -70,8 +95,6 @@ func hover_brush() -> BaseBrushController:
 	return context.water_brush if context != null else null
 
 
-## Flood takes its extent from the basin, not from the brush, so the size control
-## belongs to the tools that stamp a square.
 func adjust_brush_size(delta: int) -> void:
 	if context != null and context.water_brush != null and _brush_has_size():
 		context.water_brush.adjust_brush_size(delta)
@@ -80,7 +103,11 @@ func adjust_brush_size(delta: int) -> void:
 func _brush_has_size() -> bool:
 	if context == null or context.water_brush == null:
 		return false
-	return context.water_brush.tool in [WaterBrushController.TOOL_FREEZE, WaterBrushController.TOOL_THAW]
+	return context.water_brush.tool in [
+		WaterBrushController.TOOL_FLOW,
+		WaterBrushController.TOOL_FREEZE,
+		WaterBrushController.TOOL_THAW,
+	]
 
 
 func process(_delta: float) -> void:
@@ -103,6 +130,7 @@ func handle_input(event: InputEvent) -> bool:
 				context.set_edit_label("вода")
 				context.water_brush.apply_secondary()
 				notify_ui_changed()
+				_update_highlight()
 				return true
 			return false
 		if button.button_index != MOUSE_BUTTON_LEFT:
@@ -111,16 +139,17 @@ func handle_input(event: InputEvent) -> bool:
 			context.water_brush.update_hover(context.camera, context.space_state(), context.mouse_position())
 			context.water_brush.pick_from_cell()
 			notify_ui_changed()
+			_update_highlight()
 			return true
 		_painting = button.pressed
 		if button.pressed:
 			_stroke()
 		notify_ui_changed()
+		_update_highlight()
 		return true
 	if event is InputEventKey and event.is_pressed() and not event.is_echo():
 		return _handle_key(event as InputEventKey)
 	return false
-
 
 
 func _handle_key(event: InputEventKey) -> bool:
@@ -135,15 +164,17 @@ func _handle_key(event: InputEventKey) -> bool:
 			if _brush_has_size():
 				brush.adjust_brush_size(1)
 		KEY_EQUAL, KEY_KP_ADD:
-			if brush.tool == WaterBrushController.TOOL_FLOOD:
+			if brush.tool in [WaterBrushController.TOOL_SELECT, WaterBrushController.TOOL_FLOOD]:
 				brush.adjust_level(1)
 		KEY_MINUS, KEY_KP_SUBTRACT:
-			if brush.tool == WaterBrushController.TOOL_FLOOD:
+			if brush.tool in [WaterBrushController.TOOL_SELECT, WaterBrushController.TOOL_FLOOD]:
 				brush.adjust_level(-1)
 		KEY_G:
-			if brush.tool == WaterBrushController.TOOL_FLOOD:
+			if brush.tool in [WaterBrushController.TOOL_SELECT, WaterBrushController.TOOL_FLOOD]:
 				brush.pick_level_from_ground()
 		KEY_F:
+			brush.tool = WaterBrushController.TOOL_FLOW
+		KEY_Z:
 			brush.tool = WaterBrushController.TOOL_FREEZE
 		KEY_R:
 			brush.tool = WaterBrushController.TOOL_THAW
@@ -156,26 +187,16 @@ func _handle_key(event: InputEventKey) -> bool:
 		_:
 			return false
 	notify_ui_changed()
+	_update_highlight()
 	return true
 
 
-## One stroke: the brush edit, and — on a river with a current dialled in — the
-## flow written through `WaterService` so it is undoable and republishes
-## navigation like every other water edit.
 func _stroke() -> void:
 	context.set_edit_label(_edit_label())
 	var brush := context.water_brush
-	# A mouse press may arrive before this frame's hover update. Refresh it here
-	# so drain always resolves the body actually clicked, not the previous cell.
 	brush.update_hover(context.camera, context.space_state(), context.mouse_position())
 	brush.apply()
-	if brush.tool == WaterBrushController.TOOL_FLOOD and _flow_strength > 0 and _selected_body_has_flow():
-		context.water_service.set_flow(
-			brush.brush_cells(brush.hovered_cell),
-			brush.body_id,
-			_flow_direction,
-			_flow_strength,
-		)
+	_update_highlight()
 
 
 func pick_from_cell() -> void:
@@ -183,6 +204,7 @@ func pick_from_cell() -> void:
 		context.water_brush.update_hover(context.camera, context.space_state(), context.mouse_position())
 		context.water_brush.pick_from_cell()
 		notify_ui_changed()
+		_update_highlight()
 
 
 func _edit_label() -> String:
@@ -190,6 +212,7 @@ func _edit_label() -> String:
 		WaterBrushController.TOOL_SELECT: return "выделение водоёма"
 		WaterBrushController.TOOL_FLOOD: return "наполнение водоёма"
 		WaterBrushController.TOOL_DRAIN: return "осушение"
+		WaterBrushController.TOOL_FLOW: return "течение"
 		WaterBrushController.TOOL_FREEZE: return "заморозка"
 		WaterBrushController.TOOL_THAW: return "разморозка"
 	return "вода"
@@ -197,19 +220,22 @@ func _edit_label() -> String:
 
 func _cycle_flow_direction() -> void:
 	var order := SlopeCatalog.ORTHOGONAL_DIRECTIONS
-	_flow_direction = order[(order.find(_flow_direction) + 1) % order.size()]
+	var brush := context.water_brush
+	brush.flow_direction = order[(order.find(brush.flow_direction) + 1) % order.size()]
 
 
 func _cycle_flow_strength() -> void:
-	_flow_strength = (_flow_strength + 1) % (WaterBody.MAX_FLOW_STRENGTH + 1)
+	var brush := context.water_brush
+	brush.flow_strength = (brush.flow_strength % WaterBody.MAX_FLOW_STRENGTH) + 1
 
 
-const OPTION_WATER := &"liquid_water"
-const OPTION_LAVA := &"liquid_lava"
-const OPTION_LAKE := &"type_lake"
-const OPTION_RIVER := &"type_river"
-const OPTION_SEA := &"type_sea"
-const OPTION_AUTO_LEVEL := &"auto_level"
+func _update_highlight() -> void:
+	if context != null and context.water_highlight != null:
+		if context.water_brush != null and context.water_brush.body_id != WaterBody.NO_BODY:
+			context.water_highlight.highlight_body(context.water_brush.body_id)
+		else:
+			context.water_highlight.hide_highlight()
+
 
 # --- Panels -------------------------------------------------------------------
 
@@ -230,36 +256,62 @@ func select_palette_entry(entry_id: StringName) -> void:
 	elif entry_id == OPTION_WATER:
 		context.water_brush.select_liquid_category(&"water")
 	notify_ui_changed()
+	_update_highlight()
 
 
 func tool_options() -> Array:
 	var brush := context.water_brush
 	var options: Array = []
-	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_SELECT]), "Выделить", &"tools", brush.tool == WaterBrushController.TOOL_SELECT))
-	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_FLOOD]), "Залить", &"tools", brush.tool == WaterBrushController.TOOL_FLOOD))
-	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_DRAIN]), "Удалить", &"tools", brush.tool == WaterBrushController.TOOL_DRAIN))
-	options.append(ToolOption.of(OPTION_ACTION_ICE, "Лёд", &"tools", brush.tool in [WaterBrushController.TOOL_FREEZE, WaterBrushController.TOOL_THAW]))
-	if brush.tool in [WaterBrushController.TOOL_FREEZE, WaterBrushController.TOOL_THAW]:
-		options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_FREEZE]), "Заморозить", &"ice_action", brush.tool == WaterBrushController.TOOL_FREEZE))
-		options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_THAW]), "Убрать лёд", &"ice_action", brush.tool == WaterBrushController.TOOL_THAW))
-	if brush.liquid_category == &"water":
-		options.append(ToolOption.of(OPTION_LAKE, "Озеро", &"water_type", brush.water_type == WaterBody.Type.LAKE))
-		options.append(ToolOption.of(OPTION_RIVER, "Река", &"water_type", brush.water_type == WaterBody.Type.RIVER))
-		options.append(ToolOption.of(OPTION_SEA, "Море", &"water_type", brush.water_type == WaterBody.Type.SEA))
-	if brush.tool == WaterBrushController.TOOL_FLOOD:
-		options.append(ToolOption.of(OPTION_AUTO_LEVEL, "Авто", &"level", brush.auto_level))
-		options.append(ToolOption.of(&"water_level", "Уровень %d" % brush.level, &"level", false, true))
-		options.append(ToolOption.of(OPTION_LEVEL_DOWN, "−", &"level"))
-		options.append(ToolOption.of(OPTION_LEVEL_UP, "+", &"level"))
+
+	# --- ВОДОЕМ ---
+	options.append(ToolOption.of(&"header_body", "Водоём:", &"", false, true))
+	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_SELECT]), "Выбрать", ROW_BODY_TOOLS, brush.tool == WaterBrushController.TOOL_SELECT))
+	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_FLOOD]), "Залить", ROW_BODY_TOOLS, brush.tool == WaterBrushController.TOOL_FLOOD))
+	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_DRAIN]), "Удалить", ROW_BODY_TOOLS, brush.tool == WaterBrushController.TOOL_DRAIN))
+
+	var body_is_frozen := false
+	if context.water != null and brush.body_id != WaterBody.NO_BODY:
+		var cells := context.water.cells_of_body(brush.body_id)
+		if not cells.is_empty() and context.water.is_frozen(cells[0]):
+			body_is_frozen = true
+	options.append(ToolOption.of(OPTION_ACTION_ICE, "Лёд", ROW_BODY_TOOLS, body_is_frozen))
+
+	var is_body_mode := brush.tool in [WaterBrushController.TOOL_SELECT, WaterBrushController.TOOL_FLOOD]
+
+	if is_body_mode:
+		options.append(ToolOption.of(OPTION_WATER, "Вода", ROW_LIQUID_CAT, brush.liquid_category == &"water"))
+		options.append(ToolOption.of(OPTION_LAVA, "Лава", ROW_LIQUID_CAT, brush.liquid_category == &"lava"))
+
+		if brush.liquid_category == &"water":
+			options.append(ToolOption.of(OPTION_SEA, "Море", ROW_WATER_TYPE, brush.water_type == WaterBody.Type.SEA))
+			options.append(ToolOption.of(OPTION_LAKE, "Озеро", ROW_WATER_TYPE, brush.water_type == WaterBody.Type.LAKE))
+			options.append(ToolOption.of(OPTION_RIVER, "Река", ROW_WATER_TYPE, brush.water_type == WaterBody.Type.RIVER))
+
+		var display_level := brush.level
+		if brush.tool == WaterBrushController.TOOL_SELECT and context.water != null and brush.body_id != WaterBody.NO_BODY:
+			var body := context.water.body(brush.body_id)
+			if body != null:
+				display_level = body.surface_height
+		options.append(ToolOption.of(&"water_level", "Уровень %d" % display_level, ROW_LEVEL, false, true))
+		options.append(ToolOption.of(OPTION_LEVEL_DOWN, "−", ROW_LEVEL))
+		options.append(ToolOption.of(OPTION_LEVEL_UP, "+", ROW_LEVEL))
+		options.append(ToolOption.of(OPTION_AUTO_LEVEL, "Авто", ROW_LEVEL, brush.auto_level))
+
+	# --- КИСТЬ ---
+	options.append(ToolOption.of(&"header_brush", "Кисть:", &"", false, true))
+	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_FLOW]), "Течение", ROW_BRUSH_TOOLS, brush.tool == WaterBrushController.TOOL_FLOW))
+	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_FREEZE]), "Заморозка", ROW_BRUSH_TOOLS, brush.tool == WaterBrushController.TOOL_FREEZE))
+	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_THAW]), "Разморозка", ROW_BRUSH_TOOLS, brush.tool == WaterBrushController.TOOL_THAW))
+
+	if brush.tool == WaterBrushController.TOOL_FLOW:
+		options.append(ToolOption.of(OPTION_FLOW_DIR, "Направление: %s" % TerrainBrushController.direction_name(brush.flow_direction), ROW_FLOW_PARAMS))
+		options.append(ToolOption.of(OPTION_FLOW_STRENGTH, "Сила: %d" % brush.flow_strength, ROW_FLOW_PARAMS))
+
 	if _brush_has_size():
-		options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (brush.brush_size - 1), &"brush", false, true))
-		options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", &"brush"))
-		options.append(ToolOption.of(OPTION_BRUSH_UP, "+", &"brush"))
-	if brush.tool == WaterBrushController.TOOL_FREEZE:
-		options.append(ToolOption.of(OPTION_ICE, "Толщина льда: %d" % brush.ice_thickness))
-	if brush.tool == WaterBrushController.TOOL_FLOOD and brush.active_body_type() in [WaterBody.Type.RIVER, WaterBody.Type.LAVA]:
-		options.append(ToolOption.of(OPTION_FLOW_DIR, "Течение: %s" % TerrainBrushController.direction_name(_flow_direction)))
-		options.append(ToolOption.of(OPTION_FLOW_STRENGTH, "Сила течения: %d" % _flow_strength))
+		options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (brush.brush_size - 1), ROW_BRUSH_SIZE, false, true))
+		options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", ROW_BRUSH_SIZE))
+		options.append(ToolOption.of(OPTION_BRUSH_UP, "+", ROW_BRUSH_SIZE))
+
 	return options
 
 
@@ -269,11 +321,15 @@ func activate_option(option_id: StringName) -> void:
 	if text.begins_with(OPTION_TOOL_PREFIX):
 		brush.tool = StringName(text.trim_prefix(OPTION_TOOL_PREFIX))
 		notify_ui_changed()
+		_update_highlight()
 		return
 	match option_id:
 		OPTION_ACTION_ICE:
-			if brush.tool not in [WaterBrushController.TOOL_FREEZE, WaterBrushController.TOOL_THAW]:
-				brush.tool = WaterBrushController.TOOL_FREEZE
+			brush.toggle_body_ice()
+		OPTION_WATER:
+			brush.select_liquid_category(&"water")
+		OPTION_LAVA:
+			brush.select_liquid_category(&"lava")
 		OPTION_LAKE:
 			brush.select_water_type(WaterBody.Type.LAKE)
 		OPTION_RIVER:
@@ -299,11 +355,7 @@ func activate_option(option_id: StringName) -> void:
 		OPTION_FLOW_STRENGTH:
 			_cycle_flow_strength()
 	notify_ui_changed()
-
-
-func _selected_body_has_flow() -> bool:
-	var body := context.water.body(context.water_brush.body_id)
-	return body != null and (body.type == WaterBody.Type.RIVER or body.type == WaterBody.Type.LAVA)
+	_update_highlight()
 
 
 func inspector_lines() -> Array[String]:
@@ -313,7 +365,7 @@ func inspector_lines() -> Array[String]:
 	lines.append("Инструмент: %s" % brush.tool)
 	if _brush_has_size():
 		lines.append("Кисть: %d×%d" % [brush.brush_size * 2 - 1, brush.brush_size * 2 - 1])
-	if brush.tool == WaterBrushController.TOOL_FLOOD:
+	if brush.tool in [WaterBrushController.TOOL_SELECT, WaterBrushController.TOOL_FLOOD]:
 		lines.append("Уровень: %d (%.1f м)" % [brush.level, float(brush.level) * TerrainGrid.HEIGHT_STEP])
 	lines.append("")
 	if body == null:
@@ -325,8 +377,8 @@ func inspector_lines() -> Array[String]:
 		lines.append("Замерзает: %s" % ("да" if body.freezes else "нет"))
 		lines.append("Клеток течения: %d" % body.flow.size())
 	lines.append("")
-	if _selected_body_has_flow():
-		lines.append("Течение Flood: %s, сила %d" % [TerrainBrushController.direction_name(_flow_direction), _flow_strength])
+	if brush.tool == WaterBrushController.TOOL_FLOW:
+		lines.append("Течение: %s, сила %d" % [TerrainBrushController.direction_name(brush.flow_direction), brush.flow_strength])
 	if brush.tool == WaterBrushController.TOOL_FREEZE:
 		lines.append("Толщина льда: %d (пешеход %d, тележка %d)" % [
 			brush.ice_thickness,
@@ -334,7 +386,7 @@ func inspector_lines() -> Array[String]:
 			TravelerProfile.MIN_ICE_THICKNESS_CART,
 		])
 	lines.append("")
-	lines.append("ЛКМ по воде выбирает и редактирует этот водоём")
+	lines.append("ЛКМ по воде выбирает этот водоём")
 	lines.append("ЛКМ по суше создаёт новый водоём выбранного типа")
 	lines.append("Удалить или Shift+ПКМ удаляет весь водоём; океан защищён")
 	return lines
@@ -356,9 +408,6 @@ func list_entries() -> Array[String]:
 	return entries
 
 
-## The status line is where an author checks the rule they cannot see: depth is
-## what decides a ford, and a cell that looks like water at a glance may be a
-## crossing or a wall.
 func status_text() -> String:
 	var brush := context.water_brush
 	if not brush.has_hover:
