@@ -63,5 +63,5 @@ func _init() -> void:
 	assert(delivered, "Courier should deliver branches to the construction site")
 	assert(delivered_position.distance_squared_to(construction_position) < 0.25, "Courier should stop at the construction approach point, not the decoy building")
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

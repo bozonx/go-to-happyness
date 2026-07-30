@@ -48,5 +48,5 @@ func _init() -> void:
 	assert(pending_yard_worker != null)
 	assert(pending_yard_worker.pending_employment_workplace == yard)
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

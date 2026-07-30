@@ -50,5 +50,5 @@ func _init() -> void:
 	assert(SimHelper.is_board_cell(simulation, SimHelper.cell_from_position(simulation, beyond_forest)))
 	assert(SimHelper.find_path_around_houses(simulation, simulation.citizens[0].global_position, beyond_forest, false).reachable)
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

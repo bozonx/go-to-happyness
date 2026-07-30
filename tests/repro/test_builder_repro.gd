@@ -47,5 +47,5 @@ func _init() -> void:
 	assert(builder.state == Citizen.State.CONSTRUCTING, "builder should be in CONSTRUCTING state")
 	assert(builder.construction_site == site.node, "builder should be assigned to site")
 	assert(builder.global_position.distance_to(builder.construction_position) <= 1.0, "builder should reach construction position")
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

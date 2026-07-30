@@ -29,5 +29,5 @@ func _init() -> void:
 	assert(resident.home == replacement)
 	assert(int(replacement.get_meta("spawn_slots")) == 0)
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

@@ -54,5 +54,5 @@ func _init() -> void:
 	t_release.pressed = false
 	SimHelper.unhandled_input(simulation, t_release)
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

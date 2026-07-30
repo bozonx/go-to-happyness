@@ -24,5 +24,5 @@ func _init() -> void:
 		assert(order.payload.value(&"resource.type") == resources_by_role[role])
 		assert(order.payload.value(&"warehouse.position") == order.payload.value(&"target.access_position"))
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

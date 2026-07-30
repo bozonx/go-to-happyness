@@ -20,6 +20,8 @@ const BOARD_CELLS := 32
 
 static func run_all() -> void:
 	_test_paint_writes_texels_and_no_geometry()
+	_test_paint_rejects_an_unstable_material()
+	_test_material_paint_clamps_the_carried_variant()
 	_test_undo_restores_material_and_detail()
 	_test_detail_survives_a_height_edit()
 	print("    [PASS] Surface Paint Tests")
@@ -88,6 +90,34 @@ static func _test_paint_writes_texels_and_no_geometry() -> void:
 
 	# Painting what is already there is not an edit at all.
 	assert(not service.paint_material(cells, TerrainMaterialCatalog.MUD))
+
+
+## A texel-only material paint must not create a sand or mud wall. Height edits
+## are the operation that cascades; material edits reject instead.
+static func _test_paint_rejects_an_unstable_material() -> void:
+	var world := _make()
+	var grid: TerrainGrid = world["grid"]
+	var service: TerrainService = world["service"]
+	var cell := Vector2i(0, 0)
+	assert(grid.set_height(cell, 1))
+	assert(not service.paint_material(_brush([cell]), TerrainMaterialCatalog.SAND))
+	assert(service.last_rejection() == TerrainService.REASON_UNSTABLE_MATERIAL)
+	assert(grid.material_of(cell) == TerrainMaterialCatalog.DEFAULT_MATERIAL)
+	assert(service.paint_material(_brush([cell]), TerrainMaterialCatalog.STONE))
+
+
+## Variant numbers are meaningful only within their material palette. A carried
+## grass variant 3 therefore becomes mud's last valid variant (1), not a raw
+## texture-array layer.
+static func _test_material_paint_clamps_the_carried_variant() -> void:
+	var world := _make()
+	var grid: TerrainGrid = world["grid"]
+	var service: TerrainService = world["service"]
+	var cell := Vector2i(0, 0)
+	assert(service.paint_material(_brush([cell]), TerrainMaterialCatalog.GRASS, 3))
+	assert(grid.variant_at(cell) == 3)
+	assert(service.paint_material(_brush([cell]), TerrainMaterialCatalog.MUD))
+	assert(grid.variant_at(cell) == 1)
 
 
 ## §4.4: the delta carries the WHOLE column, detail byte included. Anything it

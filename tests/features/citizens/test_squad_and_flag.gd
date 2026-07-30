@@ -33,5 +33,5 @@ func _init() -> void:
 		assert(citizen.settlement_id == &"main_settlement", "Squad citizen should be bound to main_settlement upon flag placement")
 
 	print("SUCCESS: test_squad_and_flag passed completely!")
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

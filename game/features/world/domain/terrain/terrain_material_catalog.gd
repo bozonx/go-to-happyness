@@ -243,6 +243,15 @@ static func repose_steps_per_cell_of(material_id: StringName) -> float:
 	return repose_steps_per_cell_of_index(index_of(material_id))
 
 
+## True when this surface can hold a direct orthogonal height difference without
+## settling. Terrain sculpting resolves an excess through the cascade; a surface
+## repaint deliberately does not move ground, so the editor must refuse a paint
+## that would leave this column mechanically impossible.
+static func holds_height_difference(material_index: int, height_difference_steps: int) -> bool:
+	var repose := repose_steps_per_cell_of_index(material_index)
+	return is_inf(repose) or abs(height_difference_steps) <= repose + 0.0001
+
+
 # --- Navigation weight (§2) ---------------------------------------------------
 
 ## Base traversal cost multiplier of the bare surface, ignoring wear and snow.

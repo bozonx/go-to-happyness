@@ -52,5 +52,5 @@ func _init() -> void:
 	field_officer.overtime_mode = false
 	field_officer.overtime_until_workday_id = 0
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

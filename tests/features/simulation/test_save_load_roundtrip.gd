@@ -48,7 +48,7 @@ func _init() -> void:
 	envelope.engine_state = {"clock": {}}
 	envelope.module_states[contribution.get("module", "gth.settlement")] = contribution.get("state", {})
 	assert(envelope.save_to_file(SAVE_PATH), "save_to_file should succeed")
-	SimHelper.cleanup_simulation(self, sim_a)
+	await SimHelper.cleanup_simulation(self, sim_a)
 
 	# --- Instance B: fresh world, then load ---
 	var sim_b := await SimHelper.setup_simulation(self)
@@ -80,6 +80,6 @@ func _init() -> void:
 	var landscape_objects := sim_b.get_node("WorldTerritory/LandscapeObjects")
 	assert(sim_b.resource_piles.any(func(pile): return bool(pile.node.get_meta("landscape_owned", false)) and pile.node.get_parent() == landscape_objects), "starter world loot must return to the terrain hierarchy")
 
-	SimHelper.cleanup_simulation(self, sim_b)
+	await SimHelper.cleanup_simulation(self, sim_b)
 	print("  => Save/Load Round-Trip Test PASSED!")
 	quit(0)

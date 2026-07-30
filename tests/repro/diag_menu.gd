@@ -25,5 +25,5 @@ func _init() -> void:
 		var role: String = button.get_meta("role", "")
 		print("role='", role, "' visible=", button.visible, " disabled=", button.disabled, " connected=", button.pressed.get_connections().size(), " tooltip='", button.tooltip_text, "'")
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

@@ -52,5 +52,5 @@ func _init() -> void:
 			break
 	assert(waiting_delivery_published, "Couriers must supply waiting projects while builders work elsewhere")
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

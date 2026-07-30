@@ -31,5 +31,5 @@ func _init() -> void:
 			break
 
 	assert(simulation.construction_sites.is_empty(), "Daily builder should complete the warehouse construction")
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

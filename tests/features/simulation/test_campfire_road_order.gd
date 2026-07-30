@@ -33,5 +33,5 @@ func _init() -> void:
 	assert(is_equal_approx(normal_gain, TrailFieldService.NORMAL_TRAFFIC_STRENGTH))
 	assert(ordered_gain > normal_gain)
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

@@ -83,11 +83,12 @@ func handle_input(event: InputEvent) -> bool:
 		if _handle_common_mouse(button):
 			return true
 		if button.button_index == MOUSE_BUTTON_RIGHT:
-			if button.pressed:
+			if button.pressed and button.shift_pressed:
 				context.set_edit_label("вода")
 				context.water_brush.apply_secondary()
-			notify_ui_changed()
-			return true
+				notify_ui_changed()
+				return true
+			return false
 		if button.button_index != MOUSE_BUTTON_LEFT:
 			return false
 		_painting = button.pressed
@@ -151,8 +152,7 @@ func _stroke() -> void:
 
 func _edit_label() -> String:
 	match context.water_brush.tool:
-		WaterBrushController.TOOL_FLOOD: return "залив низины"
-		WaterBrushController.TOOL_LEVEL: return "уровень воды"
+		WaterBrushController.TOOL_FLOOD: return "наполнение водоёма"
 		WaterBrushController.TOOL_FREEZE: return "заморозка"
 		WaterBrushController.TOOL_THAW: return "разморозка"
 	return "вода"
@@ -212,8 +212,13 @@ func tool_options() -> Array:
 	var brush := context.water_brush
 	var options: Array = []
 	for tool: StringName in WaterBrushController.TOOLS:
+		var label: String = {
+			WaterBrushController.TOOL_FLOOD: "Наполнить",
+			WaterBrushController.TOOL_FREEZE: "Заморозить",
+			WaterBrushController.TOOL_THAW: "Разморозить",
+		}.get(tool, String(tool))
 		options.append(ToolOption.of(
-			StringName("%s%s" % [OPTION_TOOL_PREFIX, tool]), String(tool), &"tools", brush.tool == tool,
+			StringName("%s%s" % [OPTION_TOOL_PREFIX, tool]), label, &"tools", brush.tool == tool,
 		))
 	options.append(ToolOption.of(&"water_level", "Уровень %d" % brush.level, &"level", false, true))
 	options.append(ToolOption.of(OPTION_LEVEL_DOWN, "−", &"level"))
@@ -288,8 +293,8 @@ func inspector_lines() -> Array[String]:
 		])
 	lines.append("")
 	lines.append("Flood: ЛКМ по водоёму другого типа сменит тип всего водоёма")
-	lines.append("Уровень меняет весь выбранный водоём; Flood задаёт его контур")
-	lines.append("Заморозка и разморозка рисуются кистью; ПКМ — осушить весь водоём")
+	lines.append("Наполнение использует уровень и заменяет контур выбранного водоёма")
+	lines.append("Заморозка и разморозка рисуются кистью; Shift+ПКМ — осушить весь водоём")
 	return lines
 
 

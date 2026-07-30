@@ -18,5 +18,5 @@ func _init() -> void:
 		assert(is_instance_valid(citizen))
 		assert(citizen.visible)
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

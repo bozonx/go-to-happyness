@@ -63,7 +63,7 @@ func _init() -> void:
 	var route_warning := warnings.any(func(m: String) -> bool: return m.find("patrol") > 0)
 	assert(not route_warning, "patrol route is walkable: %s" % "; ".join(warnings))
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	print("--- test_zone_vertical_example.gd PASSED ---")
 	quit()
 

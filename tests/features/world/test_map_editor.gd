@@ -34,6 +34,7 @@ func _run() -> void:
 	_test_fill_placement_and_shared_undo(editor)
 	_test_surface_painting_moves_no_geometry(editor)
 	await _test_water_mode(editor)
+	_test_snow_paint_respects_water_and_slope(editor)
 	_test_ocean_boundary_floods_only_from_the_edge(editor)
 	_test_save_and_reopen(editor)
 	_test_new_map_is_unnamed_until_asked()
@@ -244,6 +245,49 @@ func _test_surface_painting_moves_no_geometry(editor: Node) -> void:
 	editor._undo()
 	assert(terrain.material_of(Vector2i(3, 3)) != TerrainMaterialCatalog.MUD, "undo restored the material")
 	print("  surface paint ok, zero chunks queued")
+
+
+## Snow is a terrain state, but the map editor must not author it below open
+## water or on near-vertical ground. A frozen lake remains eligible because ice
+## is a real walking surface.
+func _test_snow_paint_respects_water_and_slope(editor: Node) -> void:
+	var terrain: TerrainGrid = editor.document.terrain
+	var wet_cell := Vector2i(-6, 6)
+	var dry_cell := Vector2i(12, 12)
+	assert(editor.document.water.is_wet(terrain, wet_cell), "water test created an open-water cell")
+	editor._select_mode(&"surface")
+	var surface := editor._active as SurfaceModeController
+	surface._tool = SurfaceModeController.TOOL_SNOW
+	surface._snow_level = 3
+	editor._brush.hovered_cell = wet_cell
+	editor._brush.has_hover = true
+	surface.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	surface.handle_input(_click(MOUSE_BUTTON_LEFT, false))
+	assert(terrain.snow_depth_at(wet_cell) == 0, "open water rejected snow")
+
+	editor._brush.hovered_cell = dry_cell
+	editor._brush.has_hover = true
+	surface.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	surface.handle_input(_click(MOUSE_BUTTON_LEFT, false))
+	assert(terrain.snow_depth_at(dry_cell) == 3, "dry ground accepts snow")
+	terrain.set_cell_state(
+		dry_cell, terrain.height_of(dry_cell), SlopeCatalog.CLASS_VERY_STEEP,
+		SlopeCatalog.DIR_E, 0, terrain.material_index_at(dry_cell),
+		terrain.flags_of(dry_cell), terrain.detail_at(dry_cell),
+	)
+	surface._snow_level = 0
+	surface.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	surface.handle_input(_click(MOUSE_BUTTON_LEFT, false))
+	assert(terrain.snow_depth_at(dry_cell) == 0, "snow can always be cleared")
+	surface._snow_level = 2
+	surface.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	surface.handle_input(_click(MOUSE_BUTTON_LEFT, false))
+	assert(terrain.snow_depth_at(dry_cell) == 0, "very steep ground rejected snow")
+	terrain.set_cell_state(
+		dry_cell, terrain.height_of(dry_cell), SlopeCatalog.CLASS_FLAT,
+		0, 0, terrain.material_index_at(dry_cell), terrain.flags_of(dry_cell), terrain.detail_at(dry_cell),
+	)
+	print("  snow surface rules ok")
 
 
 ## Water mode end to end: make a body from the palette, dig a hollow, fill it,

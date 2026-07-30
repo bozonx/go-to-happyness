@@ -19,7 +19,7 @@ func _init() -> void:
 	# global explicitly to verify the scene lifecycle still restores it.
 	Engine.time_scale = 3.0
 	assert(is_equal_approx(Engine.time_scale, 3.0))
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	await process_frame
 	assert(is_equal_approx(Engine.time_scale, 1.0))
 	quit(0)

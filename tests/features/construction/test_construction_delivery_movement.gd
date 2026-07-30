@@ -46,5 +46,5 @@ func _init() -> void:
 	assert(delivered, "Courier should deliver branches to the construction site")
 	assert(delivered_resource == "branches", "Expected branches delivery")
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

@@ -22,5 +22,5 @@ func _init() -> void:
 		var has_order: bool = simulation.citizen_ai.has_current_order(c.ai_id)
 		print("t", step, " state=", c.state, " active_role=", c.active_role, " has_order=", has_order, " nav_failed=", c.navigation_failed, " pos=", c.global_position)
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

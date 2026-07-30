@@ -96,5 +96,5 @@ func _init() -> void:
 	var campfire_site: ConstructionSite = simulation.construction.site_for_node(simulation.construction_sites[0].node)
 	assert(int(campfire_site.delivered_materials.get("branches", 0)) == courier.courier_capacity(), "Construction delivery should use the courier's carrying capacity")
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

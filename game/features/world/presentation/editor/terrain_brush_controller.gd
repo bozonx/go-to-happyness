@@ -211,11 +211,19 @@ func paint_wear(level: int) -> void:
 func paint_snow(level: int) -> void:
 	if not has_hover:
 		return
+	paint_snow_cells(brush_cells(hovered_cell), level)
+
+
+## The map editor supplies the cells where snow can physically rest (dry ground,
+## ice, and gentle terrain). The generic brush deliberately stays water-agnostic
+## so the terrain lab can pose any surface state for diagnostics.
+func paint_snow_cells(cells: Array[Vector2i], level: int) -> bool:
 	var clamped := clampi(level, 0, TerrainDetailCodec.MAX_SNOW_DEPTH)
-	if _service.set_snow_depth(brush_cells(hovered_cell), clamped):
+	if _service.set_snow_depth(cells, clamped):
 		last_message = "snow depth %d" % clamped
-		return
+		return true
 	last_message = "snow unchanged"
+	return false
 
 
 ## Steps the value under the cursor by one. This is a keyboard affordance — one

@@ -25,5 +25,5 @@ func _init() -> void:
 	var delivery_snapshot := SettlementAIWorldFacade.new(simulation).capture(2)
 	assert(not bool(delivery_snapshot.citizen(courier.ai_id).facts.value(&"needs.can_start_toilet", true)), "Toilet need must wait until an active delivery finishes")
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

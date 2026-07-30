@@ -54,5 +54,5 @@ func _init() -> void:
 	assert(courier.construction_delivery_resource.is_empty(), "Delivery resource should be cleared")
 	assert(courier.state == Citizen.State.IDLE, "Courier should return to idle after the site disappears")
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

@@ -94,15 +94,22 @@ static func decode_into(buffer: PackedByteArray, grid: TerrainGrid) -> bool:
 			var index_flags := buffer[offset + 4]
 			# One call per cell: the grid recomputes nothing and marks the chunk
 			# dirty once, instead of once per field.
+			var material_index := buffer[offset + 1]
+			if not TerrainMaterialCatalog.is_valid_index(material_index):
+				material_index = TerrainMaterialCatalog.DEFAULT_INDEX
+			var detail := TerrainDetailCodec.with_variant(
+				buffer[offset + 2],
+				TerrainMaterialVariants.clamp_variant(material_index, TerrainDetailCodec.variant_of(buffer[offset + 2])),
+			)
 			grid.set_cell_state(
 				Vector2i(x, z),
 				buffer[offset] - HEIGHT_BIAS,
 				slope & SLOPE_CLASS_MASK,
 				(slope >> SLOPE_DIR_SHIFT) & SLOPE_DIR_MASK,
 				(index_flags >> SLOPE_INDEX_SHIFT) & SLOPE_INDEX_MASK,
-				buffer[offset + 1],
+				material_index,
 				index_flags & FLAGS_MASK,
-				buffer[offset + 2],
+				detail,
 			)
 			offset += BYTES_PER_CELL
 	return true

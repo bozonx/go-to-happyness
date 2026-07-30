@@ -95,5 +95,5 @@ func _init() -> void:
 	SimHelper.guard_citizen_positions(simulation)
 	assert(outside_worker.global_position == outside_return_position)
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

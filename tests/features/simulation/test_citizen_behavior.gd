@@ -77,5 +77,5 @@ func _init() -> void:
 	assert(resident.state == Citizen.State.TO_TREE)
 	assert(resident.source_access_position == work_target)
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

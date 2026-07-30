@@ -176,7 +176,7 @@ func _init() -> void:
 	simulation.foraging_service.update_gathering_indicators(false, "", "", 0.0, null, [])
 	assert(not simulation.gather_progress_labels.has(temporary_source_id))
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)
 
 

@@ -48,9 +48,9 @@ static func cleanup_simulation(tree: SceneTree, simulation: Node) -> void:
 		return
 	var runtime: Node = simulation.get_meta("test_runtime", null)
 	if is_instance_valid(runtime):
-		if runtime.get_parent() != null:
-			runtime.get_parent().remove_child(runtime)
 		runtime.free()
+		await tree.process_frame
+		await tree.physics_frame
 	var launch_manager := tree.root.get_node_or_null("GameLaunchManager")
 	if launch_manager != null:
 		launch_manager.active_session = null

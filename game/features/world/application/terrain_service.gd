@@ -13,6 +13,7 @@ extends RefCounted
 ## produces a change undo cannot see, which is worse than no undo at all.
 
 const MAX_UNDO_STEPS := 128
+const REASON_UNSTABLE_MATERIAL := &"unstable_material"
 
 signal edit_committed(delta: TerrainDelta)
 signal edit_rejected(reason: StringName)
@@ -132,18 +133,28 @@ func paint_material(cells: Array[Vector2i], material_id: StringName, variant: in
 	var material_index := TerrainMaterialCatalog.index_of(material_id)
 	if material_index < 0:
 		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
+	var paint_cells := CellUtils.sorted_unique(cells)
+	# Painting is intentionally a texel-only operation. Since it cannot cascade
+	# or rebuild geometry, reject a material which cannot hold the current slope
+	# rather than silently authoring a sand or mud cliff.
+	for cell: Vector2i in paint_cells:
+		if _grid.is_inside(cell) and not _material_is_stable_at(cell, material_index):
+			return _reject(REASON_UNSTABLE_MATERIAL)
 	var delta := TerrainDelta.new()
-	for cell: Vector2i in CellUtils.sorted_unique(cells):
+	for cell: Vector2i in paint_cells:
 		if not _grid.is_inside(cell):
 			continue
 		var old_state := TerrainDelta.state_of(_grid, cell)
 		var new_state := old_state.duplicate()
 		new_state[TerrainDelta.STATE_MATERIAL] = material_index
-		if variant >= 0:
-			new_state[TerrainDelta.STATE_DETAIL] = TerrainDetailCodec.with_variant(
-				old_state[TerrainDelta.STATE_DETAIL],
-				TerrainMaterialVariants.clamp_variant(material_index, variant),
-			)
+		# Detail belongs to the column, but a numeric variant belongs to a
+		# particular material. Preserve it only after clamping to the new palette;
+		# otherwise a stale mud variant can address an unrelated texture-array layer.
+		var requested_variant := variant if variant >= 0 else TerrainDetailCodec.variant_of(old_state[TerrainDelta.STATE_DETAIL])
+		new_state[TerrainDelta.STATE_DETAIL] = TerrainDetailCodec.with_variant(
+			old_state[TerrainDelta.STATE_DETAIL],
+			TerrainMaterialVariants.clamp_variant(material_index, requested_variant),
+		)
 		if new_state == old_state:
 			continue
 		delta.record(cell, old_state, new_state)
@@ -327,6 +338,21 @@ func _reject(reason: StringName) -> bool:
 	_last_rejection = reason
 	edit_rejected.emit(reason)
 	return false
+
+
+func _material_is_stable_at(cell: Vector2i, material_index: int) -> bool:
+	if _grid.is_hole(cell):
+		return false
+	var height := _grid.height_of(cell)
+	for direction: int in SlopeCatalog.ORTHOGONAL_DIRECTIONS:
+		var neighbour := cell + SlopeCatalog.direction_offset(direction)
+		if not _grid.is_inside(neighbour) or _grid.is_hole(neighbour):
+			continue
+		if not TerrainMaterialCatalog.holds_height_difference(
+			material_index, _grid.height_of(neighbour) - height,
+		):
+			return false
+	return true
 
 
 ## Stages a mutable copy of a column's state, keeping first-touch order so the

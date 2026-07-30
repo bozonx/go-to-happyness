@@ -25,10 +25,9 @@ extends BaseBrushController
 ## state the first seasonal pass overwrites wholesale. Freezing stays a button on
 ## the body (`toggle_body_ice`), which is the granularity the mechanic has.
 const TOOL_FLOOD := &"flood"
-const TOOL_LEVEL := &"level"
 const TOOL_FREEZE := &"freeze"
 const TOOL_THAW := &"thaw"
-const TOOLS: Array[StringName] = [TOOL_FLOOD, TOOL_LEVEL, TOOL_FREEZE, TOOL_THAW]
+const TOOLS: Array[StringName] = [TOOL_FLOOD, TOOL_FREEZE, TOOL_THAW]
 
 var tool: StringName = TOOL_FLOOD
 ## The body strokes go into. Zero until the author makes one — a stroke with no
@@ -116,8 +115,6 @@ func apply() -> void:
 	match tool:
 		TOOL_FLOOD:
 			_flood()
-		TOOL_LEVEL:
-			_set_level()
 		TOOL_FREEZE:
 			_set_frozen(true)
 		TOOL_THAW:
@@ -149,16 +146,6 @@ func _flood() -> void:
 ## body it belongs to. This is the one operation Flood cannot express: re-flooding
 ## at a lower level reaches fewer cells and leaves the rest standing at the old
 ## one, so a lake could be raised and never lowered.
-func _set_level() -> void:
-	if body_id == WaterBody.NO_BODY:
-		last_message = "select a water body first"
-		return
-	if _service.set_body_level(body_id, level):
-		last_message = "body level %d: %d cells" % [level, _service.last_delta_size()]
-		return
-	last_message = "level unchanged (%s)" % _service.last_rejection()
-
-
 ## Erase removes the whole body under the cursor, not a patch of cells. Water is
 ## authored per body — a lake is one entity with one level — so erasing a cell at a
 ## time would leave a half-drained body with no surface, which is not a state the
@@ -170,14 +157,10 @@ func _set_frozen(frozen: bool) -> void:
 	last_message = "ice unchanged (%s)" % _service.last_rejection()
 
 
-## Right button is the inverse or the complement of the left one: drain the whole
-## body under the cursor, except under the level tool, where the useful opposite of
-## "stamp this level" is "take the level from here".
+## Shift+right drains the whole body under the cursor. Plain right button remains
+## reserved for camera orbit.
 func apply_secondary() -> void:
 	if not has_hover or _service == null:
-		return
-	if tool == TOOL_LEVEL:
-		pick_level_from_ground()
 		return
 	_drain_body_at_hover()
 

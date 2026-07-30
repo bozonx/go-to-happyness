@@ -97,5 +97,5 @@ func _init() -> void:
 	test_tent.queue_free()
 	simulation.selected_house = null
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

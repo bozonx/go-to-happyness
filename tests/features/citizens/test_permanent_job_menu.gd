@@ -47,5 +47,5 @@ func _init() -> void:
 	assert(not construction_daily_button.disabled)
 
 	print("Permanent job menu tests passed.")
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

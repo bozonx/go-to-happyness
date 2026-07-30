@@ -119,7 +119,38 @@ func _paint() -> void:
 			context.brush.paint_wear(_wear_level)
 		TOOL_SNOW:
 			context.set_edit_label("снег")
-			context.brush.paint_snow(_snow_level)
+			_paint_snow()
+
+
+func _paint_snow() -> void:
+	var cells := context.brush.brush_cells(context.brush.hovered_cell)
+	# Clearing snow must also work on cells that became water or steep after an
+	# earlier authoring pass. Adding it follows the physical placement rule.
+	if _snow_level == 0:
+		context.brush.paint_snow_cells(cells, 0)
+		return
+	var eligible: Array[Vector2i] = []
+	var rejected := 0
+	for cell: Vector2i in cells:
+		if _snow_can_rest_on(cell):
+			eligible.append(cell)
+		else:
+			rejected += 1
+	if context.brush.paint_snow_cells(eligible, _snow_level) and rejected > 0:
+		context.brush.last_message += " · %d клеток пропущено" % rejected
+	elif eligible.is_empty():
+		context.brush.last_message = "снег: нет подходящей поверхности"
+
+
+func _snow_can_rest_on(cell: Vector2i) -> bool:
+	if not context.terrain.is_inside(cell) or context.terrain.is_hole(cell):
+		return false
+	# Open water has no ground surface for snow. Frozen water has an ice floor and
+	# is intentionally eligible: snowfall on a frozen lake is normal and its cost
+	# remains a weight, not a topology change.
+	if context.water != null and context.water.is_wet(context.terrain, cell) and not context.water.is_frozen(cell):
+		return false
+	return context.terrain.slope_class_at(cell) < SlopeCatalog.CLASS_VERY_STEEP
 
 
 # --- Panels -------------------------------------------------------------------
@@ -231,24 +262,7 @@ func empty_list_hint() -> String:
 	return "В режиме «Поверхность» объектов в списке пока нет"
 
 
-## Approximate colour of a material, for the palette swatch. Deliberately derived
-## from the catalog rather than stored beside it: a swatch is a convenience of
-## this panel and must not become a second place where materials are defined.
+## The palette reads the same generated swatch as terrain rendering. Keeping a
+## second match here made every catalog addition require an editor-only colour.
 func _swatch_of(index: int) -> Color:
-	match TerrainMaterialCatalog.ids()[index]:
-		TerrainMaterialCatalog.GRASS: return Color("6f9e4c")
-		TerrainMaterialCatalog.GRASS_TALL: return Color("587f3c")
-		TerrainMaterialCatalog.DIRT: return Color("7c5a3c")
-		TerrainMaterialCatalog.STONE: return Color("8b8d90")
-		TerrainMaterialCatalog.SAND: return Color("d8c58a")
-		TerrainMaterialCatalog.GRAVEL: return Color("9a9187")
-		TerrainMaterialCatalog.MUD: return Color("5c4632")
-		TerrainMaterialCatalog.SCORCHED: return Color("3a3532")
-		TerrainMaterialCatalog.ICE: return Color("bcd8e6")
-		TerrainMaterialCatalog.LUNAR_REGOLITH: return Color("9a9a97")
-		TerrainMaterialCatalog.LUNAR_ROCK: return Color("6e6e6c")
-		TerrainMaterialCatalog.MARS_REGOLITH: return Color("b5714a")
-		TerrainMaterialCatalog.MARS_ROCK: return Color("8a4a30")
-		_:
-			assert(false, "Unknown material index %d — add a swatch" % index)
-			return Color("808080")
+	return TerrainMaterialLibrary.swatch_of(index)

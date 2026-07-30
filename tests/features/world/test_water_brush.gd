@@ -23,7 +23,7 @@ static func run_all() -> void:
 	_test_create_body_is_undoable()
 	_test_undo_and_redo()
 	_test_freeze_and_thaw()
-	_test_level_tool_stamps_an_absolute_level()
+	_test_fill_replaces_a_body_with_the_selected_level()
 	_test_freeze_and_thaw_brushes_are_cell_local()
 	print("    [PASS] Water Brush Tests")
 
@@ -176,8 +176,6 @@ static func _test_cycle_tool_rotates_the_water_tools() -> void:
 
 	assert(brush.tool == WaterBrushController.TOOL_FLOOD)
 	brush.cycle_tool()
-	assert(brush.tool == WaterBrushController.TOOL_LEVEL)
-	brush.cycle_tool()
 	assert(brush.tool == WaterBrushController.TOOL_FREEZE)
 	brush.cycle_tool()
 	assert(brush.tool == WaterBrushController.TOOL_THAW)
@@ -273,12 +271,11 @@ static func _test_freeze_and_thaw() -> void:
 	assert(not water.is_frozen(centre))
 
 
-# --- Level and erase ------------------------------------------------------------
+# --- Fill level ---------------------------------------------------------------
 
-## The level tool is what makes a lake reversible. Flood only reaches cells below
-## the level it is given, so lowering one by re-flooding leaves every deeper cell
-## where it was; `level` stamps an absolute surface onto what is already wet.
-static func _test_level_tool_stamps_an_absolute_level() -> void:
+## Fill owns both the contour and level. Re-filling a selected body replaces its
+## old surface, so lowering cannot leave a second sheet of water behind.
+static func _test_fill_replaces_a_body_with_the_selected_level() -> void:
 	var world := _make()
 	var terrain: TerrainGrid = world["terrain"]
 	var water: WaterGrid = world["water"]
@@ -292,17 +289,10 @@ static func _test_level_tool_stamps_an_absolute_level() -> void:
 	brush.apply()
 	assert(water.height_of(Vector2i.ZERO) == 0)
 
-	brush.tool = WaterBrushController.TOOL_LEVEL
-	brush.adjust_brush_size(2)
 	brush.level = -1
 	brush.apply()
 	assert(water.height_of(Vector2i.ZERO) == -1, "the surface came down")
 	assert(water.is_wet(terrain, Vector2i.ZERO), "and there is still water in the hole")
-
-	# Right button under this tool takes the level from the ground instead of
-	# stamping one: the natural way to say "fill this to just over that rock".
-	brush.apply_secondary()
-	assert(brush.level == terrain.height_of(Vector2i.ZERO) + 1)
 
 
 ## Ice is the only local water brush: it authors passability, not a separate

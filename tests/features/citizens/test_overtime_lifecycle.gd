@@ -44,5 +44,5 @@ func _init() -> void:
 	assert(simulation.settlement.workday_hours == 6)
 	assert(simulation.settlement.pending_workday_hours == 0)
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

@@ -107,5 +107,5 @@ func _init() -> void:
 	assert(simulation.construction_sites.is_empty())
 	assert(simulation.building_registry.record_at_cell(cell) == null)
 
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

@@ -50,5 +50,5 @@ func _init() -> void:
 	assert(replacement.employment_workplace == civic_post)
 
 	print("Civic research post tests passed.")
-	SimHelper.cleanup_simulation(self, simulation)
+	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

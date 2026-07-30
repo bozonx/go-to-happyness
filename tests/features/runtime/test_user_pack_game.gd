@@ -60,8 +60,9 @@ func _run() -> void:
 	assert(showcase != null, "the user-pack game must not instantiate SettlementGame")
 	assert(showcase.world_setup != null)
 
-	runtime.queue_free()
+	runtime.free()
 	await process_frame
+	await physics_frame
 	_uninstall_fixture()
 	# After cleanup the installed game is gone, so the content index no longer lists it.
 	# `get_entry` is the lookup primitive; `resolve_definition` would log a spurious error.
