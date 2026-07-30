@@ -20,12 +20,22 @@ class PaletteEntry:
 	var id: StringName
 	var label: String
 	var color := Color(0, 0, 0, 0)
+	var is_header := false
+	var is_expanded := false
 
 	static func of(entry_id: StringName, entry_label: String, swatch := Color(0, 0, 0, 0)) -> PaletteEntry:
 		var entry := PaletteEntry.new()
 		entry.id = entry_id
 		entry.label = entry_label
 		entry.color = swatch
+		return entry
+
+	static func header(header_id: StringName, header_label: String, expanded := false) -> PaletteEntry:
+		var entry := PaletteEntry.new()
+		entry.id = header_id
+		entry.label = ("▼ " if expanded else "► ") + header_label
+		entry.is_header = true
+		entry.is_expanded = expanded
 		return entry
 
 

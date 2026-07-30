@@ -40,8 +40,13 @@ func set_entries(entries: Array, selected: StringName) -> void:
 		button.focus_mode = Control.FOCUS_NONE
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.button_pressed = entry.id == selected
-		if entry.color.a > 0.0:
+		button.button_pressed = entry.id == selected or (entry.is_header and entry.is_expanded)
+		if entry.is_header:
+			var header_color := Color(0.85, 0.88, 0.95)
+			button.add_theme_color_override("font_color", header_color)
+			button.add_theme_color_override("font_pressed_color", header_color)
+			button.add_theme_color_override("font_hover_color", header_color.lightened(0.15))
+		elif entry.color.a > 0.0:
 			# The swatch is the label's colour rather than a separate square: it
 			# survives every theme and costs no layout. Raised to a readable
 			# lightness first — `scorched` is nearly black, and its own colour on a

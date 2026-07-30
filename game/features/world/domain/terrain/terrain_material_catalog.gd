@@ -34,6 +34,7 @@ const LUNAR_REGOLITH := &"lunar_regolith"
 const LUNAR_ROCK := &"lunar_rock"
 const MARS_REGOLITH := &"mars_regolith"
 const MARS_ROCK := &"mars_rock"
+const CLAY := &"clay"
 
 ## Soil types digging yields in survival (parent §8). Plain identifiers: the
 ## economy that consumes them does not exist yet, and inventing a resource enum
@@ -46,6 +47,7 @@ const SOIL_MUD := &"mud"
 const SOIL_ASH := &"ash"
 const SOIL_ICE := &"ice"
 const SOIL_REGOLITH := &"regolith"
+const SOIL_CLAY := &"clay"
 
 ## Auto-rock face kinds (§3). A vertical face is never drawn with the top
 ## material — grass on a sheer wall reads as a rendering bug — so every material
@@ -148,6 +150,11 @@ const MATERIALS: Array = [
 		"nav_weight": 1.2, "soil": SOIL_STONE, "cliff": CLIFF_LAYERED_ROCK,
 		"wear_weights": null, "wear_recovery_days": 0,
 	},
+	{
+		"id": CLAY, "index": 13, "repose_class": SlopeCatalog.CLASS_STEEP,
+		"nav_weight": 1.1, "soil": SOIL_CLAY, "cliff": CLIFF_WET_CLAY,
+		"wear_weights": null, "wear_recovery_days": 4,
+	},
 ]
 
 const DEFAULT_MATERIAL := GRASS
@@ -161,12 +168,12 @@ const SNOW_WEIGHT_BY_DEPTH: Array[float] = [1.0, 1.4, 1.8, 2.2]
 ## cell of a chunk; none of them may pay for a dictionary scan per query.
 const IDS: Array[StringName] = [
 	GRASS, DIRT, STONE, SAND, GRAVEL, MUD, GRASS_TALL, SCORCHED, ICE,
-	LUNAR_REGOLITH, LUNAR_ROCK, MARS_REGOLITH, MARS_ROCK,
+	LUNAR_REGOLITH, LUNAR_ROCK, MARS_REGOLITH, MARS_ROCK, CLAY,
 ]
 const INDEX_BY_ID := {
 	GRASS: 0, DIRT: 1, STONE: 2, SAND: 3, GRAVEL: 4, MUD: 5, GRASS_TALL: 6,
 	SCORCHED: 7, ICE: 8, LUNAR_REGOLITH: 9, LUNAR_ROCK: 10, MARS_REGOLITH: 11,
-	MARS_ROCK: 12,
+	MARS_ROCK: 12, CLAY: 13,
 }
 const REPOSE_CLASS_BY_INDEX: Array[int] = [
 	SlopeCatalog.CLASS_STEEP,
@@ -182,13 +189,14 @@ const REPOSE_CLASS_BY_INDEX: Array[int] = [
 	SlopeCatalog.CLASS_PRE_CLIFF,
 	SlopeCatalog.CLASS_MODERATE,
 	SlopeCatalog.CLASS_PRE_CLIFF,
+	SlopeCatalog.CLASS_STEEP,
 ]
 const NAV_WEIGHT_BY_INDEX: Array[float] = [
-	1.0, 1.0, 1.2, 1.3, 1.15, 2.0, 2.0, 1.1, 1.0, 1.0, 1.2, 1.1, 1.2,
+	1.0, 1.0, 1.2, 1.3, 1.15, 2.0, 2.0, 1.1, 1.0, 1.0, 1.2, 1.1, 1.2, 1.1,
 ]
-const CLIFF_INDEX_BY_INDEX: Array[int] = [0, 0, 4, 2, 3, 1, 0, 0, 5, 6, 4, 6, 4]
+const CLIFF_INDEX_BY_INDEX: Array[int] = [0, 0, 4, 2, 3, 1, 0, 0, 5, 6, 4, 6, 4, 1]
 
-const MATERIAL_COUNT := 13
+const MATERIAL_COUNT := 14
 
 
 static func count() -> int:

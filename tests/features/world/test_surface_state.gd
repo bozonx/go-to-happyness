@@ -284,19 +284,26 @@ static func _test_tall_grass_decor_follows_surface_state() -> void:
 static func _test_medium_grass_decor_follows_variant_and_surface_state() -> void:
 	var grid := TerrainGrid.new()
 	grid.configure(1.0, 4)
+	grid.set_variant(Vector2i(0, 0), 0)
+	grid.set_variant(Vector2i(1, 0), 1)
+	grid.set_variant(Vector2i(0, 1), 2)
+	grid.set_variant(Vector2i(1, 1), 3)
 	var decor := TerrainMediumGrass.new()
 	var first := decor.build_chunk(grid, Vector2i.ZERO)
 	var second := decor.build_chunk(grid, Vector2i.ZERO)
-	assert(first.instance_count == 8) # four in-bounds cells, two clumps each
+	assert(first.instance_count == 8) # plain 2 + lush 3 + flowering 2 + parched 1
 	for index in first.instance_count:
 		assert(first.get_instance_transform(index) == second.get_instance_transform(index))
+	# DummyRenderer does not retain per-instance custom buffers for reading back,
+	# so cover the shared encoder directly; the Forward+ lab capture covers use.
+	for variant in TerrainMediumGrass.VARIANT_COUNT:
+		var stored := TerrainMediumGrass.atlas_custom_data_for(variant).r
+		assert(roundi(stored * float(TerrainMediumGrass.VARIANT_COUNT - 1)) == variant)
 
 	grid.set_wear(Vector2i(0, 0), 1)
 	assert(decor.build_chunk(grid, Vector2i.ZERO).instance_count == 7)
 	grid.set_snow_depth(Vector2i(1, 0), 2)
-	assert(decor.build_chunk(grid, Vector2i.ZERO).instance_count == 5)
-	grid.set_variant(Vector2i(0, 1), 1) # lush adds one clump
-	assert(decor.build_chunk(grid, Vector2i.ZERO).instance_count == 6)
+	assert(decor.build_chunk(grid, Vector2i.ZERO).instance_count == 4)
 
 
 # --- Weights in navigation ------------------------------------------------------

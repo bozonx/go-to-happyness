@@ -31,6 +31,7 @@ func _run() -> void:
 	_test_validation(editor)
 	_test_mode_switching(editor)
 	await _test_terrain_editing_and_shared_undo(editor)
+	_test_ramp_connection_and_shared_undo(editor)
 	_test_fill_placement_and_shared_undo(editor)
 	_test_surface_painting_moves_no_geometry(editor)
 	await _test_water_mode(editor)
@@ -148,6 +149,39 @@ func _test_terrain_editing_and_shared_undo(editor: Node) -> void:
 	for x in range(0, 5):
 		assert(terrain.height_of(Vector2i(x, 0)) == 0, "column %d back to flat" % x)
 	print("  terrain edit + cross-mode undo + per-column drag ok")
+
+
+## The real palette and mouse path must create a ramp, not merely expose the
+## catalog. This is the regression the unit-level grid tests cannot catch.
+func _test_ramp_connection_and_shared_undo(editor: Node) -> void:
+	var terrain: TerrainGrid = editor.document.terrain
+	editor._select_mode(&"terrain")
+	assert(editor.history.undo_depth() == 0)
+	terrain.set_height(Vector2i(2, 0), 3)
+	terrain.set_height(Vector2i(4, 0), 1)
+	editor._active.select_palette_entry(&"ramp")
+	editor._brush.hovered_cell = Vector2i(0, 0)
+	editor._brush.has_hover = true
+	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	editor._brush.hovered_cell = Vector2i(4, 0)
+	editor._active._update_ramp_preview()
+	assert(editor.ramp_preview.visible, "drag shows a ramp preview")
+	assert(editor.ramp_preview.mesh.get_aabb().size.y > 0.4, "preview is an inclined surface, not flat squares")
+	assert(editor._message.contains("будет изменено клеток: 1"), "preview explains the pending reshape")
+	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, false))
+	assert(terrain.is_ramp_valid_at(Vector2i(2, 0)), "drag connected the two height anchors")
+	assert(terrain.slope_class_at(Vector2i(2, 0)) == SlopeCatalog.CLASS_GENTLE, "Auto selected the 1:4 profile")
+	assert(terrain.height_of(Vector2i(2, 0)) == 0, "connection reshaped uneven ground")
+	assert(editor.history.undo_depth() == 1, "reshape and ramp are one editor command")
+	editor._undo()
+	assert(terrain.height_of(Vector2i(2, 0)) == 3, "undo restored reshaped ground")
+	assert(terrain.slope_class_at(Vector2i(2, 0)) == SlopeCatalog.CLASS_FLAT, "undo removed the ramp")
+	# Test setup is not an authored command; return the shared document to the flat
+	# state expected by the following mode tests.
+	terrain.set_height(Vector2i(2, 0), 0)
+	terrain.set_height(Vector2i(4, 0), 0)
+	editor._active.select_palette_entry(&"sculpt")
+	print("  ramp connection + shared undo ok")
 
 
 ## The first Fill Mode slice must use the same real input, document and history

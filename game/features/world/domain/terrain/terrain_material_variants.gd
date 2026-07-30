@@ -36,6 +36,7 @@ const VARIANTS_BY_INDEX: Array = [
 	[&"breccia", &"light_rock"],                            # lunar_rock
 	[&"red", &"ochre"],                                     # mars_regolith
 	[&"basalt", &"layered"],                                # mars_rock
+	[&"red", &"grey", &"dry"],                              # clay
 ]
 
 ## Layers 0 … `MATERIAL_LAYER_COUNT-1` are material × variant; the auto-rock face

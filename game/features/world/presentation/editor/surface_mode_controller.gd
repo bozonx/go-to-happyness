@@ -157,15 +157,40 @@ func _snow_can_rest_on(cell: Vector2i) -> bool:
 	return context.terrain.slope_class_at(cell) < SlopeCatalog.CLASS_VERY_STEEP
 
 
+const ACCORDION_EARTH := &"accordion_earth"
+const ACCORDION_EXOPLANET := &"accordion_exoplanet"
+
+const EXOPLANET_MATERIALS: Array[StringName] = [
+	TerrainMaterialCatalog.LUNAR_REGOLITH,
+	TerrainMaterialCatalog.LUNAR_ROCK,
+	TerrainMaterialCatalog.MARS_REGOLITH,
+	TerrainMaterialCatalog.MARS_ROCK,
+]
+
+var _expanded_accordion: StringName = &"earth"
+
+
 # --- Panels -------------------------------------------------------------------
 
-## The whole catalog, each entry carrying the colour it paints so the palette is
-## readable without a texture atlas.
+## The catalog split into Earth and Exoplanet accordions, with only one open at a time.
 func palette_entries() -> Array:
 	var entries: Array = []
-	for index in TerrainMaterialCatalog.count():
-		var material_id: StringName = TerrainMaterialCatalog.ids()[index]
-		entries.append(PaletteEntry.of(material_id, String(material_id), _swatch_of(index)))
+	var earth_open := _expanded_accordion == &"earth"
+	entries.append(PaletteEntry.header(ACCORDION_EARTH, "Земля", earth_open))
+	if earth_open:
+		for index in TerrainMaterialCatalog.count():
+			var material_id: StringName = TerrainMaterialCatalog.ids()[index]
+			if not EXOPLANET_MATERIALS.has(material_id):
+				entries.append(PaletteEntry.of(material_id, "  " + String(material_id), _swatch_of(index)))
+
+	var exo_open := _expanded_accordion == &"exoplanet"
+	entries.append(PaletteEntry.header(ACCORDION_EXOPLANET, "Экзопланеты", exo_open))
+	if exo_open:
+		for index in TerrainMaterialCatalog.count():
+			var material_id: StringName = TerrainMaterialCatalog.ids()[index]
+			if EXOPLANET_MATERIALS.has(material_id):
+				entries.append(PaletteEntry.of(material_id, "  " + String(material_id), _swatch_of(index)))
+
 	return entries
 
 
@@ -174,9 +199,22 @@ func selected_palette_entry() -> StringName:
 
 
 func select_palette_entry(entry_id: StringName) -> void:
+	if entry_id == ACCORDION_EARTH:
+		_expanded_accordion = &"earth"
+		notify_ui_changed()
+		return
+	elif entry_id == ACCORDION_EXOPLANET:
+		_expanded_accordion = &"exoplanet"
+		notify_ui_changed()
+		return
+
 	var index := TerrainMaterialCatalog.index_of(entry_id)
 	if index >= 0:
 		context.brush.set_material_index(index)
+		if EXOPLANET_MATERIALS.has(entry_id):
+			_expanded_accordion = &"exoplanet"
+		else:
+			_expanded_accordion = &"earth"
 		if _tool == TOOL_WEAR and not _selected_material_supports_wear():
 			_tool = TOOL_MATERIAL
 		notify_ui_changed()

@@ -301,6 +301,23 @@ func place_ramp() -> void:
 	]
 
 
+## Map-editor gesture: connect two picked height anchors, reshaping the run when
+## needed. The terrain laboratory keeps the one-click `place_ramp` entry point;
+## both still write through the same service and history.
+func connect_ramp(first_cell: Vector2i, second_cell: Vector2i, requested_class: int = RampConnectionPlan.AUTO_CLASS) -> void:
+	var plan := RampConnectionPlan.between(_grid, first_cell, second_cell, requested_class)
+	if not plan.is_valid():
+		last_message = "ramp refused: %s" % plan.reason
+		return
+	if _service.connect_ramp(first_cell, second_cell, requested_class):
+		last_message = "ramp %s connected%s" % [
+			SlopeCatalog.id_of_class(plan.slope_class),
+			"; %d cells reshaped" % plan.reshaped_cells if plan.reshaped_cells > 0 else "",
+		]
+		return
+	last_message = "ramp refused: %s" % _service.last_rejection()
+
+
 func dissolve_ramp() -> void:
 	if not has_hover:
 		return

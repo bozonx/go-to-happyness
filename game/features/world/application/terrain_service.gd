@@ -104,6 +104,29 @@ func place_ramp(start_cell: Vector2i, slope_id: StringName, direction: int) -> b
 	return true
 
 
+## Connects two authored height anchors with one catalog ramp. Unlike the legacy
+## one-click placement verb, this is allowed to reshape uneven intermediate
+## columns. The reshape and slope descriptors are one delta, so the author sees
+## one action and Ctrl+Z restores both the old heights and the old surfaces.
+func connect_ramp(first_cell: Vector2i, second_cell: Vector2i, requested_class: int = RampConnectionPlan.AUTO_CLASS) -> bool:
+	if _grid == null:
+		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
+	var plan := RampConnectionPlan.between(_grid, first_cell, second_cell, requested_class)
+	if not plan.is_valid():
+		return _reject(plan.reason)
+	var delta := TerrainDelta.new()
+	for step in plan.cells.size():
+		var cell: Vector2i = plan.cells[step]
+		var old_state := TerrainDelta.state_of(_grid, cell)
+		delta.record(cell, old_state, TerrainDelta.make_state(
+			plan.base_height, plan.slope_class, plan.direction, step,
+			old_state[TerrainDelta.STATE_MATERIAL], old_state[TerrainDelta.STATE_FLAGS],
+			old_state[TerrainDelta.STATE_DETAIL],
+		))
+	_commit(delta)
+	return true
+
+
 ## Dissolves the ramp under `cell` back into flat columns, as one undoable step.
 func dissolve_ramp(cell: Vector2i) -> bool:
 	if _grid == null:

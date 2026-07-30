@@ -9,7 +9,7 @@ extends RefCounted
 ## surface. `GridTerrainWorld` rebuilds only this cheap MultiMesh when surface
 ## details change; the terrain mesh remains untouched.
 
-const TEXTURE_PATH := "res://game/features/world/presentation/terrain/assets/tall_grass.png"
+const TEXTURE_PATH := "res://game/features/world/presentation/terrain/assets/grass_tall_meadow.png"
 const SHADER_PATH := "res://game/features/world/presentation/terrain/tall_grass.gdshader"
 
 const CARD_WIDTH := 0.82

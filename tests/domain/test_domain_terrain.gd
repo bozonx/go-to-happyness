@@ -18,6 +18,7 @@ static func run_all() -> void:
 	_test_flat_cell_corners()
 	_test_height_at_samples_across_cells()
 	_test_ramp_placement_rules()
+	_test_ramp_connection_reshapes_ground_atomically()
 	_test_ramp_unrolls_into_fractional_corners_only()
 	_test_corners_follow_orthogonal_neighbours()
 	_test_shallow_ramp_spans_eight_cells()
@@ -208,6 +209,39 @@ static func _test_ramp_placement_rules() -> void:
 	assert(not grid.place_ramp(Vector2i(0, 8), &"custom_30_degrees", SlopeCatalog.DIR_E))
 	# A run leaving the board cannot fit either.
 	assert(not grid.place_ramp(grid.max_cell() - Vector2i(1, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
+
+
+static func _test_ramp_connection_reshapes_ground_atomically() -> void:
+	var grid := _make_grid()
+	var service := TerrainService.new()
+	service.configure(grid)
+	# The gesture anchors are four cells apart and one step apart: Auto therefore
+	# chooses gentle. Uneven ground in the run is authored noise the connection
+	# tool is explicitly allowed to reshape.
+	grid.set_height(Vector2i(2, 0), 3)
+	grid.set_height(Vector2i(4, 0), 1)
+	var plan := RampConnectionPlan.between(grid, Vector2i(0, 0), Vector2i(4, 0))
+	assert(plan.is_valid())
+	assert(plan.slope_class == SlopeCatalog.CLASS_GENTLE)
+	assert(plan.direction == SlopeCatalog.DIR_E)
+	assert(plan.reshaped_cells == 1)
+	assert(service.connect_ramp(Vector2i(0, 0), Vector2i(4, 0)))
+	for x in 4:
+		assert(grid.height_of(Vector2i(x, 0)) == 0)
+		assert(grid.slope_class_at(Vector2i(x, 0)) == SlopeCatalog.CLASS_GENTLE)
+	assert(grid.is_ramp_valid_at(Vector2i(2, 0)))
+	# One undo restores both the old height and the absence of a slope.
+	assert(service.undo())
+	assert(grid.height_of(Vector2i(2, 0)) == 3)
+	assert(grid.slope_class_at(Vector2i(2, 0)) == SlopeCatalog.CLASS_FLAT)
+	# Direction comes from relative heights, not drag order.
+	var reverse := RampConnectionPlan.between(grid, Vector2i(4, 0), Vector2i(0, 0))
+	assert(reverse.is_valid() and reverse.direction == SlopeCatalog.DIR_E)
+	assert(RampConnectionPlan.between(grid, Vector2i.ZERO, Vector2i(1, 1)).reason == RampConnectionPlan.REASON_NOT_STRAIGHT)
+	assert(RampConnectionPlan.between(grid, Vector2i.ZERO, Vector2i(3, 0)).reason == RampConnectionPlan.REASON_SAME_HEIGHT)
+	assert(RampConnectionPlan.between(
+		grid, Vector2i.ZERO, Vector2i(4, 0), SlopeCatalog.CLASS_MODERATE,
+	).reason == RampConnectionPlan.REASON_WRONG_RUN)
 
 
 static func _test_ramp_unrolls_into_fractional_corners_only() -> void:

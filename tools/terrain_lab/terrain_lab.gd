@@ -601,14 +601,16 @@ func _setup_medium_grass_scene() -> void:
 		for x in range(-9, 10):
 			var cell := Vector2i(x, z)
 			grid.set_material(cell, TerrainMaterialCatalog.GRASS)
-			if x < -3:
+			if x < -5:
+				grid.set_variant(cell, 0) # plain
+			elif x < 0:
 				grid.set_variant(cell, 1) # lush
-			elif x >= -2 and x <= 3:
-				grid.set_wear(cell, 1)
-			elif x >= 4:
-				grid.set_wear(cell, 2)
+			elif x < 5:
+				grid.set_variant(cell, 2) # flowering
+			else:
+				grid.set_variant(cell, 3) # parched
 	_republish_navigation()
-	brush.last_message = "grass: lush / plain / wear 1 / bare wear 2"
+	brush.last_message = "grass variants: plain / lush / flowering / parched"
 
 
 # --- Demo terrain -----------------------------------------------------------

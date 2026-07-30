@@ -41,6 +41,7 @@ const MATERIAL_COLOURS: Array[Color] = [
 	Color(0.48, 0.47, 0.45),  # lunar_rock
 	Color(0.55, 0.32, 0.20),  # mars_regolith
 	Color(0.36, 0.24, 0.19),  # mars_rock
+	Color(0.62, 0.38, 0.26),  # clay
 ]
 
 ## Face kinds, in `TerrainMaterialCatalog.CLIFF_IDS` order.
@@ -57,12 +58,12 @@ const CLIFF_COLOURS: Array[Color] = [
 ## Grain size of the generated noise per material, in texels. Sand is fine, gravel
 ## is chunky; it is the cheapest way to make placeholder layers distinguishable
 ## while blending is being judged.
-const GRAIN_BY_MATERIAL: Array[int] = [6, 7, 12, 3, 5, 9, 5, 8, 16, 4, 12, 4, 12]
+const GRAIN_BY_MATERIAL: Array[int] = [6, 7, 12, 3, 5, 9, 5, 8, 16, 4, 12, 4, 12, 7]
 
 ## How strongly the generated height map varies. High-contrast height makes the
 ## blend edge interlock (stone through grass); flat height makes it a soft fade.
 const HEIGHT_CONTRAST_BY_MATERIAL: Array[float] = [
-	0.45, 0.5, 0.9, 0.35, 0.8, 0.4, 0.5, 0.5, 0.3, 0.4, 0.85, 0.4, 0.85,
+	0.45, 0.5, 0.9, 0.35, 0.8, 0.4, 0.5, 0.5, 0.3, 0.4, 0.85, 0.4, 0.85, 0.5,
 ]
 
 var _array: Texture2DArray = null

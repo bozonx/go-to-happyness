@@ -16,7 +16,6 @@ const OPTION_MODE := &"edit_mode"
 const OPTION_BRUSH_UP := &"brush_up"
 const OPTION_BRUSH_DOWN := &"brush_down"
 const OPTION_RAMP_CLASS := &"ramp_class"
-const OPTION_RAMP_DIR := &"ramp_dir"
 const OPTION_NAV_NONE := &"nav_none"
 const OPTION_NAV_PEDESTRIAN := &"nav_pedestrian"
 const OPTION_NAV_CART := &"nav_cart"
@@ -37,6 +36,13 @@ const TOOLS: Array[StringName] = [TOOL_SCULPT, TOOL_RAMP, TOOL_HOLE]
 
 var _tool: StringName = TOOL_SCULPT
 var _nav_profile_index := 0
+## Ramp connection is a two-anchor gesture. Auto is the useful default; exact
+## catalog classes remain available for authors who need a specific traversal
+## profile or footprint.
+var _ramp_requested_class := RampConnectionPlan.AUTO_CLASS
+var _ramp_dragging := false
+var _ramp_drag_start := Vector2i.ZERO
+var _last_ramp_status := ""
 ## Hole tool: true = cut, false = fill. Left-click applies the selected mode,
 ## Shift+right applies the inverse — same pattern as sculpt's raise/lower.
 var _hole_cutting := true
@@ -55,6 +61,7 @@ func activate() -> void:
 
 
 func deactivate() -> void:
+	_cancel_ramp_drag()
 	if context != null and context.brush != null:
 		context.brush.set_paint_direction(0)
 	if context != null and context.nav_overlay != null:
@@ -64,6 +71,8 @@ func deactivate() -> void:
 
 
 func clear_hover() -> void:
+	if _ramp_dragging:
+		_cancel_ramp_drag()
 	if context != null and context.brush != null:
 		context.brush.clear_hover()
 	if context != null and context.ramp_preview != null:
@@ -94,6 +103,8 @@ func handle_input(event: InputEvent) -> bool:
 
 
 func _handle_mouse(event: InputEventMouseButton) -> bool:
+	if _tool == TOOL_RAMP:
+		return _handle_ramp_mouse(event)
 	if _handle_common_mouse(event):
 		return true
 	if event.button_index == MOUSE_BUTTON_LEFT and event.shift_pressed and event.pressed:
@@ -134,14 +145,6 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 		TOOL_SCULPT:
 			context.set_edit_label("рельеф")
 			context.brush.set_paint_direction(direction if event.pressed else 0)
-		TOOL_RAMP:
-			if event.pressed:
-				context.set_edit_label("пандус")
-				if direction > 0:
-					context.brush.place_ramp()
-				else:
-					context.brush.dissolve_ramp()
-				context.set_status_message(context.brush.last_message)
 		TOOL_HOLE:
 			if event.pressed:
 				var cutting := _hole_cutting if direction > 0 else not _hole_cutting
@@ -152,13 +155,54 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 	return true
 
 
+func _handle_ramp_mouse(event: InputEventMouseButton) -> bool:
+	if event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			if not context.brush.has_hover:
+				return true
+			_ramp_dragging = true
+			_ramp_drag_start = context.brush.hovered_cell
+			context.set_edit_label("соединение высот")
+			_set_ramp_status("Пандус: протяните к площадке другой высоты")
+		else:
+			if not _ramp_dragging:
+				return true
+			var end_cell := context.brush.hovered_cell
+			var had_hover := context.brush.has_hover
+			_ramp_dragging = false
+			if had_hover:
+				var plan := RampConnectionPlan.between(
+					context.terrain, _ramp_drag_start, end_cell, _ramp_requested_class,
+				)
+				context.brush.connect_ramp(_ramp_drag_start, end_cell, _ramp_requested_class)
+				_set_ramp_status(_ramp_result_message(plan))
+			_redraw_overlay()
+		_update_ramp_preview()
+		notify_ui_changed()
+		return true
+	if event.button_index == MOUSE_BUTTON_RIGHT and event.shift_pressed and event.pressed:
+		context.set_edit_label("удаление пандуса")
+		context.brush.dissolve_ramp()
+		_set_ramp_status("Пандус удалён" if context.brush.last_message == "ramp dissolved" else "Под курсором нет пандуса")
+		_redraw_overlay()
+		notify_ui_changed()
+		return true
+	return false
+
+
 func _handle_key(event: InputEventKey) -> bool:
 	match event.keycode:
 		KEY_TAB:
 			_tool = TOOLS[(TOOLS.find(_tool) + 1) % TOOLS.size()]
 			if _tool == TOOL_RAMP:
 				context.set_status_message(_ramp_guidance_message())
+			else:
+				_cancel_ramp_drag()
+				if context.ramp_preview != null:
+					context.ramp_preview.hide_preview()
 		KEY_F:
+			if _tool != TOOL_SCULPT:
+				return false
 			context.set_edit_label("выравнивание")
 			context.brush.apply_flatten()
 			_redraw_overlay()
@@ -167,14 +211,17 @@ func _handle_key(event: InputEventKey) -> bool:
 		KEY_T:
 			_cycle_profile()
 		KEY_BRACKETLEFT:
+			if _tool == TOOL_RAMP:
+				return false
 			context.brush.adjust_brush_size(-1)
 		KEY_BRACKETRIGHT:
+			if _tool == TOOL_RAMP:
+				return false
 			context.brush.adjust_brush_size(1)
 		KEY_C:
-			context.brush.cycle_ramp_class()
-			context.set_status_message(_ramp_message())
-		KEY_V:
-			context.brush.cycle_ramp_direction()
+			if _tool != TOOL_RAMP:
+				return false
+			_cycle_ramp_profile()
 			context.set_status_message(_ramp_message())
 		_:
 			return false
@@ -211,7 +258,7 @@ func _cycle_profile() -> void:
 func palette_entries() -> Array:
 	var entries: Array = []
 	entries.append(PaletteEntry.of(TOOL_SCULPT, "Подъём / спуск"))
-	entries.append(PaletteEntry.of(TOOL_RAMP, "Пандус"))
+	entries.append(PaletteEntry.of(TOOL_RAMP, "Соединить высоты"))
 	entries.append(PaletteEntry.of(TOOL_HOLE, "Вырез / засыпка"))
 	return entries
 
@@ -225,6 +272,10 @@ func select_palette_entry(entry_id: StringName) -> void:
 		_tool = entry_id
 		if _tool == TOOL_RAMP:
 			context.set_status_message(_ramp_guidance_message())
+		else:
+			_cancel_ramp_drag()
+			if context.ramp_preview != null:
+				context.ramp_preview.hide_preview()
 		notify_ui_changed()
 
 
@@ -235,14 +286,14 @@ func tool_options() -> Array:
 	options.append(ToolOption.of(OPTION_NAV_CART, "Cart", &"navigation", _overlay_profile_is(&"cart")))
 	if _tool == TOOL_SCULPT:
 		options.append(ToolOption.of(OPTION_MODE, "Режим: %s" % TerrainEditOperation.mode_name(context.brush.edit_mode)))
-	options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (context.brush.brush_size - 1), &"brush", false, true))
-	options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", &"brush"))
-	options.append(ToolOption.of(OPTION_BRUSH_UP, "+", &"brush"))
+	if _tool != TOOL_RAMP:
+		options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (context.brush.brush_size - 1), &"brush", false, true))
+		options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", &"brush"))
+		options.append(ToolOption.of(OPTION_BRUSH_UP, "+", &"brush"))
 	if _tool == TOOL_HOLE:
 		options.append(ToolOption.of(OPTION_HOLE_MODE, "Режим: %s" % ("вырез" if _hole_cutting else "засыпка")))
 	if _tool == TOOL_RAMP:
-		options.append(ToolOption.of(OPTION_RAMP_CLASS, "Тип: %s" % _ramp_class_label()))
-		options.append(ToolOption.of(OPTION_RAMP_DIR, "Направление: %s" % TerrainBrushController.direction_name(context.brush.ramp_direction)))
+		options.append(ToolOption.of(OPTION_RAMP_CLASS, "Уклон: %s" % _ramp_class_label()))
 	return options
 
 
@@ -255,10 +306,7 @@ func activate_option(option_id: StringName) -> void:
 		OPTION_BRUSH_DOWN:
 			context.brush.adjust_brush_size(-1)
 		OPTION_RAMP_CLASS:
-			context.brush.cycle_ramp_class()
-			context.set_status_message(_ramp_message())
-		OPTION_RAMP_DIR:
-			context.brush.cycle_ramp_direction()
+			_cycle_ramp_profile()
 			context.set_status_message(_ramp_message())
 		OPTION_NAV_NONE:
 			_set_overlay_profile(&"")
@@ -274,17 +322,16 @@ func activate_option(option_id: StringName) -> void:
 func inspector_lines() -> Array[String]:
 	var lines: Array[String] = []
 	lines.append("Инструмент: %s" % _tool)
-	lines.append("Кисть: %d" % (context.brush.brush_size - 1))
+	if _tool != TOOL_RAMP:
+		lines.append("Кисть: %d" % (context.brush.brush_size - 1))
 	if _tool == TOOL_SCULPT:
 		lines.append("Режим высоты: %s" % TerrainEditOperation.mode_name(context.brush.edit_mode))
 		if context.brush.edit_mode == TerrainEditOperation.Mode.LEVEL:
 			lines.append("Цель Level: %d" % context.brush.level_target_height())
 	if _tool == TOOL_HOLE:
 		lines.append("Режим кисти: %s" % ("вырез" if _hole_cutting else "засыпка"))
-	lines.append("Пандус: %s → %s" % [
-		_ramp_class_label(),
-		TerrainBrushController.direction_name(context.brush.ramp_direction),
-	])
+	if _tool == TOOL_RAMP:
+		lines.append("Пандус: %s" % _ramp_class_label())
 	lines.append("Навигация: %s (%s)" % [_overlay_state(), NAV_PROFILES[_nav_profile_index]])
 	return lines
 
@@ -334,32 +381,105 @@ func _update_ramp_preview() -> void:
 	if _tool != TOOL_RAMP or context.brush == null or not context.brush.has_hover:
 		context.ramp_preview.hide_preview()
 		return
-	context.ramp_preview.show_ramp(
-		context.brush.hovered_cell, context.brush.ramp_class, context.brush.ramp_direction,
+	if not _ramp_dragging:
+		context.ramp_preview.show_start(context.brush.hovered_cell)
+		return
+	var plan := RampConnectionPlan.between(
+		context.terrain, _ramp_drag_start, context.brush.hovered_cell, _ramp_requested_class,
 	)
+	context.ramp_preview.show_connection(plan)
+	_set_ramp_status(_ramp_preview_message(plan))
 
 
 func _ramp_class_label() -> String:
-	var slope_id := SlopeCatalog.id_of_class(context.brush.ramp_class)
-	return "%s — %d кл., +%d" % [
-		_ramp_class_name(slope_id), SlopeCatalog.run_of(slope_id), SlopeCatalog.rise_of(slope_id),
+	if _ramp_requested_class == RampConnectionPlan.AUTO_CLASS:
+		return "авто"
+	var slope_id := SlopeCatalog.id_of_class(_ramp_requested_class)
+	return "%s — %d кл., +%.1f м" % [
+		_ramp_class_name(slope_id), SlopeCatalog.run_of(slope_id),
+		float(SlopeCatalog.rise_of(slope_id)) * TerrainGrid.HEIGHT_STEP,
 	]
 
 
 func _ramp_message() -> String:
-	if context.brush == null or not context.brush.has_hover:
-		return "пандус: наведите курсор на нижнюю клетку"
-	var slope_id := SlopeCatalog.id_of_class(context.brush.ramp_class)
-	var reason := context.terrain.ramp_placement_rejection(
-		context.brush.hovered_cell, context.brush.ramp_class, context.brush.ramp_direction,
-	)
-	if reason.is_empty():
-		return "пандус: можно поставить (%s → %s)" % [_ramp_class_label(), TerrainBrushController.direction_name(context.brush.ramp_direction)]
-	return "пандус: %s" % _ramp_rejection_message(reason, slope_id)
+	if _ramp_dragging and context.brush != null and context.brush.has_hover:
+		return _ramp_preview_message(RampConnectionPlan.between(
+			context.terrain, _ramp_drag_start, context.brush.hovered_cell, _ramp_requested_class,
+		))
+	return _ramp_guidance_message()
 
 
 func _ramp_guidance_message() -> String:
-	return "пандус: ЛКМ с нижней клетки; V — направление подъёма, C — тип"
+	return "Пандус: протяните ЛКМ между площадками разной высоты · C — уклон · Shift+ПКМ — удалить"
+
+
+func _cycle_ramp_profile() -> void:
+	var profiles: Array[int] = [RampConnectionPlan.AUTO_CLASS]
+	profiles.append_array(SlopeCatalog.RAMP_CLASSES)
+	var index := profiles.find(_ramp_requested_class)
+	_ramp_requested_class = profiles[(index + 1) % profiles.size()] if index >= 0 else profiles[0]
+	_update_ramp_preview()
+
+
+func _ramp_preview_message(plan: RampConnectionPlan) -> String:
+	if not plan.is_valid():
+		return "Пандус: %s" % _connection_rejection_message(plan)
+	var slope_id := SlopeCatalog.id_of_class(plan.slope_class)
+	var action := "будет изменено клеток: %d" % plan.reshaped_cells if plan.reshaped_cells > 0 else "земля уже подготовлена"
+	return "Пандус: %s · %d кл. · +%.1f м · %s · %s" % [
+		_ramp_class_name(slope_id), plan.run,
+		float(plan.rise) * TerrainGrid.HEIGHT_STEP,
+		_direction_label(plan.direction), action,
+	]
+
+
+func _ramp_result_message(plan: RampConnectionPlan) -> String:
+	if not plan.is_valid():
+		return "Пандус не создан: %s" % _connection_rejection_message(plan)
+	return "Пандус создан: %s" % _ramp_preview_message(plan).trim_prefix("Пандус: ")
+
+
+func _set_ramp_status(message: String) -> void:
+	if message == _last_ramp_status:
+		return
+	_last_ramp_status = message
+	context.set_status_message(message)
+
+
+func _cancel_ramp_drag() -> void:
+	_ramp_dragging = false
+	_last_ramp_status = ""
+
+
+static func _direction_label(direction: int) -> String:
+	match direction:
+		SlopeCatalog.DIR_N: return "↑ север"
+		SlopeCatalog.DIR_E: return "→ восток"
+		SlopeCatalog.DIR_S: return "↓ юг"
+		SlopeCatalog.DIR_W: return "← запад"
+	return "—"
+
+
+static func _connection_rejection_message(plan: RampConnectionPlan) -> String:
+	match plan.reason:
+		RampConnectionPlan.REASON_OUTSIDE: return "точка вне карты"
+		RampConnectionPlan.REASON_HOLE: return "на пути есть вырез"
+		RampConnectionPlan.REASON_SAME_CELL: return "протяните к другой клетке"
+		RampConnectionPlan.REASON_SAME_HEIGHT: return "площадки находятся на одной высоте"
+		RampConnectionPlan.REASON_NOT_STRAIGHT: return "соединение должно идти по прямой"
+		RampConnectionPlan.REASON_ANCHOR: return "на пути закреплённая клетка"
+		RampConnectionPlan.REASON_RAMP: return "на пути уже есть пандус"
+		RampConnectionPlan.REASON_WRONG_RUN:
+			return "для выбранного уклона нужно %d клеток" % SlopeCatalog.run_of_class(plan.requested_class)
+		RampConnectionPlan.REASON_WRONG_RISE:
+			return "для выбранного уклона нужен перепад %.1f м" % (
+				float(SlopeCatalog.rise_of_class(plan.requested_class)) * TerrainGrid.HEIGHT_STEP
+			)
+		RampConnectionPlan.REASON_NO_MATCH:
+			return "нет профиля для %d клеток и перепада %.1f м" % [
+				plan.run, float(plan.rise) * TerrainGrid.HEIGHT_STEP,
+			]
+	return "недопустимое положение"
 
 
 static func _ramp_class_name(slope_id: StringName) -> String:
@@ -371,17 +491,6 @@ static func _ramp_class_name(slope_id: StringName) -> String:
 		SlopeCatalog.VERY_STEEP: return "очень крутой"
 		SlopeCatalog.PRE_CLIFF: return "предельный"
 		_: return String(slope_id)
-
-
-static func _ramp_rejection_message(reason: StringName, slope_id: StringName) -> String:
-	match reason:
-		&"start_outside", &"run_outside", &"top_outside": return "не хватает места до края карты"
-		&"start_hole", &"run_hole", &"top_hole": return "на пути есть вырез"
-		&"run_anchor": return "на пути закреплённая клетка"
-		&"run_ramp", &"top_ramp": return "на пути уже есть пандус"
-		&"run_height": return "основание должно быть ровным (%d клеток)" % SlopeCatalog.run_of(slope_id)
-		&"top_height": return "верхняя клетка должна быть ровно на +%d выше" % SlopeCatalog.rise_of(slope_id)
-		_: return "недопустимое положение"
 
 
 func list_title() -> String:

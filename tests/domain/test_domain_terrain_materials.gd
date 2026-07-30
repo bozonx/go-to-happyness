@@ -66,6 +66,7 @@ static func _test_indices_are_dense_unique_and_frozen() -> void:
 		TerrainMaterialCatalog.LUNAR_ROCK: 10,
 		TerrainMaterialCatalog.MARS_REGOLITH: 11,
 		TerrainMaterialCatalog.MARS_ROCK: 12,
+		TerrainMaterialCatalog.CLAY: 13,
 	}
 	for material_id: StringName in frozen:
 		assert(TerrainMaterialCatalog.index_of(material_id) == int(frozen[material_id]))

@@ -8,8 +8,9 @@ extends RefCounted
 ## stronger silhouette. Both are deterministic chunk MultiMeshes and neither is
 ## saved as a second list of vegetation.
 
-const TEXTURE_PATH := "res://game/features/world/presentation/terrain/assets/medium_grass.png"
+const TEXTURE_PATH := "res://game/features/world/presentation/terrain/assets/grass_medium_atlas.png"
 const SHADER_PATH := "res://game/features/world/presentation/terrain/tall_grass.gdshader"
+const VARIANT_COUNT := 4
 
 const CARD_WIDTH := 0.56
 const CARD_HEIGHT := 0.68
@@ -21,6 +22,7 @@ var _material: ShaderMaterial = null
 
 func build_chunk(grid: TerrainGrid, chunk: Vector2i) -> MultiMesh:
 	var transforms: Array[Transform3D] = []
+	var variants: Array[int] = []
 	var origin := grid.chunk_origin_cell(chunk)
 	for local_z in TerrainGrid.CHUNK_CELLS:
 		for local_x in TerrainGrid.CHUNK_CELLS:
@@ -37,14 +39,24 @@ func build_chunk(grid: TerrainGrid, chunk: Vector2i) -> MultiMesh:
 				var scale := lerpf(0.76, 1.08, _unit(seed, 3))
 				var basis := Basis(Vector3.UP, yaw).scaled(Vector3(scale, scale, scale))
 				transforms.append(Transform3D(basis, Vector3(x, y, z)))
+				variants.append(TerrainMaterialVariants.clamp_variant(TerrainMaterialCatalog.DEFAULT_INDEX, grid.variant_at(cell)))
 
 	var multimesh := MultiMesh.new()
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.use_custom_data = true
 	multimesh.mesh = _card_mesh()
 	multimesh.instance_count = transforms.size()
 	for index in transforms.size():
 		multimesh.set_instance_transform(index, transforms[index])
+		multimesh.set_instance_custom_data(index, atlas_custom_data_for(variants[index]))
 	return multimesh
+
+
+## Encodes the atlas column in the normalized channel MultiMesh custom data
+## guarantees across renderers. The shader reverses this exact mapping.
+static func atlas_custom_data_for(variant: int) -> Color:
+	var clamped := clampi(variant, 0, VARIANT_COUNT - 1)
+	return Color(float(clamped) / float(VARIANT_COUNT - 1), 0.0, 0.0, 0.0)
 
 
 func material() -> ShaderMaterial:
@@ -53,6 +65,7 @@ func material() -> ShaderMaterial:
 	_material = ShaderMaterial.new()
 	_material.shader = load(SHADER_PATH)
 	_material.set_shader_parameter(&"grass_texture", load(TEXTURE_PATH))
+	_material.set_shader_parameter(&"atlas_columns", float(VARIANT_COUNT))
 	_material.set_shader_parameter(&"grass_tint", Vector3(0.68, 0.78, 0.58))
 	_material.set_shader_parameter(&"sway_metres", 0.065)
 	_material.set_shader_parameter(&"wind_strength", 0.26)
