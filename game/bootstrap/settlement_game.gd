@@ -28,8 +28,7 @@ const SAWMILL_PROCESS_DURATION = SettlementConstants.SAWMILL_PROCESS_DURATION
 var settlement := SettlementState.new()
 var world_resource_state := WorldResourceState.new()
 var launch_config: GameLaunchConfig
-## Supplied by core.world for host-launched sessions. Direct scene tests leave it
-## null and retain the local compatibility construction path.
+## Supplied by core.world before the settlement module starts the scene.
 var world_session: WorldSession = null
 ## Board size actually in play, always from the launched map.
 var board_cells := 0

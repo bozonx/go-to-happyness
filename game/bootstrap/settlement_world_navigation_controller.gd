@@ -9,16 +9,13 @@ var navigation_runtime: WorldNavigationRuntimePort
 var presentation_runtime: WorldNavigationPresentationPort
 var world_session: WorldSession
 
-## Kept alive for the session: it owns the published terrain field and, once the
-## game gains terrain editing, the subscription that keeps it current.
-var terrain_navigation_publisher := TerrainNavigationPublisher.new()
 ## The overlay-effect cost layer over the same grid (active_zones.md §4.2). Built
 ## once at session start from the map's zone layer; republishing on zone edits is
 ## the map editor's job, the same way terrain republishing is.
 var overlay_navigation_publisher := OverlayNavigationPublisher.new()
 
 
-func _init(p_navigation_runtime: WorldNavigationRuntimePort, p_presentation_runtime: WorldNavigationPresentationPort, p_world_session: WorldSession = null) -> void:
+func _init(p_navigation_runtime: WorldNavigationRuntimePort, p_presentation_runtime: WorldNavigationPresentationPort, p_world_session: WorldSession) -> void:
 	navigation_runtime = p_navigation_runtime
 	presentation_runtime = p_presentation_runtime
 	world_session = p_world_session
@@ -78,22 +75,7 @@ func publish_terrain_navigation() -> void:
 	var world_setup: WorldSetup = presentation_runtime.world_setup_getter.call()
 	if nav_grid == null or world_setup == null:
 		return
-	if world_session != null:
-		world_session.publish_navigation()
-		_publish_overlay_navigation(nav_grid)
-		return
-	# `configure` sizes the nav grid off the terrain, so the two cannot disagree
-	# about cell size or board extent — a mismatch neither side could detect.
-	# Water goes in with the ground: depth, fords, ice and lava are passability
-	# (§9.7), and publishing the two separately would leave a window in which a
-	# route could be planned across a lake.
-	terrain_navigation_publisher.configure(
-		world_setup.terrain_grid, nav_grid, null, world_setup.water_grid,
-	)
-	# The bank positions gameplay reads come off the same two grids; handing it the
-	# nav grid as well is what puts them on the surface a citizen stands on rather
-	# than at the stored column height.
-	world_setup.water_access.configure(world_setup.water_grid, world_setup.terrain_grid, nav_grid)
+	world_session.publish_navigation()
 	_publish_overlay_navigation(nav_grid)
 
 

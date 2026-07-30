@@ -7,7 +7,7 @@ Godot 4.7 settlement simulation prototype.
 1. Open `project.godot` in Godot 4.7.
 2. Run the project. It boots the main menu
    (`game/features/ui/presentation/main_menu/main_menu.tscn`), which launches the
-   gameplay scene `game/bootstrap/settlement_game.tscn` through `GameLaunchManager`.
+   gameplay runtime `game/bootstrap/game_runtime.tscn` through `GameLaunchManager`.
 
 ## Checks
 

@@ -5,7 +5,7 @@
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/camera_controller.tscn" id="3_camera"]
 [ext_resource type="PackedScene" path="res://game/features/ui/presentation/ui_manager.tscn" id="4_ui"]
 
-[node name="SettlementPrototype" type="Node3D"]
+[node name="SettlementGame" type="Node3D"]
 script = ExtResource("1_main")
 
 [node name="WorldTerritory" parent="." instance=ExtResource("2_terrain")]

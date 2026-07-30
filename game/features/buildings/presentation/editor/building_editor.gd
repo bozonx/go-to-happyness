@@ -141,10 +141,7 @@ func _resolve_launch_mode() -> void:
 
 func _connect_back_navigation() -> void:
 	var launch_mgr := get_node_or_null("/root/GameLaunchManager")
-	if launch_mgr != null and launch_mgr.has_method("return_to_main_menu"):
-		back_requested.connect(launch_mgr.return_to_main_menu)
-	else:
-		back_requested.connect(_fallback_back_to_menu)
+	back_requested.connect(launch_mgr.return_to_main_menu)
 
 
 # ---------------------------------------------------------------------------
@@ -648,10 +645,6 @@ func _confirm_back_to_menu() -> void:
 	if not await _confirm_discard_changes():
 		return
 	back_requested.emit()
-
-
-func _fallback_back_to_menu() -> void:
-	get_tree().change_scene_to_file("res://game/features/ui/presentation/main_menu/main_menu.tscn")
 
 
 func _on_mode_frame_pressed() -> void:

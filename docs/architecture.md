@@ -9,6 +9,8 @@ owns it.
 ```text
 game/
   bootstrap/
+    game_runtime.tscn
+    game_runtime.gd
     settlement_game.tscn
     settlement_game.gd
   content/

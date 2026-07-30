@@ -198,29 +198,20 @@ func _landscape_summary() -> String:
 
 func _on_start_game_pressed() -> void:
 	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
-	if launch_mgr != null and launch_mgr.has_method("launch_game_definition"):
-		launch_mgr.call("launch_game_definition", selected_game, selected_map)
-	else:
-		get_tree().change_scene_to_file("res://game/bootstrap/game_runtime.tscn")
+	launch_mgr.call("launch_game_definition", selected_game, selected_map)
 
 
 func _on_building_editor_pressed() -> void:
 	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
-	if launch_mgr != null and launch_mgr.has_method("launch_building_editor"):
-		# Player mode: the menu is the player's entry point. Dev mode is reached by
-		# opening the editor scene inside Godot (content_packaging.md §9).
-		launch_mgr.call("launch_building_editor", false)
-	else:
-		get_tree().change_scene_to_file("res://game/features/buildings/presentation/editor/building_editor.tscn")
+	# Player mode: the menu is the player's entry point. Dev mode is reached by
+	# opening the editor scene inside Godot (content_packaging.md §9).
+	launch_mgr.call("launch_building_editor", false)
 
 
 func _on_map_editor_pressed() -> void:
 	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
-	if launch_mgr != null and launch_mgr.has_method("launch_map_editor"):
-		# Editing opens the chosen map when one is chosen, and a new map otherwise.
-		launch_mgr.call("launch_map_editor", selected_map)
-		return
-	get_tree().change_scene_to_file("res://game/features/world/presentation/editor/map_editor.tscn")
+	# Editing opens the chosen map when one is chosen, and a new map otherwise.
+	launch_mgr.call("launch_map_editor", selected_map)
 
 
 func _on_quit_pressed() -> void:
@@ -233,6 +224,5 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.keycode == KEY_6 and event.pressed and not event.echo:
 		if SessionSaveCoordinator.has_quicksave():
 			var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
-			if launch_mgr != null and launch_mgr.has_method("launch_from_save"):
-				launch_mgr.call("launch_from_save", SessionSaveCoordinator.QUICKSAVE_PATH)
-				get_viewport().set_input_as_handled()
+			launch_mgr.call("launch_from_save", SessionSaveCoordinator.QUICKSAVE_PATH)
+			get_viewport().set_input_as_handled()

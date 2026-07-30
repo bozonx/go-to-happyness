@@ -106,7 +106,7 @@ func _ready() -> void:
 func _resolve_launch_mode() -> void:
 	var launch_manager: Node = get_node_or_null("/root/GameLaunchManager")
 	var dev := OS.has_feature("editor")
-	if launch_manager != null and "editor_mode_forced" in launch_manager \
+	if "editor_mode_forced" in launch_manager \
 			and bool(launch_manager.get("editor_mode_forced")):
 		dev = bool(launch_manager.get("editor_dev_mode"))
 	dev_mode = dev
@@ -122,15 +122,13 @@ func _resolve_launch_mode() -> void:
 ## one. Saving it goes through Save As, which is where a name is asked for.
 func _open_requested_map() -> void:
 	var launch_manager: Node = get_node_or_null("/root/GameLaunchManager")
-	if launch_manager != null and launch_manager.get("pending_editor_document") is MapDocument:
+	if launch_manager.get("pending_editor_document") is MapDocument:
 		document = launch_manager.get("pending_editor_document") as MapDocument
 		launch_manager.set("pending_editor_document", null)
 		current_path = ""
 		_message = "возврат из тест-запуска · несохранённые правки сохранены"
 		return
-	var requested: StringName = &""
-	if launch_manager != null:
-		requested = launch_manager.get("pending_editor_map")
+	var requested: StringName = launch_manager.get("pending_editor_map")
 	if not String(requested).is_empty():
 		document = _service.load_map(requested)
 		if document == null:
@@ -567,10 +565,6 @@ func _test_run() -> void:
 	if not (result["errors"] as Array).is_empty():
 		return
 	var launch_manager: Node = get_node_or_null("/root/GameLaunchManager")
-	if launch_manager == null or not launch_manager.has_method("launch_game_definition"):
-		_message = "тест-запуск недоступен: нет host launcher"
-		_refresh_panels()
-		return
 	var definition_key := document.meta.start.game_definition
 	if GameModuleRegistry.resolve_definition(definition_key) == null:
 		_message = "тест-запуск недоступен: игра %s не установлена" % definition_key
@@ -673,10 +667,7 @@ func _return_to_menu() -> void:
 	if not await _confirm_discard_changes():
 		return
 	var launch_manager: Node = get_node_or_null("/root/GameLaunchManager")
-	if launch_manager != null and launch_manager.has_method("return_to_main_menu"):
-		launch_manager.call("return_to_main_menu")
-		return
-	get_tree().change_scene_to_file("res://game/features/ui/presentation/main_menu/main_menu.tscn")
+	launch_manager.call("return_to_main_menu")
 
 
 ## Guards every path that throws the document away: New, Open, Back and Esc.

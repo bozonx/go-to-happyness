@@ -11,8 +11,9 @@ operational parts it does not cover.
 
 - Engine **Godot 4.7**, Forward Plus, **Jolt Physics** for 3D. GDScript only.
 - `project.godot` boots `game/features/ui/presentation/main_menu/main_menu.tscn`.
-  The gameplay scene is `game/bootstrap/settlement_game.tscn`, reached through
-  `GameLaunchManager`.
+  The gameplay runtime is `game/bootstrap/game_runtime.tscn`, reached through
+  `GameLaunchManager`. The settlement scene `game/bootstrap/settlement_game.tscn`
+  is a temporary presentation adapter owned by `SettlementGameModule`.
 - Feature-first layout under `game/features/<feature>/{domain,application,presentation}/`,
   composed by `game/bootstrap/`.
 - Authored content is a pack tree under `game/content/` (`pack.json`, `*.gdbuilding.json`,

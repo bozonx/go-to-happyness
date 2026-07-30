@@ -13,13 +13,12 @@ func _init() -> void:
 func _run() -> void:
 	var launch_manager := root.get_node_or_null("GameLaunchManager")
 	assert(launch_manager != null, "GameLaunchManager autoload is required")
-	var config := GameLaunchConfig.for_tent_era()
-	config.map_document = MapDocumentService.new().load_map(config.map_ref)
-	config.apply_map_start()
 	var definition := GameModuleRegistry.resolve_definition(&"core:settlement")
 	assert(definition != null)
 	assert(definition.module_ids == [&"core.world", &"gth.settlement"])
-	launch_manager.set("active_session", GameSessionConfig.create(definition, config.map_ref, config.map_document))
+	var map := MapDocumentService.new().load_map(definition.default_map)
+	assert(map != null, "settlement default map must load")
+	launch_manager.set("active_session", GameSessionConfig.create(definition, definition.default_map, map))
 	var runtime := GameRuntimeScene.instantiate() as GameRuntime
 	root.add_child(runtime)
 	for _frame in range(4):
@@ -34,9 +33,8 @@ func _run() -> void:
 	assert(settlement.world_session == runtime.world_session)
 	assert(settlement.nav_grid == runtime.world_session.nav_grid)
 	assert(settlement.launch_config != null)
-	assert(settlement.launch_config != config, "runtime must receive module parameters, not the legacy launch object")
-	assert(settlement.launch_config.map_document == config.map_document)
-	assert(settlement.launch_config.starting_population == config.starting_population)
+	assert(settlement.launch_config.map_document == map)
+	assert(settlement.launch_config.starting_population == 4)
 	assert(settlement.world_setup != null, "settlement module must initialize the existing game")
 	assert(SessionSaveCoordinator.save_quicksave(runtime))
 	var settlement_save := SaveData.new()
