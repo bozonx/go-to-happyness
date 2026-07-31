@@ -1,10 +1,10 @@
-class_name DecorModeController
+class_name BuildingFillModeController
 extends Node3D
 
-## Decor mode of the building editor (design §3.3): places, selects, moves and
+## Fill mode of the building editor (design §3.3): places, selects, moves and
 ## configures the `objects[]` of a blueprint.
 ##
-## Lives as a child of BuildingEditor and owns everything decor-specific — the
+## Lives as a child of BuildingEditor and owns everything fill-specific — the
 ## spawned instances, the placement ghost and the selection marker — so the
 ## editor script only routes input and mode switching here.  History belongs to
 ## BuildingEditor, where it remains chronological across every mode.
@@ -12,10 +12,10 @@ extends Node3D
 ## One contextual gesture owns the left mouse button: it drops the selected
 ## catalog asset on empty ground, or selects and drags an existing object.
 
-const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
+const FillObjectRecordScript = preload("res://game/features/buildings/domain/editor/fill_object_record.gd")
 const FixtureEditorPanelScript = preload("res://game/features/buildings/presentation/editor/fixture_editor_panel.gd")
-const DecorPlacementValidatorScript = preload("res://game/features/buildings/presentation/editor/decor_placement_validator.gd")
-const DecorCollisionOverlayScript = preload("res://game/features/buildings/presentation/editor/decor_collision_overlay.gd")
+const FillPlacementValidatorScript = preload("res://game/features/buildings/presentation/editor/fill_placement_validator.gd")
+const FillCollisionOverlayScript = preload("res://game/features/buildings/presentation/editor/fill_collision_overlay.gd")
 
 
 const ROTATION_STEP_DEG := 15.0
@@ -72,7 +72,7 @@ var _toolbar_delete_btn: Button = null
 var _layer_label: Label = null
 var _collision_overlay_btn: Button = null
 var _collision_overlay: Node3D = null
-var _catalog_panel: DecorCatalogPanel = null
+var _catalog_panel: FillCatalogPanel = null
 var _zone_filter_option: OptionButton = null
 var _zone_out_of_bounds_label: Label = null
 
@@ -86,48 +86,48 @@ var _fixture_panel: RefCounted = null
 
 func setup(editor: Node) -> void:
 	_editor = editor
-	_validator = DecorPlacementValidatorScript.new()
-	name = "DecorRoot"
+	_validator = FillPlacementValidatorScript.new()
+	name = "FillRoot"
 
-	_panel = editor.get_node("%DecorPanel")
-	_inspector_panel = editor.get_node("%DecorInspectorPanel")
-	_toolbar = editor.get_node("%DecorToolbar")
-	_inspector_title = editor.get_node("%DecorInspectorTitle")
-	_id_label = editor.get_node("%DecorIdLabel")
-	_asset_label = editor.get_node("%DecorAssetLabel")
-	_zone_option = editor.get_node("%DecorZoneOption")
-	_badges_label = editor.get_node("%DecorBadgesLabel")
-	_zone_out_of_bounds_label = editor.get_node("%DecorZoneWarningLabel")
-	_object_search_edit = editor.get_node("%DecorObjectSearchEdit")
-	_zone_filter_option = editor.get_node("%DecorZoneFilterOption")
-	_object_list = editor.get_node("%DecorObjectList")
-	_controls_vbox = editor.get_node("%DecorControlsVBox")
-	_pos_x_spin = editor.get_node("%DecorPosXSpin")
-	_pos_y_spin = editor.get_node("%DecorPosYSpin")
-	_pos_z_spin = editor.get_node("%DecorPosZSpin")
-	_yaw_spin = editor.get_node("%DecorYawSpin")
-	_pitch_spin = editor.get_node("%DecorPitchSpin")
-	_roll_spin = editor.get_node("%DecorRollSpin")
-	_scale_spin = editor.get_node("%DecorScaleSpin")
-	_replace_btn = editor.get_node("%DecorReplaceBtn")
-	_toolbar_delete_btn = editor.get_node("%DecorDeleteSelectionBtn")
-	_layer_label = editor.get_node("%DecorLayerLabel")
+	_panel = editor.get_node("%FillPanel")
+	_inspector_panel = editor.get_node("%FillInspectorPanel")
+	_toolbar = editor.get_node("%FillToolbar")
+	_inspector_title = editor.get_node("%FillInspectorTitle")
+	_id_label = editor.get_node("%FillIdLabel")
+	_asset_label = editor.get_node("%FillAssetLabel")
+	_zone_option = editor.get_node("%FillZoneOption")
+	_badges_label = editor.get_node("%FillBadgesLabel")
+	_zone_out_of_bounds_label = editor.get_node("%FillZoneWarningLabel")
+	_object_search_edit = editor.get_node("%FillObjectSearchEdit")
+	_zone_filter_option = editor.get_node("%FillZoneFilterOption")
+	_object_list = editor.get_node("%FillObjectList")
+	_controls_vbox = editor.get_node("%FillControlsVBox")
+	_pos_x_spin = editor.get_node("%FillPosXSpin")
+	_pos_y_spin = editor.get_node("%FillPosYSpin")
+	_pos_z_spin = editor.get_node("%FillPosZSpin")
+	_yaw_spin = editor.get_node("%FillYawSpin")
+	_pitch_spin = editor.get_node("%FillPitchSpin")
+	_roll_spin = editor.get_node("%FillRollSpin")
+	_scale_spin = editor.get_node("%FillScaleSpin")
+	_replace_btn = editor.get_node("%FillReplaceBtn")
+	_toolbar_delete_btn = editor.get_node("%FillDeleteSelectionBtn")
+	_layer_label = editor.get_node("%FillLayerLabel")
 
 	# Fixture editor — delegated to FixtureEditorPanel
 	_fixture_panel = FixtureEditorPanelScript.new()
 	_fixture_panel.setup(editor, Callable(self, "_push_undo"))
 
-	# Catalog panel — delegated to DecorCatalogPanel
-	_catalog_panel = DecorCatalogPanel.new()
+	# Catalog panel — delegated to FillCatalogPanel
+	_catalog_panel = FillCatalogPanel.new()
 	_catalog_panel.setup(self, editor)
 
-	editor.get_node("%DecorRotXBtn").pressed.connect(rotate_selection.bind("x", 1))
-	editor.get_node("%DecorRotYBtn").pressed.connect(rotate_selection.bind("y", 1))
-	editor.get_node("%DecorRotZBtn").pressed.connect(rotate_selection.bind("z", 1))
-	editor.get_node("%DecorLayerDownBtn").pressed.connect(func(): _editor.set_layer(_editor.active_layer - 1))
-	editor.get_node("%DecorLayerUpBtn").pressed.connect(func(): _editor.set_layer(_editor.active_layer + 1))
-	_collision_overlay_btn = editor.get_node("%DecorCollisionOverlayBtn")
-	_collision_overlay = DecorCollisionOverlayScript.new()
+	editor.get_node("%FillRotXBtn").pressed.connect(rotate_selection.bind("x", 1))
+	editor.get_node("%FillRotYBtn").pressed.connect(rotate_selection.bind("y", 1))
+	editor.get_node("%FillRotZBtn").pressed.connect(rotate_selection.bind("z", 1))
+	editor.get_node("%FillLayerDownBtn").pressed.connect(func(): _editor.set_layer(_editor.active_layer - 1))
+	editor.get_node("%FillLayerUpBtn").pressed.connect(func(): _editor.set_layer(_editor.active_layer + 1))
+	_collision_overlay_btn = editor.get_node("%FillCollisionOverlayBtn")
+	_collision_overlay = FillCollisionOverlayScript.new()
 	_collision_overlay.name = "CollisionOverlay"
 	add_child(_collision_overlay)
 	_collision_overlay_btn.toggled.connect(_on_collision_overlay_toggled)
@@ -216,7 +216,7 @@ func erase_at_cursor() -> void:
 		return
 	var target := pick_object_at(_editor.cursor_hit_pos)
 	if target.is_empty():
-		_editor.set_status("Под курсором нет объекта декора.")
+		_editor.set_status("Под курсором нет объекта наполнения.")
 		return
 	_push_undo()
 	_erase_object(target)
@@ -273,7 +273,7 @@ func on_drag() -> void:
 	_update_selection_marker()
 
 
-## Returns true when the key was consumed by decor mode.
+## Returns true when the key was consumed by fill mode.
 func handle_key(event: InputEventKey) -> bool:
 	if event.ctrl_pressed:
 		match event.keycode:
@@ -291,6 +291,9 @@ func handle_key(event: InputEventKey) -> bool:
 				return true
 		return false
 	match event.keycode:
+		KEY_P:
+			pick_asset_at_cursor()
+			return true
 		KEY_C, KEY_R:
 			rotate_selection("y", -1 if event.shift_pressed else 1)
 			return true
@@ -309,7 +312,7 @@ func handle_key(event: InputEventKey) -> bool:
 	return false
 
 # ---------------------------------------------------------------------------
-# Placement maths — delegated to DecorPlacementValidator
+# Placement maths — delegated to FillPlacementValidator
 # ---------------------------------------------------------------------------
 
 func snapped_position(raw_hit: Vector3) -> Vector3:
@@ -340,8 +343,8 @@ func pick_object_at(world_pos: Vector3) -> String:
 	return _validator.pick_object_at(world_pos, _editor.blueprint)
 
 
-func find_record(object_id: String) -> DecorObjectRecordScript:
-	return DecorPlacementValidatorScript.find_record_in(object_id, _editor.blueprint)
+func find_record(object_id: String) -> FillObjectRecordScript:
+	return FillPlacementValidatorScript.find_record_in(object_id, _editor.blueprint)
 
 
 # ---------------------------------------------------------------------------
@@ -359,7 +362,7 @@ func _place_or_select_at(hit: Vector3) -> void:
 	var position := snapped_position(hit)
 	var asset := WorldAssetCatalog.get_asset(current_asset_id)
 	if asset == null:
-		_editor.set_status("Выберите ассет в каталоге декора.")
+		_editor.set_status("Выберите ассет в каталоге наполнения.")
 		return
 	if not _is_valid_transform(position, Vector3(current_pitch_deg, current_yaw_deg, current_roll_deg), Vector3.ONE, asset.id):
 		# The hit can be near the edge of an object's footprint rather than inside
@@ -370,7 +373,7 @@ func _place_or_select_at(hit: Vector3) -> void:
 			select_object(conflict)
 			_editor.set_status("Выбран объект, занимающий это место.")
 		else:
-			_editor.set_status("Здесь нельзя разместить декор: место занято или вне границ здания.")
+			_editor.set_status("Здесь нельзя разместить наполнение: место занято или вне границ здания.")
 		return
 	_place_at(position)
 
@@ -378,15 +381,15 @@ func _place_or_select_at(hit: Vector3) -> void:
 func _place_at(position: Vector3) -> void:
 	var asset := WorldAssetCatalog.get_asset(current_asset_id)
 	if asset == null:
-		_editor.set_status("Выберите ассет в каталоге декора.")
+		_editor.set_status("Выберите ассет в каталоге наполнения.")
 		return
 	# Keep the invariant at the mutation boundary too: UI input is not the only
 	# caller of this method, and a red preview must never still create an overlap.
-	if _compute_ghost_state(position) != DecorPlacementValidatorScript.GhostState.VALID:
-		_editor.set_status("Нельзя разместить декор поверх другого объекта.")
+	if _compute_ghost_state(position) != FillPlacementValidatorScript.GhostState.VALID:
+		_editor.set_status("Нельзя разместить наполнение поверх другого объекта.")
 		return
 	_push_undo()
-	var record := DecorObjectRecordScript.make(asset.id, position, _next_object_suffix())
+	var record := FillObjectRecordScript.make(asset.id, position, _next_object_suffix())
 	record.rot = Vector3(0.0, current_yaw_deg, 0.0)
 	record.appearance = asset.default_appearance()
 	_editor.blueprint.objects.append(record)
@@ -472,7 +475,7 @@ func rotate_selection(axis: String, direction: int) -> void:
 	elif axis == "z":
 		current_roll_deg = fposmod(current_roll_deg + delta, 360.0)
 	else:
-		push_warning("DecorModeController: invalid rotation axis '%s'" % axis)
+		push_warning("BuildingFillModeController: invalid rotation axis '%s'" % axis)
 		return
 	if record != null:
 		var candidate := Vector3(current_pitch_deg, current_yaw_deg, current_roll_deg)
@@ -509,7 +512,7 @@ func cancel_current_action() -> void:
 		return
 	if not current_asset_id.is_empty():
 		_catalog_panel.clear_asset_selection()
-		_editor.set_status("Кисть декора сброшена.")
+		_editor.set_status("Кисть наполнения сброшена.")
 		return
 	_editor.set_status("Ничего не выбрано.")
 
@@ -520,9 +523,9 @@ func cancel_current_action() -> void:
 func _next_object_suffix() -> int:
 	var suffix := Time.get_ticks_msec()
 	var taken: Dictionary = {}
-	for record: DecorObjectRecordScript in _editor.blueprint.objects:
+	for record: FillObjectRecordScript in _editor.blueprint.objects:
 		taken[record.id] = true
-	while taken.has("decor_%s_%d" % [String(current_asset_id), suffix]):
+	while taken.has("fill_%s_%d" % [String(current_asset_id), suffix]):
 		suffix += 1
 	return suffix
 
@@ -532,7 +535,7 @@ func _next_object_suffix() -> int:
 # ---------------------------------------------------------------------------
 
 func _push_undo() -> void:
-	# Compatibility hook for fixture/decor callers.  The authoritative snapshot
+	# Compatibility hook for fixture/fill callers.  The authoritative snapshot
 	# is recorded by BuildingEditor.mark_dirty after the mutation.
 	pass
 
@@ -561,17 +564,17 @@ func rebuild_nodes() -> void:
 	for node: Node3D in _nodes.values():
 		node.queue_free()
 	_nodes.clear()
-	for record: DecorObjectRecordScript in _editor.blueprint.objects:
+	for record: FillObjectRecordScript in _editor.blueprint.objects:
 		_spawn_node(record)
 	_update_selection_marker()
 	if _collision_overlay != null:
 		_collision_overlay.rebuild(_editor.blueprint)
 
 
-func _spawn_node(record: DecorObjectRecordScript) -> void:
+func _spawn_node(record: FillObjectRecordScript) -> void:
 	var asset := WorldAssetCatalog.get_asset(record.asset_id)
 	if asset == null:
-		push_warning("DecorModeController: unknown asset %s, object %s not shown" % [record.asset_id, record.id])
+		push_warning("BuildingFillModeController: unknown asset %s, object %s not shown" % [record.asset_id, record.id])
 		return
 	var scene := load(asset.scene_path) as PackedScene
 	if scene == null:
@@ -586,7 +589,7 @@ func _spawn_node(record: DecorObjectRecordScript) -> void:
 		instance.call("apply_decor_properties", record.appearance)
 
 
-func _apply_transform_to_node(record: DecorObjectRecordScript) -> void:
+func _apply_transform_to_node(record: FillObjectRecordScript) -> void:
 	var node: Node3D = _nodes.get(record.id, null)
 	if node == null:
 		return
@@ -658,7 +661,7 @@ func _update_hover_marker() -> void:
 		_hover_marker = _create_torus_marker(Color(1.0, 0.8, 0.2, 0.9))
 	var asset := WorldAssetCatalog.get_asset(record.asset_id)
 	var size := asset.footprint_m() if asset != null else Vector3.ONE
-	var radius := maxf(DecorPlacementValidatorScript.MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
+	var radius := maxf(FillPlacementValidatorScript.MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
 	_hover_marker.visible = true
 	_hover_marker.scale = Vector3.ONE * (radius / 0.5)
 	_hover_marker.position = record.pos + Vector3(0.0, 0.05, 0.0)
@@ -673,16 +676,16 @@ func _hide_ghost() -> void:
 func _update_ghost_color(state: int) -> void:
 	var color: Color = GHOST_COLOR_VALID
 	match state:
-		DecorPlacementValidatorScript.GhostState.INTERSECTION:
+		FillPlacementValidatorScript.GhostState.INTERSECTION:
 			color = GHOST_COLOR_INTERSECTION
-		DecorPlacementValidatorScript.GhostState.OUT_OF_BOUNDS:
+		FillPlacementValidatorScript.GhostState.OUT_OF_BOUNDS:
 			color = GHOST_COLOR_OUT_OF_BOUNDS
 	_get_ghost_material().albedo_color = color
 
 
 ## Makes an instance read as a preview rather than a placed object: translucent
 ## meshes, no lights and no live particles. Without this the ghost lit the scene
-## and was indistinguishable from real decor.
+## and was indistinguishable from real fill.
 func _apply_preview_look(root: Node3D) -> void:
 	var targets: Array[Node] = [root]
 	targets.append_array(root.find_children("*", "", true, false))
@@ -734,14 +737,14 @@ func _update_selection_marker() -> void:
 		_selection_marker = _create_torus_marker(Color(0.35, 0.95, 1.0, 0.85))
 	var asset := WorldAssetCatalog.get_asset(record.asset_id)
 	var size := asset.footprint_m() if asset != null else Vector3.ONE
-	var radius := maxf(DecorPlacementValidatorScript.MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
+	var radius := maxf(FillPlacementValidatorScript.MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
 	_selection_marker.visible = true
 	_selection_marker.scale = Vector3.ONE * (radius / 0.5)
 	_selection_marker.position = record.pos + Vector3(0.0, 0.03, 0.0)
 
 
 # ---------------------------------------------------------------------------
-# Collision overlay — delegated to DecorCollisionOverlay node
+# Collision overlay — delegated to FillCollisionOverlay node
 # ---------------------------------------------------------------------------
 
 ## Toggle collision overlay on/off. When on, wireframe boxes are drawn for
@@ -777,7 +780,7 @@ func _refresh_object_list() -> void:
 	_object_list.clear()
 	var search_text := _object_search_edit.text.strip_edges().to_lower() if _object_search_edit != null else ""
 	var zone_filter := _get_zone_filter_selection()
-	for record: DecorObjectRecordScript in _editor.blueprint.objects:
+	for record: FillObjectRecordScript in _editor.blueprint.objects:
 		var asset := WorldAssetCatalog.get_asset(record.asset_id)
 		var label := asset.name if asset != null else "%s (нет ассета)" % record.asset_id
 		if not search_text.is_empty():
@@ -872,10 +875,10 @@ func _zone_name_for_id(zone_id: StringName) -> String:
 
 
 ## Called by BuildingEditor when a place zone is deleted.
-## Clears owner_zone_id on all decor objects that referenced it.
+## Clears owner_zone_id on all fill objects that referenced it.
 func on_zone_deleted(zone_id: StringName) -> void:
 	var affected := 0
-	for record: DecorObjectRecordScript in _editor.blueprint.objects:
+	for record: FillObjectRecordScript in _editor.blueprint.objects:
 		if record.owner_zone_id == zone_id:
 			record.owner_zone_id = &""
 			affected += 1
@@ -901,7 +904,7 @@ func _refresh_inspector() -> void:
 			_controls_vbox.set_fields(
 				_appearance_definitions(selected_asset), selected_asset.default_appearance(), true, false)
 		else:
-			_inspector_title.text = "Инспектор декора"
+			_inspector_title.text = "Инспектор наполнения"
 			_id_label.text = "ID: —"
 			_asset_label.text = "Выберите ассет в палитре или объект в 3D"
 			_badges_label.text = ""
@@ -936,7 +939,7 @@ func _appearance_definitions(asset: WorldAssetDef) -> Array[EntityPropertyDef]:
 
 
 func _on_appearance_property_committed(property_name: StringName, value: Variant) -> void:
-	_set_property(String(property_name), DecorObjectRecordScript.json_safe_value(value))
+	_set_property(String(property_name), FillObjectRecordScript.json_safe_value(value))
 
 
 func _on_appearance_property_reset(property_name: StringName) -> void:
@@ -946,7 +949,7 @@ func _on_appearance_property_reset(property_name: StringName) -> void:
 		return
 	for definition: EntityPropertyDef in _appearance_definitions(asset):
 		if definition.name == property_name:
-			_set_property(String(property_name), DecorObjectRecordScript.json_safe_value(definition.default))
+			_set_property(String(property_name), FillObjectRecordScript.json_safe_value(definition.default))
 			_refresh_inspector()
 			return
 
@@ -974,14 +977,14 @@ func _set_transform_fields_enabled(enabled: bool) -> void:
 		_replace_btn.text = "Заменить на выбранный ассет"
 
 
-func _refresh_replace_action(record: DecorObjectRecordScript) -> void:
+func _refresh_replace_action(record: FillObjectRecordScript) -> void:
 	var replacement := WorldAssetCatalog.get_asset(current_asset_id)
 	_replace_btn.disabled = replacement == null or current_asset_id == record.asset_id
 	_replace_btn.text = "Заменить на «%s»" % replacement.name if replacement != null else "Заменить на выбранный ассет"
 
 
 ## Refresh the owner-zone dropdown from the blueprint's owning areas.
-func _refresh_zone_options(current_zone: StringName, _record: DecorObjectRecordScript) -> void:
+func _refresh_zone_options(current_zone: StringName, _record: FillObjectRecordScript) -> void:
 	_syncing_ui = true
 	_zone_option.clear()
 	_zone_option.add_item("(без зоны)")
@@ -1011,7 +1014,7 @@ func _on_zone_selected(index: int) -> void:
 
 
 ## Show diagnostic badges for the selected object.
-func _update_badges(record: DecorObjectRecordScript, asset: Variant) -> void:
+func _update_badges(record: FillObjectRecordScript, asset: Variant) -> void:
 	var badges: Array[String] = []
 	if asset != null and asset.scale_mode != WorldAssetDef.SCALE_LOCKED:
 		badges.append("Масштаб: %s" % String(asset.scale_mode))
@@ -1091,12 +1094,12 @@ func _replace_selected_object() -> void:
 
 
 ## Re-spawn the visual node for an existing record (used by replace).
-func _spawn_node_for_existing(record: DecorObjectRecordScript) -> void:
+func _spawn_node_for_existing(record: FillObjectRecordScript) -> void:
 	_remove_node(record.id)
 	_spawn_node(record)
 
 
-func _sync_transform_fields(record: DecorObjectRecordScript) -> void:
+func _sync_transform_fields(record: FillObjectRecordScript) -> void:
 	_syncing_ui = true
 	_pos_x_spin.value = record.pos.x
 	_pos_y_spin.value = record.pos.y

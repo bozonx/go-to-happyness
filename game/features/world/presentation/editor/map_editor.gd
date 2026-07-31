@@ -7,8 +7,8 @@ extends Node3D
 ## stack. Everything an author actually does to a map lives in a mode controller.
 ##
 ## The rule is worth stating because breaking it is the failure this editor was
-## designed around: `building_editor.gd` grew to 2159 lines before decor was cut
-## out of it into `decor_mode_controller.gd`. **If an `if mode == ...` ever
+## designed around: `building_editor.gd` grew to 2159 lines before fill was cut
+## out of it into `building_fill_mode_controller.gd`. **If an `if mode == ...` ever
 ## appears inside the input handling below, logic has leaked out of a
 ## controller.** The mode list is data; adding phase 2's fill mode should mean
 ## adding one entry to `_build_modes` and one file, and touching nothing else.
@@ -438,7 +438,7 @@ func _refresh_panels() -> void:
 		_active.list_title(), _active.list_entries(), _active.empty_list_hint(), _active.selected_list_index(),
 	)
 	# A stack you cannot pop says so by being grey, the way the building editor's
-	# decor buttons do.
+	# fill buttons do.
 	_undo_button.disabled = not history.can_undo()
 	_redo_button.disabled = not history.can_redo()
 	_status_message.text = _message

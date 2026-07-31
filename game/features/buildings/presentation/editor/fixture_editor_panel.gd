@@ -1,10 +1,10 @@
 class_name FixtureEditorPanel
 extends RefCounted
 
-## Fixture editor sub-panel of decor mode (Phase 2A — fire_source vertical slice).
+## Fixture editor sub-panel of fill mode (Phase 2A — fire_source vertical slice).
 ##
 ## Owns the fixture list, inspector, CRUD operations, and fire-source defaults.
-## Extracted from DecorModeController to isolate fixture concerns from decor
+## Extracted from BuildingFillModeController to isolate fixture concerns from fill
 ## object placement and selection.
 
 const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
@@ -278,8 +278,8 @@ func refresh_fixture_ui() -> void:
 	_refresh_fixture_list()
 
 
-## Clears visual_object_id references to a deleted decor object on all fixtures.
-## Called by DecorModeController._erase_object before the object is removed.
+## Clears visual_object_id references to a deleted fill object on all fixtures.
+## Called by BuildingFillModeController._erase_object before the object is removed.
 func clear_visual_references(object_id: String) -> void:
 	for fixture: FixtureDefinitionScript in _editor.blueprint.fixtures:
 		if fixture.visual_object_id == object_id:

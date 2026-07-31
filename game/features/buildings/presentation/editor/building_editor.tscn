@@ -155,11 +155,11 @@ toggle_mode = true
 disabled = true
 text = "2. Отделка"
 
-[node name="ModeDecorBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+[node name="ModeFillBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
-text = "3. Декор"
+text = "3. Наполнение"
 
 
 [node name="ModeZonesBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
@@ -245,89 +245,89 @@ layout_mode = 2
 text = "➕ (PgUp)"
 tooltip_text = "Слой выше (PageUp)"
 
-[node name="DecorToolbar" type="HBoxContainer" parent="EditorUI/Root/TopBar/Margin/HBox"]
+[node name="FillToolbar" type="HBoxContainer" parent="EditorUI/Root/TopBar/Margin/HBox"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="DecorDeleteSelectionBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+[node name="FillDeleteSelectionBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 disabled = true
 text = "🗑"
 tooltip_text = "Удалить выбранный объект (Delete)"
 
-[node name="VSepDecorActions" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+[node name="VSepFillActions" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 layout_mode = 2
 
-[node name="DecorRotXBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+[node name="FillRotXBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "🔄X (X)"
 tooltip_text = "Поворот вокруг оси X (X)"
 
-[node name="DecorRotYBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+[node name="FillRotYBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "🔄Y (C)"
 tooltip_text = "Поворот вокруг оси Y (C)"
 
-[node name="DecorRotZBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+[node name="FillRotZBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "🔄Z (Z)"
 tooltip_text = "Поворот вокруг оси Z (Z)"
 
-[node name="DecorSnapButtons" type="HBoxContainer" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+[node name="FillSnapButtons" type="HBoxContainer" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 layout_mode = 2
 theme_override_constants/separation = 2
 
-[node name="DecorSnap1Btn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar/DecorSnapButtons"]
+[node name="FillSnap1Btn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar/FillSnapButtons"]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 text = "1"
 tooltip_text = "Привязка к сетке: 1 м"
 
-[node name="DecorSnapHalfBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar/DecorSnapButtons"]
+[node name="FillSnapHalfBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar/FillSnapButtons"]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 text = "0.5"
 tooltip_text = "Привязка к сетке: 0.5 м"
 
-[node name="DecorSnapQuarterBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar/DecorSnapButtons"]
+[node name="FillSnapQuarterBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar/FillSnapButtons"]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 text = "0.25"
 tooltip_text = "Привязка к сетке: 0.25 м"
 
-[node name="VSepDecorLayer" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+[node name="VSepFillLayer" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 layout_mode = 2
 
-[node name="DecorLayerLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+[node name="FillLayerLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Слой 0"
 
-[node name="DecorLayerDownBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+[node name="FillLayerDownBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "➖ (PgDn)"
 tooltip_text = "Слой ниже (PageDown)"
 
-[node name="DecorLayerUpBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+[node name="FillLayerUpBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "➕ (PgUp)"
 tooltip_text = "Слой выше (PageUp)"
 
-[node name="VSepDecorOverlay" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+[node name="VSepFillOverlay" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 layout_mode = 2
 
-[node name="DecorCollisionOverlayBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+[node name="FillCollisionOverlayBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
@@ -745,7 +745,7 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 2
 
-[node name="DecorPanel" type="PanelContainer" parent="EditorUI/Root"]
+[node name="FillPanel" type="PanelContainer" parent="EditorUI/Root"]
 unique_name_in_owner = true
 visible = false
 custom_minimum_size = Vector2(220, 0)
@@ -758,77 +758,77 @@ offset_right = 228.0
 offset_bottom = -48.0
 grow_vertical = 2
 
-[node name="Scroll" type="ScrollContainer" parent="EditorUI/Root/DecorPanel"]
+[node name="Scroll" type="ScrollContainer" parent="EditorUI/Root/FillPanel"]
 layout_mode = 2
 horizontal_scroll_mode = 0
 
-[node name="DecorVBox" type="VBoxContainer" parent="EditorUI/Root/DecorPanel/Scroll"]
+[node name="FillVBox" type="VBoxContainer" parent="EditorUI/Root/FillPanel/Scroll"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 6
 
-[node name="Title" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+[node name="Title" type="Label" parent="EditorUI/Root/FillPanel/Scroll/FillVBox"]
 layout_mode = 2
 text = "Каталог наполнения"
 horizontal_alignment = 1
 
-[node name="DecorRecentLbl" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+[node name="FillRecentLbl" type="Label" parent="EditorUI/Root/FillPanel/Scroll/FillVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Недавно использованные:"
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 theme_override_font_sizes/font_size = 12
 
-[node name="DecorRecentContainer" type="HFlowContainer" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+[node name="FillRecentContainer" type="HFlowContainer" parent="EditorUI/Root/FillPanel/Scroll/FillVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/h_separation = 3
 theme_override_constants/v_separation = 3
 
-[node name="DecorSearchEdit" type="LineEdit" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+[node name="FillSearchEdit" type="LineEdit" parent="EditorUI/Root/FillPanel/Scroll/FillVBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(190, 0)
 layout_mode = 2
 placeholder_text = "Поиск ассета во всех категориях..."
 
-[node name="DecorCatalogNav" type="HBoxContainer" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+[node name="FillCatalogNav" type="HBoxContainer" parent="EditorUI/Root/FillPanel/Scroll/FillVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="DecorCatalogBackBtn" type="Button" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox/DecorCatalogNav"]
+[node name="FillCatalogBackBtn" type="Button" parent="EditorUI/Root/FillPanel/Scroll/FillVBox/FillCatalogNav"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 flat = true
 text = "‹ Назад"
 
-[node name="DecorCatalogLocation" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox/DecorCatalogNav"]
+[node name="FillCatalogLocation" type="Label" parent="EditorUI/Root/FillPanel/Scroll/FillVBox/FillCatalogNav"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Все группы"
 vertical_alignment = 1
 
-[node name="DecorTagFilterToggle" type="Button" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox/DecorCatalogNav"]
+[node name="FillTagFilterToggle" type="Button" parent="EditorUI/Root/FillPanel/Scroll/FillVBox/FillCatalogNav"]
 unique_name_in_owner = true
 layout_mode = 2
 flat = true
 text = "Теги ▾"
 
-[node name="DecorTagFilters" type="HFlowContainer" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+[node name="FillTagFilters" type="HFlowContainer" parent="EditorUI/Root/FillPanel/Scroll/FillVBox"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 theme_override_constants/h_separation = 3
 theme_override_constants/v_separation = 3
 
-[node name="DecorAssetContainer" type="VBoxContainer" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+[node name="FillAssetContainer" type="VBoxContainer" parent="EditorUI/Root/FillPanel/Scroll/FillVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 3
 
-[node name="DecorInspectorPanel" type="PanelContainer" parent="EditorUI/Root"]
+[node name="FillInspectorPanel" type="PanelContainer" parent="EditorUI/Root"]
 unique_name_in_owner = true
 visible = false
 custom_minimum_size = Vector2(300, 0)
@@ -845,130 +845,130 @@ offset_bottom = -48.0
 grow_horizontal = 0
 grow_vertical = 2
 
-[node name="Scroll" type="ScrollContainer" parent="EditorUI/Root/DecorInspectorPanel"]
+[node name="Scroll" type="ScrollContainer" parent="EditorUI/Root/FillInspectorPanel"]
 layout_mode = 2
 
-[node name="InspectorVBox" type="VBoxContainer" parent="EditorUI/Root/DecorInspectorPanel/Scroll"]
+[node name="InspectorVBox" type="VBoxContainer" parent="EditorUI/Root/FillInspectorPanel/Scroll"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 6
 
-[node name="DecorInspectorTitle" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FillInspectorTitle" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Объект не выбран"
 horizontal_alignment = 1
 
-[node name="GeneralSectionLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="GeneralSectionLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Основное"
 theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
 
-[node name="DecorIdLabel" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FillIdLabel" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 theme_override_font_sizes/font_size = 12
 text = "ID: —"
 
-[node name="DecorAssetLabel" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FillAssetLabel" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 theme_override_font_sizes/font_size = 12
 text = "Ассет: —"
 
-[node name="DecorBadgesLabel" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FillBadgesLabel" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 theme_override_font_sizes/font_size = 12
 text = ""
 
-[node name="HSepTransform" type="HSeparator" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="HSepTransform" type="HSeparator" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 layout_mode = 2
 
-[node name="TransformSectionLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="TransformSectionLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 layout_mode = 2
 text = "Трансформ"
 theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
 
-[node name="TransformGrid" type="GridContainer" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="TransformGrid" type="GridContainer" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 layout_mode = 2
 columns = 2
 
-[node name="PosXLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="PosXLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
 text = "Позиция X"
 
-[node name="DecorPosXSpin" type="SpinBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="FillPosXSpin" type="SpinBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = -128.0
 max_value = 128.0
 step = 0.05
 
-[node name="PosYLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="PosYLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
 text = "Позиция Y"
 
-[node name="DecorPosYSpin" type="SpinBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="FillPosYSpin" type="SpinBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = -16.0
 max_value = 64.0
 step = 0.05
 
-[node name="PosZLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="PosZLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
 text = "Позиция Z"
 
-[node name="DecorPosZSpin" type="SpinBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="FillPosZSpin" type="SpinBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = -128.0
 max_value = 128.0
 step = 0.05
 
-[node name="YawLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="YawLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
 text = "Поворот Y°"
 
-[node name="DecorYawSpin" type="SpinBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="FillYawSpin" type="SpinBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = -360.0
 max_value = 360.0
 step = 1.0
 
-[node name="PitchLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="PitchLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
 text = "Поворот X°"
 
-[node name="DecorPitchSpin" type="SpinBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="FillPitchSpin" type="SpinBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = -360.0
 max_value = 360.0
 step = 1.0
 
-[node name="RollLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="RollLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
 text = "Поворот Z°"
 
-[node name="DecorRollSpin" type="SpinBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="FillRollSpin" type="SpinBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = -360.0
 max_value = 360.0
 step = 1.0
 
-[node name="ScaleLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="ScaleLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
 text = "Масштаб"
 
-[node name="DecorScaleSpin" type="SpinBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="FillScaleSpin" type="SpinBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = 0.2
@@ -976,43 +976,43 @@ max_value = 5.0
 step = 0.05
 value = 1.0
 
-[node name="HSepControls" type="HSeparator" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="HSepControls" type="HSeparator" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 layout_mode = 2
 
-[node name="DecorControlsVBox" type="VBoxContainer" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FillControlsVBox" type="VBoxContainer" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 4
 script = ExtResource("5_property_inspector")
 
-[node name="ActionsRow" type="HBoxContainer" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="ActionsRow" type="HBoxContainer" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 layout_mode = 2
 
-[node name="DecorReplaceBtn" type="Button" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/ActionsRow"]
+[node name="FillReplaceBtn" type="Button" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/ActionsRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Заменить на выбранный ассет"
 tooltip_text = "Заменить ассет выбранного объекта"
 
-[node name="HSepLinks" type="HSeparator" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="HSepLinks" type="HSeparator" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 layout_mode = 2
 
-[node name="LinksSectionLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="LinksSectionLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Связи"
 theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
 
-[node name="ZoneLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="ZoneLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 layout_mode = 2
 text = "Зона-владелец:"
 
-[node name="DecorZoneOption" type="OptionButton" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FillZoneOption" type="OptionButton" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="DecorZoneWarningLabel" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FillZoneWarningLabel" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -1020,89 +1020,89 @@ theme_override_colors/font_color = Color(1.0, 0.7, 0.2, 1)
 theme_override_font_sizes/font_size = 12
 autowrap_mode = 2
 
-[node name="FixturesSectionLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FixturesSectionLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Функциональные точки"
 theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
 
-[node name="FixtureActionsRow" type="HBoxContainer" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FixtureActionsRow" type="HBoxContainer" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 layout_mode = 2
 
-[node name="FixtureAddBtn" type="Button" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/FixtureActionsRow"]
+[node name="FixtureAddBtn" type="Button" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/FixtureActionsRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "＋ Точка"
 
-[node name="FixtureDeleteBtn" type="Button" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/FixtureActionsRow"]
+[node name="FixtureDeleteBtn" type="Button" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/FixtureActionsRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Удалить"
 
-[node name="FixtureList" type="ItemList" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FixtureList" type="ItemList" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 80)
 layout_mode = 2
 
-[node name="FixtureIdLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FixtureIdLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 theme_override_font_sizes/font_size = 12
 text = "ID: —"
 
-[node name="FixtureCapLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FixtureCapLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 layout_mode = 2
 text = "Функция:"
 
-[node name="FixtureCapabilityOption" type="OptionButton" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FixtureCapabilityOption" type="OptionButton" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="FixtureVisualLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FixtureVisualLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 layout_mode = 2
 text = "Визуальный объект:"
 
-[node name="FixtureVisualOption" type="OptionButton" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FixtureVisualOption" type="OptionButton" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="FixtureZoneLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FixtureZoneLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 layout_mode = 2
 text = "Зона:"
 
-[node name="FixtureZoneOption" type="OptionButton" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FixtureZoneOption" type="OptionButton" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="FixtureFireDefaultsLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FixtureFireDefaultsLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Параметры огня"
 theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
 visible = false
 
-[node name="FixtureFireGrid" type="GridContainer" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FixtureFireGrid" type="GridContainer" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 columns = 2
 visible = false
 
-[node name="FixtureLitLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/FixtureFireGrid"]
+[node name="FixtureLitLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/FixtureFireGrid"]
 layout_mode = 2
 text = "Горит"
 
-[node name="FixtureLitCheck" type="CheckBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/FixtureFireGrid"]
+[node name="FixtureLitCheck" type="CheckBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/FixtureFireGrid"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="FixtureFuelLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/FixtureFireGrid"]
+[node name="FixtureFuelLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/FixtureFireGrid"]
 layout_mode = 2
 text = "Топливо"
 
-[node name="FixtureFuelSpin" type="SpinBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/FixtureFireGrid"]
+[node name="FixtureFuelSpin" type="SpinBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/FixtureFireGrid"]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = 0.0
@@ -1110,11 +1110,11 @@ max_value = 100.0
 step = 1.0
 value = 4.0
 
-[node name="FixtureCapFuelLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/FixtureFireGrid"]
+[node name="FixtureCapFuelLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/FixtureFireGrid"]
 layout_mode = 2
 text = "Вместимость"
 
-[node name="FixtureCapFuelSpin" type="SpinBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/FixtureFireGrid"]
+[node name="FixtureCapFuelSpin" type="SpinBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/FixtureFireGrid"]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = 1.0
@@ -1122,30 +1122,30 @@ max_value = 100.0
 step = 1.0
 value = 10.0
 
-[node name="HSepObjects" type="HSeparator" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="HSepObjects" type="HSeparator" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 layout_mode = 2
 
-[node name="ObjectsLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="ObjectsLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 layout_mode = 2
 text = "Объекты в чертеже:"
 
-[node name="DecorObjectSearchEdit" type="LineEdit" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FillObjectSearchEdit" type="LineEdit" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 placeholder_text = "Поиск объектов..."
 clear_button_enabled = true
 
-[node name="ZoneFilterLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="ZoneFilterLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 layout_mode = 2
 text = "Фильтр по зоне:"
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 theme_override_font_sizes/font_size = 12
 
-[node name="DecorZoneFilterOption" type="OptionButton" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FillZoneFilterOption" type="OptionButton" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="DecorObjectList" type="ItemList" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FillObjectList" type="ItemList" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 130)
 layout_mode = 2
@@ -1177,7 +1177,7 @@ layout_mode = 2
 
 [node name="ShortcutTooltip" parent="EditorUI/Root/StatusBar/HBox" instance=ExtResource("4_shortcuts")]
 layout_mode = 2
-shortcuts_text = "Общее\nЛКМ — строить / выбрать · Shift+ЛКМ — пипетка\nShift+ПКМ — стереть · ПКМ — камера · СКМ — панорама · Колесо — зум\nWASD/QE — движение камеры · Ctrl+Z / Ctrl+Y — отменить / повторить\n\nКаркас\nE — ластик · L — линия · M — прямоугольник · Z/X/C — поворот\nPageUp/PageDown — слой выше / ниже · Shift+СКМ — взять кисть\n\nДекор\nC/R, X, Z — поворот по осям · Ctrl+D — дублировать · Delete — удалить\n\nЗоны\nQ/W — область / точка · Tab — следующая роль · F — поворот точки\nEsc — снять выделение / режим выбора · Shift+ПКМ — стереть клетку · Delete — удалить выбранное"
+shortcuts_text = "Общее\nЛКМ — строить / выбрать · Shift+ЛКМ — пипетка\nShift+ПКМ — стереть · ПКМ — камера · СКМ — панорама · Колесо — зум\nWASD/QE — движение камеры · Ctrl+Z / Ctrl+Y — отменить / повторить\n\nКаркас\nE — ластик · L — линия · M — прямоугольник · Z/X/C — поворот\nPageUp/PageDown — слой выше / ниже · Shift+СКМ — взять кисть\n\nНаполнение\nC/R, X, Z — поворот по осям · Ctrl+D — дублировать · Delete — удалить\n\nЗоны\nQ/W — область / точка · Tab — следующая роль · F — поворот точки\nEsc — снять выделение / режим выбора · Shift+ПКМ — стереть клетку · Delete — удалить выбранное"
 
 [node name="MetadataPanel" type="ConfirmationDialog" parent="EditorUI/Root"]
 unique_name_in_owner = true
@@ -1417,7 +1417,7 @@ placeholder_text = "my_building_id"
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/BackBtn" to="." method="_confirm_back_to_menu"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/ModeFrameBtn" to="." method="_on_mode_frame_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/ModeFinishesBtn" to="." method="_on_mode_finishes_pressed"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/ModeDecorBtn" to="." method="_on_mode_decor_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/ModeFillBtn" to="." method="_on_mode_fill_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/ModeZonesBtn" to="." method="_on_mode_zones_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/NewBtn" to="." method="_on_new_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/LoadBtn" to="." method="_on_load_pressed"]

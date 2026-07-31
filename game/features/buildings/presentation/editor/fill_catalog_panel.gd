@@ -1,7 +1,7 @@
-class_name DecorCatalogPanel
+class_name FillCatalogPanel
 extends EditorCatalogPanel
 
-## Catalog sub-panel of decor mode: one-level-at-a-time browse navigation,
+## Catalog sub-panel of fill mode: one-level-at-a-time browse navigation,
 ## search, tag filters, recent assets, and snap-step selection.
 ##
 ## Delegates core catalog browsing and UI management to EditorCatalogPanel.

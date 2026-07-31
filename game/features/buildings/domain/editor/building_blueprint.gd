@@ -5,13 +5,13 @@ extends RefCounted
 ## format (see design_docs/engine/modular_building_editor.md).
 ##
 ## Frame-construction level only populates `blocks` and `construction_cost`;
-## the decor / active-zone sections are preserved verbatim on load/save so the
+## the fill / active-zone sections are preserved verbatim on load/save so the
 ## format stays forward-compatible with later editor modes.
 
 const BlueprintBlockScript = preload("res://game/features/buildings/domain/editor/blueprint_block.gd")
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
-const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
+const FillObjectRecordScript = preload("res://game/features/buildings/domain/editor/fill_object_record.gd")
 const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
 const ContentIdScript = preload("res://game/features/content/domain/content_id.gd")
 
@@ -49,8 +49,8 @@ var areas: Array[ZoneAreaRecord] = []
 var anchors: Array[ZoneAnchorRecord] = []
 var routes: Array[ZoneRouteRecord] = []
 
-## Placed decor and furnishing (authored in editor Mode 3, design §3.3).
-var objects: Array[DecorObjectRecord] = []
+## Placed fill and furnishing (authored in editor Mode 3, design §3.3).
+var objects: Array[FillObjectRecord] = []
 
 ## Functional fixtures (design_docs/engine/building_furnishing.md §3.2).
 ## Each entry is a FixtureDefinition describing a game-interactable element.
@@ -179,9 +179,9 @@ func to_dict() -> Dictionary:
 		anchor_dicts.append(anchor.to_dict())
 	var object_dicts: Array = []
 	var pivot := pivot_offset()
-	for decor_object in objects:
-		var object_dict := decor_object.to_dict()
-		object_dict["pos"] = [decor_object.pos.x - pivot.x, decor_object.pos.y, decor_object.pos.z - pivot.z]
+	for fill_object in objects:
+		var object_dict := fill_object.to_dict()
+		object_dict["pos"] = [fill_object.pos.x - pivot.x, fill_object.pos.y, fill_object.pos.z - pivot.z]
 		object_dicts.append(object_dict)
 	return {
 		"version": FORMAT_VERSION,
@@ -260,7 +260,7 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 		var pivot := bp.pivot_offset()  # `footprint` is already parsed above.
 		for raw_object in raw_objects:
 			if raw_object is Dictionary:
-				var record: DecorObjectRecord = DecorObjectRecordScript.from_dict(raw_object)
+				var record: FillObjectRecord = FillObjectRecordScript.from_dict(raw_object)
 				record.pos += Vector3(pivot.x, 0.0, pivot.z)
 				bp.objects.append(record)
 
@@ -389,7 +389,7 @@ func validation_errors() -> Array[String]:
 			if _interiors_intersect(left_aabb, right_aabb) and not _allows_structural_joint(left, right):
 				errors.append("Overlapping block volumes: %s and %s" % [left.pos, right.pos])
 	errors.append_array(_zone_errors())
-	errors.append_array(_decor_errors())
+	errors.append_array(_fill_errors())
 	errors.append_array(_fixture_errors())
 	return errors
 
@@ -551,7 +551,7 @@ func _zone_errors() -> Array[String]:
 	return errors
 
 
-func _decor_errors() -> Array[String]:
+func _fill_errors() -> Array[String]:
 	var errors: Array[String] = []
 	var seen_ids: Dictionary = {}
 	var zone_ids: Dictionary = {}
@@ -562,10 +562,10 @@ func _decor_errors() -> Array[String]:
 		for e in obj_errors:
 			errors.append(e)
 		if seen_ids.has(obj.id):
-			errors.append("Duplicate decor object id: %s" % obj.id)
+			errors.append("Duplicate fill object id: %s" % obj.id)
 		seen_ids[obj.id] = true
 		if obj.owner_zone_id != &"" and not zone_ids.has(obj.owner_zone_id):
-			errors.append("Decor object %s references unknown place zone: %s" % [obj.id, obj.owner_zone_id])
+			errors.append("Fill object %s references unknown place zone: %s" % [obj.id, obj.owner_zone_id])
 	return errors
 
 

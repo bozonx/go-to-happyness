@@ -8,7 +8,7 @@ const RepositoryScript = preload("res://game/features/buildings/presentation/edi
 const LibraryScript = preload("res://game/features/buildings/presentation/building_blueprint_library.gd")
 const BuildingBlueprintsScript = preload("res://game/features/buildings/presentation/building_blueprints.gd")
 const BuildingCatalogScript = preload("res://game/features/buildings/domain/building_catalog.gd")
-const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
+const FillObjectRecordScript = preload("res://game/features/buildings/domain/editor/fill_object_record.gd")
 
 const TEST_ID := &"_test_modular_pipeline"
 const TEST_PROJECT_ROOT := "user://content/projects/test_author.test_buildings"
@@ -73,11 +73,11 @@ func _init() -> void:
 	assert(not LibraryScript.has(runtime_key))
 
 	_test_builtin_tent()
-	_test_decor_only_blueprint_uses_footprint_pivot()
+	_test_fill_only_blueprint_uses_footprint_pivot()
 	_test_id_alphabet_is_refused_not_mangled()
 	_test_save_writes_back_to_the_same_file()
 	_test_read_only_source_is_not_writable()
-	_test_decor_survives_a_round_trip()
+	_test_fill_survives_a_round_trip()
 	MapDocumentService._remove_directory(TEST_PROJECT_ROOT)
 	quit(0)
 
@@ -169,19 +169,19 @@ func _test_read_only_source_is_not_writable() -> void:
 	assert(not shipped.is_empty(), "shipped blueprints are listed for opening")
 
 
-## Decor is part of the blueprint, not a layer on top of it: one file, one save.
+## Fill is part of the blueprint, not a layer on top of it: one file, one save.
 ## The invariant is asserted rather than assumed because nothing in the save path
 ## mentions `objects` — it works only as long as the whole document is written.
-func _test_decor_survives_a_round_trip() -> void:
+func _test_fill_survives_a_round_trip() -> void:
 	var repository := RepositoryScript.new(false, TEST_PROJECT_ROOT, TEST_SOURCE)
 	var blueprint := BlueprintScript.new()
-	blueprint.id = &"_test_decor_round_trip"
-	blueprint.role = &"_test_decor_round_trip"
-	blueprint.name = "С декором"
+	blueprint.id = &"_test_fill_round_trip"
+	blueprint.role = &"_test_fill_round_trip"
+	blueprint.name = "С наполнением"
 	blueprint.footprint = Vector2i(4, 4)
 	blueprint.grid_bounds = Vector3i(4, 2, 4)
 
-	var record = DecorObjectRecordScript.new()
+	var record = FillObjectRecordScript.new()
 	record.id = &"campfire_1"
 	record.asset_id = &"campfire"
 	record.pos = Vector3(2.5, 0.0, 1.5)
@@ -193,13 +193,13 @@ func _test_decor_survives_a_round_trip() -> void:
 
 	var reread = repository.load_blueprint(saved["path"])
 	assert(reread != null, "reopened")
-	assert(reread.objects.size() == 1, "the decor object came back")
+	assert(reread.objects.size() == 1, "the fill object came back")
 	assert(reread.objects[0].id == &"campfire_1")
 	assert(reread.objects[0].asset_id == &"campfire")
 	# Positions cross the pivot conversion on the way out and back (§7.1), so an
 	# exact match here also proves the two directions agree.
 	assert(reread.objects[0].pos.is_equal_approx(record.pos),
-		"decor position survived the pivot conversion: %s vs %s" % [reread.objects[0].pos, record.pos])
+		"fill position survived the pivot conversion: %s vs %s" % [reread.objects[0].pos, record.pos])
 	assert(is_equal_approx(reread.objects[0].rot.y, 90.0), "rotation survived")
 
 	DirAccess.remove_absolute(saved["path"])
@@ -222,12 +222,12 @@ func _test_builtin_tent() -> void:
 	assert(costs == {"branches": 4, "grass": 4}, "tent cost must stay the static one, got %s" % costs)
 
 
-## A building with only authored decor still uses the footprint pivot. Otherwise
+## A building with only authored fill still uses the footprint pivot. Otherwise
 ## its objects are offset by half the footprint when placed in the world.
-func _test_decor_only_blueprint_uses_footprint_pivot() -> void:
+func _test_fill_only_blueprint_uses_footprint_pivot() -> void:
 	var campfire: Dictionary = BuildingBlueprintsScript.get_blueprint("campfire")
 	var modules: Array = campfire.get("modules", [])
-	assert(modules.size() == 1, "campfire must contain its authored decor module")
+	assert(modules.size() == 1, "campfire must contain its authored fill module")
 	var local_position: Vector3 = modules[0].get("position", Vector3.INF)
 	assert(local_position.is_zero_approx(),
-		"decor-only campfire must be centred on its placement cell")
+		"fill-only campfire must be centred on its placement cell")

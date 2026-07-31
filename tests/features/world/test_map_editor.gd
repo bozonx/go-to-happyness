@@ -3,8 +3,8 @@ extends SceneTree
 ## End-to-end test of the territory editor against the real scene
 ## (design_docs/engine/map_editor.md §15 "Тесты").
 ##
-## Modelled on `test_decor_mode_editor.gd` for a reason that is already paid for:
-## the old catalog-only coverage of decor mode passed green while the entire mode
+## Modelled on `test_fill_mode_editor.gd` for a reason that is already paid for:
+## the old catalog-only coverage of fill mode passed green while the entire mode
 ## could not place a single object. Unit tests over the brush and the format prove
 ## the parts; only running the actual scene proves the editor.
 ##

@@ -1,4 +1,4 @@
-class_name DecorObjectRecord
+class_name FillObjectRecord
 extends RefCounted
 
 
@@ -24,17 +24,17 @@ var scale: Vector3 = Vector3.ONE
 var appearance: Dictionary = {}
 
 
-static func make(p_asset_id: StringName, p_pos: Vector3, unique_suffix: int) -> DecorObjectRecord:
-	var record := DecorObjectRecord.new()
-	record.id = "decor_%s_%d" % [String(p_asset_id), unique_suffix]
+static func make(p_asset_id: StringName, p_pos: Vector3, unique_suffix: int) -> FillObjectRecord:
+	var record := FillObjectRecord.new()
+	record.id = "fill_%s_%d" % [String(p_asset_id), unique_suffix]
 	record.asset_id = p_asset_id
 	record.pos = p_pos
 	return record
 
 
-func duplicate_record(unique_suffix: int) -> DecorObjectRecord:
-	var copy := DecorObjectRecord.new()
-	copy.id = "decor_%s_%d" % [String(asset_id), unique_suffix]
+func duplicate_record(unique_suffix: int) -> FillObjectRecord:
+	var copy := FillObjectRecord.new()
+	copy.id = "fill_%s_%d" % [String(asset_id), unique_suffix]
 	copy.asset_id = asset_id
 	copy.owner_zone_id = owner_zone_id
 	copy.pos = pos
@@ -79,8 +79,8 @@ static func json_safe_value(value: Variant) -> Variant:
 
 
 ## Deserializes an object from the current blueprint format.
-static func from_dict(data: Dictionary) -> DecorObjectRecord:
-	var record := DecorObjectRecord.new()
+static func from_dict(data: Dictionary) -> FillObjectRecord:
+	var record := FillObjectRecord.new()
 	record.id = String(data.get("id", ""))
 	record.asset_id = StringName(data.get("asset_id", ""))
 	record.owner_zone_id = StringName(data.get("owner_zone", ""))
@@ -95,15 +95,15 @@ static func from_dict(data: Dictionary) -> DecorObjectRecord:
 func validation_errors() -> Array[String]:
 	var errors: Array[String] = []
 	if id.strip_edges().is_empty():
-		errors.append("Decor object has an empty id")
+		errors.append("Fill object has an empty id")
 	if asset_id == &"":
-		errors.append("Decor object %s has no asset_id" % id)
+		errors.append("Fill object %s has no asset_id" % id)
 	for component in [pos.x, pos.y, pos.z, rot.x, rot.y, rot.z]:
 		if not is_finite(component):
-			errors.append("Decor object %s has a non-finite transform" % id)
+			errors.append("Fill object %s has a non-finite transform" % id)
 			break
 	if scale.x <= 0.0 or scale.y <= 0.0 or scale.z <= 0.0:
-		errors.append("Decor object %s has a non-positive scale" % id)
+		errors.append("Fill object %s has a non-positive scale" % id)
 	return errors
 
 
@@ -118,14 +118,14 @@ func validation_errors_with_asset(asset: Variant) -> Array[String]:
 	# Scale: must be uniform and allowed by the asset's scale policy.
 	var scale_val := scale.x
 	if not is_equal_approx(scale.x, scale.y) or not is_equal_approx(scale.x, scale.z):
-		errors.append("Decor object %s has non-uniform scale (%.3f, %.3f, %.3f)" % [id, scale.x, scale.y, scale.z])
+		errors.append("Fill object %s has non-uniform scale (%.3f, %.3f, %.3f)" % [id, scale.x, scale.y, scale.z])
 	elif not asset.is_scale_allowed(scale_val):
-		errors.append("Decor object %s has scale %.3f which is not allowed by asset %s" % [id, scale_val, asset.id])
+		errors.append("Fill object %s has scale %.3f which is not allowed by asset %s" % [id, scale_val, asset.id])
 	# Rotation: only allowed axes may have non-zero rotation.
 	if not is_equal_approx(rot.x, 0.0) and not asset.is_rotation_axis_allowed("x"):
-		errors.append("Decor object %s rotates on X axis but asset %s does not allow it" % [id, asset.id])
+		errors.append("Fill object %s rotates on X axis but asset %s does not allow it" % [id, asset.id])
 	if not is_equal_approx(rot.z, 0.0) and not asset.is_rotation_axis_allowed("z"):
-		errors.append("Decor object %s rotates on Z axis but asset %s does not allow it" % [id, asset.id])
+		errors.append("Fill object %s rotates on Z axis but asset %s does not allow it" % [id, asset.id])
 	# Collision policy: must be a known value.
 	var valid_policies := [
 		WorldAssetDef.COLLISION_NONE,
@@ -134,7 +134,7 @@ func validation_errors_with_asset(asset: Variant) -> Array[String]:
 		WorldAssetDef.COLLISION_FOOTPRINT,
 	]
 	if not (asset.collision_policy in valid_policies):
-		errors.append("Decor object %s: asset %s has unknown collision policy %s" % [id, asset.id, asset.collision_policy])
+		errors.append("Fill object %s: asset %s has unknown collision policy %s" % [id, asset.id, asset.collision_policy])
 	return errors
 
 

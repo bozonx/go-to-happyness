@@ -119,14 +119,14 @@ func footprint_m() -> Vector3:
 
 
 ## Control defaults, already JSON-safe (Color → html string), ready to be stored
-## in a DecorObjectRecord.
+## in a FillObjectRecord.
 func default_appearance() -> Dictionary:
 	var props: Dictionary = {}
 	for control in appearance_controls:
 		var control_name := String(control.get("name", ""))
 		if control_name.is_empty():
 			continue
-		props[control_name] = DecorObjectRecord.json_safe_value(control.get("default", null))
+		props[control_name] = FillObjectRecord.json_safe_value(control.get("default", null))
 	return props
 
 

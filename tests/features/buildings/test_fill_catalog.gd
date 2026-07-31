@@ -1,17 +1,17 @@
 extends SceneTree
 
-const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
+const FillObjectRecordScript = preload("res://game/features/buildings/domain/editor/fill_object_record.gd")
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
 
 
 func _init() -> void:
-	print("--- Running test_decor_catalog.gd ---")
+	print("--- Running test_fill_catalog.gd ---")
 	_test_catalog_assets()
 	_test_catalog_taxonomy()
 	_test_asset_scenes_exist()
 	_test_bindings_resolve_in_scenes()
-	_test_blueprint_decor_objects()
+	_test_blueprint_fill_objects()
 	_test_colors_survive_json_round_trip()
 	_test_validation_rejects_broken_objects()
 	_test_current_round_trip()
@@ -20,7 +20,7 @@ func _init() -> void:
 	_test_catalog_filtering()
 	_test_builtin_blueprints_are_current()
 	_test_asset_validation_with_known_asset()
-	print("--- test_decor_catalog.gd PASSED ---")
+	print("--- test_fill_catalog.gd PASSED ---")
 	quit(0)
 
 
@@ -88,14 +88,14 @@ func _test_catalog_taxonomy() -> void:
 
 func _test_asset_scenes_exist() -> void:
 	for asset in WorldAssetCatalog.get_all_assets():
-		assert(ResourceLoader.exists(asset.scene_path), "Missing decor scene: %s" % asset.scene_path)
-		assert(load(asset.scene_path) is PackedScene, "Decor scene failed to load: %s" % asset.scene_path)
+		assert(ResourceLoader.exists(asset.scene_path), "Missing fill scene: %s" % asset.scene_path)
+		assert(load(asset.scene_path) is PackedScene, "Fill scene failed to load: %s" % asset.scene_path)
 
 
 ## Every declared binding must point at a node that actually exists, otherwise
 ## the control silently does nothing in the editor.
 ##
-## The `asset_id` meta and binding resolution are a decor-object contract: they
+## The `asset_id` meta and binding resolution are a fill-object contract: they
 ## matter for assets the `DecorObjectController` drives through
 ## `appearance_controls`. Natural and ambient fill (trees, grass, forage,
 ## rabbits, fireflies) is rendered by other presenters and carries no bindings,
@@ -117,10 +117,10 @@ func _test_bindings_resolve_in_scenes() -> void:
 		instance.free()
 
 
-func _test_blueprint_decor_objects() -> void:
+func _test_blueprint_fill_objects() -> void:
 	var bp := BuildingBlueprintScript.new()
-	bp.id = &"test_decor_house"
-	var record := DecorObjectRecordScript.make(&"campfire", Vector3(1.5, 0.0, 1.5), 1)
+	bp.id = &"test_fill_house"
+	var record := FillObjectRecordScript.make(&"campfire", Vector3(1.5, 0.0, 1.5), 1)
 	record.rot = Vector3(0.0, 90.0, 0.0)
 	record.scale = Vector3(1.5, 1.5, 1.5)
 	record.appearance = {"visual_flame_visible": true, "light_energy": 2.0}
@@ -135,7 +135,7 @@ func _test_blueprint_decor_objects() -> void:
 
 	var loaded_bp := BuildingBlueprintScript.from_dict(dict)
 	assert(loaded_bp.objects.size() == 1, "Loaded blueprint objects size check")
-	var loaded: DecorObjectRecordScript = loaded_bp.objects[0]
+	var loaded: FillObjectRecordScript = loaded_bp.objects[0]
 	assert(loaded.asset_id == &"campfire", "Loaded blueprint object asset check")
 	assert(loaded.rot.y == 90.0, "Rotation must survive the round trip")
 	# `scale` used to be written and then ignored on load.
@@ -150,31 +150,31 @@ func _test_colors_survive_json_round_trip() -> void:
 	assert(defaults["light_color"] is String, "Colour defaults must be stored as html strings")
 
 	var bp := BuildingBlueprintScript.new()
-	bp.id = &"test_decor_colors"
-	var record := DecorObjectRecordScript.make(&"campfire", Vector3.ZERO, 1)
+	bp.id = &"test_fill_colors"
+	var record := FillObjectRecordScript.make(&"campfire", Vector3.ZERO, 1)
 	record.appearance = defaults
 	bp.objects.append(record)
 
-	assert(not bp.content_revision().is_empty(), "content_revision must not choke on decor appearance")
+	assert(not bp.content_revision().is_empty(), "content_revision must not choke on fill appearance")
 
 	var reloaded := BuildingBlueprintScript.from_json(bp.to_json())
-	assert(reloaded != null, "Blueprint with decor must round-trip through JSON")
-	assert(reloaded.objects.size() == 1, "Decor object must survive a JSON round trip")
+	assert(reloaded != null, "Blueprint with fill must round-trip through JSON")
+	assert(reloaded.objects.size() == 1, "Fill object must survive a JSON round trip")
 	assert(reloaded.objects[0].appearance["light_color"] == defaults["light_color"], "Colour value must be preserved")
 
 
 func _test_validation_rejects_broken_objects() -> void:
 	var bp := BuildingBlueprintScript.new()
-	bp.id = &"test_decor_validation"
-	bp.objects.append(DecorObjectRecordScript.make(&"campfire", Vector3.ZERO, 7))
-	bp.objects.append(DecorObjectRecordScript.make(&"campfire", Vector3.ONE, 7))
+	bp.id = &"test_fill_validation"
+	bp.objects.append(FillObjectRecordScript.make(&"campfire", Vector3.ZERO, 7))
+	bp.objects.append(FillObjectRecordScript.make(&"campfire", Vector3.ONE, 7))
 	var errors := bp.validation_errors()
-	assert(errors.any(func(e: String): return e.contains("Duplicate decor object id")),
-		"Duplicate decor ids must be reported")
+	assert(errors.any(func(e: String): return e.contains("Duplicate fill object id")),
+		"Duplicate fill ids must be reported")
 
 	var unknown_bp := BuildingBlueprintScript.new()
-	unknown_bp.id = &"test_decor_unknown_asset"
-	unknown_bp.objects.append(DecorObjectRecordScript.make(&"not_installed_asset", Vector3.ZERO, 1))
+	unknown_bp.id = &"test_fill_unknown_asset"
+	unknown_bp.objects.append(FillObjectRecordScript.make(&"not_installed_asset", Vector3.ZERO, 1))
 	# A file may reference a custom asset that is not installed here; it must
 	# still load rather than being rejected outright.
 	assert(unknown_bp.validation_errors().is_empty(), "An unknown asset id must not fail validation")
@@ -184,7 +184,7 @@ func _test_validation_rejects_broken_objects() -> void:
 func _test_current_round_trip() -> void:
 	var bp := BuildingBlueprintScript.new()
 	bp.id = &"test_current_roundtrip"
-	var record := DecorObjectRecordScript.make(&"campfire", Vector3(1.0, 0.0, 2.0), 1)
+	var record := FillObjectRecordScript.make(&"campfire", Vector3(1.0, 0.0, 2.0), 1)
 	record.rot = Vector3(0.0, 180.0, 0.0)
 	record.scale = Vector3(1.0, 1.0, 1.0)
 	record.owner_zone_id = &""
@@ -232,21 +232,21 @@ func _test_non_empty_fixtures_rejected() -> void:
 	print("  fixtures validation ok")
 
 
-## A decor object referencing a non-existent zone must be flagged by the validator.
+## A fill object referencing a non-existent zone must be flagged by the validator.
 func _test_owner_zone_validation() -> void:
 	var bp := BuildingBlueprintScript.new()
 	bp.id = &"test_owner_zone_validation"
-	var record := DecorObjectRecordScript.make(&"campfire", Vector3.ZERO, 1)
+	var record := FillObjectRecordScript.make(&"campfire", Vector3.ZERO, 1)
 	record.owner_zone_id = &"nonexistent_zone"
 	bp.objects.append(record)
 	var errors := bp.validation_errors()
 	assert(errors.any(func(e: String): return e.contains("unknown place zone") and e.contains("nonexistent_zone")),
-		"Decor object with unknown owner_zone must be flagged")
+		"Fill object with unknown owner_zone must be flagged")
 	# Clearing the zone must remove the error.
 	record.owner_zone_id = &""
 	errors = bp.validation_errors()
 	assert(not errors.any(func(e: String): return e.contains("unknown place zone")),
-		"Decor object with empty owner_zone must not flag a zone error")
+		"Fill object with empty owner_zone must not flag a zone error")
 	print("  owner_zone validation ok")
 
 
@@ -334,41 +334,41 @@ func _test_builtin_blueprints_are_current() -> void:
 	print("  builtin blueprints format ok (%d files)" % found_count)
 
 
-## A decor object with a known asset must be validated against the asset's
+## A fill object with a known asset must be validated against the asset's
 ## scale, rotation and collision policy constraints.
 func _test_asset_validation_with_known_asset() -> void:
 	var campfire := WorldAssetCatalog.get_asset(&"campfire")
 	assert(campfire != null, "Campfire asset must exist")
 
 	# Locked scale: scale 2.0 must be rejected.
-	var bad_scale := DecorObjectRecordScript.make(&"campfire", Vector3.ZERO, 1)
+	var bad_scale := FillObjectRecordScript.make(&"campfire", Vector3.ZERO, 1)
 	bad_scale.scale = Vector3(2.0, 2.0, 2.0)
 	var errors := bad_scale.validation_errors_with_asset(campfire)
 	assert(errors.any(func(e: String): return e.contains("scale") and e.contains("not allowed")),
 		"Scale 2.0 on locked campfire must be rejected")
 
 	# Non-uniform scale must be rejected.
-	var bad_nonuniform := DecorObjectRecordScript.make(&"campfire", Vector3.ZERO, 2)
+	var bad_nonuniform := FillObjectRecordScript.make(&"campfire", Vector3.ZERO, 2)
 	bad_nonuniform.scale = Vector3(1.0, 2.0, 1.0)
 	errors = bad_nonuniform.validation_errors_with_asset(campfire)
 	assert(errors.any(func(e: String): return e.contains("non-uniform scale")),
 		"Non-uniform scale must be rejected")
 
 	# All axes are authorable for furnishing unless an asset explicitly restricts one.
-	var bad_rot := DecorObjectRecordScript.make(&"campfire", Vector3.ZERO, 3)
+	var bad_rot := FillObjectRecordScript.make(&"campfire", Vector3.ZERO, 3)
 	bad_rot.rot = Vector3(45.0, 0.0, 0.0)
 	errors = bad_rot.validation_errors_with_asset(campfire)
 	assert(errors.is_empty(), "X-axis rotation must be allowed by the default furnishing policy")
 
 	# Valid object: scale 1.0, arbitrary rotation.
-	var good := DecorObjectRecordScript.make(&"campfire", Vector3.ZERO, 4)
+	var good := FillObjectRecordScript.make(&"campfire", Vector3.ZERO, 4)
 	good.scale = Vector3.ONE
 	good.rot = Vector3(0.0, 90.0, 0.0)
 	errors = good.validation_errors_with_asset(campfire)
 	assert(errors.is_empty(), "Valid campfire object must have no errors, got: " + str(errors))
 
 	# Unknown asset: must not produce asset-specific errors.
-	var unknown := DecorObjectRecordScript.make(&"not_installed", Vector3.ZERO, 5)
+	var unknown := FillObjectRecordScript.make(&"not_installed", Vector3.ZERO, 5)
 	errors = unknown.validation_errors_with_asset(null)
 	assert(errors.is_empty(), "Unknown asset must not produce asset-specific errors")
 	print("  asset validation ok")

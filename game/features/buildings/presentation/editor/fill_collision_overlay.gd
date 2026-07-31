@@ -1,14 +1,14 @@
-class_name DecorCollisionOverlay
+class_name FillCollisionOverlay
 extends Node3D
 
-## Wireframe collision overlay for decor objects (design §4.2 — authoring preview,
+## Wireframe collision overlay for fill objects (design §4.2 — authoring preview,
 ## not runtime). When toggled on, draws translucent boxes for each object whose
 ## collision_policy is not "none", and blocking-navigation objects get an
 ## additional coloured sphere marker.
 ##
-## Extracted from DecorModeController to isolate the visual overlay lifecycle.
+## Extracted from BuildingFillModeController to isolate the visual overlay lifecycle.
 
-const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
+const FillObjectRecordScript = preload("res://game/features/buildings/domain/editor/fill_object_record.gd")
 
 var _overlays: Dictionary = {}  ## object id (String) -> Array[MeshInstance3D]
 var _active: bool = false
@@ -35,11 +35,11 @@ func rebuild(blueprint: RefCounted = null) -> void:
 		return
 	if blueprint == null:
 		return
-	for record: DecorObjectRecordScript in blueprint.objects:
+	for record: FillObjectRecordScript in blueprint.objects:
 		_build_for(record)
 
 
-func _build_for(record: DecorObjectRecordScript) -> void:
+func _build_for(record: FillObjectRecordScript) -> void:
 	var asset := WorldAssetCatalog.get_asset(record.asset_id)
 	if asset == null:
 		return

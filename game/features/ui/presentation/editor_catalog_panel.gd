@@ -38,15 +38,15 @@ func setup(controller: Object, editor: Node = null, p_scope: StringName = WorldA
 	_controller = controller
 	scope = p_scope
 
-	if editor != null and editor.has_node("%DecorSearchEdit"):
-		_search_edit = editor.get_node("%DecorSearchEdit")
-		_recent_label = editor.get_node("%DecorRecentLbl")
-		_recent_container = editor.get_node("%DecorRecentContainer")
-		_asset_container = editor.get_node("%DecorAssetContainer")
-		_back_button = editor.get_node("%DecorCatalogBackBtn")
-		_location_label = editor.get_node("%DecorCatalogLocation")
-		_tag_filter_toggle = editor.get_node("%DecorTagFilterToggle")
-		_tag_filters = editor.get_node("%DecorTagFilters")
+	if editor != null and editor.has_node("%FillSearchEdit"):
+		_search_edit = editor.get_node("%FillSearchEdit")
+		_recent_label = editor.get_node("%FillRecentLbl")
+		_recent_container = editor.get_node("%FillRecentContainer")
+		_asset_container = editor.get_node("%FillAssetContainer")
+		_back_button = editor.get_node("%FillCatalogBackBtn")
+		_location_label = editor.get_node("%FillCatalogLocation")
+		_tag_filter_toggle = editor.get_node("%FillTagFilterToggle")
+		_tag_filters = editor.get_node("%FillTagFilters")
 		_build_snap_options(editor)
 	else:
 		_build_dynamic_ui()
@@ -130,8 +130,8 @@ func activate() -> void:
 
 
 func _build_snap_options(editor: Node) -> void:
-	if editor.has_node("%DecorSnap1Btn"):
-		_snap_buttons = {1.0: editor.get_node("%DecorSnap1Btn"), 0.5: editor.get_node("%DecorSnapHalfBtn"), 0.25: editor.get_node("%DecorSnapQuarterBtn")}
+	if editor.has_node("%FillSnap1Btn"):
+		_snap_buttons = {1.0: editor.get_node("%FillSnap1Btn"), 0.5: editor.get_node("%FillSnapHalfBtn"), 0.25: editor.get_node("%FillSnapQuarterBtn")}
 		for step in _snap_buttons.keys():
 			(_snap_buttons[step] as Button).pressed.connect(_select_snap_step.bind(float(step)))
 

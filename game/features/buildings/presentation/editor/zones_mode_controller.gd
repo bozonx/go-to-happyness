@@ -326,6 +326,8 @@ func handle_key(event: InputEventKey) -> bool:
 	if not event.pressed or event.echo:
 		return false
 	match event.keycode:
+		KEY_P:
+			pick_at_cursor()
 		KEY_Q:
 			_arm_tool(TOOL_AREA)
 		KEY_W:
@@ -1017,8 +1019,8 @@ func _delete_selection() -> void:
 		for fixture in _editor.blueprint.fixtures:
 			if fixture.owner_zone_id == area.id:
 				fixtures_count += 1
-		for decor_object in _editor.blueprint.objects:
-			if decor_object.owner_zone_id == area.id:
+		for fill_object in _editor.blueprint.objects:
+			if fill_object.owner_zone_id == area.id:
 				objects_count += 1
 		if anchors_count + fixtures_count + objects_count > 0:
 			var confirmed: bool = await _editor.confirm_action(
@@ -1053,9 +1055,9 @@ func _remove_area(area: ZoneAreaRecord) -> void:
 	for fixture in _editor.blueprint.fixtures:
 		if fixture.owner_zone_id == area.id:
 			fixture.owner_zone_id = &""
-	for decor_object in _editor.blueprint.objects:
-		if decor_object.owner_zone_id == area.id:
-			decor_object.owner_zone_id = &""
+	for fill_object in _editor.blueprint.objects:
+		if fill_object.owner_zone_id == area.id:
+			fill_object.owner_zone_id = &""
 	_editor.blueprint.areas.erase(area)
 	_remove_route_stops(removed_anchor_ids)
 	_clear_selection()
@@ -1440,12 +1442,12 @@ func _refresh_equipment(area: ZoneAreaRecord) -> void:
 			fixture.capabilities.map(func(cap: StringName) -> String: return String(cap)))]
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_equipment_container.add_child(label)
-	for decor_object in _editor.blueprint.objects:
-		if decor_object.owner_zone_id != area.id:
+	for fill_object in _editor.blueprint.objects:
+		if fill_object.owner_zone_id != area.id:
 			continue
 		found = true
 		var label := Label.new()
-		label.text = "▧ Предмет %s" % decor_object.id
+		label.text = "▧ Предмет %s" % fill_object.id
 		_equipment_container.add_child(label)
 	if not found:
 		var empty := Label.new()
@@ -1453,12 +1455,12 @@ func _refresh_equipment(area: ZoneAreaRecord) -> void:
 		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		empty.modulate = Color(0.65, 0.68, 0.72)
 		_equipment_container.add_child(empty)
-	var decor_btn := Button.new()
-	decor_btn.text = "Перейти к оснащению в декоре"
-	decor_btn.pressed.connect(func() -> void:
-		_editor.select_mode(_editor.EditMode.DECOR)
+	var fill_btn := Button.new()
+	fill_btn.text = "Перейти к наполнению"
+	fill_btn.pressed.connect(func() -> void:
+		_editor.select_mode(_editor.EditMode.FILL)
 		_editor.set_status("Выберите предмет или fixture и назначьте ему зону «%s»." % area.display_name()))
-	_equipment_container.add_child(decor_btn)
+	_equipment_container.add_child(fill_btn)
 
 
 func _build_route_rows(route: ZoneRouteRecord) -> void:
@@ -1597,9 +1599,9 @@ func _on_id_submitted(text: String) -> void:
 		for fixture in _editor.blueprint.fixtures:
 			if fixture.owner_zone_id == area.id:
 				fixture.owner_zone_id = new_id
-		for decor_object in _editor.blueprint.objects:
-			if decor_object.owner_zone_id == area.id:
-				decor_object.owner_zone_id = new_id
+		for fill_object in _editor.blueprint.objects:
+			if fill_object.owner_zone_id == area.id:
+				fill_object.owner_zone_id = new_id
 		area.id = new_id
 		_selected_area_id = new_id
 	else:
@@ -1689,8 +1691,8 @@ func _area_has_owned_content(area_id: StringName) -> bool:
 	for fixture in _editor.blueprint.fixtures:
 		if fixture.owner_zone_id == area_id:
 			return true
-	for decor_object in _editor.blueprint.objects:
-		if decor_object.owner_zone_id == area_id:
+	for fill_object in _editor.blueprint.objects:
+		if fill_object.owner_zone_id == area_id:
 			return true
 	return false
 

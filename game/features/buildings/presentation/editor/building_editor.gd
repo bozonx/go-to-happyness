@@ -18,7 +18,7 @@ const CENTRE_BAND_COLOR := Color(1.0, 0.82, 0.18, 0.12)
 
 enum Tool { PLACE, ERASE }
 enum Brush { LINE, RECT }
-enum EditMode { FRAME, FINISHES, DECOR, ZONES }
+enum EditMode { FRAME, FINISHES, FILL, ZONES }
 
 @export_group("Editor")
 ## Forces developer mode when the scene is opened/run directly. The main menu
@@ -48,8 +48,8 @@ var current_mode: int = EditMode.FRAME
 
 ## Frame mode lives in its own controller; see frame_mode_controller.gd.
 var frame_mode: FrameModeController = null
-## Decor mode (design §3.3) lives in its own controller; see decor_mode_controller.gd.
-var decor_mode: DecorModeController = null
+## Fill mode (design §3.3) lives in its own controller; see building_fill_mode_controller.gd.
+var fill_mode: BuildingFillModeController = null
 ## Zones mode lives in its own controller; see zones_mode_controller.gd.
 var zones_mode: ZonesModeController = null
 
@@ -86,12 +86,13 @@ var _orbiting: bool = false
 
 @onready var _mode_frame_btn: Button = %ModeFrameBtn
 @onready var _mode_finishes_btn: Button = %ModeFinishesBtn
-@onready var _mode_decor_btn: Button = %ModeDecorBtn
+@onready var _mode_fill_btn: Button = %ModeFillBtn
 @onready var _mode_zones_btn: Button = %ModeZonesBtn
 
 @onready var _back_btn: Button = %BackBtn
 @onready var _undo_btn: Button = %UndoBtn
 @onready var _redo_btn: Button = %RedoBtn
+@onready var _eyedropper_btn: Button = %EyedropperBtn
 
 var _mode_buttons: Dictionary = {}
 ## Prevent value_changed callbacks from overwriting one footprint dimension
@@ -99,7 +100,7 @@ var _mode_buttons: Dictionary = {}
 ## fields.
 var _syncing_metadata_fields := false
 
-## One chronological history for the entire blueprint.  The older decor-only
+## One chronological history for the entire blueprint.  The older fill-only
 ## snapshots made Ctrl+Z depend on the active mode and left frame/zones edits
 ## irreversible.  A blueprint is still small enough for bounded whole-document
 ## snapshots; this gives every existing mode undo coverage without making each
@@ -160,8 +161,8 @@ func _init_world() -> void:
 
 	frame_mode = FrameModeController.new()
 	add_child(frame_mode)
-	decor_mode = DecorModeController.new()
-	add_child(decor_mode)
+	fill_mode = BuildingFillModeController.new()
+	add_child(fill_mode)
 	zones_mode = ZonesModeController.new()
 	add_child(zones_mode)
 
@@ -174,8 +175,8 @@ func _process(delta: float) -> void:
 	if _camera_controller != null:
 		_camera_controller.update(delta)
 	_update_cursor()
-	if current_mode == EditMode.DECOR:
-		decor_mode.refresh_ghost()
+	if current_mode == EditMode.FILL:
+		fill_mode.refresh_ghost()
 		return
 	if current_mode == EditMode.ZONES:
 		zones_mode.refresh_ghost()
@@ -198,8 +199,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif frame_mode.is_painting():
 			_update_cursor()
 			if cursor_valid:
-				if current_mode == EditMode.DECOR:
-					decor_mode.on_drag()
+				if current_mode == EditMode.FILL:
+					fill_mode.on_drag()
 				elif current_mode == EditMode.FRAME and current_brush == Brush.RECT:
 					frame_mode.paint_rect(frame_mode.paint_anchor, cursor_cell)
 				else:
@@ -234,9 +235,9 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 				frame_mode.last_paint_cell = cursor_cell
 				frame_mode.erase_hovered_block_or_cell()
 				return
-			if current_mode == EditMode.DECOR and event.pressed and event.shift_pressed:
+			if current_mode == EditMode.FILL and event.pressed and event.shift_pressed:
 				_orbiting = false
-				decor_mode.erase_at_cursor()
+				fill_mode.erase_at_cursor()
 				return
 			_orbiting = event.pressed
 		MOUSE_BUTTON_MIDDLE:
@@ -262,16 +263,16 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 					if current_mode == EditMode.FRAME:
 						frame_mode.pick_single_block()
 						return
-					if current_mode == EditMode.DECOR:
-						decor_mode.pick_asset_at_cursor()
+					if current_mode == EditMode.FILL:
+						fill_mode.pick_asset_at_cursor()
 						return
 				if current_mode == EditMode.ZONES:
 					if zones_mode.handle_mouse_button(event):
 						frame_mode.painting = zones_mode.is_painting()
 						frame_mode.last_paint_cell = cursor_cell
 					return
-				elif current_mode == EditMode.DECOR:
-					decor_mode.on_left_pressed()
+				elif current_mode == EditMode.FILL:
+					fill_mode.on_left_pressed()
 					frame_mode.painting = true
 				else:
 					frame_mode.painting = true
@@ -283,8 +284,8 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 						frame_mode.apply_tool_at_cursor()
 			else:
 				frame_mode.painting = false
-				if current_mode == EditMode.DECOR:
-					decor_mode.on_left_released()
+				if current_mode == EditMode.FILL:
+					fill_mode.on_left_released()
 				elif current_mode == EditMode.ZONES:
 					zones_mode.handle_mouse_button(event)
 
@@ -298,14 +299,16 @@ func _handle_key(event: InputEventKey) -> void:
 			KEY_Y:
 				redo()
 				return
-	if current_mode == EditMode.DECOR:
-		decor_mode.handle_key(event)
+	if current_mode == EditMode.FILL:
+		fill_mode.handle_key(event)
 		return
 	if current_mode == EditMode.ZONES:
 		if zones_mode.handle_key(event):
 			return
 		return
 	match event.keycode:
+		KEY_P:
+			_on_eyedropper_pressed()
 		KEY_Z:
 			frame_mode.cycle_rotation_z(-1 if event.shift_pressed else 1)
 		KEY_X:
@@ -362,7 +365,7 @@ func _update_cursor() -> void:
 		_refresh_ghost()
 		return
 	var hit := from + dir * t
-	# Decor placement is sub-cell, so it needs the raw intersection, not just the
+	# Fill placement is sub-cell, so it needs the raw intersection, not just the
 	# cell the frame tools work in.
 	cursor_hit_pos = hit
 	cursor_cell = Vector3i(int(floor(hit.x)), active_layer, int(floor(hit.z)))
@@ -384,8 +387,8 @@ func _text_input_has_focus() -> bool:
 # ---------------------------------------------------------------------------
 
 func _refresh_ghost() -> void:
-	if current_mode == EditMode.DECOR:
-		decor_mode.refresh_ghost()
+	if current_mode == EditMode.FILL:
+		fill_mode.refresh_ghost()
 		return
 	if current_mode == EditMode.ZONES:
 		zones_mode.refresh_ghost()
@@ -407,8 +410,8 @@ func _set_layer(layer: int) -> void:
 	var max_layer := maxi(0, blueprint.grid_bounds.y - 1) if blueprint != null else 0
 	active_layer = clampi(layer, 0, max_layer)
 	frame_mode.refresh_layer_plane()
-	if decor_mode != null:
-		decor_mode.on_layer_changed()
+	if fill_mode != null:
+		fill_mode.on_layer_changed()
 	if zones_mode != null:
 		zones_mode.on_layer_changed()
 
@@ -519,13 +522,13 @@ func _select_mode(mode: int) -> void:
 	current_mode = mode
 	for m in _mode_buttons.keys():
 		(_mode_buttons[m] as Button).button_pressed = m == mode
-	if mode == EditMode.DECOR:
+	if mode == EditMode.FILL:
 		frame_mode.deactivate()
 		zones_mode.deactivate()
-		decor_mode.activate()
-		_update_status("Режим декора: щелчок — поставить или выбрать, Delete — удалить, Esc — снять выделение.")
+		fill_mode.activate()
+		_update_status("Режим наполнения: щелчок — поставить или выбрать, Delete — удалить, Esc — снять выделение.")
 	else:
-		decor_mode.deactivate()
+		fill_mode.deactivate()
 		if mode == EditMode.ZONES:
 			frame_mode.deactivate()
 			frame_mode.set_tool(Tool.PLACE)
@@ -591,7 +594,7 @@ func _on_new_pressed() -> void:
 	current_path = ""
 	frame_mode.rebuild_all_block_nodes()
 	zones_mode.on_blueprint_changed()
-	_reset_decor_for_new_blueprint()
+	_reset_fill_for_new_blueprint()
 	frame_mode.sync_metadata_fields()
 	_dirty = false
 	reset_history()
@@ -642,7 +645,7 @@ func _on_load_item_activated(index: int) -> void:
 	grid_model.load_from_blueprint(blueprint)
 	frame_mode.rebuild_all_block_nodes()
 	zones_mode.on_blueprint_loaded()
-	_reset_decor_for_new_blueprint()
+	_reset_fill_for_new_blueprint()
 	frame_mode.sync_metadata_fields()
 	_dirty = false
 	reset_history()
@@ -667,8 +670,8 @@ func _on_mode_finishes_pressed() -> void:
 	_select_mode(EditMode.FINISHES)
 
 
-func _on_mode_decor_pressed() -> void:
-	_select_mode(EditMode.DECOR)
+func _on_mode_fill_pressed() -> void:
+	_select_mode(EditMode.FILL)
 
 
 func _on_mode_zones_pressed() -> void:
@@ -699,6 +702,19 @@ func _on_layer_up_pressed() -> void:
 	_set_layer(active_layer + 1)
 
 
+func _on_eyedropper_pressed() -> void:
+	_update_cursor()
+	match current_mode:
+		EditMode.FRAME:
+			frame_mode.pick_single_block()
+		EditMode.FILL:
+			fill_mode.pick_asset_at_cursor()
+		EditMode.ZONES:
+			zones_mode.pick_at_cursor()
+		_:
+			_update_status("Пипетка недоступна в этом режиме.")
+
+
 # ---------------------------------------------------------------------------
 # UI setup & signal wiring (binds to static nodes in building_editor.tscn)
 # ---------------------------------------------------------------------------
@@ -706,12 +722,12 @@ func _on_layer_up_pressed() -> void:
 func _setup_ui() -> void:
 	_mode_buttons[EditMode.FRAME] = _mode_frame_btn
 	_mode_buttons[EditMode.FINISHES] = _mode_finishes_btn
-	_mode_buttons[EditMode.DECOR] = _mode_decor_btn
+	_mode_buttons[EditMode.FILL] = _mode_fill_btn
 	_mode_buttons[EditMode.ZONES] = _mode_zones_btn
 
 	frame_mode.setup(self)
 	zones_mode.setup(self)
-	decor_mode.setup(self)
+	fill_mode.setup(self)
 
 	_back_btn.visible = not dev_mode
 	if dev_mode:
@@ -720,6 +736,7 @@ func _setup_ui() -> void:
 		_export_mesh_btn.pressed.connect(_on_export_mesh_pressed)
 		_navmesh_preview_btn.pressed.connect(_on_navmesh_preview_pressed)
 
+	_eyedropper_btn.pressed.connect(_on_eyedropper_pressed)
 	_load_list.item_activated.connect(_on_load_item_activated)
 	_save_as_dialog.confirmed.connect(_on_save_as_confirmed)
 	_metadata_panel.confirmed.connect(_on_settings_confirmed)
@@ -757,8 +774,8 @@ func _record_history_change() -> void:
 	_redo_stack.clear()
 	_history_baseline = current
 	_refresh_undo_redo_buttons()
-	if decor_mode != null:
-		decor_mode.refresh_history_buttons()
+	if fill_mode != null:
+		fill_mode.refresh_history_buttons()
 
 
 func reset_history() -> void:
@@ -775,7 +792,7 @@ func _restore_history_snapshot(snapshot: Dictionary) -> void:
 	grid_model.load_from_blueprint(blueprint)
 	frame_mode.rebuild_all_block_nodes()
 	zones_mode.on_blueprint_loaded()
-	_reset_decor_for_new_blueprint()
+	_reset_fill_for_new_blueprint()
 	frame_mode.sync_metadata_fields()
 	_history_baseline = snapshot.duplicate(true)
 	_dirty = _history_baseline != _saved_snapshot
@@ -813,17 +830,17 @@ func _run_confirmation_dialog(dialog: ConfirmationDialog, size: Vector2i) -> boo
 
 
 # ---------------------------------------------------------------------------
-# Decor mode bridge — the logic lives in DecorModeController.
+# Fill mode bridge — the logic lives in BuildingFillModeController.
 # ---------------------------------------------------------------------------
 
-## Drops every spawned decor instance and its undo history after the blueprint
+## Drops every spawned fill instance and its undo history after the blueprint
 ## behind them has been replaced (New / Load). Without this the previous
-## building's decor stayed in the scene.
-func _reset_decor_for_new_blueprint() -> void:
-	if decor_mode == null:
+## building's fill stayed in the scene.
+func _reset_fill_for_new_blueprint() -> void:
+	if fill_mode == null:
 		return
-	decor_mode.clear_undo_history()
-	decor_mode.select_object("")
-	decor_mode.rebuild_nodes()
-	if current_mode == EditMode.DECOR:
-		decor_mode.activate()
+	fill_mode.clear_undo_history()
+	fill_mode.select_object("")
+	fill_mode.rebuild_nodes()
+	if current_mode == EditMode.FILL:
+		fill_mode.activate()

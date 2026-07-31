@@ -1,11 +1,11 @@
-class_name DecorPlacementValidator
+class_name FillPlacementValidator
 extends RefCounted
 
-## Pure placement logic extracted from DecorModeController: snapping, bounds
+## Pure placement logic extracted from BuildingFillModeController: snapping, bounds
 ## checks, AABB intersection, collision conflicts, picking, and record lookup.
 ## No nodes, no UI — only deterministic math over blueprint state.
 
-const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
+const FillObjectRecordScript = preload("res://game/features/buildings/domain/editor/fill_object_record.gd")
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 
 ## Minimum click radius, so thin objects (a flag pole) stay pickable.
@@ -58,7 +58,7 @@ func is_in_bounds(pos: Vector3, blueprint: RefCounted, asset_id: StringName, sca
 	return pos.x - half_x >= 0.0 and pos.x + half_x <= float(footprint.x) and pos.z - half_z >= 0.0 and pos.z + half_z <= float(footprint.y)
 
 
-func decor_aabb(pos: Vector3, asset_id: StringName, scale: Vector3) -> AABB:
+func fill_aabb(pos: Vector3, asset_id: StringName, scale: Vector3) -> AABB:
 	var asset := WorldAssetCatalog.get_asset(asset_id)
 	var size := (asset.footprint_m() if asset != null else Vector3.ONE) * scale
 	return AABB(pos - Vector3(size.x * 0.5, 0.0, size.z * 0.5), size)
@@ -77,7 +77,7 @@ func is_collision_conflict(pos: Vector3, blueprint: RefCounted, asset_id: String
 	var asset := WorldAssetCatalog.get_asset(asset_id)
 	if asset == null:
 		return false
-	var candidate := decor_aabb(pos, asset_id, scale)
+	var candidate := fill_aabb(pos, asset_id, scale)
 	var candidate_blocks := asset.collision_policy != WorldAssetDef.COLLISION_NONE or asset.blocking_navigation
 	# Frame volumes and circulation are authoring obstacles. This deliberately
 	# uses the same occupied volumes as the frame editor, not a second grid.
@@ -87,7 +87,7 @@ func is_collision_conflict(pos: Vector3, blueprint: RefCounted, asset_id: String
 			return true
 	if not candidate_blocks:
 		return false
-	for record: DecorObjectRecordScript in blueprint.objects:
+	for record: FillObjectRecordScript in blueprint.objects:
 		if record.id == exclude_id:
 			continue
 		var other_asset := WorldAssetCatalog.get_asset(record.asset_id)
@@ -95,7 +95,7 @@ func is_collision_conflict(pos: Vector3, blueprint: RefCounted, asset_id: String
 			continue
 		if other_asset.collision_policy == WorldAssetDef.COLLISION_NONE and not other_asset.blocking_navigation:
 			continue
-		if aabbs_intersect(candidate, decor_aabb(record.pos, record.asset_id, record.scale)):
+		if aabbs_intersect(candidate, fill_aabb(record.pos, record.asset_id, record.scale)):
 			return true
 	return false
 
@@ -125,7 +125,7 @@ func compute_ghost_state(pos: Vector3, blueprint: RefCounted, asset_id: StringNa
 ## Returns all candidates so the caller can cycle through overlapping ones.
 func pick_objects_at(world_pos: Vector3, blueprint: RefCounted) -> Array[String]:
 	var candidates: Array[Dictionary] = []
-	for record: DecorObjectRecordScript in blueprint.objects:
+	for record: FillObjectRecordScript in blueprint.objects:
 		var asset := WorldAssetCatalog.get_asset(record.asset_id)
 		var size := asset.footprint_m() if asset != null else Vector3.ONE
 		var radius := maxf(MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
@@ -164,10 +164,10 @@ func pick_object_at(world_pos: Vector3, blueprint: RefCounted) -> String:
 	return ids[idx]
 
 
-static func find_record_in(object_id: String, blueprint: RefCounted) -> DecorObjectRecordScript:
+static func find_record_in(object_id: String, blueprint: RefCounted) -> FillObjectRecordScript:
 	if object_id.is_empty():
 		return null
-	for record: DecorObjectRecordScript in blueprint.objects:
+	for record: FillObjectRecordScript in blueprint.objects:
 		if record.id == object_id:
 			return record
 	return null

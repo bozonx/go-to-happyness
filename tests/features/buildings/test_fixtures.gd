@@ -15,7 +15,7 @@ const FixtureServiceScript = preload("res://game/features/buildings/application/
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 const BuildingBlueprintLibraryScript = preload("res://game/features/buildings/presentation/building_blueprint_library.gd")
-const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
+const FillObjectRecordScript = preload("res://game/features/buildings/domain/editor/fill_object_record.gd")
 
 
 func _init() -> void:
@@ -222,7 +222,7 @@ func _test_fixture_validation_duplicate_visual_object() -> void:
 
 
 func _make_dummy_object(object_id: String) -> RefCounted:
-	var obj := DecorObjectRecordScript.new()
+	var obj := FillObjectRecordScript.new()
 	obj.id = object_id
 	obj.asset_id = &"campfire"
 	obj.pos = Vector3.ZERO

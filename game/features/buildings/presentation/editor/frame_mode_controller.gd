@@ -177,7 +177,7 @@ func deactivate() -> void:
 	painting = false
 	shift_erasing = false
 	# The frame ghost is shared scene UI, not part of the palette.  It must not
-	# survive a switch to decor/zones and look like a stray block in the world.
+	# survive a switch to fill/zones and look like a stray block in the world.
 	if _ghost != null:
 		_ghost.visible = false
 	if _shift_hover_visual != null:

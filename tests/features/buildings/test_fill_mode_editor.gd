@@ -1,15 +1,15 @@
 extends SceneTree
 
-## End-to-end test of the editor's decor mode against the real scene: mode
+## End-to-end test of the editor.s fill mode against the real scene: mode
 ## switching, snapping, the click path, selection, dragging, property bindings,
 ## undo and save/load.
 ##
-## It drives BuildingEditor + DecorModeController the way the UI does, which is
-## what the previous unit-only coverage missed — decor mode could not place a
+## It drives BuildingEditor + BuildingFillModeController the way the UI does, which is
+## what the previous unit-only coverage missed — fill mode could not place a
 ## single object while every catalog assertion still passed.
 
 const EditorScene = preload("res://game/features/buildings/presentation/editor/building_editor.tscn")
-const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
+const FillObjectRecordScript = preload("res://game/features/buildings/domain/editor/fill_object_record.gd")
 const BlueprintBlockScript = preload("res://game/features/buildings/domain/editor/blueprint_block.gd")
 
 
@@ -19,144 +19,144 @@ func _initialize() -> void:
 
 
 func _run() -> void:
-	print("--- Running test_decor_mode_editor.gd ---")
+	print("--- Running test_fill_mode_editor.gd ---")
 	var editor := EditorScene.instantiate()
 	root.add_child(editor)
 	await process_frame
 
-	var decor = editor.decor_mode
-	assert(decor != null, "controller exists")
+	var fill = editor.fill_mode
+	assert(fill != null, "controller exists")
 
-	# Enter decor mode the way the UI does.
+	# Enter fill mode the way the UI does.
 	editor.get_node("%Ghost").visible = true
-	editor._select_mode(editor.EditMode.DECOR)
-	assert(decor.is_active(), "decor panel visible")
+	editor._select_mode(editor.EditMode.FILL)
+	assert(fill.is_active(), "fill panel visible")
 	assert(not editor._metadata_panel.visible, "settings dialog is not open")
-	assert(editor.get_node("%DecorToolbar").visible, "decor toolbar visible")
+	assert(editor.get_node("%FillToolbar").visible, "fill toolbar visible")
 	assert(not editor.get_node("%FrameToolbar").visible, "frame toolbar hidden")
 	assert(not editor.get_node("%Ghost").visible, "frame ghost hidden outside frame mode")
-	print("  mode switch ok, asset=", decor.current_asset_id)
+	print("  mode switch ok, asset=", fill.current_asset_id)
 
 	# Snapping: 0.5 step lands on half-block centres, not on the origin.
-	decor.current_snap_step = 0.5
-	var snapped: Vector3 = decor.snapped_position(Vector3(3.13, 0.0, -1.4))
+	fill.current_snap_step = 0.5
+	var snapped: Vector3 = fill.snapped_position(Vector3(3.13, 0.0, -1.4))
 	assert(snapped.is_equal_approx(Vector3(3.25, 0.0, -1.25)), "snap 0.5 -> %s" % snapped)
-	decor.current_snap_step = 1.0
-	snapped = decor.snapped_position(Vector3(3.13, 0.0, -1.4))
+	fill.current_snap_step = 1.0
+	snapped = fill.snapped_position(Vector3(3.13, 0.0, -1.4))
 	assert(snapped.is_equal_approx(Vector3(3.5, 0.0, -1.5)), "snap 1.0 -> %s" % snapped)
 	print("  snapping ok")
 
 	# Place two objects through the real click path.
 	editor.cursor_valid = true
-	decor.current_asset_id = &"campfire"
+	fill.current_asset_id = &"campfire"
 	editor.cursor_hit_pos = Vector3(2.2, 0.0, 2.2)
-	decor.on_left_pressed()
+	fill.on_left_pressed()
 	editor.cursor_hit_pos = Vector3(5.4, 0.0, 5.4)
-	decor.current_asset_id = &"flag"
-	decor.on_left_pressed()
+	fill.current_asset_id = &"flag"
+	fill.on_left_pressed()
 	await process_frame
 	assert(editor.blueprint.objects.size() == 2, "two objects placed, got %d" % editor.blueprint.objects.size())
-	assert(decor._nodes.size() == 2, "two instances spawned")
+	assert(fill._nodes.size() == 2, "two instances spawned")
 	print("  placement ok, ids=", editor.blueprint.objects.map(func(r): return r.id))
 
 	# The contextual tool never stacks on an existing object: it selects it.
 	editor.cursor_hit_pos = Vector3(2.2, 0.0, 2.2)
-	decor.on_left_pressed()
-	assert(editor.blueprint.objects.size() == 2, "placement mode must not stack decor under the cursor")
-	assert(decor.selected_object_id == editor.blueprint.objects[0].id,
+	fill.on_left_pressed()
+	assert(editor.blueprint.objects.size() == 2, "placement mode must not stack fill under the cursor")
+	assert(fill.selected_object_id == editor.blueprint.objects[0].id,
 		"placement mode selects the object under the cursor")
-	decor.refresh_ghost()
-	assert(decor._ghost == null or not decor._ghost.visible, "ghost hides while the cursor is over decor")
-	assert(decor._hover_marker.visible, "hover marker identifies the object a click will select")
-	assert(not editor.get_node("%DecorDeleteSelectionBtn").disabled, "toolbar delete enables for selection")
+	fill.refresh_ghost()
+	assert(fill._ghost == null or not fill._ghost.visible, "ghost hides while the cursor is over fill")
+	assert(fill._hover_marker.visible, "hover marker identifies the object a click will select")
+	assert(not editor.get_node("%FillDeleteSelectionBtn").disabled, "toolbar delete enables for selection")
 	print("  occupied placement selects instead of stacking")
 
 	# The same contextual click handles selection and dragging.
 	editor.cursor_hit_pos = Vector3(2.3, 0.0, 2.3)
-	decor.on_left_pressed()
-	assert(decor.selected_object_id == editor.blueprint.objects[0].id, "picked the campfire")
-	assert(editor.get_node("%DecorInspectorPanel").visible, "inspector shown")
-	assert(decor._controls_vbox.get_child_count() > 0, "shared property inspector renders appearance")
-	assert(editor.get_node_or_null("%DecorDuplicateBtn") == null, "duplicate is not repeated in inspector")
-	assert(editor.get_node_or_null("%DecorDeleteBtn") == null, "delete remains in the top toolbar only")
-	print("  selection ok ->", decor.selected_object_id)
+	fill.on_left_pressed()
+	assert(fill.selected_object_id == editor.blueprint.objects[0].id, "picked the campfire")
+	assert(editor.get_node("%FillInspectorPanel").visible, "inspector shown")
+	assert(fill._controls_vbox.get_child_count() > 0, "shared property inspector renders appearance")
+	assert(editor.get_node_or_null("%FillDuplicateBtn") == null, "duplicate is not repeated in inspector")
+	assert(editor.get_node_or_null("%FillDeleteBtn") == null, "delete remains in the top toolbar only")
+	print("  selection ok ->", fill.selected_object_id)
 
 	# Drag it.
 	var before: Vector3 = editor.blueprint.objects[0].pos
 	editor.cursor_hit_pos = Vector3(4.3, 0.0, 2.3)
-	decor.on_drag()
-	decor.on_left_released()
+	fill.on_drag()
+	fill.on_left_released()
 	assert(editor.blueprint.objects[0].pos != before, "drag moved the object")
 	print("  drag ok ", before, " -> ", editor.blueprint.objects[0].pos)
 
 	# Properties reach the instance.
-	decor._set_property("visual_flame_visible", false)
-	var node = decor._nodes[decor.selected_object_id]
+	fill._set_property("visual_flame_visible", false)
+	var node = fill._nodes[fill.selected_object_id]
 	assert(node.get_node("Fire").visible == false, "visual_flame_visible=false hides the flame")
-	decor._set_property("light_color", "44aaff")
+	fill._set_property("light_color", "44aaff")
 	assert(node.get_node("Light").light_color.is_equal_approx(Color("44aaff")), "colour binding applied")
-	decor._on_appearance_property_reset(&"light_color")
+	fill._on_appearance_property_reset(&"light_color")
 	assert(editor.blueprint.objects[0].appearance["light_color"] != "44aaff", "shared reset restores asset default")
 	print("  property bindings ok")
 
 	# Duplicate, delete, undo, redo.
-	decor.duplicate_selection()
+	fill.duplicate_selection()
 	assert(editor.blueprint.objects.size() == 3, "duplicated")
-	decor.delete_selection()
+	fill.delete_selection()
 	assert(editor.blueprint.objects.size() == 2, "deleted")
-	decor.undo()
+	fill.undo()
 	assert(editor.blueprint.objects.size() == 3, "undo restored the delete")
-	decor.redo()
+	fill.redo()
 	assert(editor.blueprint.objects.size() == 2, "redo re-applied the delete")
-	decor.undo()
+	fill.undo()
 	assert(editor.blueprint.objects.size() == 3, "undo restored the delete again")
-	decor.undo()
+	fill.undo()
 	assert(editor.blueprint.objects.size() == 2, "undo restored the duplicate")
 	print("  undo/redo ok")
 
 	# Collision overlay: toggling on builds overlays, toggling off clears them.
-	decor._on_collision_overlay_toggled(true)
-	assert(not decor._collision_overlay.is_empty(), "collision overlays built for blocking objects")
-	decor._on_collision_overlay_toggled(false)
-	assert(decor._collision_overlay.is_empty(), "collision overlays cleared on toggle off")
+	fill._on_collision_overlay_toggled(true)
+	assert(not fill._collision_overlay.is_empty(), "collision overlays built for blocking objects")
+	fill._on_collision_overlay_toggled(false)
+	assert(fill._collision_overlay.is_empty(), "collision overlays cleared on toggle off")
 	print("  collision overlay ok")
 
 	# Zone filter: create a zone, assign an object, filter by it, then delete zone.
 	# Re-select first object since undo/redo may have cleared the selection.
-	decor.select_object(editor.blueprint.objects[0].id)
-	assert(decor.find_record(decor.selected_object_id) != null, "object re-selected before zone test")
+	fill.select_object(editor.blueprint.objects[0].id)
+	assert(fill.find_record(fill.selected_object_id) != null, "object re-selected before zone test")
 	var zone := ZoneAreaRecord.new()
 	zone.id = &"test_zone_1"
 	zone.area_name = "Тестовая зона"
 	zone.add_rect(Rect2i(2, 2, 1, 1))
 	editor.blueprint.areas.append(zone)
-	decor._refresh_zone_filter_options()
+	fill._refresh_zone_filter_options()
 	# Assign selected object to the zone.
-	decor.find_record(decor.selected_object_id).owner_zone_id = &"test_zone_1"
-	decor._refresh_inspector()
-	assert(decor.find_record(decor.selected_object_id).owner_zone_id == &"test_zone_1", "object assigned to zone")
+	fill.find_record(fill.selected_object_id).owner_zone_id = &"test_zone_1"
+	fill._refresh_inspector()
+	assert(fill.find_record(fill.selected_object_id).owner_zone_id == &"test_zone_1", "object assigned to zone")
 	# Filter object list by zone — should show only 1 object.
-	decor._zone_filter_option.select(1)
-	decor._on_zone_filter_selected(1)
-	assert(decor._object_list.item_count == 1, "zone filter shows only objects in zone")
+	fill._zone_filter_option.select(1)
+	fill._on_zone_filter_selected(1)
+	assert(fill._object_list.item_count == 1, "zone filter shows only objects in zone")
 	# Reset filter.
-	decor._zone_filter_option.select(0)
-	decor._on_zone_filter_selected(0)
-	assert(decor._object_list.item_count == 2, "all zones filter shows all objects")
+	fill._zone_filter_option.select(0)
+	fill._on_zone_filter_selected(0)
+	assert(fill._object_list.item_count == 2, "all zones filter shows all objects")
 	# Delete the zone — on_zone_deleted should clear owner_zone_id.
-	decor.on_zone_deleted(&"test_zone_1")
-	assert(decor.find_record(decor.selected_object_id).owner_zone_id == &"", "zone deletion clears owner_zone_id")
+	fill.on_zone_deleted(&"test_zone_1")
+	assert(fill.find_record(fill.selected_object_id).owner_zone_id == &"", "zone deletion clears owner_zone_id")
 	print("  zone filter + deletion ok")
 
 	# Replace object: compatible appearance properties must be preserved.
 	# campfire and cooking_campfire both share visual_flame_visible (bool) and
 	# light_energy (float). Setting non-default values on the campfire, then
 	# replacing with cooking_campfire, must carry them over.
-	decor.select_object(editor.blueprint.objects[0].id)
-	decor._set_property("visual_flame_visible", false)
-	decor._set_property("light_energy", 3.5)
-	decor.current_asset_id = &"cooking_campfire"
-	decor._replace_selected_object()
+	fill.select_object(editor.blueprint.objects[0].id)
+	fill._set_property("visual_flame_visible", false)
+	fill._set_property("light_energy", 3.5)
+	fill.current_asset_id = &"cooking_campfire"
+	fill._replace_selected_object()
 	assert(editor.blueprint.objects[0].asset_id == &"cooking_campfire",
 		"object replaced with cooking_campfire")
 	assert(editor.blueprint.objects[0].appearance.get("visual_flame_visible", null) == false,
@@ -168,61 +168,61 @@ func _run() -> void:
 	# The eyedropper copies the placed asset and rotations into the placement
 	# brush, then Esc first clears scene selection and then clears that brush.
 	editor.cursor_hit_pos = editor.blueprint.objects[0].pos
-	decor.pick_asset_at_cursor()
-	assert(decor.current_asset_id == editor.blueprint.objects[0].asset_id, "decor eyedropper copies asset")
-	decor.select_object(editor.blueprint.objects[0].id)
-	decor.cancel_current_action()
-	assert(decor.selected_object_id.is_empty(), "first Esc clears decor selection")
-	assert(not decor.current_asset_id.is_empty(), "first Esc keeps the placement brush")
-	decor.cancel_current_action()
-	assert(decor.current_asset_id.is_empty(), "second Esc clears the placement brush")
+	fill.pick_asset_at_cursor()
+	assert(fill.current_asset_id == editor.blueprint.objects[0].asset_id, "fill eyedropper copies asset")
+	fill.select_object(editor.blueprint.objects[0].id)
+	fill.cancel_current_action()
+	assert(fill.selected_object_id.is_empty(), "first Esc clears fill selection")
+	assert(not fill.current_asset_id.is_empty(), "first Esc keeps the placement brush")
+	fill.cancel_current_action()
+	assert(fill.current_asset_id.is_empty(), "second Esc clears the placement brush")
 
 	# All rotation axes are authorable and Esc does not leave a pending drag.
-	decor.current_asset_id = &"campfire"
-	decor.select_object(editor.blueprint.objects[0].id)
-	decor.rotate_selection("x", 1)
-	decor.rotate_selection("z", 1)
+	fill.current_asset_id = &"campfire"
+	fill.select_object(editor.blueprint.objects[0].id)
+	fill.rotate_selection("x", 1)
+	fill.rotate_selection("z", 1)
 	assert(not is_zero_approx(editor.blueprint.objects[0].rot.x), "X rotation applied")
 	assert(not is_zero_approx(editor.blueprint.objects[0].rot.z), "Z rotation applied")
-	decor.cancel_current_action()
-	assert(decor.selected_object_id.is_empty(), "Esc clears decor selection")
-	decor.select_object(editor.blueprint.objects[0].id)
+	fill.cancel_current_action()
+	assert(fill.selected_object_id.is_empty(), "Esc clears fill selection")
+	fill.select_object(editor.blueprint.objects[0].id)
 	print("  multi-axis rotation + Esc ok")
 
 	# The same validation boundary protects placement and inspector fields from
 	# frame/circulation volumes.
 	editor.blueprint.blocks.append(BlueprintBlockScript.new(Vector3i(7, 0, 7), &"cube"))
-	decor.current_asset_id = &"campfire"
+	fill.current_asset_id = &"campfire"
 	var blocked_before: int = editor.blueprint.objects.size()
 	editor.cursor_hit_pos = Vector3(7.5, 0.0, 7.5)
-	decor.on_left_pressed()
-	assert(editor.blueprint.objects.size() == blocked_before, "frame volume blocks decor placement")
-	decor.select_object(editor.blueprint.objects[0].id)
+	fill.on_left_pressed()
+	assert(editor.blueprint.objects.size() == blocked_before, "frame volume blocks fill placement")
+	fill.select_object(editor.blueprint.objects[0].id)
 	var original_pos: Vector3 = editor.blueprint.objects[0].pos
-	decor._syncing_ui = true
-	decor._pos_x_spin.value = 7.5
-	decor._pos_z_spin.value = 7.5
-	decor._syncing_ui = false
-	decor._on_transform_spin_changed(7.5)
+	fill._syncing_ui = true
+	fill._pos_x_spin.value = 7.5
+	fill._pos_z_spin.value = 7.5
+	fill._syncing_ui = false
+	fill._on_transform_spin_changed(7.5)
 	assert(editor.blueprint.objects[0].pos.is_equal_approx(original_pos), "inspector rejects frame overlap")
 	editor.blueprint.blocks.clear()
 	print("  frame collision validation ok")
 
-	# Fixture edits share the decor history and deleting a visual leaves an
+	# Fixture edits share the fill history and deleting a visual leaves an
 	# explicit, valid invisible fixture rather than a dangling reference.
-	decor._add_fixture()
+	fill._add_fixture()
 	assert(editor.blueprint.fixtures.size() == 1, "fixture added")
-	decor._on_fixture_visual_selected(1)
+	fill._on_fixture_visual_selected(1)
 	var fixture_id: String = editor.blueprint.fixtures[0].visual_object_id
 	assert(not fixture_id.is_empty(), "fixture visual linked")
-	decor.select_object(fixture_id)
-	decor.delete_selection()
+	fill.select_object(fixture_id)
+	fill.delete_selection()
 	assert(editor.blueprint.fixtures[0].visual_object_id.is_empty(), "visual delete unlinks fixture")
-	decor.undo()
+	fill.undo()
 	assert(editor.blueprint.fixtures[0].visual_object_id == fixture_id, "undo restores fixture link")
-	decor.undo()
+	fill.undo()
 	assert(editor.blueprint.fixtures.size() == 1, "undo restores visual deletion only")
-	decor.undo()
+	fill.undo()
 	assert(editor.blueprint.fixtures.is_empty(), "undo restores fixture addition")
 	print("  fixture links + history ok")
 
@@ -233,23 +233,23 @@ func _run() -> void:
 	zone2.area_name = "Зона проверки границ"
 	zone2.add_rect(Rect2i(1, 1, 1, 1))
 	editor.blueprint.areas.append(zone2)
-	var bounds_obj: DecorObjectRecordScript = editor.blueprint.objects[0]
+	var bounds_obj: FillObjectRecordScript = editor.blueprint.objects[0]
 	bounds_obj.pos = Vector3(1.5, 0.0, 1.5)
 	bounds_obj.owner_zone_id = &"test_zone_bounds"
-	decor.select_object(bounds_obj.id)
-	decor._refresh_inspector()
+	fill.select_object(bounds_obj.id)
+	fill._refresh_inspector()
 	# _update_zone_highlight is called during _refresh_inspector.
 	# With floor, position 1.5 -> cell 1, which is in the zone — no warning.
-	assert(not decor._zone_out_of_bounds_label.visible,
+	assert(not fill._zone_out_of_bounds_label.visible,
 		"Object at cell-centre 1.5 must not trigger false out-of-zone warning (floor, not round)")
 	print("  zone bounds floor ok")
 
 	# Clean up: remove the zone and revert the object.
-	decor.on_zone_deleted(&"test_zone_bounds")
+	fill.on_zone_deleted(&"test_zone_bounds")
 	editor.blueprint.areas.erase(zone2)
 
 	# A room must be reachable, so the blueprint needs a door before it validates
-	# (active_zones.md §8.1) — the decor test authors rooms, not just labels.
+	# (active_zones.md §8.1) — the fill test authors rooms, not just labels.
 	var door := ZoneAnchorRecord.new()
 	door.id = &"door"
 	door.role = ZoneAnchorRecord.ROLE_DOOR
@@ -261,15 +261,15 @@ func _run() -> void:
 	assert(not json.is_empty(), "blueprint serializes")
 	var reloaded = load("res://game/features/buildings/domain/editor/building_blueprint.gd").from_json(json)
 	assert(editor.blueprint.validation_errors().is_empty(),
-		"a decor-only blueprint must validate: %s" % [editor.blueprint.validation_errors()])
+		"a fill-only blueprint must validate: %s" % [editor.blueprint.validation_errors()])
 	assert(reloaded != null, "serialized blueprint is valid")
 	assert(reloaded.objects.size() == 2, "objects survive save/load")
 	assert(reloaded.objects[0].appearance["visual_flame_visible"] == false, "authored property survives")
 	print("  save/load ok")
 
-	# Leaving decor mode cleans up.
+	# Leaving fill mode cleans up.
 	editor._select_mode(editor.EditMode.FRAME)
-	assert(not decor.is_active(), "decor deactivated")
-	assert(not editor._metadata_panel.visible, "settings dialog stays closed outside decor mode too")
-	print("--- test_decor_mode_editor.gd PASSED ---")
+	assert(not fill.is_active(), "fill deactivated")
+	assert(not editor._metadata_panel.visible, "settings dialog stays closed outside fill mode too")
+	print("--- test_fill_mode_editor.gd PASSED ---")
 	quit(0)
