@@ -16,7 +16,7 @@
 > ([building_furnishing.md](building_furnishing.md)), упаковкой и поиском файлов
 > ([content_packaging.md](content_packaging.md)).
 
-Документ раскрывает §5.5 `map_editor.md`, где остаётся только ссылка сюда.
+Документ раскрывает §5.4 `map_editor.md`, где остаётся только ссылка сюда.
 
 ---
 
