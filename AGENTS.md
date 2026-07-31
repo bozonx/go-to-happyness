@@ -123,7 +123,7 @@ the production `TerrainGrid`, `TerrainService`, chunk mesher and `NavGrid` in is
 ## Map editor and `.gdmap`
 
 A map is a folder package (`map.json` + `terrain.bin` + `preview.png`) under
-`res://game/content/core/maps/` or `user://custom_maps/`, opened by `MapDocumentService`.
+`res://game/content/core/maps/` or a user pack's `maps/`, opened by `MapDocumentService`.
 It owns the board size and starting conditions; `SettlementGame.BOARD_CELLS` is only the
 no-map fallback. See `design_docs/engine/map_editor.md`.
 

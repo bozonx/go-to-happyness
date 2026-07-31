@@ -42,11 +42,11 @@ schema and their states, all of it pack data
 (`design_docs/engine/map_fill_mode.md` §4). It deliberately knows no component by
 name: the module that executes a component introduces and validates it.
 
-`project.godot` starts the host main menu. `GameRuntime` is the composition root
-of one selected game session; `game/bootstrap/settlement_game.tscn` is now the
-temporary presentation root of the `gth.settlement` module. Its controller still
-wires the legacy settlement services and simulation tick, but it must not become
-the owner of new feature rules, host UI or session-wide infrastructure.
+`project.godot` starts the host main menu. `GameRuntime` is the composition root of one
+selected game session; `game/bootstrap/settlement_game.tscn` is the temporary
+presentation root of the `gth.settlement` module. Its controller still wires the
+settlement services and simulation tick, but it must not become the owner of new feature
+rules, host UI or session-wide infrastructure.
 
 ## Layer boundaries
 
@@ -196,71 +196,54 @@ dispatcher and AI order path.
    keys must be stable value identifiers; do not use runtime `ObjectID` as saved or
    cross-system identity.
 
-## Migration boundary
+## Session and launch boundary
 
-### Game runtime migration
+The player launch path is `game definition -> GameSessionConfig ->
+RuntimeLaunchManager -> GameRuntime -> registered modules`. The host menu indexes
+installed game definitions from content packs, and `Esc` returns any running game to
+that library. The shipped `core:settlement` definition selects `core.world` and
+`gth.settlement`; `core:world_showcase` proves another game can use the same world
+module without Settlement.
 
-Phase A of the platform transition (`design_docs/engine/multi_purpose_engine.md`
-§4) is complete. The player launch path is now `game definition ->
-GameSessionConfig -> RuntimeLaunchManager -> GameRuntime -> registered modules`.
-The host menu indexes installed game definitions, and `Esc` returns any running
-game to that library. The shipped `core:settlement` definition selects
-`core.world` and `gth.settlement`; `core:world_showcase` proves that another game
-can use the same world module without Settlement. Definitions are indexed from
-content packs rather than hard-coded as the application's only game, and
-`GameRuntime` carries no citizen, era, wellbeing, building or settlement-resource
-field. `SettlementGame` is the settlement module's presentation adapter, created
-only by `SettlementGameModule`; scene tests enter through `GameRuntime` as well.
+- **`GameRuntime` carries no game-specific field** — no citizen, era, wellbeing,
+  building or settlement resource. Game-specific values live in a module's start
+  parameters. `GameSessionConfig` may hold a map, seed and definition, and nothing else.
+- **`SettlementGame` is the settlement module's presentation adapter**, created only by
+  `SettlementGameModule`. Scene tests enter through `GameRuntime` too; do not add a
+  launch path that bypasses it.
+- **`SessionSaveCoordinator` owns the save envelope.** `SaveData` v5 persists the
+  `game`, `map` and `engine` headers plus one versioned section per participating
+  module. The settlement scene has no save entry point of its own. Pre-v5 saves are not
+  migrated: the project has no released save format, and an adapter would outlive the
+  formats it reads.
+- **Eras are host functionality, not a settlement rule.** A definition declares the
+  catalogue, a map narrows it in `start.progression`, and `SessionProgression` resolves
+  the two plus the player's choice once per session. A module projects the resolved
+  record onto its own stage type. Do not add a second owner of era state.
+- **The launch screen and the game editor build controls from
+  `GameModule.start_parameters()` and the definition's `menu_parameters`.** Neither may
+  contain a widget keyed to a module id.
+- **`HostInputController` handles registered profile shortcuts before module scenes.**
+  The first supported profile is `rts` (`F5` quicksave, `Esc` back to the library, or
+  back to the originating editor when the session is a test run).
 
-Keep game-specific fields inside a module's start parameters. `GameSessionConfig`
-may hold a map, seed and definition, but never era, wellbeing, population or
-settlement resources. `SettlementGameModule` temporarily adapts its module
-parameters to the existing settlement bootstrap start record; the generic session
-does not carry that record. Do not add new launch paths that do.
+### Extraction still in progress
 
-`SessionSaveCoordinator` owns the generic save envelope: `SaveData` v5 persists
-the `game`, `map` and `engine` headers plus one versioned section per participating
-module. `SettlementGameModule.save_state` / `restore_state` go through
-`SaveGameService` and `SettlementSaveLoader`; the settlement scene has no save entry
-point of its own. Pre-v5 saves are not migrated — the project has no released save
-format yet, and a legacy adapter would outlive the formats it reads.
+`settlement_game.gd` remains a transitional controller. Extract from it incrementally,
+without a behaviour rewrite, and delete the old write owner in the same change:
 
-Eras are host functionality, not a settlement rule: a definition declares the
-catalogue, a map narrows it in `start.progression`, and `SessionProgression` resolves
-the two plus the player's choice once per session. A module reads the resolved record
-and projects it onto its own stage type. Do not add a second owner of era state.
-
-The launch screen and the game editor build their controls from
-`GameModule.start_parameters()` and the definition's `menu_parameters`. Neither may
-contain a widget keyed to a module id.
-
-`HostInputController` handles registered profile shortcuts before module scenes;
-the first supported profile is `rts` (`F5` quicksave, `Esc` back to the library, or
-back to the originating editor when the session is a test run). Host UI and further
-input-profile extraction follow that same rule.
-
-The native AI migration is the primary execution path. Continue extracting
-bootstrap implementation into feature modules incrementally without a behavior
-rewrite:
-
-1. Extract building placement and completion effects. Construction and demolition
-   queues already belong to buildings/application; preserve those boundaries instead
-   of adding feature logic back to the bootstrap controller.
-2. Keep moving delivery and trade state into `logistics/{domain,application}`.
-   `CourierDispatcher` remains the owner of courier task assignment while task
-   producers migrate to typed requests.
-3. Move remaining need state and effects behind `needs/application` and expose them
-   to AI only as facts.
-4. Add road coverage and desire-line traffic through the `routing` request/result
-   API without pushing routing rules back into the bootstrap controller.
-5. Move each UI panel into `ui/presentation` and make it consume commands and query
-   results instead of bootstrap fields.
-6. Split the citizen actor only after its movement and task-execution contracts are
+1. Building placement and completion effects. Construction and demolition queues already
+   belong to `buildings/application`; do not add feature logic back to the controller.
+2. Delivery and trade state into `logistics/{domain,application}`. `CourierDispatcher`
+   stays the owner of courier task assignment while producers migrate to typed requests.
+3. Remaining need state and effects behind `needs/application`, exposed to AI as facts.
+4. Road coverage and desire-line traffic through the `routing` request/result API.
+5. Each UI panel into `ui/presentation`, consuming commands and query results.
+6. The citizen actor split — only after its movement and task-execution contracts are
    covered by tests.
 
-Keep short compatibility delegates in the bootstrap controller only while a caller is
-being migrated. Delete them with the final caller; do not let them become a permanent
-API.
+Compatibility delegates in the controller live only while a caller is being migrated.
+Delete them with the final caller; they must not become a permanent API.
 
 ## Tests
 
