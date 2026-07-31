@@ -71,6 +71,9 @@ func _init() -> void:
 	TestMapEditorHistoryScript.run_all()
 	TestDomainTerrainNavigationScript.run_all()
 	TestDomainWaterScript.run_all()
+	TestMapSpawnServiceScript.run_all()
+	TestMapValidatorScript.run_all()
+	TestMapTestRunServiceScript.run_all()
 	TestSaveLoadScript.run_all()
 	print("  => Domain Unit Tests PASSED.")
 
