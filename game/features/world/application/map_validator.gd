@@ -27,6 +27,7 @@ static func validate(document: MapDocument, terrain: TerrainGrid, water: WaterGr
 	for anchor in document.zones.anchors:
 		_validate_anchor_place(anchor, terrain, water, errors)
 	_validate_entities(document, terrain, errors)
+	_validate_scenario(document, errors)
 	return errors
 
 
@@ -70,6 +71,18 @@ static func _validate_entities(document: MapDocument, terrain: TerrainGrid, erro
 			errors.append("сущность %s задаёт неизвестное состояние %s" % [entity.id, entity.initial_state])
 
 
+## Scenario references that need the rest of the document (map_editor.md §11).
+## `MapScenario.validate` already caught what the layer can see on its own —
+## duplicate ids, undeclared flags — so this adds only the cross-layer rule: a
+## trigger addressing an area that no longer exists. A rule pointing at a deleted
+## zone never fires, and silence is the one failure an author cannot debug.
+static func _validate_scenario(document: MapDocument, errors: Array[String]) -> void:
+	errors.append_array(document.scenario.validate())
+	for zone_id: StringName in document.scenario.referenced_zones():
+		if document.zones.area_by_id(zone_id) == null:
+			errors.append("правило ссылается на несуществующую область %s" % zone_id)
+
+
 ## An anchor must stand on real, dry, passable ground — a spawn in a hole, under
 ## deep water, or on lava is a map that cannot start (§8.1, §11).
 static func _validate_anchor_place(anchor: ZoneAnchorRecord, terrain: TerrainGrid, water: WaterGrid, errors: Array[String]) -> void:
@@ -96,6 +109,10 @@ static func _validate_anchor_place(anchor: ZoneAnchorRecord, terrain: TerrainGri
 ## not the save path's, and save never has a published navigation field.
 static func warnings(document: MapDocument, nav_grid: NavGrid) -> Array[String]:
 	var warnings: Array[String] = []
+	# Scenario findings need no grids, so they are produced before the navigation
+	# guard below: an unreachable objective is a navigation question, but a rule
+	# that can never fire is answerable from the document alone.
+	_warn_about_scenario(document, warnings)
 	if nav_grid == null:
 		return warnings
 	# An anchor standing on an impassable cell is reachable only by teleport.
@@ -110,6 +127,39 @@ static func warnings(document: MapDocument, nav_grid: NavGrid) -> Array[String]:
 	for route in document.zones.routes:
 		_warn_if_route_breaks(route, document, nav_grid, warnings)
 	return warnings
+
+
+## Scenario problems a map still launches with (map_editor.md §11). Each of them
+## produces a rule that quietly does nothing, which is the class of bug an author
+## has no way to see from inside the game.
+static func _warn_about_scenario(document: MapDocument, warnings: Array[String]) -> void:
+	var scenario := document.scenario
+	if scenario.is_empty():
+		return
+	if scenario.victory.is_empty() and scenario.defeat.is_empty() \
+			and document.meta.map_kind == MapMeta.MAP_KIND_SCENARIO:
+		warnings.append("сценарная карта без условий победы и поражения")
+	var written: Dictionary = {}
+	for rule: MapRule in scenario.rules:
+		for action: MapRuleAction in rule.actions:
+			if action.writes_flag():
+				written[action.flag] = true
+		if not rule.enabled:
+			continue
+		# `actor` is authored but not yet delivered: the bus identifies agents by
+		# a runtime id no map can name, so a rule filtering on one never matches.
+		if rule.trigger.actor != &"":
+			warnings.append("правило %s фильтрует по actor — на этом этапе такое правило не сработает" % rule.id)
+		if rule.actions.is_empty():
+			warnings.append("правило %s ничего не делает" % rule.id)
+	# A win condition over a flag nothing ever sets cannot be reached. The reverse
+	# (a flag written but never read) is normal — an author often declares state
+	# before writing the rule that consumes it — so it is not reported.
+	for condition: MapRuleCondition in scenario.victory + scenario.defeat:
+		for flag_id: StringName in condition.referenced_flags():
+			var declared := scenario.flag_by_id(flag_id)
+			if declared != null and not written.has(flag_id):
+				warnings.append("условие исхода читает флаг %s, который ни одно правило не меняет" % flag_id)
 
 
 static func _warn_if_anchor_unreachable(anchor: ZoneAnchorRecord, nav_grid: NavGrid, warnings: Array[String]) -> void:

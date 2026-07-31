@@ -4,6 +4,8 @@ extends Node3D
 ## Generic session root. Modules attach their own session presentation below this
 ## node; it deliberately owns no settlement scene, UI or gameplay state.
 
+const ScenarioBannerScene = preload("res://game/features/runtime/presentation/scenario_banner.tscn")
+
 var active_session: GameSessionConfig = null
 var active_modules: Dictionary = {}
 var session_content: Node = null
@@ -23,6 +25,24 @@ func _ready() -> void:
 		return
 	host_input.configure(session.definition.input_profile)
 	_restore_pending_save()
+	# The scenario starts after modules and any pending save: a `session_started`
+	# rule must see the world the player is about to see, not the one before a
+	# save was restored over it. The banner is bound before the start so that
+	# rule's message is not lost.
+	if world_session != null:
+		var banner := ScenarioBannerScene.instantiate() as ScenarioBanner
+		add_child(banner)
+		banner.bind(world_session.scenario_runtime)
+		world_session.scenario_runtime.start()
+
+
+## Session time for the scenario's `elapsed` triggers. The host drives it rather
+## than a gameplay clock because elapsed time is the one schedule every game has:
+## a settlement day and a shooter round are module vocabulary, and a module that
+## has them publishes its own trigger through `MapScenarioRuntime.publish`.
+func _process(delta: float) -> void:
+	if world_session != null:
+		world_session.scenario_runtime.process(delta)
 
 
 func attach_session_content(node: Node) -> void:

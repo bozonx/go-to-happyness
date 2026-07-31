@@ -16,6 +16,16 @@ var terrain_navigation_publisher := TerrainNavigationPublisher.new()
 ## metadata. WorldSetup merely projects this instance into the territory.
 var entity_runtime := MapEntityRuntime.new()
 var cell_size := DEFAULT_CELL_SIZE
+## The one zone event bus of the session (`active_zones.md` §14). It lives here
+## rather than in a game's bootstrapper because the scenario layer below listens
+## to it, and a rule table that worked in only one game would not be an engine
+## feature. A game builds its presence tracker and zone registry against this
+## bus instead of creating a second one.
+var zone_event_bus := ZoneEventBus.new()
+## The authored scenario, running (map_editor.md §10). Present for every game:
+## flags, rules and win/lose conditions are host functionality, and a map that
+## carries none simply has an idle runtime.
+var scenario_runtime := MapScenarioRuntime.new()
 
 
 func _init(p_map_document: MapDocument = null, p_cell_size := DEFAULT_CELL_SIZE) -> void:
@@ -23,6 +33,14 @@ func _init(p_map_document: MapDocument = null, p_cell_size := DEFAULT_CELL_SIZE)
 	cell_size = p_cell_size
 	if map_document != null:
 		nav_grid.configure(cell_size, map_document.board_cells())
+		scenario_runtime.configure(map_document.scenario)
+	# Presence reaches the rule table the moment the tracker publishes it. Wired
+	# at construction so no game has to remember to connect it — forgetting would
+	# leave zone triggers silently dead in exactly one game.
+	zone_event_bus.configure({
+		"area_entered": scenario_runtime.handle_zone_event,
+		"area_exited": scenario_runtime.handle_zone_event,
+	})
 
 
 func build(
@@ -70,3 +88,8 @@ func dispose() -> void:
 	world_setup = null
 	entity_runtime = MapEntityRuntime.new()
 	terrain_navigation_publisher = TerrainNavigationPublisher.new()
+	# The bus holds callables into the scenario runtime; clearing it before the
+	# runtime goes is what keeps a stopped session from receiving one more
+	# presence event from a tracker that has not been torn down yet.
+	zone_event_bus.configure({})
+	scenario_runtime = MapScenarioRuntime.new()

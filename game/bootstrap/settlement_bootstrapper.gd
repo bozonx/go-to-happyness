@@ -220,12 +220,15 @@ func _setup_zone_runtime() -> void:
 	game.zone_presence_index = ZonePresenceIndex.new()
 	if map_document != null:
 		game.zone_presence_index.rebuild(map_document.zones, board_cells)
-	game.zone_event_bus = ZoneEventBus.new()
-	game.zone_event_bus.configure({})
+	# The bus belongs to the session, not to this game: `WorldSession` owns it and
+	# has already subscribed the map's scenario runtime to it (map_editor.md §10).
+	# Creating a second one here is what would make a rule table work in the
+	# showcase and silently do nothing in the settlement.
+	game.zone_event_bus = game.world_session.zone_event_bus if game.world_session != null else ZoneEventBus.new()
 	# The registry publishes owner/flag mutations onto the same bus presence uses
-	# (§14), so a future rule sees "captured" and "entered" on one channel. Built
-	# here rather than passed into `build_from` so a save restore can replay state
-	# with the bus still null-silent until this configure runs.
+	# (§14), so a rule sees "captured" and "entered" on one channel. Built here
+	# rather than passed into `build_from` so a save restore can replay state
+	# before this configure runs.
 	game.map_zone_registry.configure(game.zone_event_bus)
 	game.zone_presence_tracker = ZonePresenceTracker.new()
 	game.zone_presence_tracker.configure(game.zone_presence_index, game.zone_event_bus)

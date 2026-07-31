@@ -375,7 +375,10 @@ static func _test_unknown_sections_survive_a_save() -> void:
 
 	var loaded := service.load_package(path)
 	assert(loaded != null)
-	assert(loaded.section("rules").size() == 1)
+	# `rules` is no longer passthrough — it has a typed owner (`MapScenario`) —
+	# but the promise it was passed through for is the same: the row comes back,
+	# including a trigger kind this build has never heard of.
+	assert(loaded.scenario.rules.size() == 1)
 	assert(loaded.section("markers").size() == 1)
 
 	# Open, edit only the ground, save. Everything else has to come back.
@@ -383,7 +386,8 @@ static func _test_unknown_sections_survive_a_save() -> void:
 	_save_to(service, loaded)
 	var reloaded := service.load_package(path)
 	assert(reloaded != null)
-	assert(reloaded.section("rules")[0]["id"] == "gate_ambush")
+	assert(reloaded.scenario.rules[0].id == &"gate_ambush")
+	assert(reloaded.scenario.rules[0].trigger.to_dict()["trigger"] == "region_entered")
 	assert(reloaded.section("markers")[0]["role"] == "hero_start")
 	# Note the shape, not the exact numbers: JSON has one number type, so a
 	# passthrough section comes back with floats where it went in with ints. That

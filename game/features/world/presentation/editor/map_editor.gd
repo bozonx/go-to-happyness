@@ -22,7 +22,6 @@ const MapEditorModeBarScript = preload("res://game/features/world/presentation/e
 ## what the editor is going to be, and disabled so they cannot pretend to work.
 const PLANNED_MODES: Array = [
 	{"id": &"roads", "title": "Покрытия", "icon": "🛣️", "reason": "Слой покрытий — фаза 3"},
-	{"id": &"rules", "title": "Правила и старт", "icon": "📜", "reason": "Правила и режимы игры — фаза 5"},
 ]
 
 @onready var terrain_world: GridTerrainWorld = $Terrain
@@ -302,7 +301,10 @@ func _replace_document(next: MapDocument, path: String) -> void:
 # --- Modes --------------------------------------------------------------------
 
 func _build_modes() -> void:
-	_modes = [TerrainModeController.new(), SurfaceModeController.new(), WaterModeController.new(), EntitiesModeController.new(), FillModeController.new()]
+	_modes = [
+		TerrainModeController.new(), SurfaceModeController.new(), WaterModeController.new(),
+		EntitiesModeController.new(), FillModeController.new(), ScenarioModeController.new(),
+	]
 	for mode: MapEditorMode in _modes:
 		mode.configure(_context)
 		mode.ui_changed.connect(_refresh_panels)

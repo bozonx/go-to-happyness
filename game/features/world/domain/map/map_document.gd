@@ -6,25 +6,22 @@ extends RefCounted
 ## Pure data: no nodes, no files, no rendering. `MapDocumentService` reads and
 ## writes it, the editor mutates it, `RuntimeLaunchManager` starts a session from it.
 ##
-## The layers phases 2–5 will fill — placements, objects, regions, markers,
-## routes, flags, rules, victory, defeat — are already carried here as raw
-## JSON-safe arrays. That is deliberate and it is the point of this class existing
-## in phase 1: a map authored later and opened in an earlier build must come back
-## out of the editor with its rules intact. An editor that silently dropped the
-## sections it does not understand would corrupt every map it touched, and the
-## author would not find out until the map stopped working.
+## The layers a later phase will fill — placements above all — are carried here
+## as raw JSON-safe arrays. That is deliberate and it is the point of this class
+## existing in phase 1: a map authored later and opened in an earlier build must
+## come back out of the editor with its contents intact. An editor that silently
+## dropped the sections it does not understand would corrupt every map it
+## touched, and the author would not find out until the map stopped working.
 
 ## Sections the format defines but this phase does not interpret. They round-trip
 ## byte-for-byte through the editor.
 const PASSTHROUGH_SECTIONS: Array[String] = [
 	"placements",
-	"flags", "rules", "victory", "defeat",
 ]
 
-## `flags` is the odd one out (§10): named booleans and counters, so an object,
-## while everything else is an ordered list. Writing it as `[]` would produce a
-## file that does not match the format the rules engine will read.
-const OBJECT_SECTIONS: Array[String] = ["flags"]
+## Sections written as an object rather than an ordered list. Writing one as `[]`
+## would produce a file that does not match the format its consumer reads.
+const OBJECT_SECTIONS: Array[String] = []
 
 ## The registry of water bodies (grid_terrain_system.md §9.2). Unlike the sections
 ## above this one IS interpreted: it is parsed into `water` on load and written
@@ -47,6 +44,13 @@ var zones: MapZoneLayer = MapZoneLayer.new()
 
 ## Named authored entities; anonymous scatter remains a later binary layer.
 var entities: MapEntityLayer = MapEntityLayer.new()
+
+## Declared flags, the rule table and the win/lose expressions (§10). Like the
+## zone layer and unlike `placements`, this one is interpreted: it is parsed on
+## load and written back on save, so `flags`/`rules`/`victory`/`defeat` have
+## exactly one owner. Rows and actions this build does not model still survive
+## the trip — that guarantee moved into the scenario, it did not disappear.
+var scenario: MapScenario = MapScenario.new()
 
 ## Raw contents of the sections listed above, plus any key a future version adds
 ## that this build has never heard of.
@@ -94,11 +98,13 @@ static func from_json(source: Dictionary) -> MapDocument:
 	# expands it, so an old map that still carries it silently drops that grass
 	# and forage. Everything natural lives as explicit `entities[]` records now.
 	for key: String in source:
-		if _is_meta_key(key) or key == WATER_SECTION or key in ["areas", "anchors", "routes", "entities", "natural_scatter"]:
+		if _is_meta_key(key) or key == WATER_SECTION or key in MapScenario.SECTIONS \
+				or key in ["areas", "anchors", "routes", "entities", "natural_scatter"]:
 			continue
 		document.sections[key] = _duplicated(source[key])
 	document.zones.from_json(source)
 	document.entities.from_json(source.get("entities", []))
+	document.scenario = MapScenario.from_json(source)
 	document._read_water_registry(source.get(WATER_SECTION, []))
 	return document
 
@@ -110,6 +116,9 @@ func to_json() -> Dictionary:
 	for key: String in zones.to_json():
 		result[key] = zones.to_json()[key]
 	result["entities"] = entities.to_json()
+	var scenario_json := scenario.to_json()
+	for key: String in scenario_json:
+		result[key] = scenario_json[key]
 	# Declared sections are always written, even when empty, so a map file reads
 	# the same whether or not its author ever opened those modes.
 	for key: String in PASSTHROUGH_SECTIONS:
