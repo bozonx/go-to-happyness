@@ -2,7 +2,7 @@
 
 **Статус: фаза A завершена — «две игры, один runtime» реализована.** Этот документ — источник правды для границы платформы,
 порядка работ и ближайшего вертикального среза. Он не обещает реализацию всех
-жанров; дальние направления находятся в [`../ideas.md`](../ideas.md#4-платформа-пользовательских-игр-за-пределами-среза).
+жанров; дальние направления находятся в [`../ideas.md`](../ideas.md#6-платформа-пользовательских-игр).
 
 ## 1. Продуктовая модель и границы
 
@@ -255,112 +255,47 @@ profile `rts`; неподдержанный profile — ошибка валид�
 у чертежей (`content_packaging.md` §7). Конверт версионируется целиком и не мигрирует:
 его форма меняется только вместе с хостом, а форма секции — дело модуля.
 
-## 4. Ближайший вертикальный срез: «две игры, один runtime»
+## 4. Вертикальный срез «две игры, один runtime» — выполнен
 
-Это единственный обязательный результат переходной фазы. Он доказывает, что
-Settlement не особенный, без преждевременного строительства RPG/RTS движка.
+Единственный обязательный результат переходной фазы: доказать, что Settlement не
+особенный, без преждевременного строительства RPG/RTS движка. Он достигнут.
 
-### Реализовано в первом инкременте
-
-Уже существуют authored `GameDefinition` (`core:settlement` и
-`core:world_showcase`), `GameSessionConfig`, `GameRuntime`, статический registry
-built-in модулей и `SettlementGameModule`. Главное меню запускает обе игры через
-один путь; definitions индексируются из папки `games/` content pack.
-`core.world` создаёт единый `WorldSession` с картой, `WorldSetup` и
-terrain/water navigation, который используют модули игры. Существующий
-`SettlementGame` остаётся внутренним адаптером модуля; даже scene tests запускают
-его только через `GameRuntime`.
-
-Секционные сохранения уже пишет `SessionSaveCoordinator`: заголовки game/map
-принадлежат host, а Settlement и Showcase добавляют только свои module sections.
-Первый UI/input host тоже есть: definition выбирает allowlisted `rts` profile,
-`F5` сохраняет, `Esc` возвращает в библиотеку. Settlement HUD пока остаётся
-временной панелью модуля.
-
-### Пользовательский результат
-
-В меню доступны две definition из core pack:
+**Пользовательский результат.** В меню доступны две definition из core pack:
 
 1. **Settlement** — текущая игра с тем же стартом, картой и сохранением.
 2. **World Showcase** — небольшая не-settlement игра: загружает ту же `.gdmap`,
-   показывает authored named entities, даёт RTS-камеру и взаимодействие с
-   объектом через capability; в ней нет жителей, экономики, строительства,
-   settlement UI и settlement-сохранения.
+   показывает authored named entities, даёт RTS-камеру и взаимодействие с объектом
+   через capability; в ней нет жителей, экономики, строительства, settlement UI и
+   settlement-сохранения.
 
 Автор может скопировать Showcase в user pack, выбрать карту и стартовые сущности,
-запустить тест из редактора. Невалидная module dependency, неизвестная capability
-или несовместимый save дают читаемую ошибку до сцены игры.
+запустить тест из редактора. Невалидная module dependency, неизвестная capability или
+несовместимый save дают читаемую ошибку до сцены игры. Showcase запускается из
+библиотеки того же приложения: отдельного экспорта или executable у него нет.
 
-Showcase запускается из библиотеки того же приложения. Он не получает отдельный
-экспорт или executable: это минимальная проверка устанавливаемой authored game,
-а не начало standalone toolchain.
+**Критерии готовности** (все проверены в коде):
 
-### Обязательные инкременты
+- `SettlementGame` не является стартовой сценой definition и не требуется `GameRuntime`
+  для запуска Showcase;
+- запуск обеих игр использует один code path разрешения pack → definition → map →
+  runtime; различаются только definition и набор модулей;
+- `GameRuntime` не содержит полей citizen, era, wellbeing, buildings или
+  settlement-ресурсов;
+- сохранение Showcase не содержит settlement-секции; Settlement-сохранение содержит её
+  как модульную секцию;
+- Showcase map с неизвестным модулем/компонентом не стартует молча;
+- экран запуска и редактор игр не содержат ни одного виджета, привязанного к модулю:
+  контролы строятся из `menu_parameters` + `GameModule.start_parameters()`;
+- прогрессия разрешается хостом (§3.1), save-секции версионированы (§3.5), мёртвые поля
+  `clock`/`ui_layout` удалены (§3.4);
+- один `ContentIndex` на хост с явной инвалидацией; `required_content` карты и
+  `requires` пака проверяются до старта сессии;
+- редактор игр симметричен редакторам карт и зданий (`content_packaging.md` §6.4).
 
-Все семь выполнены; код ссылок на классы приведён в `docs/architecture.md`.
-
-1. ✅ Добавить `GameDefinition`, `GameSessionConfig`, статический `GameModuleRegistry`
-   и `SessionBootstrapper`; `RuntimeLaunchManager` разрешает game/map до смены сцены.
-2. ✅ Вынести world-составление из `SettlementGame` в `GameRuntime`; оставить
-   `settlement_game.tscn` адаптером, пока последний caller не перешёл.
-3. ✅ Ввести `core.world` и перенести settlement launch fields в начальные параметры
-   `gth.settlement`; сохранить map migration для старых `.gdmap`.
-4. ✅ Дать `EntityRuntime` lifecycle для map entities и тонкую presentation-проекцию;
-   реализован как `MapEntityRuntime`, без combat, inventory или общего actor framework.
-5. ✅ Ввести модульные save-секции, мигратор SaveData v3 и round-trip тесты.
-6. ✅ Вынести из `UIManager` только host/layout и actions, сохранить settlement
-   панели как вклад `gth.settlement`.
-7. ✅ Добавить Showcase definition, тестовый user pack и end-to-end scene tests для
-   обеих игр, save/load и ошибок валидации. Showcase definition (`core:world_showcase`),
-   его модуль и единый e2e-тест (`tests/features/runtime/test_game_runtime.gd`),
-   покрывающий обе игры, save/load и валидацию модулей, есть. Тестовый user pack покрыт
-   на двух уровнях: доменный тест `test_installed_user_pack_game_is_indexed_and_resolvable`
-   в `tests/domain/test_domain_game_runtime.gd` создаёт пак в
-   `user://content/installed/`, индексирует его `ContentIndex` и резолвит
-   `GameModuleRegistry` по runtime key `pack:test_author.test_pack/test_game`; а
-   сквозной тест `tests/features/runtime/test_user_pack_game.gd` с файловой фикстурой
-   `tests/fixtures/test_user_pack/` доказывает полный цикл install → index → resolve →
-   validate → launch авторской игры (`pack:gth.test_user_pack/sky_island_tour`) как пакета
-   данных поверх общих модулей, без своего GDScript-модуля.
-
-### Достройка фазы A: оболочка
-
-Срез доказал, что runtime не тянет settlement. Но оболочка продукта ещё знала про него,
-и это было доделано отдельно — до фазы B, потому что каждый пункт дешевле сейчас, чем
-после первых установленных паков:
-
-- ✅ **Экран запуска не знает модулей.** Панель эр и панель settlement-параметров
-  заменены контролами, которые строятся из `menu_parameters` + `GameModule.start_parameters()`.
-- ✅ **Прогрессия — функциональность хоста** (§3.1): `ProgressionPolicy` в
-  `start.progression` карты, `SessionProgression` в сессии, модуль только проецирует её
-  на свою шкалу.
-- ✅ **Версии save-секций и настоящие ревизии** (§3.5); адаптер v1–v3 удалён вместе с
-  форматами, которых больше нет.
-- ✅ **Мёртвые поля удалены**: `clock`, `ui_layout` (§3.4); фолбэк «сейв без заголовка =
-  Settlement» заменён отказом.
-- ✅ **Список карт фильтруется игрой**, а `required_content` карты и `requires` пака
-  проверяются до старта сессии, а не обнаруживаются дырами в мире.
-- ✅ **Один `ContentIndex` на хост** с явной инвалидацией вместо полного обхода паков на
-  каждый запрос.
-- ✅ **Редактор игр симметричен остальным**: открытие definition из любого источника,
-  отвязка read-only, «Сохранить как», защита от потери правок, возврат из тест-запуска в
-  редактор, список модулей из реестра.
-
-### Критерии готовности
-
-Все выполнены (проверено в коде):
-
-- ✅ `SettlementGame` не является стартовой сценой definition и не требуется
-  `GameRuntime` для запуска Showcase.
-- ✅ Запуск обеих игр использует один code path разрешения pack → definition → map →
-  runtime; различаются только definition и набор модулей.
-- ✅ `GameRuntime` не содержит полей citizen, era, wellbeing, buildings или
-  settlement-ресурсов.
-- ✅ Сохранение Showcase не содержит settlement-секции; Settlement-сохранение
-  содержит её как модульную секцию, а старый save мигрирует.
-- ✅ Showcase map с неизвестным модулем/компонентом не стартует молча.
-- ✅ Существующие settlement scene tests и новый smoke-test Showcase проходят после
-  import pass.
+Покрытие: e2e-тест `tests/features/runtime/test_game_runtime.gd` гоняет обе игры,
+save/load и валидацию модулей; `tests/features/runtime/test_user_pack_game.gd` с
+файловой фикстурой доказывает полный цикл install → index → resolve → validate → launch
+авторской игры как пакета данных поверх общих модулей, без своего GDScript-модуля.
 
 ## 5. Порядок после среза
 
@@ -379,35 +314,23 @@ Showcase запускается из библиотеки того же прил
 Выбор C и D должен быть отдельным решением с gameplay-документом. Цель — доказать
 контракт вторым потребителем, а не по списку заранее построить все подсистемы.
 
-## 6. Миграция существующего кода и документов
+## 6. Правило миграции
 
 Не делать большой переписывающий коммит. Для каждого шага: сначала новый контракт,
 затем перенос одного caller-а, затем тест и удаление compatibility delegate с
-последним caller-ом.
+последним caller-ом. `preload` script-файлов в новом коде не вводить: использовать
+`class_name` по правилам репозитория; `PackedScene` остаётся допустимым preload.
 
-| Сейчас | Переход | Конечный владелец |
-| --- | --- | --- |
-| `GameLaunchConfig` | ✅ Стал module-owned: `SettlementGameModule._launch_config` реконструирует его из `GameSessionConfig.module_parameters["gth.settlement"]`. | settlement module |
-| `GameLaunchManager` | ✅ Стал хост-лаунчером `RuntimeLaunchManager`: entry/scene transition без era/economy. Мёртвый settlement-наследник удалён. | application launch |
-| `SettlementGame` / bootstrapper | ✅ Разобраны на `GameRuntime` и `SettlementGameModule`; константы вынесены в `SettlementConstants`; временная сцена — адаптер модуля. Дальнейшее извлечение bootstrap — по фазам B+. | runtime + module |
-| `SaveData` | ✅ Один import path в секционный формат; compatibility projection убран. | `SessionSaveCoordinator` + modules |
-| `MapStart.mode/systems/economy` | ✅ `game_definition` выбирает композицию, `module_settings` содержит overrides карты, общие дефолты лежат в `game.start.modules`. | map + owning module |
-| `UIManager` | ✅ Host и routing отделены (`HostInputController`, `rts` profile); settlement-панели остаются вкладом модуля. Дальнейшее разнесение панелей — фазы B+. | ui host + module UI |
-| `Citizen` | Не обобщать заранее. Вынести только то, что реально нужно второму потребителю. | settlement до появления второго потребителя |
+Переход фазы A завершён: `GameLaunchConfig` стал module-owned, `GameLaunchManager` —
+хост-лаунчером `RuntimeLaunchManager`, `SettlementGame` разобран на `GameRuntime` +
+`SettlementGameModule`, `SaveData` — на секционный формат, `MapStart.mode/systems/economy`
+заменены на `game_definition` + `module_settings`, `UIManager` разделён на host-часть и
+вклад модуля. Текущее распределение владения зафиксировано в
+[`docs/architecture.md`](../../docs/architecture.md); история переноса — в git.
 
-`preload` script-файлов в затронутом новом коде не вводить: использовать `class_name`
-по правилам репозитория. `PackedScene` остаётся допустимым preload.
-
-Нужные обновления соседних документов:
-
-- ✅ [`map_editor.md`](map_editor.md): `mode`/`systems`/`economy` удалены, формат
-  поднят до v5, миграция описана;
-- ✅ [`map_fill_mode.md`](map_fill_mode.md): ссылка на `start.economy.population`
-  обновлена на `start.modules.gth.settlement.starting_population`;
-- [`content_packaging.md`](content_packaging.md): schema pack, entry games и
-  dependency/API validation;
-- [`docs/architecture.md`](../../docs/architecture.md): после появления кода
-  зафиксировать новые feature ownership и composition root.
+Единственное, что осталось непереносимым намеренно: **`Citizen` не обобщается заранее.**
+Из него выносится только то, что реально понадобится второму потребителю, и до его
+появления он принадлежит settlement.
 
 ## 7. Решения, которые пока не принимаем
 
@@ -427,5 +350,5 @@ Showcase запускается из библиотеки того же прил
 
 Эти ограничения — не отказ от направлений. Они сохраняют первый переход коротким,
 проверяемым и обратимым. Дальнейшие пожелания записываются только в
-[`../ideas.md`](../ideas.md#4-платформа-пользовательских-игр-за-пределами-среза),
+[`../ideas.md`](../ideas.md#6-платформа-пользовательских-игр),
 пока не станут отдельным vertical slice.

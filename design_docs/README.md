@@ -10,29 +10,41 @@
 
 ## engine — мир, форматы, редакторы
 
+### Земля и мир
+
 | Документ | О чём |
 | --- | --- |
-| [grid_terrain_system.md](engine/grid_terrain_system.md) | Сеточно-террасный ландшафт: высоты, уклоны, каскад, вода, мешер. Родительский документ для всего, что касается земли. |
-| [terrain_materials.md](engine/terrain_materials.md) | Каталог материалов поверхности, варианты, износ, снег, сезоны, текстурный бюджет. |
-| [navigation_and_roads.md](engine/navigation_and_roads.md) | `NavGrid`, веса, дороги как покрытие, `RoutePlan`. |
+| [grid_terrain_system.md](engine/grid_terrain_system.md) | Сеточно-террасный ландшафт: высоты, уклоны, каскад, вырезы, мешер, навигация по форме земли. Родительский документ для всего, что касается земли. |
+| [terrain_materials.md](engine/terrain_materials.md) | Каталог материалов поверхности, варианты, износ, снег, сезоны, блендинг и текстурный бюджет. |
+| [water.md](engine/water.md) | Водоёмы, лёд, течение, волны, навигация в воде и формат водного слоя. |
 | [weather.md](engine/weather.md) | Прогноз, две оси облачности, ветер, небо и светила, лаборатория погоды. |
-| [map_editor.md](engine/map_editor.md) | Формат `.gdmap`, редактор территорий, режимы и undo. |
-| [map_fill_mode.md](engine/map_fill_mode.md) | Режим наполнения карты: общая библиотека ассетов, архетипы сущностей, состояния, NPC и спавнеры, генерируемый инспектор свойств. |
+| [navigation_and_roads.md](engine/navigation_and_roads.md) | `NavGrid`, веса, тропинки, дороги как покрытие, `RoutePlan`, профили мобильности. |
+
+### Форматы и редакторы
+
+| Документ | О чём |
+| --- | --- |
+| [map_editor.md](engine/map_editor.md) | Формат `.gdmap`, редактор территорий, режимы, границы карты, правила и undo. |
+| [map_fill_mode.md](engine/map_fill_mode.md) | Режим наполнения карты: библиотека ассетов, архетипы сущностей, состояния, спавнеры, генерируемый инспектор свойств. |
 | [modular_building_editor.md](engine/modular_building_editor.md) | Формат `.gdbuilding.json`, каркас, отделка, режимы редактора. |
-| [active_zones.md](engine/active_zones.md) | Модель активных зон обоих редакторов: области, точки, маршруты, права и эффекты, состояние и владелец зоны, события, валидация, runtime. |
 | [building_furnishing.md](engine/building_furnishing.md) | Наполнение здания: предметы, fixtures, capabilities. |
-| [content_packaging.md](engine/content_packaging.md) | Паки, стили, идентификаторы, пользовательский контент, правило ревизии. |
-| [content_editor.md](engine/content_editor.md) | Editor Hub, проекты-паки, владение настройками игры/карты/здания и политика эр карты. |
-| [multi_purpose_engine.md](engine/multi_purpose_engine.md) | Пользовательские игры внутри одного приложения: граница хоста, game packs, общий runtime и ближайший срез «две игры, один runtime». |
+| [active_zones.md](engine/active_zones.md) | Модель активных зон обоих редакторов: области, точки, маршруты, права и эффекты, состояние, события, спавн, валидация, runtime. |
+| [content_packaging.md](engine/content_packaging.md) | Паки, стили, идентификаторы, владение настройками, Editor Hub, пользовательский контент, правило ревизии. |
+
+### Платформа
+
+| Документ | О чём |
+| --- | --- |
+| [multi_purpose_engine.md](engine/multi_purpose_engine.md) | Пользовательские игры внутри одного приложения: граница хоста, game definitions, реестр модулей, секционные сохранения. |
 
 ## citizens — житель, решения, труд
 
 | Документ | О чём |
 | --- | --- |
-| [citizen_ai.md](citizens/citizen_ai.md) | Нативный ИИ: фасад, снимок мира, приказы, цели, шаги, актуатор. |
-| [unit_needs.md](citizens/unit_needs.md) | Личные потребности и их интеграция с ИИ. |
-| [order_system.md](citizens/order_system.md) | Приказы: прямые, дневные и профессиональные; приоритеты и жизненный цикл. |
-| [workforce_system.md](citizens/workforce_system.md) | Занятость, вакансии, профессии, границы с ИИ. |
+| [citizen_ai.md](citizens/citizen_ai.md) | Нативный ИИ: фасад, снимок мира, арбитраж, задачи, шаги, актуатор, резервы. |
+| [order_system.md](citizens/order_system.md) | Приказы: категории, дневной срок, шкала приоритетов, прямой контроль, дневной приказ «Курьер». |
+| [unit_needs.md](citizens/unit_needs.md) | Личные потребности и политика их прерывания. |
+| [workforce_system.md](citizens/workforce_system.md) | Занятость, вакансии, профессии, контракт логистической задачи. |
 | [workforce_rollout_plan.md](citizens/workforce_rollout_plan.md) | Оставшиеся шаги перехода к трудовой модели (рабочий бэклог). |
 | [work_positions.md](citizens/work_positions.md) | Рабочие позиции, чиновник, исследователь, переход к стратегии. |
 | [labour_time_and_overtime.md](citizens/labour_time_and_overtime.md) | Длительность рабочего дня, ночные приказы, цена переработки. |
@@ -46,10 +58,10 @@
 | [building_progression.md](settlement/building_progression.md) | Цепочки зданий, уровни и апгрейды поперёк эр. |
 | [tent_era_survival.md](settlement/tent_era_survival.md) | Стартовый сценарий: первые ночи, погода, выживание. |
 | [village_territory.md](settlement/village_territory.md) | Область деревни: где можно строить и как она растёт. |
-| [storage_warehouses.md](settlement/storage_warehouses.md) | Склады, рюкзак, кучи, порча. |
+| [storage_warehouses.md](settlement/storage_warehouses.md) | Склады, рюкзак, кучи, порча, резервы под стройки. |
 | [food_water_progression.md](settlement/food_water_progression.md) | Еда и вода от сухпайков до столовой и кухни. |
 | [fire_sources.md](settlement/fire_sources.md) | Главный костёр и костёр для готовки: топливо, состояния, последствия. |
-| [event_system.md](settlement/event_system.md) | Data-driven случайные события, условия, кулдауны, цепочки. |
+| [event_system.md](settlement/event_system.md) | Data-driven случайные события: модель, каталог палаточной эры, цепочки. |
 
 ## Прочее
 
@@ -60,10 +72,12 @@
 ## Правила
 
 - Один механизм — один владеющий документ. Если правило описано в двух местах,
-  одно из описаний устареет молча.
+  одно из описаний устареет молча. Второе место обязано ссылаться, а не пересказывать.
 - Статус наверху документа обязателен, если реализована не вся спецификация.
 - Бэклог и changelog внутри дизайн-документа стареют быстрее, чем документ
   вокруг них: незакрытые шаги выносятся в отдельный план, сделанное живёт в git.
+  Список «что уже сделано» допустим только там, где он объясняет **почему так**, а не
+  перечисляет коммиты.
 - Поимённые списки классов, целей, шагов и команд в документе **не ведутся**.
   Такой список обязан устаревать; документ описывает границы, правила и причины,
   а перечень — задача кода. План по фазам, наоборот, остаётся в своём документе:

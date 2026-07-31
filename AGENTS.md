@@ -98,7 +98,7 @@ the production `TerrainGrid`, `TerrainService`, chunk mesher and `NavGrid` in is
   editor's terrain layer. A host binds keys and draws the hover marker; it never
   reimplements a tool.
 - Water is a second layer over the same board (`WaterGrid` + `WaterBody` registry,
-  `engine/grid_terrain_system.md` §9). It is authored, never simulated. Depth is **not** stored —
+  `engine/water.md`). It is authored, never simulated. Depth is **not** stored —
   it is water level minus ground — so raising a lake bed drains it.
 - **There is exactly one water system.** The old pond props plus hand-written
   `terrain_blocked_cells` are gone; a session with no map digs the biome's ponds into the
@@ -180,10 +180,12 @@ cameras and calibration geometry. The rules themselves are in
 - Tests that preload `settlement_game.gd` parse the whole bootstrap controller: a missing
   function referenced there fails unrelated tests at load time.
 - Design docs live in `design_docs/` (what to build), split by subsystem:
-  `engine/` (terrain, water, maps, building format, packs), `citizens/` (AI, needs,
-  orders, labour) and `settlement/` (eras, economy, content). `design_docs/README.md`
-  is the index; start there rather than guessing a path. `docs/` holds engineering
-  docs (how it is built): `architecture.md` and `gameplay.md`.
+  `engine/` (terrain, materials, water, weather, navigation, maps, building format,
+  zones, packs, platform), `citizens/` (AI, orders, needs, workforce, labour, FPP) and
+  `settlement/` (eras, buildings, survival, storage, food, fire, events).
+  `design_docs/README.md` is the index; start there rather than guessing a path.
+  `docs/` holds engineering docs (how it is built): `architecture.md` and `gameplay.md`.
+  One mechanic has exactly one owning doc — a second mention links, it does not restate.
 - `design_docs/ideas.md` holds directions beyond the development horizon. It is not a
   source of truth — do not implement from it, and do not leave far-future design in a
   subsystem doc where it reads as a requirement.
