@@ -24,11 +24,14 @@ func handle_unhandled_input(event: InputEvent, runtime: GameRuntime) -> bool:
 		return true
 	if key_event.keycode == KEY_ESCAPE:
 		var launch_manager := runtime.get_node_or_null("/root/GameLaunchManager")
-		if launch_manager != null and launch_manager.get("pending_editor_document") != null \
-				and launch_manager.has_method("return_to_editor_test"):
-			launch_manager.call("return_to_editor_test")
+		if launch_manager == null:
+			return false
+		# A test run returns to the editor it was started from; anything else
+		# returns to the library. The host decides this, not the running game.
+		if not String(launch_manager.get("editor_return_scene")).is_empty():
+			launch_manager.call("return_from_editor_test")
 			return true
-		if launch_manager != null and launch_manager.has_method("return_to_main_menu"):
+		if launch_manager.has_method("return_to_main_menu"):
 			launch_manager.call("return_to_main_menu")
 			return true
 	return false

@@ -815,12 +815,6 @@ func get_toilets() -> Array[Node3D]:
 	return toilets
 
 
-func restore_from_save_data(save_data: SaveData) -> bool:
-	return SettlementSaveLoader.new().restore(self, save_data)
-
-
-func save_session_state() -> Dictionary:
-	return {
-		"module": "gth.settlement",
-		"state": SaveGameService.capture_settlement_section(self),
-	}
+## Save and restore belong to `SettlementGameModule`: it owns the section, its
+## version and its migration. This scene is the module's presentation adapter and
+## must not grow a second entry point into the save file.

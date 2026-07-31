@@ -4,11 +4,19 @@
   "name": "World Showcase",
   "description": "Демонстрация мира без поселения: террасный ландшафт, сущности и RTS-камера.",
   "pack": "core",
-  "modules": ["core.world", "gth.world_showcase"],
+  "modules": [
+    "core.world",
+    "gth.world_showcase"
+  ],
   "default_map": "core:green_valley",
-  "clock": "realtime_pauseable",
   "input_profile": "rts",
-  "ui_layout": "",
-  "start": {"modules": {}},
-  "progression": {"eras": [], "technologies": {}}
+  "start": {
+    "modules": {}
+  },
+  "progression": {
+    "eras": [],
+    "technologies": {}
+  },
+  "revision": "world-showcase-1",
+  "menu_parameters": []
 }

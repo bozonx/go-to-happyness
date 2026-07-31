@@ -16,9 +16,6 @@ func run(runtime: GameRuntime, session: GameSessionConfig) -> bool:
 	if not definition_errors.is_empty():
 		push_error("[launch] invalid game definition: %s" % "; ".join(definition_errors))
 		return false
-	if not HostInputProfile.is_supported(session.definition.input_profile):
-		push_error("[launch] unsupported host input profile: %s" % session.definition.input_profile)
-		return false
 	var modules: Array[GameModule] = []
 	var selected: Dictionary = {}
 	for module_id: StringName in session.definition.module_ids:

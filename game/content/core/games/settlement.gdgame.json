@@ -4,11 +4,12 @@
   "name": "Go To Happyness: Settlement",
   "description": "Симулятор поселения: выживание, строительство, экономика и развитие общины от палаток до кирпичных домов.",
   "pack": "core",
-  "modules": ["core.world", "gth.settlement"],
+  "modules": [
+    "core.world",
+    "gth.settlement"
+  ],
   "default_map": "core:green_valley",
-  "clock": "realtime_pauseable",
   "input_profile": "rts",
-  "ui_layout": "settlement_hud",
   "start": {
     "modules": {
       "gth.settlement": {
@@ -20,59 +21,129 @@
     }
   },
   "menu_parameters": [
-    {"id": "era", "label": "Начальная эра", "type": "era"}
+    {
+      "type": "era"
+    },
+    {
+      "module": "gth.settlement",
+      "id": "starting_population"
+    }
   ],
   "progression": {
     "eras": [
       {
         "id": "tent",
-        "name": {"ru": "Палаточная", "en": "Tent"},
-        "description": {"ru": "Выживание небольшой группы и первые временные постройки.", "en": "Small-group survival and the first temporary structures."},
-        "tags": ["survival", "pre_industrial"],
-        "technology_roots": ["campfire"],
-        "next": ["earth"]
+        "name": {
+          "ru": "Палаточная",
+          "en": "Tent"
+        },
+        "description": {
+          "ru": "Выживание небольшой группы и первые временные постройки.",
+          "en": "Small-group survival and the first temporary structures."
+        },
+        "tags": [
+          "survival",
+          "pre_industrial"
+        ],
+        "technology_roots": [
+          "campfire"
+        ],
+        "next": [
+          "earth"
+        ]
       },
       {
         "id": "earth",
-        "name": {"ru": "Земляная", "en": "Earth"},
-        "description": {"ru": "Стабилизация быта и первые постоянные ремёсла.", "en": "Stable daily life and the first permanent crafts."},
-        "tags": ["pre_industrial"],
-        "technology_roots": ["earth_buildings"],
-        "next": ["clay"]
+        "name": {
+          "ru": "Земляная",
+          "en": "Earth"
+        },
+        "description": {
+          "ru": "Стабилизация быта и первые постоянные ремёсла.",
+          "en": "Stable daily life and the first permanent crafts."
+        },
+        "tags": [
+          "pre_industrial"
+        ],
+        "technology_roots": [
+          "earth_buildings"
+        ],
+        "next": [
+          "clay"
+        ]
       },
       {
         "id": "clay",
-        "name": {"ru": "Глиняная", "en": "Clay"},
-        "description": {"ru": "Ремесло, обжиг и расширение торговли.", "en": "Crafts, firing and expanded trade."},
-        "tags": ["pre_industrial"],
+        "name": {
+          "ru": "Глиняная",
+          "en": "Clay"
+        },
+        "description": {
+          "ru": "Ремесло, обжиг и расширение торговли.",
+          "en": "Crafts, firing and expanded trade."
+        },
+        "tags": [
+          "pre_industrial"
+        ],
         "technology_roots": [],
-        "next": ["wood"]
+        "next": [
+          "wood"
+        ]
       },
       {
         "id": "wood",
-        "name": {"ru": "Деревянная", "en": "Wood"},
-        "description": {"ru": "Развитая экономика, доски и городской рост.", "en": "A developed economy, boards and town growth."},
-        "tags": ["pre_industrial"],
+        "name": {
+          "ru": "Деревянная",
+          "en": "Wood"
+        },
+        "description": {
+          "ru": "Развитая экономика, доски и городской рост.",
+          "en": "A developed economy, boards and town growth."
+        },
+        "tags": [
+          "pre_industrial"
+        ],
         "technology_roots": [],
-        "next": ["stone"]
+        "next": [
+          "stone"
+        ]
       },
       {
         "id": "stone",
-        "name": {"ru": "Каменная", "en": "Stone"},
-        "description": {"ru": "Городское управление и долговечное строительство.", "en": "Urban administration and durable construction."},
-        "tags": ["pre_industrial"],
+        "name": {
+          "ru": "Каменная",
+          "en": "Stone"
+        },
+        "description": {
+          "ru": "Городское управление и долговечное строительство.",
+          "en": "Urban administration and durable construction."
+        },
+        "tags": [
+          "pre_industrial"
+        ],
         "technology_roots": [],
-        "next": ["brick"]
+        "next": [
+          "brick"
+        ]
       },
       {
         "id": "brick",
-        "name": {"ru": "Кирпичная", "en": "Brick"},
-        "description": {"ru": "Мануфактуры и плотная городская застройка.", "en": "Manufacturing and dense urban development."},
-        "tags": ["early_industrial"],
+        "name": {
+          "ru": "Кирпичная",
+          "en": "Brick"
+        },
+        "description": {
+          "ru": "Мануфактуры и плотная городская застройка.",
+          "en": "Manufacturing and dense urban development."
+        },
+        "tags": [
+          "early_industrial"
+        ],
         "technology_roots": [],
         "next": []
       }
     ],
     "technologies": {}
-  }
+  },
+  "revision": "settlement-1"
 }

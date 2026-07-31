@@ -49,10 +49,19 @@ size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 28
 text = "Проект игры"
 horizontal_alignment = 1
+[node name="SourceLabel" type="Label" parent="Margin/Root/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = ""
 [node name="SaveGameButton" type="Button" parent="Margin/Root/Header"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "💾 Сохранить игру"
+[node name="SaveAsButton" type="Button" parent="Margin/Root/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "💾 Сохранить как…"
 [node name="TestGameButton" type="Button" parent="Margin/Root/Header"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -142,8 +151,8 @@ custom_minimum_size = Vector2(0, 60)
 layout_mode = 2
 [node name="ModulesLabel" type="Label" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
 layout_mode = 2
-text = "Модули (через запятую)"
-[node name="ModulesEdit" type="LineEdit" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
+text = "Модули"
+[node name="ModulesBox" type="VBoxContainer" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
 unique_name_in_owner = true
 layout_mode = 2
 [node name="DefaultMapLabel" type="Label" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
@@ -152,59 +161,26 @@ text = "Стартовая карта"
 [node name="DefaultMapOption" type="OptionButton" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
 unique_name_in_owner = true
 layout_mode = 2
-[node name="ClockLabel" type="Label" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
-layout_mode = 2
-text = "Модель времени"
-[node name="ClockOption" type="OptionButton" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
-unique_name_in_owner = true
-layout_mode = 2
 [node name="InputLabel" type="Label" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
 layout_mode = 2
 text = "Input profile"
 [node name="InputEdit" type="LineEdit" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
 unique_name_in_owner = true
 layout_mode = 2
-[node name="LayoutLabel" type="Label" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
-layout_mode = 2
-text = "UI layout"
-[node name="LayoutEdit" type="LineEdit" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
-unique_name_in_owner = true
-layout_mode = 2
-[node name="SettlementPanel" type="VBoxContainer" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
-unique_name_in_owner = true
-layout_mode = 2
-[node name="Title" type="Label" parent="Margin/Root/Tabs/Игры/Scroll/Fields/SettlementPanel"]
+[node name="ParametersTitle" type="Label" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
-text = "Стартовые параметры Settlement"
-[node name="BiomeLabel" type="Label" parent="Margin/Root/Tabs/Игры/Scroll/Fields/SettlementPanel"]
-layout_mode = 2
-text = "Биом"
-[node name="BiomeEdit" type="LineEdit" parent="Margin/Root/Tabs/Игры/Scroll/Fields/SettlementPanel"]
+text = "Стартовые параметры модулей"
+[node name="ParametersBox" type="VBoxContainer" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
 unique_name_in_owner = true
 layout_mode = 2
-[node name="MoneyLabel" type="Label" parent="Margin/Root/Tabs/Игры/Scroll/Fields/SettlementPanel"]
+[node name="MenuTitle" type="Label" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
 layout_mode = 2
-text = "Стартовые деньги"
-[node name="MoneySpin" type="SpinBox" parent="Margin/Root/Tabs/Игры/Scroll/Fields/SettlementPanel"]
+theme_override_font_sizes/font_size = 18
+text = "Показывать в меню запуска"
+[node name="MenuParametersBox" type="VBoxContainer" parent="Margin/Root/Tabs/Игры/Scroll/Fields"]
 unique_name_in_owner = true
 layout_mode = 2
-max_value = 100000.0
-[node name="WellbeingLabel" type="Label" parent="Margin/Root/Tabs/Игры/Scroll/Fields/SettlementPanel"]
-layout_mode = 2
-text = "Благополучие"
-[node name="WellbeingSpin" type="SpinBox" parent="Margin/Root/Tabs/Игры/Scroll/Fields/SettlementPanel"]
-unique_name_in_owner = true
-layout_mode = 2
-max_value = 100.0
-[node name="PopulationLabel" type="Label" parent="Margin/Root/Tabs/Игры/Scroll/Fields/SettlementPanel"]
-layout_mode = 2
-text = "Население"
-[node name="PopulationSpin" type="SpinBox" parent="Margin/Root/Tabs/Игры/Scroll/Fields/SettlementPanel"]
-unique_name_in_owner = true
-layout_mode = 2
-min_value = 1.0
-max_value = 1000.0
 
 [node name="Прогрессия" type="HSplitContainer" parent="Margin/Root/Tabs"]
 layout_mode = 2
@@ -294,6 +270,13 @@ text = "{}"
 unique_name_in_owner = true
 layout_mode = 2
 autowrap_mode = 3
+
+[node name="DiscardDialog" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "Несохранённые изменения"
+initial_position = 2
+dialog_text = "В игре есть несохранённые изменения. Выйти без сохранения?"
+ok_button_text = "Выйти"
 
 [node name="NewGameDialog" type="ConfirmationDialog" parent="."]
 unique_name_in_owner = true

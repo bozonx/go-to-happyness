@@ -2212,7 +2212,7 @@
 		}
 	],
 	"flags": {},
-	"format_version": 6,
+	"format_version": 7,
 	"id": "green_valley",
 	"kind": "map",
 	"map_kind": "map",
@@ -2275,19 +2275,16 @@
 	"start": {
 		"day_of_year": 120,
 		"game_definition": "core:settlement",
-		"module_settings": {
-			"gth.settlement": {
-				"progression": {
-					"mode": "restricted",
-					"allowed_eras": ["tent", "earth", "clay", "wood", "stone", "brick"],
-					"default_era": "tent"
-				}
-			}
-		},
+		"module_settings": {},
 		"latitude": 54.0,
 		"style": "generic",
 		"time_of_day": 480,
-		"weather_preset": "clear"
+		"weather_preset": "clear",
+		"progression": {
+			"mode": "inherit",
+			"allowed_eras": [],
+			"default_era": "tent"
+		}
 	},
 	"tags": [],
 	"victory": [],

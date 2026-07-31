@@ -610,7 +610,8 @@ func _test_run() -> void:
 		_refresh_panels()
 		return
 	if launch_manager.has_method("launch_editor_test"):
-		launch_manager.call("launch_editor_test", definition_key, document)
+		launch_manager.call("launch_editor_test", definition_key, document,
+			RuntimeLaunchManager.MAP_EDITOR_SCENE)
 
 
 ## Every committed ground edit becomes exactly one command, recorded here rather

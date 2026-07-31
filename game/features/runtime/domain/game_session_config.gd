@@ -2,13 +2,18 @@ class_name GameSessionConfig
 extends RefCounted
 
 ## One launch request. Game-specific values live inside module_parameters; this
-## record deliberately does not know eras, citizens, resources, or professions.
+## record deliberately does not know citizens, resources, or professions.
+##
+## Progression is the exception, and on purpose: eras are host functionality that
+## packs opt into with data, so the session resolves them once — game catalogue,
+## map policy, player choice — and every module reads the same answer.
 
 var definition: GameDefinition = null
 var map_ref: StringName = &""
 var map_document: MapDocument = null
 var seed := 0
 var module_parameters: Dictionary = {}
+var progression: SessionProgression = SessionProgression.new()
 
 
 static func create(
@@ -16,6 +21,7 @@ static func create(
 	p_map_ref: StringName,
 	p_map_document: MapDocument,
 	p_module_parameters: Dictionary = {},
+	p_selected_era: StringName = &"",
 ) -> GameSessionConfig:
 	var session := GameSessionConfig.new()
 	session.definition = p_definition
@@ -25,9 +31,23 @@ static func create(
 	if p_map_document != null:
 		_merge_module_parameters(session.module_parameters, p_map_document.meta.start.module_settings)
 	for module_id: Variant in p_module_parameters:
-		var supplied: Variant = p_module_parameters[module_id]
-		_merge_module_parameter(session.module_parameters, module_id, supplied)
+		_merge_module_parameter(session.module_parameters, module_id, p_module_parameters[module_id])
+	session.progression = SessionProgression.resolve(
+		p_definition.progression if p_definition != null else null,
+		map_policy(p_map_document),
+		p_selected_era,
+	)
 	return session
+
+
+## The map's progression policy, or the neutral default when there is no map.
+static func map_policy(map_document: MapDocument) -> ProgressionPolicy:
+	return map_document.meta.start.progression if map_document != null else ProgressionPolicy.new()
+
+
+func parameters_for(module_id: StringName) -> Dictionary:
+	var value: Variant = module_parameters.get(module_id, {})
+	return (value as Dictionary).duplicate(true) if value is Dictionary else {}
 
 
 static func _default_module_parameters(definition: GameDefinition) -> Dictionary:

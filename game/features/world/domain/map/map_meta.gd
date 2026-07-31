@@ -34,9 +34,11 @@ const BORDER_LAVA := &"lava"
 const BORDER_NOTHING := &"nothing"
 const BORDER_KINDS: Array[StringName] = [BORDER_OCEAN, BORDER_LAVA, BORDER_NOTHING]
 
-## Game-specific start data is namespaced by its owning module. The map may
-## constrain or disable a game's progression without defining what an era is.
-const FORMAT_VERSION := 6
+## Game-specific start data is namespaced by its owning module in
+## `start.module_settings`. Progression is not: it is host functionality, so
+## `start.progression` (v7) constrains or disables a game's eras without the map
+## naming the module that advances them.
+const FORMAT_VERSION := 7
 
 ## Board presets (§6.2). All are multiples of `TerrainGrid.CHUNK_CELLS` so the
 ## board is whole chunks. The default is the largest one that still loads

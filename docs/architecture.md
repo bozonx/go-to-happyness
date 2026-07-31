@@ -73,8 +73,9 @@ create generic `utils`, `helpers`, `managers` or catch-all `services` directorie
 ## Feature ownership
 
 - `content`: authored content packaging — packs, content ids, style resolution and
-  the save stamp shared by blueprints and maps. See
-  `design_docs/engine/content_packaging.md`.
+  the save stamp shared by blueprints, maps and game definitions. `ContentIndex.shared()`
+  is the one index every reader uses; every writer calls `ContentIndex.invalidate()`.
+  See `design_docs/engine/content_packaging.md`.
 - `settlement`: economy, stored resources, eras, wellbeing and global progression.
 - `buildings`: definitions, placement, construction, demolition and building visuals.
 - `citizens`: citizen profiles, task state, actor movement and task execution.
@@ -86,10 +87,14 @@ create generic `utils`, `helpers`, `managers` or catch-all `services` directorie
   satisfy them; the needs service owns the values and effects.
 - `production`: production-specific rules and systems, currently the sawmill.
 - `runtime`: game definitions, session configuration, the registry of built-in
-  game modules and their composition order. It owns no settlement rule, actor
-  type or UI panel. `GameRuntime` is the generic session root. `core.world`
-  creates the session's `WorldSession` (map, `WorldSetup`, and terrain/water
-  navigation); a game module may add its own overlays and obstacles but never a
+  game modules and their composition order, and the two host features a
+  code-free pack opts into with data — **progression** (`GameProgressionDefinition`,
+  `ProgressionPolicy`, `SessionProgression`) and **declared start parameters**
+  (`StartParameterDef`). It owns no settlement rule, actor type or UI panel.
+  `GameRuntime` is the generic session root. `core.world` creates the session's
+  `WorldSession` (map, `WorldSetup`, and terrain/water navigation) and validates
+  the map's `required_content` and its pack's `requires` before any gameplay
+  module starts; a game module may add its own overlays and obstacles but never a
   second map world. `SettlementGameModule` temporarily starts the existing
   settlement bootstrap through this boundary while its services are extracted
   incrementally.
@@ -99,8 +104,11 @@ create generic `utils`, `helpers`, `managers` or catch-all `services` directorie
   delayed effects and the choice UI. See `design_docs/settlement/event_system.md`.
 - `save_load`: save file schema and the save/load service. `SessionSaveCoordinator`
   owns the generic save envelope — `game`/`map`/`engine` headers plus one section per
-  participating module; per-game sections are still read through `SaveGameService` by
-  the owning module. See `design_docs/engine/multi_purpose_engine.md` §3.5.
+  participating module, each stamped with its owner's `section_version()`; per-game
+  sections are still read through `SaveGameService` by the owning module. The envelope
+  itself does not migrate: an unreadable `format_version` is refused, and a section from
+  an older module version goes through that module's `migrate_section`. See
+  `design_docs/engine/multi_purpose_engine.md` §3.5.
 - `world`: terrain, water, maps, the map editor and world-only presentation.
 - `routing`: navigation grid, route selection and route results. UI belongs in a
   future `ui/presentation` feature.
@@ -210,17 +218,26 @@ settlement resources. `SettlementGameModule` temporarily adapts its module
 parameters to the existing settlement bootstrap start record; the generic session
 does not carry that record. Do not add new launch paths that do.
 
-`SessionSaveCoordinator` owns the generic save envelope: `SaveData` v4 persists
-the `game`, `map` and `engine` headers plus a section per participating module.
-The legacy settlement projection is gone: `SettlementGameModule.save_state` /
-`restore_state` go through `SaveGameService` and `SettlementSaveLoader`, and old
-v1–v3 saves import through the one-time `_migrate_legacy_to_v4` adapter in
-`SaveData.from_dict`, which lifts the flat settlement blob into the
-`modules["gth.settlement"]` section. The generic session does not carry a
-settlement record.
+`SessionSaveCoordinator` owns the generic save envelope: `SaveData` v5 persists
+the `game`, `map` and `engine` headers plus one versioned section per participating
+module. `SettlementGameModule.save_state` / `restore_state` go through
+`SaveGameService` and `SettlementSaveLoader`; the settlement scene has no save entry
+point of its own. Pre-v5 saves are not migrated — the project has no released save
+format yet, and a legacy adapter would outlive the formats it reads.
+
+Eras are host functionality, not a settlement rule: a definition declares the
+catalogue, a map narrows it in `start.progression`, and `SessionProgression` resolves
+the two plus the player's choice once per session. A module reads the resolved record
+and projects it onto its own stage type. Do not add a second owner of era state.
+
+The launch screen and the game editor build their controls from
+`GameModule.start_parameters()` and the definition's `menu_parameters`. Neither may
+contain a widget keyed to a module id.
+
 `HostInputController` handles registered profile shortcuts before module scenes;
-the first supported profile is `rts` (`F5` quicksave, `Esc` library). Host UI and
-further input-profile extraction follow that same rule.
+the first supported profile is `rts` (`F5` quicksave, `Esc` back to the library, or
+back to the originating editor when the session is a test run). Host UI and further
+input-profile extraction follow that same rule.
 
 The native AI migration is the primary execution path. Continue extracting
 bootstrap implementation into feature modules incrementally without a behavior

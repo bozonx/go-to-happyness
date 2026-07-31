@@ -4,9 +4,11 @@ extends RefCounted
 ## Typed record and factory for settlement game launch configurations.
 ## Configures starting era, landscape/biome, starting economy, and extra parameters.
 
+## Progression as the host resolved it for this session (`SessionProgression`).
+## The settlement module copies it in; nothing here decides which eras a map
+## allows.
 var era_id: StringName = &"tent"
 var era_type: int = 0 # Matches SettlementState.Era.TENT
-var progression_mode: StringName = &"inherit"
 var allowed_eras: Array[StringName] = []
 var allowed_era_types: Array[int] = []
 var era_names: Dictionary = {}

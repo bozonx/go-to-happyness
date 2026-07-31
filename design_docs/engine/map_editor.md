@@ -209,7 +209,7 @@ definition (`start.game_definition`, см. §7.1 и [multi_purpose_engine.md](mu
 | Идентичность | `id`, `name`, `author` |
 | Классификация | `map_kind`, `biomes[]`, `tags[]`, `players` |
 | Мир | `border.kind`, `border.level` |
-| Старт | `start.style`, время/день/широта/погода, `start.game_definition`, module-scoped progression policy |
+| Старт | `start.style`, время/день/широта/погода, `start.game_definition`, `start.progression`, module-scoped overrides |
 
 Размер доски там **не редактируется** и показан только для чтения: он выбирается в
 диалоге создания и не меняется (§6.2, §17.2).
@@ -360,11 +360,11 @@ source — другой ключ. Обход папок внутри источ�
 проставляется при записи общим `ContentRevision.new_stamp()` — то же правило, что
 у чертежей (`content_packaging.md` §7).
 
-### 4.1. `map.json`, актуальный формат (v6)
+### 4.1. `map.json`, актуальный формат (v7)
 
 ```json
 {
-  "format_version": 6,
+  "format_version": 7,
   "kind": "map",
   "id": "green_valley",
   "name": "Зелёная долина",
@@ -386,15 +386,12 @@ source — другой ключ. Обход папок внутри источ�
     "time_of_day": 480,
     "weather_preset": "clear",
     "game_definition": "core:settlement",
-    "module_settings": {
-      "gth.settlement": {
-        "progression": {
-          "mode": "restricted",
-          "allowed_eras": ["tent", "earth", "clay"],
-          "default_era": "tent"
-        }
-      }
-    }
+    "progression": {
+      "mode": "restricted",
+      "allowed_eras": ["tent", "earth", "clay"],
+      "default_era": "tent"
+    },
+    "module_settings": {}
   },
 
   "required_content": [
@@ -442,9 +439,11 @@ source — другой ключ. Обход папок внутри источ�
 runtime key установленной игры, по умолчанию `core:world_showcase` (карта остаётся
 тестируемой без settlement-данных). `mode`/`systems`/`economy` удалены из формата (v5);
 
-**Версия.** Загрузчик принимает только реализованный v6. Он содержит
-`start.module_settings`; `start.era` отсутствует. До первого релиза встроенные карты и
-fixtures обновляются вместе с форматом, без runtime-миграций.
+**Версия.** Загрузчик принимает только реализованный v7. Прогрессия переехала из
+`start.module_settings["gth.settlement"].progression` в `start.progression` (v7): эры —
+функциональность хоста, и карта ограничивает их, не называя модуль, который их двигает.
+До первого релиза встроенные карты и fixtures обновляются вместе с форматом, без
+runtime-миграций.
 
 ---
 
@@ -696,6 +695,7 @@ Merge, §8), объекты и декор, растительность и ре�
 | `time_of_day` | минута суток на старте (`SimulationClock.minutes`, сейчас дефолт 480 = 8:00) |
 | `weather_preset` | стартовая погода в двухосевой модели (`cloud_cover` + `storm_influence`) |
 | `game_definition` | runtime key установленной игры, которая интерпретирует карту; новые карты начинают с `core:world_showcase` |
+| `progression` | политика эр этой карты: `inherit` / `restricted` / `fixed` / `disabled`, `allowed_eras`, `default_era` |
 | `module_settings` | настройки и ограничения конкретной карты, keyed by module id |
 
 **День года и широта — входные данные, а не готовая механика.** Сезонность и накопление
@@ -717,9 +717,11 @@ Merge, §8), объекты и декор, растительность и ре�
 [multi_purpose_engine.md](multi_purpose_engine.md) §3.1–3.2.
 
 `game_definition` выбирает композицию, а `module_settings` настраивает выбранные модули
-для этой карты. `gth.settlement.progression` поддерживает `inherit`, `restricted`,
-`fixed`, `disabled`, `allowed_eras` и `default_era`. Это редактируется отдельным
-диалогом старта; ручная правка JSON не требуется.
+для этой карты. Прогрессия в `module_settings` не лежит: `start.progression` — поле
+хоста, потому что эры реализованы в хосте, а пак (не имеющий кода) только объявляет их
+в definition и ограничивает картой. Поддерживаются `inherit`, `restricted`, `fixed`,
+`disabled`, `allowed_eras` и `default_era`; редактируется диалогом старта, ручная правка
+JSON не требуется.
 
 Как пресеты карт соотносятся с definition, определено там же, в определении игры и её
 модулях: шутерная карта — это не `settlement_sim: false`, а другая definition с другим
@@ -905,9 +907,10 @@ definition'ом через `input_profile`, а не полем `systems.hero_con
 сцену `game_runtime.tscn`. Какую игру запустить, решает definition, а не карта: карта
 приносит мир, definition — модули и их стартовые параметры.
 
-Карта приносит нейтральные условия мира и module-scoped overrides. `gth.settlement`
-применяет progression policy из `start.module_settings`, а стиль остаётся нейтральным
-свойством мира. Игра → карта → параметры конкретного запуска объединяются рекурсивно.
+Карта приносит нейтральные условия мира и module-scoped overrides. Прогрессию
+разрешает хост: `GameSessionConfig` сводит каталог эр игры, `start.progression` карты и
+выбор игрока в один `SessionProgression`, а модуль только проецирует его на свою шкалу.
+Стиль остаётся нейтральным свойством мира. Игра → карта → параметры конкретного запуска объединяются рекурсивно.
 `mode`/`systems` больше не являются границей композиции сессии — эту роль принял game
 definition ([multi_purpose_engine.md](multi_purpose_engine.md) §3.1) — и в launch-пути
 settlement не опрашиваются.

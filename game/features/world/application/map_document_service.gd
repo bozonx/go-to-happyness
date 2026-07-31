@@ -111,6 +111,7 @@ func list_maps() -> Array[Dictionary]:
 			"key": indexed_entry.runtime_key, "name": meta.name if not meta.name.is_empty() else String(indexed_entry.id),
 			"kind": meta.kind, "map_kind": meta.map_kind, "players": meta.players,
 			"board_cells": meta.board_cells, "revision": meta.revision,
+			"game_definition": meta.start.game_definition,
 			"author": meta.author, "path": indexed_entry.path,
 			"writable": can_write(indexed_entry.path),
 			"has_preview": FileAccess.file_exists(indexed_entry.path.path_join(PREVIEW_PNG))})
@@ -118,10 +119,9 @@ func list_maps() -> Array[Dictionary]:
 
 
 func _ensure_content_index() -> void:
-	# Rebuild each query: player authors can save content without notifying this
-	# service, and phase 1 deliberately has no persistent cache yet.
-	_content_index = ContentIndexScript.new()
-	_content_index.rebuild()
+	# One host-owned index, refreshed by whoever writes content. This service used
+	# to reparse every pack per query, which cost a full disk walk per map listed.
+	_content_index = ContentIndexScript.shared()
 
 
 ## Header only — `map.json` without the binary layers. This is what a map list
@@ -142,6 +142,10 @@ func read_header(source: StringName, id: StringName) -> Dictionary:
 		"kind": meta.kind,
 		"board_cells": meta.board_cells,
 		"revision": meta.revision,
+		"game_definition": meta.start.game_definition,
+		# The launch screen needs the era policy before it has a session, and the
+		# header is the only place it can get it without decoding the terrain.
+		"progression": meta.start.progression,
 		"author": meta.author,
 		"path": path,
 		"has_preview": FileAccess.file_exists(path.path_join(PREVIEW_PNG)),
@@ -301,6 +305,7 @@ func save_map_to(document: MapDocument, final_path: String, preview: Image = nul
 		return ""
 	_remove_directory(backup_path)
 	document.dirty = false
+	ContentIndexScript.invalidate()
 	return final_path
 
 

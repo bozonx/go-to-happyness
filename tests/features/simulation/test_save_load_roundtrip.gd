@@ -4,9 +4,9 @@ const SimHelper = preload("res://tests/helpers/simulation_test_helper.gd")
 const SaveDataScript = preload("res://game/features/save_load/domain/save_data.gd")
 
 ## End-to-end save/load: mutate a live settlement, persist it through the real
-## module-section path (SettlementGame.save_session_state -> SaveData envelope),
+## module-section path (SaveGameService section -> versioned SaveData envelope),
 ## then restore into a *fresh* game instance and assert the state came back. This
-## exercises restore_from_save_data with the forest overlay, which the SaveData
+## exercises the settlement section restore with the forest overlay, which the SaveData
 ## unit test cannot reach.
 
 const SAVE_PATH := "user://saves/test_roundtrip.json"
@@ -40,13 +40,14 @@ func _init() -> void:
 	sim_a.settlement.money = 4321
 	var citizen_count: int = sim_a.citizens.size()
 
-	# Capture through the same hook the host coordinator calls, then wrap it in the
-	# generic envelope and persist. This is the only settlement write path now.
-	var contribution: Dictionary = sim_a.save_session_state()
+	# Capture through the same service the settlement module calls, then wrap it in
+	# the generic envelope and persist. This is the only settlement write path now.
+	var module := SettlementGameModule.new()
 	var envelope := SaveDataScript.new()
 	envelope.game_header = {"pack": "core", "id": "settlement", "revision": ""}
-	envelope.engine_state = {"clock": {}}
-	envelope.module_states[contribution.get("module", "gth.settlement")] = contribution.get("state", {})
+	envelope.engine_state = {"seed": 0}
+	envelope.set_module_section(module.module_id(), module.section_version(),
+		SaveGameService.capture_settlement_section(sim_a))
 	assert(envelope.save_to_file(SAVE_PATH), "save_to_file should succeed")
 	await SimHelper.cleanup_simulation(self, sim_a)
 
@@ -59,7 +60,8 @@ func _init() -> void:
 
 	var loaded := SaveDataScript.new()
 	assert(loaded.load_from_file(SAVE_PATH), "load_from_file should succeed")
-	assert(sim_b.restore_from_save_data(loaded), "restore_from_save_data should succeed")
+	assert(SettlementSaveLoader.new().restore(sim_b, loaded.module_section(module.module_id())),
+		"restoring the gth.settlement section should succeed")
 
 	# Settlement + population restored.
 	assert(sim_b.settlement.money == 4321, "money not restored")

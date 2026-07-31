@@ -19,15 +19,15 @@ func start_session(session: GameSessionConfig) -> bool:
 	return world_setup.terrain_grid != null and world_setup.water_grid != null
 
 
-## The hint is only relevant for an F5 test run from the map editor; a Showcase
-## launched from the menu has nowhere to return to. It matches the same flag
-## `HostInputController` checks to route `Esc` back into the editor.
+## The hint is only relevant for a test run from an editor; a Showcase launched
+## from the library has nowhere to return to. It reads the same flag
+## `HostInputController` uses to route `Esc` back into the editor.
 func _update_editor_hint() -> void:
 	if editor_hint == null:
 		return
 	var launch_manager := get_node_or_null("/root/GameLaunchManager")
-	var from_editor := launch_manager != null and launch_manager.get("pending_editor_document") != null
-	editor_hint.visible = from_editor
+	editor_hint.visible = launch_manager != null \
+		and not String(launch_manager.get("editor_return_scene")).is_empty()
 
 
 func _process(delta: float) -> void:
@@ -41,25 +41,21 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
+## The module's save section: camera only. The host wraps it with the section
+## version and the game/map headers.
 func save_session_state() -> Dictionary:
 	return {
-		"module": "gth.world_showcase",
-		"state": {
-			"camera": {
-				"target": SaveData.vector3_to_dict(camera_controller.camera_target),
-				"distance": camera_controller.camera_distance,
-				"yaw": camera_controller.camera_yaw,
-				"pitch": camera_controller.camera_pitch,
-			},
+		"camera": {
+			"target": SaveData.vector3_to_dict(camera_controller.camera_target),
+			"distance": camera_controller.camera_distance,
+			"yaw": camera_controller.camera_yaw,
+			"pitch": camera_controller.camera_pitch,
 		},
 	}
 
 
-func restore_session_state(save_data: SaveData) -> void:
-	var section: Variant = save_data.module_states.get("gth.world_showcase", {})
-	if not section is Dictionary:
-		return
-	var camera_state: Variant = (section as Dictionary).get("camera", {})
+func restore_session_state(section: Dictionary) -> void:
+	var camera_state: Variant = section.get("camera", {})
 	if not camera_state is Dictionary:
 		return
 	var state := camera_state as Dictionary

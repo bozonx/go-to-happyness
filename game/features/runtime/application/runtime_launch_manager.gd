@@ -9,6 +9,7 @@ const MAP_EDITOR_SCENE := "res://game/features/world/presentation/editor/map_edi
 const EDITOR_HUB_SCENE := "res://game/features/content/presentation/editor/editor_hub.tscn"
 const GAME_EDITOR_SCENE := "res://game/features/runtime/presentation/editor/game_editor.tscn"
 const GAME_RUNTIME_SCENE := "res://game/bootstrap/game_runtime.tscn"
+const MAIN_MENU_SCENE := "res://game/features/ui/presentation/main_menu/main_menu.tscn"
 
 var active_session: GameSessionConfig = null
 var pending_save_path := ""
@@ -18,6 +19,9 @@ var pending_editor_map: StringName = &""
 ## In-memory hand-off for F5 from the map editor. It is intentionally not a
 ## save: a test run must see unsaved edits and must not mutate the document.
 var pending_editor_document: MapDocument = null
+## Where `Esc` returns when the session was started as a test run. Empty means
+## the session came from the library, and `Esc` goes back to the main menu.
+var editor_return_scene := ""
 var active_editor_pack_root := ""
 var active_editor_pack_source: StringName = &""
 
@@ -28,9 +32,12 @@ func launch_game_definition(
 	definition_key: StringName,
 	map_ref: StringName = &"",
 	module_parameters: Dictionary = {},
+	selected_era: StringName = &"",
 	resolved_map: MapDocument = null,
 ) -> void:
 	pending_save_path = ""
+	editor_return_scene = ""
+	pending_editor_document = null
 	var definition := GameModuleRegistry.resolve_definition(definition_key)
 	if definition == null:
 		push_error("[launch] game definition is unavailable: %s" % definition_key)
@@ -40,11 +47,19 @@ func launch_game_definition(
 	if document == null:
 		push_warning("[launch] игровая сессия отменена: карта %s не открылась: %s" % [selected_map, _map_service.last_error])
 		return
-	active_session = GameSessionConfig.create(definition, selected_map, document, module_parameters)
+	active_session = GameSessionConfig.create(definition, selected_map, document, module_parameters, selected_era)
 	get_tree().change_scene_to_file(GAME_RUNTIME_SCENE)
 
 
-func launch_editor_test(definition_key: StringName, document: MapDocument) -> void:
+## Test run from an editor. The session is identical to a library launch; the
+## only difference is that `Esc` returns the author to the editor they came from
+## instead of dropping them into the main menu.
+func launch_editor_test(
+	definition_key: StringName,
+	document: MapDocument,
+	return_scene: String,
+	map_ref: StringName = &"editor:preview",
+) -> void:
 	if document == null:
 		push_warning("[launch] тест-запуск отменён: карта отсутствует")
 		return
@@ -54,13 +69,16 @@ func launch_editor_test(definition_key: StringName, document: MapDocument) -> vo
 		return
 	pending_save_path = ""
 	pending_editor_document = document
-	active_session = GameSessionConfig.create(definition, &"editor:preview", document)
+	editor_return_scene = return_scene
+	active_session = GameSessionConfig.create(definition, map_ref, document)
 	get_tree().change_scene_to_file(GAME_RUNTIME_SCENE)
 
 
-func return_to_editor_test() -> void:
+func return_from_editor_test() -> void:
+	var scene := editor_return_scene if not editor_return_scene.is_empty() else MAP_EDITOR_SCENE
 	active_session = null
-	get_tree().change_scene_to_file(MAP_EDITOR_SCENE)
+	editor_return_scene = ""
+	get_tree().change_scene_to_file(scene)
 
 
 func launch_from_save(save_path: String) -> void:
@@ -68,32 +86,30 @@ func launch_from_save(save_path: String) -> void:
 	if not save_data.load_from_file(save_path):
 		push_warning("[launch] сохранение не читается: %s" % save_path)
 		return
-	# The map ref always lives in the host map header now: a v4 save writes it
-	# there directly, and the v1–v3 adapter lifts the embedded map_ref into the
-	# same header during migration. There is no projection to fall back to.
-	var map_reference: Dictionary = save_data.map_header
-	if map_reference.is_empty():
+	var reference := save_data.map_header
+	if reference.is_empty():
 		push_warning("[launch] сохранение не открыто: в нём нет ссылки на карту")
 		return
-	var reference := map_reference as Dictionary
-	var source := StringName(reference.get("source", "core"))
 	var id := StringName(reference.get("id", ""))
 	if id.is_empty():
 		push_warning("[launch] в сохранении некорректная ссылка на карту")
 		return
-	var map_ref := ContentId.runtime_key(source, id)
+	var map_ref := ContentId.runtime_key(StringName(reference.get("source", "core")), id)
 	var map := _map_service.load_map(map_ref)
 	if map == null:
 		push_warning("[launch] сохранение не открыто: карта %s не найдена" % map_ref)
 		return
-	var saved_revision := String(reference.get("revision", ""))
-	if not saved_revision.is_empty() and map.meta.revision != saved_revision:
-		push_warning("[launch] карта %s изменилась после сохранения; будет использована текущая версия." % map_ref)
-	var definition := GameModuleRegistry.resolve_definition(_save_definition_key(save_data))
+	var definition_key := _save_definition_key(save_data)
+	if definition_key.is_empty():
+		push_warning("[launch] сохранение не открыто: в нём нет ссылки на игру")
+		return
+	var definition := GameModuleRegistry.resolve_definition(definition_key)
 	if definition == null:
-		push_error("[launch] game definition from save is unavailable")
+		push_warning("[launch] сохранение не открыто: игра %s не установлена" % definition_key)
 		return
 	pending_save_path = save_path
+	editor_return_scene = ""
+	pending_editor_document = null
 	active_session = GameSessionConfig.create(definition, map_ref, map)
 	get_tree().change_scene_to_file(GAME_RUNTIME_SCENE)
 
@@ -137,12 +153,13 @@ func return_to_editor_hub() -> void:
 
 func return_to_main_menu() -> void:
 	reset_to_default()
-	get_tree().change_scene_to_file("res://game/features/ui/presentation/main_menu/main_menu.tscn")
+	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
 
 
 func reset_to_default() -> void:
 	pending_save_path = ""
 	pending_editor_document = null
+	editor_return_scene = ""
 	active_session = null
 
 
@@ -151,10 +168,13 @@ func _set_editor_mode(dev_mode: bool) -> void:
 	editor_mode_forced = true
 
 
-func _save_definition_key(save_data: SaveData) -> StringName:
-	if save_data != null and not save_data.game_header.is_empty():
-		var pack_id := StringName(save_data.game_header.get("pack", ""))
-		var game_id := StringName(save_data.game_header.get("id", ""))
-		if not pack_id.is_empty() and not game_id.is_empty():
-			return ContentId.runtime_key(pack_id, game_id)
-	return &"core:settlement"
+## A save names its own game. There is no fallback to Settlement: guessing would
+## make one shipped game silently privileged over every installed one.
+static func _save_definition_key(save_data: SaveData) -> StringName:
+	if save_data == null or save_data.game_header.is_empty():
+		return &""
+	var pack_id := StringName(save_data.game_header.get("pack", ""))
+	var game_id := StringName(save_data.game_header.get("id", ""))
+	if pack_id.is_empty() or game_id.is_empty():
+		return &""
+	return ContentId.runtime_key(pack_id, game_id)

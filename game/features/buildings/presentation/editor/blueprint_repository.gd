@@ -101,6 +101,7 @@ func save(blueprint: BuildingBlueprintScript, path: String = "") -> Dictionary:
 	var rename_error := DirAccess.rename_absolute(temporary_path, target)
 	if rename_error != OK:
 		return {"ok": false, "path": target, "error": "Не удалось завершить сохранение: %s" % error_string(rename_error)}
+	ContentIndexScript.invalidate()
 	return {"ok": true, "path": target, "error": ""}
 
 
@@ -120,8 +121,7 @@ func load_blueprint(path: String) -> BuildingBlueprintScript:
 func list_blueprints() -> Array:
 	var out: Array = []
 	last_errors.clear()
-	var index := ContentIndexScript.new()
-	index.rebuild()
+	var index := ContentIndexScript.shared()
 	last_errors.append_array(index.errors)
 	for entry in index.blueprint_entries():
 		out.append({

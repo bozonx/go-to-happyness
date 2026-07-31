@@ -6,10 +6,17 @@ extends RefCounted
 
 const FORMAT_VERSION := 1
 
+## `menu_parameters` entry that surfaces the host's era picker. Everything else
+## in that list names a module parameter: `{"module": ..., "id": ...}`.
+const MENU_PARAMETER_ERA: StringName = &"era"
+
 var id: StringName = &""
 var name := ""
 ## Short human-readable description shown in the game library menu.
 var description := ""
+## Stamp written on every save (`ContentRevision`). A save records it so a
+## session can tell the player its game was edited since — it never blocks.
+var revision := ""
 ## Runtime address from ContentIndex (`core:settlement` or `pack:author.pack/game`).
 ## It is assigned by the registry, not authored in
 ## `.gdgame.json`, because an installed pack's source is chosen on install.
@@ -17,14 +24,12 @@ var runtime_key: StringName = &""
 var pack_id: StringName = &""
 var default_map: StringName = &""
 var module_ids: Array[StringName] = []
-var clock_id: StringName = &"realtime_pauseable"
 var input_profile: StringName = &"rts"
-var ui_layout: StringName = &""
 ## Defaults keyed by the module that owns and validates them.
 var start_module_parameters: Dictionary = {}
-## Declares which start parameters the game wants surfaced in the menu UI.
-## Each entry is `{ "id": StringName, "label": String, "type": "era" }`.
-## An empty array means the menu shows no game-specific selectors.
+## Which start parameters the launch screen offers the player, in order. Each
+## entry is either `{"type": "era"}` or `{"module": StringName, "id": StringName}`;
+## labels come from the module's own declaration, not from here.
 var menu_parameters: Array[Dictionary] = []
 var progression: GameProgressionDefinition = GameProgressionDefinition.new()
 
@@ -53,11 +58,10 @@ static func from_dict(source: Dictionary) -> GameDefinition:
 	definition.id = StringName(source.get("id", ""))
 	definition.name = String(source.get("name", definition.id))
 	definition.description = String(source.get("description", ""))
+	definition.revision = String(source.get("revision", ""))
 	definition.pack_id = StringName(source.get("pack", ""))
 	definition.default_map = StringName(source.get("default_map", ""))
-	definition.clock_id = StringName(source.get("clock", definition.clock_id))
 	definition.input_profile = StringName(source.get("input_profile", definition.input_profile))
-	definition.ui_layout = StringName(source.get("ui_layout", ""))
 	for raw_id: Variant in source.get("modules", []):
 		definition.module_ids.append(StringName(raw_id))
 	var start: Variant = source.get("start", {})
@@ -84,13 +88,19 @@ func to_dict() -> Dictionary:
 		"id": String(id),
 		"name": name,
 		"description": description,
+		"revision": revision,
 		"pack": String(pack_id),
 		"modules": module_ids.map(func(module_id: StringName) -> String: return String(module_id)),
 		"default_map": String(default_map),
-		"clock": String(clock_id),
 		"input_profile": String(input_profile),
-		"ui_layout": String(ui_layout),
 		"start": {"modules": start_module_parameters.duplicate(true)},
 		"menu_parameters": menu_parameters.duplicate(true),
 		"progression": progression.to_dict(),
 	}
+
+
+## Start parameters this definition supplies for one module, merged over nothing
+## else — the session merges map and player values on top.
+func parameters_for(module_id: StringName) -> Dictionary:
+	var value: Variant = start_module_parameters.get(module_id, {})
+	return (value as Dictionary).duplicate(true) if value is Dictionary else {}

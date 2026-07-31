@@ -22,8 +22,10 @@ func _init() -> void:
 func _run() -> void:
 	_install_fixture()
 
-	var index := ContentIndex.new()
-	index.rebuild()
+	# Installing content is a write, so it invalidates the one host-owned index.
+	# Without this the pack would exist on disk and be invisible to every reader.
+	ContentIndex.invalidate()
+	var index := ContentIndex.shared()
 	var entry := index.get_entry(GAME_KEY)
 	assert(entry != null, "an installed user-pack game must be indexed by its runtime key")
 	assert(entry.content_type == &"game")
@@ -68,9 +70,8 @@ func _run() -> void:
 	_uninstall_fixture()
 	# After cleanup the installed game is gone, so the content index no longer lists it.
 	# `get_entry` is the lookup primitive; `resolve_definition` would log a spurious error.
-	var rebuilt := ContentIndex.new()
-	rebuilt.rebuild()
-	assert(rebuilt.get_entry(GAME_KEY) == null, "uninstall must remove the game from the index")
+	ContentIndex.invalidate()
+	assert(ContentIndex.shared().get_entry(GAME_KEY) == null, "uninstall must remove the game from the index")
 	print("--- test_user_pack_game.gd PASSED ---")
 	quit(0)
 

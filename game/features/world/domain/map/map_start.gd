@@ -23,6 +23,11 @@ var module_settings: Dictionary = {}
 ## system switches as the session-composition boundary; old maps without it
 ## retain the generic showcase so they remain testable without settlement data.
 var game_definition: StringName = &"core:world_showcase"
+## How this map uses the eras its game declares. Progression is host
+## functionality, so the policy sits beside the other world fields rather than
+## inside a module's settings: a map narrows or disables it without naming the
+## module that happens to advance it.
+var progression: ProgressionPolicy = ProgressionPolicy.new()
 
 
 static func from_dict(source: Dictionary) -> MapStart:
@@ -33,6 +38,7 @@ static func from_dict(source: Dictionary) -> MapStart:
 	start.time_of_day = clampi(int(source.get("time_of_day", start.time_of_day)), 0, 1439)
 	start.weather_preset = StringName(source.get("weather_preset", start.weather_preset))
 	start.game_definition = StringName(source.get("game_definition", start.game_definition))
+	start.progression = ProgressionPolicy.from_dict(source.get("progression", {}))
 	var authored_settings: Variant = source.get("module_settings", {})
 	if authored_settings is Dictionary:
 		start.module_settings = (authored_settings as Dictionary).duplicate(true)
@@ -47,6 +53,7 @@ func to_dict() -> Dictionary:
 		"time_of_day": time_of_day,
 		"weather_preset": String(weather_preset),
 		"game_definition": String(game_definition),
+		"progression": progression.to_dict(),
 		"module_settings": module_settings.duplicate(true),
 	}
 

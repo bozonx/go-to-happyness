@@ -9,15 +9,11 @@ const CitizenActorScene = preload("res://game/features/citizens/presentation/cit
 var game: SettlementGame
 
 
-func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
+## Restores one `gth.settlement` save section onto a running session. The host
+## envelope, its headers and the section version are the coordinator's business;
+## this loader only ever sees the module's own contents.
+func restore(p_game: SettlementGame, section: Dictionary) -> bool:
 	game = p_game
-	if save_data == null:
-		return false
-
-	# The settlement module owns its section. SaveData no longer carries a flat
-	# settlement projection, so everything this loader needs lives under one key;
-	# the v1–v3 adapter in SaveData.from_dict has already packed it there.
-	var section: Dictionary = save_data.module_states.get("gth.settlement", {})
 	if section.is_empty():
 		push_warning("SettlementSaveLoader: save has no gth.settlement section")
 		return false
@@ -134,7 +130,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 					child.queue_free()
 			game.construction_controller.complete_building(cell, b_type, pos, site_node, blueprint)
 		else:
-			push_warning("restore_from_save_data: skipping building with unknown type '" + b_type + "' at cell " + str(cell))
+			push_warning("SettlementSaveLoader: skipping building with unknown type '" + b_type + "' at cell " + str(cell))
 
 	# 7. Restore Construction Sites
 	for c_dict in construction_sites_state:
@@ -159,7 +155,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 				game.building_registry.attach_node(cell, site.node, b_type)
 				game.construction_controller.update_construction_supply_label(site)
 		else:
-			push_warning("restore_from_save_data: skipping construction site with unknown type '" + b_type + "' at cell " + str(cell))
+			push_warning("SettlementSaveLoader: skipping construction site with unknown type '" + b_type + "' at cell " + str(cell))
 
 	SaveGameService.restore_warehouses(game.settlement, s_dict.get("warehouses", []), s_dict.get("warehouse_types", []), bool(s_dict.get("warehouse_ever_built", false)))
 

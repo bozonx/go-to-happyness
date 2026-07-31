@@ -60,12 +60,12 @@ layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 32
 
-[node name="EraPanel" type="Panel" parent="MarginContainer/VBoxContainer/ContentSplit"]
+[node name="ParametersPanel" type="Panel" parent="MarginContainer/VBoxContainer/ContentSplit"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 1.0
 
-[node name="VBox" type="VBoxContainer" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel"]
+[node name="VBox" type="VBoxContainer" parent="MarginContainer/VBoxContainer/ContentSplit/ParametersPanel"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -78,21 +78,29 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 12
 
-[node name="EraPanelTitle" type="Label" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
+[node name="ParametersTitle" type="Label" parent="MarginContainer/VBoxContainer/ContentSplit/ParametersPanel/VBox"]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
-text = "Начальная эра"
+text = "Параметры запуска"
 
-[node name="EraOption" type="OptionButton" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
-custom_minimum_size = Vector2(0, 44)
+[node name="ParametersScroll" type="ScrollContainer" parent="MarginContainer/VBoxContainer/ContentSplit/ParametersPanel/VBox"]
 layout_mode = 2
+size_flags_vertical = 3
 
-[node name="EditorButton" type="Button" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
+[node name="ParametersBox" type="VBoxContainer" parent="MarginContainer/VBoxContainer/ContentSplit/ParametersPanel/VBox/ParametersScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="EditorButton" type="Button" parent="MarginContainer/VBoxContainer/ContentSplit/ParametersPanel/VBox"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 text = "🛠 Редактор контента"
 
-[node name="DevModeButton" type="Button" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
+[node name="DevModeButton" type="Button" parent="MarginContainer/VBoxContainer/ContentSplit/ParametersPanel/VBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
@@ -127,10 +135,12 @@ layout_mode = 2
 text = "Выберите игру:"
 
 [node name="GameOption" type="OptionButton" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 36)
 layout_mode = 2
 
 [node name="GameDescriptionLabel" type="Label" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.75, 0.8, 0.85, 1)
 theme_override_font_sizes/font_size = 13
@@ -139,9 +149,10 @@ text = ""
 
 [node name="LandscapeLabel" type="Label" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
 layout_mode = 2
-text = "Выберите ландшафт / карту:"
+text = "Карта:"
 
 [node name="LandscapeOption" type="OptionButton" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 36)
 layout_mode = 2
 
@@ -156,16 +167,18 @@ stretch_mode = 6
 layout_mode = 2
 
 [node name="DescriptionLabel" type="Label" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.85, 0.9, 0.95, 1)
 autowrap_mode = 3
-text = "Описание эры..."
+text = ""
 
 [node name="ParamSummaryLabel" type="Label" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.8, 0.7, 1)
 autowrap_mode = 3
-text = "Параметры..."
+text = ""
 
 [node name="Footer" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
@@ -173,10 +186,11 @@ alignment = 1
 theme_override_constants/separation = 24
 
 [node name="StartGameButton" type="Button" parent="MarginContainer/VBoxContainer/Footer"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 48)
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
-text = "▶ Начать эру"
+text = "▶ Запустить игру"
 
 [node name="SavesButton" type="Button" parent="MarginContainer/VBoxContainer/Footer"]
 unique_name_in_owner = true
@@ -186,6 +200,7 @@ theme_override_font_sizes/font_size = 18
 text = "💾 Сохранения"
 
 [node name="QuitButton" type="Button" parent="MarginContainer/VBoxContainer/Footer"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(160, 48)
 layout_mode = 2
 theme_override_font_sizes/font_size = 18

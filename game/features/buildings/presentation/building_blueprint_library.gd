@@ -29,8 +29,7 @@ static func refresh() -> void:
 	_cache.clear()
 	_index_built = true
 	BuildingCatalogScript.clear_runtime_definitions()
-	_content_index = ContentIndexScript.new()
-	_content_index.rebuild()
+	_content_index = ContentIndexScript.shared()
 	for indexed_entry in _content_index.blueprint_entries():
 		var path: String = indexed_entry.path
 		var blueprint := BuildingBlueprintScript.from_json(FileAccess.get_file_as_string(path))

@@ -49,11 +49,12 @@ static func _test_meta_round_trips_through_json() -> void:
 	document.meta.tags = [&"survival"]
 	document.meta.border_level = -2
 	document.meta.border_kind = MapMeta.BORDER_NOTHING
-	document.meta.start.module_settings = {
-		&"gth.settlement": {"progression": {
-			"mode": "restricted", "allowed_eras": ["tent", "earth"], "default_era": "tent",
-		}},
-	}
+	# Progression is a host field, not a module setting: the map narrows the eras
+	# its game declares without naming the module that advances them.
+	document.meta.start.progression = ProgressionPolicy.from_dict({
+		"mode": "restricted", "allowed_eras": ["tent", "earth"], "default_era": "tent",
+	})
+	document.meta.start.module_settings = {&"gth.settlement": {"starting_population": 6}}
 	document.meta.start.style = &"roman"
 	document.meta.start.day_of_year = 200
 	document.meta.start.latitude = 60.0
@@ -75,7 +76,10 @@ static func _test_meta_round_trips_through_json() -> void:
 	assert(restored.meta.start.style == &"roman")
 	assert(is_equal_approx(restored.meta.start.latitude, 60.0))
 	assert(restored.meta.start.time_of_day == 540)
-	assert(restored.meta.start.module_settings_for(&"gth.settlement")["progression"]["default_era"] == "tent")
+	assert(restored.meta.start.progression.mode == ProgressionPolicy.MODE_RESTRICTED)
+	assert(restored.meta.start.progression.allowed_eras == [&"tent", &"earth"])
+	assert(restored.meta.start.progression.default_era == &"tent")
+	assert(restored.meta.start.module_settings_for(&"gth.settlement")["starting_population"] == 6)
 	assert(restored.meta.required_content.size() == 1)
 	assert(restored.to_json()["format_version"] == MapMeta.FORMAT_VERSION)
 

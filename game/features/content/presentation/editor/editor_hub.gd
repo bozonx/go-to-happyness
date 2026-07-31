@@ -86,8 +86,7 @@ func _set_project(project: Dictionary) -> void:
 ## Counts games, maps and buildings in the selected project pack by indexing
 ## its content through ContentIndex filtered by source.
 func _refresh_content_counts(project: Dictionary) -> void:
-	var index := ContentIndex.new()
-	index.rebuild()
+	var index := ContentIndex.shared()
 	var source: StringName = project.get("source", &"")
 	var game_count := 0
 	var map_count := 0
@@ -143,6 +142,7 @@ func _delete_project() -> void:
 	if root.is_empty() or dev_mode:
 		return
 	if _remove_directory_recursive(root):
+		ContentIndex.invalidate()
 		status_label.text = "Проект удалён: %s" % root
 		selected_project = {}
 		_refresh_projects()

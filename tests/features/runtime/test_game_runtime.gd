@@ -40,7 +40,10 @@ func _run() -> void:
 	var settlement_save := SaveData.new()
 	assert(settlement_save.load_from_file(SessionSaveCoordinator.QUICKSAVE_PATH))
 	assert(settlement_save.game_header.get("id") == "settlement")
-	assert(settlement_save.module_states.has("gth.settlement"))
+	assert(settlement_save.game_header.get("revision") == definition.revision,
+		"the save must record which revision of the game wrote it")
+	assert(settlement_save.module_sections.has("gth.settlement"))
+	assert(settlement_save.module_section_version(&"gth.settlement") == SettlementGameModule.new().section_version())
 	var saved_money := settlement.settlement.money
 	settlement.settlement.money = 1
 	assert(SessionSaveCoordinator.load_pending(runtime, SessionSaveCoordinator.QUICKSAVE_PATH))
@@ -81,7 +84,7 @@ func _assert_world_showcase(launch_manager: Node) -> void:
 	var save := SaveData.new()
 	assert(save.load_from_file(SessionSaveCoordinator.QUICKSAVE_PATH))
 	assert(save.game_header.get("id") == "world_showcase")
-	assert(save.module_states.get("gth.world_showcase", {}).get("camera", {}).get("yaw") == 17.0)
+	assert(save.module_section(&"gth.world_showcase").get("camera", {}).get("yaw") == 17.0)
 	showcase.camera_controller.camera_yaw = 90.0
 	assert(SessionSaveCoordinator.load_pending(runtime, SessionSaveCoordinator.QUICKSAVE_PATH))
 	assert(showcase.camera_controller.camera_yaw == 17.0)

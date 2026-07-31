@@ -91,6 +91,7 @@ func save_pack(pack: ContentPack, root: String) -> bool:
 		return false
 	file.store_string(JSON.stringify(pack.to_dict(), "  "))
 	file.close()
+	ContentIndex.invalidate()
 	return true
 
 

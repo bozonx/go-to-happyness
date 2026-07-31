@@ -200,7 +200,7 @@ func open_start_settings_dialog(meta: MapMeta) -> void:
 	_start_day_spin.value = meta.start.day_of_year
 	_start_latitude_spin.value = meta.start.latitude
 	_start_weather_edit.text = String(meta.start.weather_preset)
-	_refresh_progression_fields(meta.start.module_settings_for(&"gth.settlement").get("progression", {}))
+	_refresh_progression_fields(meta.start.progression)
 	_start_dialog.popup_centered()
 
 
@@ -221,7 +221,8 @@ func _on_start_settings_confirmed() -> void:
 	properties_applied.emit()
 
 
-func _refresh_progression_fields(authored_policy: Dictionary = {}) -> void:
+func _refresh_progression_fields(authored_policy: ProgressionPolicy = null) -> void:
+	var policy := authored_policy if authored_policy != null else ProgressionPolicy.new()
 	_allowed_eras_list.clear()
 	_default_era_option.clear()
 	var game_key := StringName(_start_game_option.get_item_metadata(_start_game_option.selected))
@@ -232,15 +233,15 @@ func _refresh_progression_fields(authored_policy: Dictionary = {}) -> void:
 		_allowed_eras_list.set_item_metadata(item, era.id)
 		_default_era_option.add_item(era.display_name())
 		_default_era_option.set_item_metadata(_default_era_option.item_count - 1, era.id)
-	var mode := StringName(authored_policy.get("mode", "inherit"))
-	_select_metadata(_progression_mode_option, mode)
-	var allowed: Array = authored_policy.get("allowed_eras", [])
+	_select_metadata(_progression_mode_option, policy.mode)
 	for index in _allowed_eras_list.item_count:
-		var era_id: Variant = _allowed_eras_list.get_item_metadata(index)
-		if mode != &"restricted" or allowed.has(String(era_id)) or allowed.has(era_id):
+		var era_id: StringName = _allowed_eras_list.get_item_metadata(index)
+		if policy.mode != ProgressionPolicy.MODE_RESTRICTED or era_id in policy.allowed_eras:
 			_allowed_eras_list.select(index, false)
-	_select_metadata(_default_era_option, StringName(authored_policy.get(
-		"default_era", _default_era_option.get_item_metadata(0) if _default_era_option.item_count > 0 else &"")))
+	var default_era := policy.default_era
+	if default_era.is_empty() and _default_era_option.item_count > 0:
+		default_era = _default_era_option.get_item_metadata(0)
+	_select_metadata(_default_era_option, default_era)
 	_progression_mode_option.disabled = eras.is_empty()
 	_update_progression_controls()
 
@@ -248,31 +249,23 @@ func _refresh_progression_fields(authored_policy: Dictionary = {}) -> void:
 func _update_progression_controls() -> void:
 	var has_eras := _default_era_option.item_count > 0
 	var mode := StringName(_progression_mode_option.get_item_metadata(_progression_mode_option.selected))
+	var restricted := mode == ProgressionPolicy.MODE_RESTRICTED
 	_allowed_eras_list.visible = has_eras
-	_allowed_eras_list.mouse_filter = Control.MOUSE_FILTER_STOP if mode == &"restricted" else Control.MOUSE_FILTER_IGNORE
-	_allowed_eras_list.modulate.a = 1.0 if mode == &"restricted" else 0.55
-	_default_era_option.disabled = not has_eras or mode == &"disabled"
+	_allowed_eras_list.mouse_filter = Control.MOUSE_FILTER_STOP if restricted else Control.MOUSE_FILTER_IGNORE
+	_allowed_eras_list.modulate.a = 1.0 if restricted else 0.55
+	_default_era_option.disabled = not has_eras or mode == ProgressionPolicy.MODE_DISABLED
 
 
 func _write_progression_policy(meta: MapMeta) -> void:
-	var settings := meta.start.module_settings_for(&"gth.settlement")
-	if _default_era_option.item_count == 0:
-		settings.erase("progression")
-	else:
-		var mode := StringName(_progression_mode_option.get_item_metadata(_progression_mode_option.selected))
-		var policy := {"mode": String(mode)}
-		if mode == &"restricted":
-			var allowed: Array[String] = []
+	var policy := ProgressionPolicy.new()
+	if _default_era_option.item_count > 0:
+		policy.mode = StringName(_progression_mode_option.get_item_metadata(_progression_mode_option.selected))
+		if policy.mode == ProgressionPolicy.MODE_RESTRICTED:
 			for index: int in _allowed_eras_list.get_selected_items():
-				allowed.append(String(_allowed_eras_list.get_item_metadata(index)))
-			policy["allowed_eras"] = allowed
-		if mode != &"disabled":
-			policy["default_era"] = String(_default_era_option.get_item_metadata(_default_era_option.selected))
-		settings["progression"] = policy
-	if settings.is_empty():
-		meta.start.module_settings.erase(&"gth.settlement")
-	else:
-		meta.start.module_settings[&"gth.settlement"] = settings
+				policy.allowed_eras.append(StringName(_allowed_eras_list.get_item_metadata(index)))
+		if policy.mode != ProgressionPolicy.MODE_DISABLED:
+			policy.default_era = StringName(_default_era_option.get_item_metadata(_default_era_option.selected))
+	meta.start.progression = policy
 
 
 # --- Option plumbing ----------------------------------------------------------
@@ -297,18 +290,16 @@ func _fill_static_options() -> void:
 		[MapMeta.BORDER_NOTHING, "Ничего"],
 	])
 	_add_options(_progression_mode_option, [
-		[&"inherit", "Все эры игры"],
-		[&"restricted", "Только выбранные эры"],
-		[&"fixed", "Одна фиксированная эра"],
-		[&"disabled", "Без эр"],
+		[ProgressionPolicy.MODE_INHERIT, "Все эры игры"],
+		[ProgressionPolicy.MODE_RESTRICTED, "Только выбранные эры"],
+		[ProgressionPolicy.MODE_FIXED, "Одна фиксированная эра"],
+		[ProgressionPolicy.MODE_DISABLED, "Без эр"],
 	])
 
 
 func _fill_game_options(selected_game: StringName) -> void:
 	_start_game_option.clear()
-	var index := ContentIndex.new()
-	index.rebuild()
-	for entry in index.game_entries():
+	for entry in ContentIndex.shared().game_entries():
 		_start_game_option.add_item(entry.name)
 		_start_game_option.set_item_metadata(_start_game_option.item_count - 1, entry.runtime_key)
 	_select_metadata(_start_game_option, selected_game)
