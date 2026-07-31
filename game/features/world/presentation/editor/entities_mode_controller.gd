@@ -89,8 +89,12 @@ func hover_brush() -> BaseBrushController:
 func rebuild_views() -> void:
 	if _root == null:
 		return
+	# `free()` rather than `queue_free()`: `activate()` is called on the same
+	# frame a mode switch also rebuilds, and a deferred free would leave the old
+	# markers counted alongside the new ones — the editor would draw and re-draw
+	# on top of itself. Markers own no signals, so freeing in place is safe.
 	for child in _root.get_children():
-		child.queue_free()
+		child.free()
 	if context == null or context.document == null:
 		return
 	# Companion starts are numbered in authoring order; the label mirrors what
@@ -152,7 +156,6 @@ func _add_label(parent: Node3D, text: String, marker_height: float) -> void:
 	label.no_depth_test = true
 	label.shaded = false
 	label.position = Vector3(0.0, marker_height * 0.5 + 0.5, 0.0)
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	parent.add_child(label)
 
 

@@ -33,6 +33,7 @@ func _run() -> void:
 	_test_scene_came_up(editor)
 	_test_validation(editor)
 	_test_mode_switching(editor)
+	_test_entities_mode_renders_anchor_markers(editor)
 	await _test_terrain_editing_and_shared_undo(editor)
 	_test_ramp_connection_and_shared_undo(editor)
 	_test_fill_placement_and_shared_undo(editor)
@@ -118,6 +119,53 @@ func _test_mode_switching(editor: Node) -> void:
 	editor._select_mode(&"terrain")
 	assert(editor._active.id == &"terrain", "switched back")
 	print("  modes ok")
+
+
+## Spawn anchors render as 3D markers in the zones mode, so an author can tell
+## the hero start from a companion start at a glance instead of reading the list.
+## This is the presentation counterpart of `MapSpawnService`'s data contract.
+func _test_entities_mode_renders_anchor_markers(editor: Node) -> void:
+	var terrain: TerrainGrid = editor.document.terrain
+	var zones: MapZoneLayer = editor.document.zones
+	# Snapshot anchors so the test leaves the document the way it found it — later
+	# tests assert on terrain/fill state and must not see these samples.
+	var prior_count := zones.anchors.size()
+	var hero := ZoneAnchorRecord.new()
+	hero.id = &"hero_start"
+	hero.role = ZoneAnchorRecord.ROLE_SPAWN
+	hero.function = MapSpawnService.HERO_START
+	hero.pos = Vector3(2.5, 0.0, 3.5)
+	zones.anchors.append(hero)
+	var companion := ZoneAnchorRecord.new()
+	companion.id = &"companion_1"
+	companion.role = ZoneAnchorRecord.ROLE_SPAWN
+	companion.function = MapSpawnService.COMPANION_START
+	companion.pos = Vector3(3.5, 0.0, 3.5)
+	zones.anchors.append(companion)
+
+	editor._select_mode(&"entities")
+	var controller: EntitiesModeController = editor._active
+	# The visual root holds one MeshInstance3D per anchor; the Label3D is a child
+	# of that mesh, so the root's direct children equal the authored anchor count.
+	var marker_root: Node3D = controller._root
+	assert(marker_root != null, "entities mode owns a marker root")
+	assert(marker_root.get_child_count() == 2, "each anchor renders a marker: %d" % marker_root.get_child_count())
+	for marker in marker_root.get_children():
+		assert(marker is MeshInstance3D, "anchor marker is a mesh")
+		# The marker lifts onto the live terrain, like the runtime spawn does.
+		var expected_height := terrain.height_at(Vector3(marker.position.x, 0.0, marker.position.z))
+		assert(marker.position.y > expected_height, "marker sits above the ground, not inside it")
+		# Each marker carries a Label3D so its role reads from any angle.
+		var has_label := false
+		for child in marker.get_children():
+			if child is Label3D:
+				has_label = true
+				break
+		assert(has_label, "anchor marker has a readable label")
+	# Restore the document so subsequent tests see a clean board.
+	zones.anchors.resize(prior_count)
+	editor._select_mode(&"terrain")
+	print("  anchor markers ok")
 
 
 func _test_terrain_editing_and_shared_undo(editor: Node) -> void:

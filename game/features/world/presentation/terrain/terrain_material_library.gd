@@ -9,16 +9,48 @@ const TEXTURE_SIZE := 512
 const PLACEHOLDER_SIZE := 128
 const LOOKUP_WIDTH := TerrainMaterialVariants.MAX_VARIANTS
 
-const GRASS_SURFACE_PATHS: Array[String] = [
-	"res://game/features/world/presentation/terrain/assets/grass_ground_plain.png",
-	"res://game/features/world/presentation/terrain/assets/grass_ground_lush.png",
-	"res://game/features/world/presentation/terrain/assets/grass_ground_parched.png",
-	"res://game/features/world/presentation/terrain/assets/grass_ground_flowering.png",
-]
-const TALL_GRASS_SURFACE_PATHS: Array[String] = [
-	"res://game/features/world/presentation/terrain/assets/grass_tall_ground_meadow.png",
-	"res://game/features/world/presentation/terrain/assets/grass_tall_ground_fern.png",
-	"res://game/features/world/presentation/terrain/assets/grass_tall_ground_eared.png",
+## Where every authored surface texture lives. One directory for the whole array;
+## the mesher, the palette swatch and the cliff shader all resolve through it.
+const ASSET_DIR := "res://game/features/world/presentation/terrain/assets/"
+
+## Authored 512² surface underlays (albedo in RGB, height map in alpha) keyed by
+## material id. The list for a material MUST cover exactly its
+## `TerrainMaterialVariants.surface_style_count` styles, and each base name is the
+## `<material_id>_<surface_style>` of that style — the test in
+## `test_domain_terrain_textures.gd` enforces both, so adding a material or a
+## variant without an entry here fails loudly instead of sampling a placeholder.
+##
+## An empty string means the style is not drawn yet: the layer falls back to a
+## procedural placeholder, exactly as it did before this table existed. That is
+## the whole point of stage 1 — the file paths are frozen now, and dropping the
+## PNG in later (`design_docs/engine/terrain_materials.md` §7.1) lights the layer
+## up without touching this file or the layer layout.
+const AUTHORED_SURFACE_PATHS: Dictionary = {
+	TerrainMaterialCatalog.GRASS: [
+		"grass_ground_plain", "grass_ground_lush", "grass_ground_parched", "grass_ground_flowering",
+	],
+	TerrainMaterialCatalog.GRASS_TALL: [
+		"grass_tall_ground_meadow", "grass_tall_ground_fern", "grass_tall_ground_eared",
+	],
+	TerrainMaterialCatalog.DIRT: ["dirt_plain", "dirt_dark", "dirt_cracked", "dirt_dusty"],
+	TerrainMaterialCatalog.STONE: ["stone_grey", "stone_dark", "stone_sandstone", "stone_cooled_lava"],
+	TerrainMaterialCatalog.SAND: ["sand_yellow", "sand_white", "sand_coarse"],
+	TerrainMaterialCatalog.GRAVEL: ["gravel_river_pebbles", "gravel_crushed"],
+	TerrainMaterialCatalog.MUD: ["mud_silty", "mud_puddled"],
+	TerrainMaterialCatalog.SCORCHED: ["scorched_smouldering", "scorched_cold"],
+	TerrainMaterialCatalog.ICE: ["ice_smooth", "ice_cracked", "ice_hummocks", "ice_dusty"],
+	TerrainMaterialCatalog.LUNAR_REGOLITH: ["lunar_regolith_mare_dark", "lunar_regolith_highland_light"],
+	TerrainMaterialCatalog.LUNAR_ROCK: ["lunar_rock_breccia", "lunar_rock_light_rock"],
+	TerrainMaterialCatalog.MARS_REGOLITH: ["mars_regolith_red", "mars_regolith_ochre"],
+	TerrainMaterialCatalog.MARS_ROCK: ["mars_rock_basalt", "mars_rock_layered"],
+	TerrainMaterialCatalog.CLAY: ["clay_red", "clay_grey", "clay_dry"],
+}
+
+## Auto-rock cliff faces (`terrain_materials.md` §3). Same 512² layout as tops —
+## the cliff shader samples the same texture array — indexed by `CLIFF_IDS` order.
+const AUTHORED_CLIFF_PATHS: Array[String] = [
+	"cliff_rooted_soil", "cliff_wet_clay", "cliff_sand_scree", "cliff_gravel_scree",
+	"cliff_layered_rock", "cliff_ice_wall", "cliff_dust_slope",
 ]
 
 const MATERIAL_COLOURS: Array[Color] = [
@@ -141,15 +173,38 @@ func _ensure_images() -> void:
 			_images.append(_generate_placeholder(material_index, style))
 			_simple_layers[material_index * 16 + style] = simple_layer
 	for cliff_index in TerrainMaterialCatalog.cliff_count():
-		_images.append(_generate(CLIFF_COLOURS[cliff_index], 10, 0.8, 1000 + cliff_index))
+		var cliff_path := _authored_cliff_path(cliff_index)
+		if cliff_path != "":
+			_images.append(_load_authored(cliff_path))
+			_authored_layers[_images.size() - 1] = true
+		else:
+			_images.append(_generate(CLIFF_COLOURS[cliff_index], 10, 0.8, 1000 + cliff_index))
 
 
+## Resolves a material + surface style to its authored PNG, or "" when the style
+## is not drawn yet (or the file is missing on disk). "" routes the caller to the
+## procedural placeholder, so a not-yet-authored layer never breaks the array.
 func _authored_path(material_index: int, style: int) -> String:
-	if material_index == TerrainMaterialCatalog.index_of(TerrainMaterialCatalog.GRASS):
-		return GRASS_SURFACE_PATHS[style]
-	if material_index == TerrainMaterialCatalog.index_of(TerrainMaterialCatalog.GRASS_TALL):
-		return TALL_GRASS_SURFACE_PATHS[style]
-	return ""
+	var id := TerrainMaterialCatalog.id_of_index(material_index)
+	if not AUTHORED_SURFACE_PATHS.has(id):
+		return ""
+	var base_names: Array = AUTHORED_SURFACE_PATHS[id]
+	if style < 0 or style >= base_names.size() or base_names[style] == "":
+		return ""
+	var base_name: String = base_names[style]
+	var path: String = ASSET_DIR + base_name + ".png"
+	return path if ResourceLoader.exists(path) else ""
+
+
+## Same contract as `_authored_path`, for the cliff face kinds of §3.
+func _authored_cliff_path(cliff_index: int) -> String:
+	if cliff_index < 0 or cliff_index >= AUTHORED_CLIFF_PATHS.size():
+		return ""
+	var base_name: String = AUTHORED_CLIFF_PATHS[cliff_index]
+	if base_name == "":
+		return ""
+	var path := ASSET_DIR + base_name + ".png"
+	return path if ResourceLoader.exists(path) else ""
 
 
 func _load_authored(path: String) -> Image:
