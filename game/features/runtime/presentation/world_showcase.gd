@@ -4,6 +4,7 @@ extends Node3D
 const CELL_SIZE := 2.0
 
 @onready var camera_controller: CameraController = $CameraController
+@onready var editor_hint: Label = $EditorHintLayer/EditorHint
 var world_setup: WorldSetup = null
 var world_session: WorldSession = null
 
@@ -14,7 +15,19 @@ func start_session(session: GameSessionConfig) -> bool:
 		return false
 	var active_world_session := world_session if world_session != null else WorldSession.new(session.map_document)
 	world_setup = active_world_session.build(self, camera_controller.camera, CELL_SIZE, session.map_document.board_cells())
+	_update_editor_hint()
 	return world_setup.terrain_grid != null and world_setup.water_grid != null
+
+
+## The hint is only relevant for an F5 test run from the map editor; a Showcase
+## launched from the menu has nowhere to return to. It matches the same flag
+## `HostInputController` checks to route `Esc` back into the editor.
+func _update_editor_hint() -> void:
+	if editor_hint == null:
+		return
+	var launch_manager := get_node_or_null("/root/GameLaunchManager")
+	var from_editor := launch_manager != null and launch_manager.get("pending_editor_document") != null
+	editor_hint.visible = from_editor
 
 
 func _process(delta: float) -> void:

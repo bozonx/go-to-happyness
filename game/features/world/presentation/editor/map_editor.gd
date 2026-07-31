@@ -598,8 +598,15 @@ func _test_run() -> void:
 		return
 	var launch_manager: Node = get_node_or_null("/root/GameLaunchManager")
 	var definition_key := document.meta.start.game_definition
-	if GameModuleRegistry.resolve_definition(definition_key) == null:
-		_message = "тест-запуск недоступен: игра %s не установлена" % definition_key
+	# Map-level validation only checks the world (anchor placement, entity
+	# bounds). A settlement map also needs a `core:hero_start` and enough
+	# `core:companion_start` for the starting party; that gate lives in the
+	# module and used to fail silently after launch_editor_test changed scenes.
+	# Run it here so the author sees the problem in the status bar instead of a
+	# black screen.
+	var session_errors := _test_run_service.validate_session(document, definition_key)
+	if not session_errors.is_empty():
+		_message = "тест-запуск невозможен: %s" % "; ".join(session_errors)
 		_refresh_panels()
 		return
 	if launch_manager.has_method("launch_editor_test"):

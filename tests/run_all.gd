@@ -25,6 +25,9 @@ const TestWaterFlowScript = preload("res://tests/features/world/test_water_flow.
 const TestMapEditorHistoryScript = preload("res://tests/features/world/test_map_editor_history.gd")
 const TestDomainTerrainNavigationScript = preload("res://tests/domain/test_domain_terrain_navigation.gd")
 const TestDomainWaterScript = preload("res://tests/domain/test_domain_water.gd")
+const TestMapSpawnServiceScript = preload("res://tests/domain/test_map_spawn_service.gd")
+const TestMapValidatorScript = preload("res://tests/domain/test_map_validator.gd")
+const TestMapTestRunServiceScript = preload("res://tests/domain/test_map_test_run_service.gd")
 
 const TestAIFrameworkScript = preload("res://tests/ai/test_ai_framework.gd")
 const TestAINeedsScript = preload("res://tests/ai/test_ai_needs.gd")

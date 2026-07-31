@@ -4,11 +4,32 @@ extends MapEditorMode
 ## Map authoring of the shared active-zone model. The first slice deliberately
 ## keeps the UI in the generic palette/inspector: static editor chrome stays in
 ## the scene, while all zone behaviour remains in this controller.
+##
+## Anchors are visible in the 3D view: a `spawn` marker's colour and label say
+## whether it is the hero start, a companion start, or an undecorated spawn, so
+## the author never has to click into the list to tell them apart. This is the
+## map-editor counterpart of the building editor's `zones_mode_controller` — the
+## colours stay aligned across both tools.
 
 const TOOL_AREA := &"area"
 const TOOL_POINT := &"point"
 const TOOL_ROUTE := &"route"
 const TOOLS: Array[StringName] = [TOOL_AREA, TOOL_POINT, TOOL_ROUTE]
+
+## Colour/size/label per spawn function. `MapSpawnService` distinguishes hero and
+## companion starts; a function this build does not interpret still draws as a
+## spawn, just without a role-specific colour.
+const SPAWN_FUNCTION_STYLE: Dictionary = {
+	MapSpawnService.HERO_START: {"color": Color(1.0, 0.82, 0.25), "size": Vector3(0.5, 1.1, 0.5), "label": "Герой"},
+	MapSpawnService.COMPANION_START: {"color": Color(0.45, 0.7, 1.0), "size": Vector3(0.45, 0.9, 0.45), "label": "Житель"},
+}
+const SPAWN_FALLBACK_STYLE: Dictionary = {"color": Color(0.8, 0.5, 1.0), "size": Vector3(0.45, 0.9, 0.45)}
+## Non-spawn roles get their own colour, matching the building editor's
+## `ANCHOR_STYLE` so a waypoint reads the same in both tools.
+const ROLE_STYLE: Dictionary = {
+	ZoneAnchorRecord.ROLE_WAYPOINT: Color(0.7, 0.7, 0.7),
+	ZoneAnchorRecord.ROLE_POI: Color(1.0, 0.8, 0.6),
+}
 
 var _tool: StringName = TOOL_AREA
 var _area_role: StringName = ZoneAreaRecord.ROLE_REGION
@@ -18,6 +39,9 @@ var _drag_start := Vector2i.ZERO
 var _dragging := false
 var _active_route_id: StringName = &""
 
+var _root: Node3D = null
+var _material_cache: Dictionary = {}
+
 
 func _init() -> void:
 	id = &"entities"
@@ -25,10 +49,27 @@ func _init() -> void:
 	icon = "📍"
 
 
+func configure(next_context: MapEditorContext) -> void:
+	super.configure(next_context)
+	if _root == null:
+		_root = Node3D.new()
+		_root.name = "ZoneAnchorViews"
+		context.terrain_world.add_child(_root)
+	rebuild_views()
+
+
+func activate() -> void:
+	rebuild_views()
+
+
 func deactivate() -> void:
 	_dragging = false
 	if context != null and context.brush != null:
 		context.brush.clear_hover()
+
+
+func document_changed() -> void:
+	rebuild_views()
 
 
 func clear_hover() -> void:
@@ -38,6 +79,93 @@ func clear_hover() -> void:
 
 func hover_brush() -> BaseBrushController:
 	return context.brush if context != null else null
+
+
+## Presentation-only markers for every anchor on the zone layer, rebuilt on
+## activation and whenever the document changes. They are the only way to tell,
+## at a glance, where a spawn sits and whether it is the hero or a companion —
+## the authored `pos` is planar, so the marker lifts onto the live terrain the
+## way the runtime will, otherwise it would sit inside a raised hill.
+func rebuild_views() -> void:
+	if _root == null:
+		return
+	for child in _root.get_children():
+		child.queue_free()
+	if context == null or context.document == null:
+		return
+	# Companion starts are numbered in authoring order; the label mirrors what
+	# `MapSpawnService.companion_spawn_positions` returns, so the on-map text and
+	# the spawn order the runtime uses stay in sync.
+	var companion_index := 0
+	for anchor: ZoneAnchorRecord in context.document.zones.anchors:
+		var style := _anchor_style(anchor)
+		if anchor.is_spawn() and anchor.function == MapSpawnService.COMPANION_START:
+			companion_index += 1
+		var label_text := _anchor_label(anchor, style, companion_index)
+		_add_marker(anchor, style, label_text)
+
+
+func _anchor_style(anchor: ZoneAnchorRecord) -> Dictionary:
+	if anchor.is_spawn():
+		return SPAWN_FUNCTION_STYLE.get(anchor.function, SPAWN_FALLBACK_STYLE)
+	var color: Color = ROLE_STYLE.get(anchor.role, Color(0.6, 0.6, 0.65))
+	return {"color": color, "size": Vector3(0.4, 0.8, 0.4)}
+
+
+func _anchor_label(anchor: ZoneAnchorRecord, style: Dictionary, companion_index: int) -> String:
+	if anchor.is_spawn():
+		if anchor.function == MapSpawnService.COMPANION_START:
+			return "%s %d" % [style.get("label", ""), companion_index]
+		if style.has("label"):
+			return String(style["label"])
+		return String(anchor.id)
+	return String(anchor.id)
+
+
+func _add_marker(anchor: ZoneAnchorRecord, style: Dictionary, label_text: String) -> void:
+	var marker := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = style["size"]
+	marker.mesh = mesh
+	marker.material_override = _get_material(style["color"])
+	var size: Vector3 = style["size"]
+	# Anchored XZ with Y lifted onto the terrain — the same projection the
+	# citizen factory applies at launch, so a marker never sits inside the ground.
+	var position := anchor.pos
+	position.y = context.terrain.height_at(position) + size.y * 0.5
+	marker.position = position
+	marker.rotation.y = anchor.facing
+	_root.add_child(marker)
+	if not label_text.is_empty():
+		_add_label(marker, label_text, size.y)
+
+
+func _add_label(parent: Node3D, text: String, marker_height: float) -> void:
+	var label := Label3D.new()
+	label.text = text
+	label.font_size = 48
+	label.outline_size = 16
+	label.outline_modulate = Color.BLACK
+	label.modulate = Color.WHITE
+	label.pixel_size = 0.012
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.shaded = false
+	label.position = Vector3(0.0, marker_height * 0.5 + 0.5, 0.0)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(label)
+
+
+func _get_material(color: Color) -> StandardMaterial3D:
+	var key := color.to_html(true)
+	if _material_cache.has(key):
+		return _material_cache[key]
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(color.r, color.g, color.b, 0.75)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_material_cache[key] = material
+	return material
 
 
 func pick_from_cell() -> void:
@@ -225,12 +353,18 @@ func activate_option(option_id: StringName) -> void:
 
 
 func inspector_lines() -> Array[String]:
-	return [
+	var lines: Array[String] = [
 		"Инструмент: %s" % _tool,
 		"Областей: %d" % context.document.zones.areas.size(),
 		"Точек: %d" % context.document.zones.anchors.size(),
 		"Маршрутов: %d" % context.document.zones.routes.size(),
 	]
+	if _tool == TOOL_POINT and _anchor_role == ZoneAnchorRecord.ROLE_SPAWN:
+		# The active spawn function decides what a new click places; restating it
+		# in the inspector keeps the palette toggle and the marker colour honest.
+		var function_label := "старт героя" if _spawn_function == MapSpawnService.HERO_START else "старт жителя"
+		lines.append("Будет поставлено: %s" % function_label)
+	return lines
 
 
 func list_title() -> String:
