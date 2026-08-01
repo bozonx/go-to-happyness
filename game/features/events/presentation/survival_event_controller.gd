@@ -242,16 +242,8 @@ func _apply_skip_night_incident() -> void:
 		{"resource": ResourceIds.FOOD, "min": 3, "max": 5, "message": "Night scavengers took %d food."},
 		{"resource": ResourceIds.GRASS, "min": 10, "max": 15, "message": "A stray animal ate %d grass."},
 		{"resource": ResourceIds.BRANCHES, "min": 5, "max": 8, "message": "Wind scattered %d branches."},
-		{"resource": "gloves", "min": 20, "max": 20, "message": "Night scavengers damaged a glove set by %d%%."},
 	]
 	var incident: Dictionary = incidents[simulation.random.randi_range(0, incidents.size() - 1)]
-	if str(incident.resource) == "gloves":
-		var gloves: Dictionary = simulation.settlement.equipment.get(ResourceIds.CONSTRUCTION_GLOVES, {})
-		if int(gloves.get("sets", 0)) > 0:
-			gloves["active_durability"] = maxf(0.0, float(gloves.get("active_durability", 100.0)) - float(incident.max))
-			simulation.settlement.equipment[ResourceIds.CONSTRUCTION_GLOVES] = gloves
-			simulation.add_message(str(incident.message) % int(incident.max))
-		return
 	var amount := mini(simulation.settlement.amount(str(incident.resource)), simulation.random.randi_range(int(incident.min), int(incident.max)))
 	if amount > 0:
 		simulation.settlement.add(str(incident.resource), -amount)

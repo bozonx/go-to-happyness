@@ -122,23 +122,6 @@ offset_bottom = 116.0
 max_value = 99.0
 alignment = 2
 
-[node name="GlovesLabel" type="Label" parent="EntranceOrderModal"]
-layout_mode = 0
-offset_left = 20.0
-offset_top = 134.0
-offset_right = 200.0
-offset_bottom = 158.0
-text = "Gloves (8 coins each)"
-
-[node name="GlovesSpin" type="SpinBox" parent="EntranceOrderModal"]
-layout_mode = 0
-offset_left = 220.0
-offset_top = 130.0
-offset_right = 320.0
-offset_bottom = 156.0
-max_value = 99.0
-alignment = 2
-
 [node name="BucketLabel" type="Label" parent="EntranceOrderModal"]
 layout_mode = 0
 offset_left = 20.0

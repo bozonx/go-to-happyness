@@ -41,7 +41,6 @@ var entrance_work_button: Button
 var entrance_order_modal: Panel
 var entrance_order_food_spin: SpinBox
 var entrance_order_water_spin: SpinBox
-var entrance_order_gloves_spin: SpinBox
 var entrance_order_bucket_spin: SpinBox
 var entrance_order_total_label: Label
 var materials_factory_menu_title: Label
@@ -251,7 +250,6 @@ func _create_entrance_menu() -> void:
 			entrance_order_modal = menu.entrance_order_modal
 			entrance_order_food_spin = menu.entrance_order_food_spin
 			entrance_order_water_spin = menu.entrance_order_water_spin
-			entrance_order_gloves_spin = menu.entrance_order_gloves_spin
 			entrance_order_bucket_spin = menu.entrance_order_bucket_spin
 			entrance_order_total_label = menu.entrance_order_total_label
 
@@ -261,7 +259,6 @@ func _create_entrance_menu() -> void:
 
 			entrance_order_food_spin.value_changed.connect(func(_val): events.entrance_order_total_update_requested.emit())
 			entrance_order_water_spin.value_changed.connect(func(_val): events.entrance_order_total_update_requested.emit())
-			entrance_order_gloves_spin.value_changed.connect(func(_val): events.entrance_order_total_update_requested.emit())
 			entrance_order_bucket_spin.value_changed.connect(func(_val): events.entrance_order_total_update_requested.emit())
 
 

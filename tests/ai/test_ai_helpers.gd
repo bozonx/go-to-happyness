@@ -216,8 +216,7 @@ class NullFacade extends AIWorldFacade:
 
 
 class FakeSettlement extends RefCounted:
-	func construction_gloves_available() -> bool:
-		return false
+	pass
 
 
 class FakeFireManagementService extends RefCounted:

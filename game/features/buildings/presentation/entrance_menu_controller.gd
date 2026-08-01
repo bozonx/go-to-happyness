@@ -35,7 +35,6 @@ func update_entrance_order_total(_value := 0.0) -> void:
 	var total: int = (
 		int(simulation.ui_manager.entrance_order_food_spin.value) * simulation.FOOD_PURCHASE_PRICE
 		+ int(simulation.ui_manager.entrance_order_water_spin.value) * simulation.ENTRANCE_WATER_PRICE
-		+ int(simulation.ui_manager.entrance_order_gloves_spin.value) * simulation.ENTRANCE_GLOVE_PRICE
 		+ int(simulation.ui_manager.entrance_order_bucket_spin.value) * simulation.ENTRANCE_BUCKET_PRICE
 	)
 	var available: int = simulation.trade_service.available_trade_money()
@@ -45,12 +44,10 @@ func update_entrance_order_total(_value := 0.0) -> void:
 func send_entrance_order() -> void:
 	var food := int(simulation.ui_manager.entrance_order_food_spin.value)
 	var water := int(simulation.ui_manager.entrance_order_water_spin.value)
-	var gloves := int(simulation.ui_manager.entrance_order_gloves_spin.value)
 	var bucket := int(simulation.ui_manager.entrance_order_bucket_spin.value)
 	var total: int = (
 		food * simulation.FOOD_PURCHASE_PRICE
 		+ water * simulation.ENTRANCE_WATER_PRICE
-		+ gloves * simulation.ENTRANCE_GLOVE_PRICE
 		+ bucket * simulation.ENTRANCE_BUCKET_PRICE
 	)
 	if total <= 0:
@@ -60,13 +57,11 @@ func send_entrance_order() -> void:
 		return
 	if food > 0:
 		simulation.trade_service.buy_entrance_food(food, simulation.FOOD_PURCHASE_PRICE)
-	for _i in range(gloves):
-		simulation.trade_service.buy_entrance_gloves(simulation.ENTRANCE_GLOVE_PRICE)
 	if water > 0:
 		simulation.trade_service.buy_entrance_resource(ResourceIds.WATER, water, simulation.ENTRANCE_WATER_PRICE)
 	for _i in range(bucket):
 		simulation.trade_service.buy_entrance_tool("bucket", simulation.ENTRANCE_BUCKET_PRICE)
-	simulation.update_interface("Entrance order placed: %d food, %d water, %d gloves, %d buckets." % [food, water, gloves, bucket])
+	simulation.update_interface("Entrance order placed: %d food, %d water, %d buckets." % [food, water, bucket])
 	hide_entrance_order_modal()
 
 

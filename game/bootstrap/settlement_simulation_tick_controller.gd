@@ -63,7 +63,6 @@ func update_clock(delta: float) -> void:
 			game.update_interface("Rain has stopped.")
 	if game.clock.hour() != previous_hour:
 		game.settlement_survival_service.apply_hourly_tent_survival(game.clock.hour())
-		game.settlement_survival_service.apply_hourly_bare_hands_penalty()
 		game.settlement_survival_service.apply_hourly_work_fatigue()
 	if game.ui_manager.hud != null:
 		game.ui_manager.hud.update_clock("%s  %02d:%02d  x%d" % ["Night" if game.clock.is_night() else "Day", game.clock.hour(), game.clock.minute(), int(game.time_multiplier)])

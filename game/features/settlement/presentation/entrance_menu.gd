@@ -15,7 +15,6 @@ signal close_requested
 @onready var entrance_order_modal: Panel = $EntranceOrderModal
 @onready var entrance_order_food_spin: SpinBox = $EntranceOrderModal/FoodSpin
 @onready var entrance_order_water_spin: SpinBox = $EntranceOrderModal/WaterSpin
-@onready var entrance_order_gloves_spin: SpinBox = $EntranceOrderModal/GlovesSpin
 @onready var entrance_order_bucket_spin: SpinBox = $EntranceOrderModal/BucketSpin
 @onready var entrance_order_total_label: Label = $EntranceOrderModal/TotalLabel
 @onready var send_button: Button = $EntranceOrderModal/SendButton

@@ -137,7 +137,7 @@ func spawn_trash_piles() -> void:
 
 func _loot_resources(loot: Dictionary) -> Dictionary:
 	var resources: Dictionary = {}
-	for field in [{"name": &"grass", "resource": ResourceIds.GRASS}, {"name": &"branches", "resource": ResourceIds.BRANCHES}, {"name": &"gloves", "resource": &"gloves"}]:
+	for field in [{"name": &"grass", "resource": ResourceIds.GRASS}, {"name": &"branches", "resource": ResourceIds.BRANCHES}]:
 		var amount := int(loot.get(field.name, 0))
 		if amount > 0:
 			resources[field.resource] = amount

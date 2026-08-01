@@ -122,12 +122,6 @@ func buy_entrance_food(quantity: int, unit_price: int) -> void:
 	start_entrance_purchase({"kind": "buy_resource", "resource": ResourceIds.FOOD, "quantity": quantity, "price": unit_price})
 
 
-func buy_entrance_gloves(price: int) -> void:
-	if available_trade_money() < price:
-		return
-	start_entrance_purchase({"kind": "buy_gloves", "price": price})
-
-
 func buy_entrance_resource(resource_type: String, quantity: int, unit_price: int) -> void:
 	if quantity <= 0 or available_trade_money() < quantity * unit_price:
 		return
@@ -240,12 +234,6 @@ func on_trade_delivery_finished(worker: Citizen) -> void:
 			if _settlement.buy_tool(str(trade.tool), int(trade.price)):
 				_update_workers.call()
 				_update_interface.call("Purchased %s after delivery to storage." % str(trade.tool).replace("_", " "))
-		"buy_gloves":
-			var gloves_price := int(trade.price)
-			if _settlement.money >= gloves_price:
-				_settlement.money -= gloves_price
-				_settlement.add_construction_glove_set()
-				_update_interface.call("Purchased a construction glove set at the entrance sign.")
 		"buy_courier_equipment":
 			var price := int(trade.price)
 			var courier: Citizen = _citizen_for_ai_id.call(int(trade.courier_id))

@@ -381,8 +381,7 @@
 			"props": {
 				"food": 16,
 				"water": 8,
-				"tarp": 1,
-				"construction_gloves": 1
+				"tarp": 1
 			}
 		},
 		{
@@ -545,7 +544,6 @@
 			"id": "loot_04",
 			"props": {
 				"branches": 4.0,
-				"gloves": 1.0,
 				"grass": 6.0
 			},
 			"transform": {

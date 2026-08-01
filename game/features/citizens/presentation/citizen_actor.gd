@@ -1568,14 +1568,6 @@ func _has_ground_below() -> bool:
 
 func _work(delta: float) -> bool:
 	var speed_multiplier := 1.0
-	if _is_physical_work():
-		if simulation != null and simulation.settlement.construction_gloves_available():
-			# Durability is measured in collective in-game work hours, not frames.
-			simulation.settlement.wear_construction_gloves(delta * simulation.GAME_MINUTES_PER_SECOND / 60.0)
-			clear_status_effect(CitizenStatusEffect.BARE_HANDS)
-		else:
-			set_status_effect(CitizenStatusEffect.BARE_HANDS, "Bare hands", 1.0)
-			speed_multiplier = 0.60
 	if simulation != null:
 		var smoke_multiplier: float = simulation.fire_management_service.fire_smoke_work_multiplier(global_position)
 		if smoke_multiplier < 1.0:

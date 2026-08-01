@@ -96,17 +96,6 @@ func _trigger_zero_wellbeing_departure() -> void:
 	_add_message.call("%s will leave at dawn after the settlement's wellbeing collapsed." % candidate.role_label())
 
 
-func apply_hourly_bare_hands_penalty() -> void:
-	if _settlement.construction_gloves_available():
-		return
-	var bare_handed_workers := 0
-	for citizen in _citizens:
-		if is_instance_valid(citizen) and citizen._is_physical_work():
-			bare_handed_workers += 1
-	if bare_handed_workers > 0:
-		_settlement.wellbeing = maxi(0, _settlement.wellbeing - ceili(float(bare_handed_workers) / maxi(1, _citizens.size())))
-
-
 func apply_rain_damage() -> void:
 	var sheltered_capacity := int(_settlement.buildings.get("straw_warehouse", 0)) * 48 + int(_settlement.buildings.get("tarp_warehouse", 0)) * 72
 	if _settlement.warehouse_tarp_covered:

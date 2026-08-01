@@ -4,8 +4,7 @@ const GrassSourceRecord = preload("res://game/features/production/domain/grass_s
 
 
 class FakeSettlement extends RefCounted:
-	func construction_gloves_available() -> bool:
-		return false
+	pass
 
 
 class FakeFireManagementService extends RefCounted:

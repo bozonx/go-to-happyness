@@ -4,7 +4,6 @@ extends Resource
 @export var cell: Vector2i = Vector2i.ZERO
 @export var grass: int = 0
 @export var branches: int = 0
-@export var gloves: int = 0
 
 
 func resources() -> Dictionary:
@@ -13,7 +12,5 @@ func resources() -> Dictionary:
 		result[&"grass"] = grass
 	if branches > 0:
 		result[&"branches"] = branches
-	if gloves > 0:
-		result[&"gloves"] = gloves
 	return result
 

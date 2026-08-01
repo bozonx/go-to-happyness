@@ -191,38 +191,7 @@ func apply_tent_start(reset_progress := true) -> void:
 
 
 
-func construction_gloves_available() -> bool:
-	return equipment_state.construction_gloves_available(amount(ResourceIds.CONSTRUCTION_GLOVES))
-
-
-func wear_construction_gloves(wear_amount: float) -> bool:
-	return equipment_state.wear_construction_gloves(wear_amount, _take_construction_gloves_from_storage)
-
-
-func add_construction_glove_set() -> void:
-	add(ResourceIds.CONSTRUCTION_GLOVES, 1)
-
-
-func _take_construction_gloves_from_storage() -> bool:
-	if equipment_state.take_construction_gloves_from_storage(amount(ResourceIds.CONSTRUCTION_GLOVES)):
-		add(ResourceIds.CONSTRUCTION_GLOVES, -1)
-		return true
-	return false
-
-## --- Weighted, reallocatable storage ------------------------------------------
-## Every stored good takes up "space units". The warehouse holds a fixed number of
-## units for the current era; the player splits that budget between resources in
-## the warehouse menu. Heavy goods (logs, bricks) cost more than a unit each;
-## water is light and packs several to a unit.
-## Compatibility aliases — use StorageState.STORED_RESOURCES / STORAGE_WEIGHTS in new code.
-const STORED_RESOURCES = StorageState.STORED_RESOURCES
-const STORAGE_WEIGHTS = StorageState.STORAGE_WEIGHTS
-
-## Compatibility alias — use EraProgress.ERA_RESOURCES in new code.
-const ERA_RESOURCES = EraProgress.ERA_RESOURCES
-
-
-static func resources_for_era(p_era: Era) -> Array[String]:
+func resources_for_era(p_era: Era) -> Array[String]:
 	return EraProgress.resources_for_era(p_era)
 
 func era_resources() -> Array[String]:
