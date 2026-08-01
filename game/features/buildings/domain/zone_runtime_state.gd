@@ -93,6 +93,18 @@ func max_workers() -> int:
 	return maxi(0, int(properties.get("max_workers", 0)))
 
 
+## Housing beds in this zone (`core:housing`'s `residents` property). Zero for
+## non-housing zones and unmarked rooms, so a building's total is the sum.
+func residents() -> int:
+	return maxi(0, int(properties.get("residents", 0)))
+
+
+## Cooked-food storage this zone supplies (`food_capacity` on kitchen, workplace
+## and leisure functions). Zero means the zone is not a food source.
+func food_capacity() -> int:
+	return maxi(0, int(properties.get("food_capacity", 0)))
+
+
 ## Real capacity: a citizen without a place to stand is not employed here. When
 ## the author placed no slots at all the zone falls back to its centre, and the
 ## pack's number is taken at face value (§5.2).

@@ -24,7 +24,6 @@ const OPTION_LAVA := &"liquid_lava"
 const OPTION_LAKE := &"type_lake"
 const OPTION_RIVER := &"type_river"
 const OPTION_SEA := &"type_sea"
-const OPTION_AUTO_LEVEL := &"auto_level"
 
 const ROW_BODY_TOOLS := &"row_body_tools"
 const ROW_BODY_ACTIONS := &"row_body_actions"
@@ -131,9 +130,7 @@ func _update_flood_preview() -> void:
 		context.water_flood_preview.hide_preview()
 		return
 
-	var preview_level := brush.level
-	if brush.auto_level and context.terrain != null:
-		preview_level = context.terrain.height_of(cell) + 1
+	var preview_level := context.terrain.height_of(cell) + 1
 
 	if context.terrain.height_of(cell) >= preview_level:
 		context.water_flood_preview.hide_preview()
@@ -200,9 +197,7 @@ func _handle_left_click() -> void:
 
 	if brush.tool == WaterBrushController.TOOL_FLOOD:
 		if not context.water.has_water(cell):
-			var preview_level := brush.level
-			if brush.auto_level and context.terrain != null:
-				preview_level = context.terrain.height_of(cell) + 1
+			var preview_level := context.terrain.height_of(cell) + 1
 
 			# If ground is >= preview_level (cannot flood here):
 			if context.terrain.height_of(cell) >= preview_level:
@@ -210,13 +205,6 @@ func _handle_left_click() -> void:
 					brush.body_id = WaterBody.NO_BODY
 					_update_highlight()
 					notify_ui_changed()
-				return
-
-			# If a body was previously selected, first click on dry land deselects it
-			if brush.body_id != WaterBody.NO_BODY:
-				brush.body_id = WaterBody.NO_BODY
-				_update_highlight()
-				notify_ui_changed()
 				return
 
 	_stroke()
@@ -333,16 +321,6 @@ func tool_options() -> Array:
 		options.append(ToolOption.of(OPTION_LAKE, "Озеро", ROW_WATER_TYPE, brush.water_type == WaterBody.Type.LAKE))
 		options.append(ToolOption.of(OPTION_RIVER, "Река", ROW_WATER_TYPE, brush.water_type == WaterBody.Type.RIVER))
 
-	var display_level := brush.level
-	if context != null and context.water != null and brush.body_id != WaterBody.NO_BODY:
-		var body := context.water.body(brush.body_id)
-		if body != null:
-			display_level = body.surface_height
-	options.append(ToolOption.of(&"water_level", "Уровень %d" % display_level, ROW_LEVEL, false, true))
-	options.append(ToolOption.of(OPTION_LEVEL_DOWN, "−", ROW_LEVEL))
-	options.append(ToolOption.of(OPTION_LEVEL_UP, "+", ROW_LEVEL))
-	options.append(ToolOption.of(OPTION_AUTO_LEVEL, "Авто", ROW_LEVEL, brush.auto_level))
-
 	var has_selected_body := false
 	var is_frozen := false
 	if context != null and context.water != null and brush.body_id != WaterBody.NO_BODY:
@@ -353,6 +331,14 @@ func tool_options() -> Array:
 				is_frozen = true
 
 	if has_selected_body:
+		var display_level := brush.level
+		var body := context.water.body(brush.body_id)
+		if body != null:
+			display_level = body.surface_height
+		options.append(ToolOption.of(&"water_level", "Уровень %d" % display_level, ROW_LEVEL, false, true))
+		options.append(ToolOption.of(OPTION_LEVEL_DOWN, "−", ROW_LEVEL))
+		options.append(ToolOption.of(OPTION_LEVEL_UP, "+", ROW_LEVEL))
+
 		if brush.liquid_category == &"water":
 			var freeze_label := "Разморозить водоём" if is_frozen else "Заморозить водоём"
 			options.append(ToolOption.of(OPTION_ACTION_ICE, freeze_label, ROW_BODY_ACTIONS, is_frozen))
@@ -405,17 +391,13 @@ func activate_option(option_id: StringName) -> void:
 			brush.select_water_type(WaterBody.Type.RIVER)
 		OPTION_SEA:
 			brush.select_water_type(WaterBody.Type.SEA)
-		OPTION_AUTO_LEVEL:
-			brush.auto_level = not brush.auto_level
 		OPTION_BRUSH_UP:
 			brush.adjust_brush_size(1)
 		OPTION_BRUSH_DOWN:
 			brush.adjust_brush_size(-1)
 		OPTION_LEVEL_UP:
-			brush.auto_level = false
 			brush.adjust_level(1)
 		OPTION_LEVEL_DOWN:
-			brush.auto_level = false
 			brush.adjust_level(-1)
 		OPTION_ICE:
 			brush.cycle_ice_thickness()

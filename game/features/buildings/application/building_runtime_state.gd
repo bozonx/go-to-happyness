@@ -94,6 +94,39 @@ func role_capacity(role: StringName) -> int:
 	return capacity
 
 
+## Total housing beds across every zone, summed from each `core:housing` room's
+## `residents` property. Replaces the hardcoded per-type housing table.
+func compute_housing_capacity() -> int:
+	var total := 0
+	for zone in zones:
+		total += zone.residents()
+	return total
+
+
+## Total cooked-food storage across every zone that declares `food_capacity`
+## (kitchen, workplace and leisure rooms). Replaces `KITCHEN_FOOD_CAPACITIES`.
+func food_capacity() -> int:
+	var total := 0
+	for zone in zones:
+		total += zone.food_capacity()
+	return total
+
+
+## Whether any zone carries this function id (e.g. `core:housing`, `core:market`).
+## Replaces the BuildingTypes role lists: a building's role is exactly the set of
+## functions its authored rooms declare.
+func has_function(function_id: StringName) -> bool:
+	for zone in zones:
+		if zone.function == function_id:
+			return true
+	return false
+
+
+## Whether any workplace zone staffs this profession.
+func has_profession(role: StringName) -> bool:
+	return role != &"" and role_capacity(role) > 0
+
+
 func zone_for_citizen(citizen_id: int, role: StringName) -> ZoneRuntimeState:
 	for zone in zones:
 		if zone.supports_role(role) and citizen_id in zone.assigned_citizen_ids:

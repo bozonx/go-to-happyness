@@ -427,50 +427,7 @@ func _variant_option_id(variant_index: int) -> StringName:
 
 
 func inspector_lines() -> Array[String]:
-	if _coverage_selected:
-		return _coverage_inspector_lines()
-	var index := context.brush.material_index
-	var lines: Array[String] = []
-	lines.append("Инструмент: %s" % _tool)
-	lines.append("Материал: %s" % context.brush.material_id())
-	lines.append("Вариант: %s" % TerrainMaterialVariants.variant_name(index, context.brush.variant))
-	lines.append("Кисть: %d×%d" % [context.brush.brush_size * 2 - 1, context.brush.brush_size * 2 - 1])
-	lines.append("")
-	# The four properties that make this a material and not a decoration.
-	lines.append("Осыпание: %s" % SlopeCatalog.id_of_class(TerrainMaterialCatalog.repose_class_of_index(index)))
-	lines.append("Грунт: %s" % TerrainMaterialCatalog.soil_of_index(index))
-	lines.append("Обрыв: %s" % TerrainMaterialCatalog.cliff_material_of_index(index))
-	lines.append("Вес прохода: ×%.2f" % TerrainMaterialCatalog.nav_weight_of_index(index))
-	lines.append("")
-	lines.append("Кисть износа: %d, кисть снега: %d" % [_wear_level, _snow_level])
-	return lines
-
-
-## What the coverage entry IS, in the four numbers that make it one: its weight,
-## who may use it, when it can be built and whether it is maintained by traffic.
-func _coverage_inspector_lines() -> Array[String]:
-	var brush := _coverage_brush()
-	var lines: Array[String] = []
-	if brush == null:
-		lines.append("Слой покрытий недоступен")
-		return lines
-	var index := brush.coverage_index
-	if index == CoverageCatalog.NONE_INDEX:
-		lines.append("Инструмент: снять покрытие")
-		lines.append("")
-		lines.append("Снятие открывает материал земли под покрытием")
-		lines.append("и не трогает тропинку под ним.")
-		return lines
-	lines.append("Инструмент: покрытие")
-	lines.append("Покрытие: %s" % CoverageCatalog.title_of_index(index))
-	lines.append("ID: %s" % CoverageCatalog.id_of_index(index))
-	lines.append("Ширина: %d" % (brush.brush_size * 2 - 1))
-	lines.append("")
-	lines.append("Вес прохода: %.2f" % CoverageCatalog.weight_of_index(index))
-	lines.append("Эра постройки: %d" % CoverageCatalog.minimum_era_of_index(index))
-	lines.append("Органическое: %s" % ("да" if CoverageCatalog.is_organic_index(index) else "нет"))
-	lines.append("Износ: %d" % brush.wear)
-	return lines
+	return []
 
 
 func status_text() -> String:
@@ -480,12 +437,14 @@ func status_text() -> String:
 		return "клетка —"
 	var cell := context.brush.hovered_cell
 	var index := context.terrain.material_index_at(cell)
-	return "клетка %d,%d · %s/%s · износ %d · снег %d · вес ×%.2f · чанков в очереди %d" % [
+	return "клетка %d,%d · %s/%s · осыпание %s · грунт %s · обрыв %s · износ %d · снег %d · вес ×%.2f" % [
 		cell.x, cell.y, context.terrain.material_of(cell),
 		TerrainMaterialVariants.variant_name(index, context.terrain.variant_at(cell)),
+		SlopeCatalog.id_of_class(TerrainMaterialCatalog.repose_class_of_index(index)),
+		TerrainMaterialCatalog.soil_of_index(index),
+		TerrainMaterialCatalog.cliff_material_of_index(index),
 		context.terrain.wear_at(cell), context.terrain.snow_depth_at(cell),
 		context.terrain.surface_weight_at(cell),
-		context.terrain_world.pending_chunk_count() if context.terrain_world != null else 0,
 	]
 
 
@@ -496,12 +455,14 @@ func _coverage_status_text() -> String:
 	var cell := brush.hovered_cell
 	var layer := context.coverage
 	var laid := layer.index_at(cell) if layer != null else CoverageCatalog.NONE_INDEX
-	# The material under it is shown alongside, because that is what erasing the
-	# coverage would bring back.
-	return "клетка %d,%d · покрытие %s · земля %s · вес %s" % [
+	var index := context.terrain.material_index_at(cell)
+	return "клетка %d,%d · покрытие %s · земля %s (осыпание %s, грунт %s, обрыв %s) · вес %s" % [
 		cell.x, cell.y,
 		CoverageCatalog.title_of_index(laid),
 		context.terrain.material_of(cell),
+		SlopeCatalog.id_of_class(TerrainMaterialCatalog.repose_class_of_index(index)),
+		TerrainMaterialCatalog.soil_of_index(index),
+		TerrainMaterialCatalog.cliff_material_of_index(index),
 		"%.2f" % CoverageCatalog.weight_of_index(laid) if laid != CoverageCatalog.NONE_INDEX \
 			else "×%.2f" % context.terrain.surface_weight_at(cell),
 	]

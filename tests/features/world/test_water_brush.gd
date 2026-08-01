@@ -29,7 +29,7 @@ static func run_all() -> void:
 	_test_eyedropper_picks_water_and_frozen_properties()
 	_test_retype_body_on_flood_converts_lake_to_lava()
 	_test_dry_click_creates_a_new_body_but_water_click_adopts_existing()
-	_test_auto_level_and_direct_type_selection()
+	_test_ground_level_and_direct_type_selection()
 	print("    [PASS] Water Brush Tests")
 
 
@@ -322,7 +322,6 @@ static func _test_fill_replaces_a_body_with_the_selected_level() -> void:
 	assert(water.height_of(Vector2i.ZERO) == 0)
 
 	brush.level = -1
-	brush.auto_level = false
 	brush.apply()
 	assert(water.height_of(Vector2i.ZERO) == -1, "the surface came down")
 	assert(water.is_wet(terrain, Vector2i.ZERO), "and there is still water in the hole")
@@ -397,8 +396,6 @@ static func _test_dry_click_creates_a_new_body_but_water_click_adopts_existing()
 	var brush: WaterBrushController = world["brush"]
 	terrain.set_height(Vector2i.ZERO, -2)
 	terrain.set_height(Vector2i(8, 8), -2)
-	brush.auto_level = false
-	brush.level = 0
 	_hover(brush, Vector2i.ZERO)
 	brush.apply()
 	var first_id := water.body_id_at(Vector2i.ZERO)
@@ -413,7 +410,7 @@ static func _test_dry_click_creates_a_new_body_but_water_click_adopts_existing()
 	assert(water.has_water(Vector2i.ZERO), "editing the second body preserves the first")
 
 
-static func _test_auto_level_and_direct_type_selection() -> void:
+static func _test_ground_level_and_direct_type_selection() -> void:
 	var world := _make()
 	var terrain: TerrainGrid = world["terrain"]
 	var water: WaterGrid = world["water"]
@@ -426,7 +423,7 @@ static func _test_auto_level_and_direct_type_selection() -> void:
 	assert(brush.active_body_type() == WaterBody.Type.RIVER)
 	_hover(brush, cell)
 	brush.apply()
-	assert(brush.level == -3, "auto level follows clicked ground")
+	assert(brush.level == -3, "level follows clicked ground")
 	assert(water.body_at(cell).type == WaterBody.Type.RIVER)
 	var created_id := brush.body_id
 	assert(world["service"].undo_depth() == 1, "create plus first flood is one gesture")

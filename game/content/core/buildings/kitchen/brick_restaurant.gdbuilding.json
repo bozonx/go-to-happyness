@@ -304,7 +304,8 @@
 			"function": "core:workplace",
 			"properties": {
 				"profession": "cook",
-				"max_workers": 4
+				"max_workers": 4,
+				"food_capacity": 20
 			},
 			"rects": [
 				[

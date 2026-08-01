@@ -10,6 +10,7 @@ const S = preload("res://game/features/ui/domain/game_strings.gd")
 const WaterCollectorRecordScript = preload("res://game/features/logistics/domain/water_collector_record.gd")
 const HouseLightRecord = preload("res://game/features/buildings/domain/house_light_record.gd")
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
+const BuildingRuntimeStateScript = preload("res://game/features/buildings/application/building_runtime_state.gd")
 
 var _settlement: SettlementState
 var _citizens: Array = []
@@ -448,19 +449,15 @@ func register_completed_building_type_features(building_type: String, building: 
 		"tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house":
 			if building_type in ["house", "house_lvl2", "house_lvl3", "brick_house"]:
 				_completed_house_count_setter.call(_completed_house_count_getter.call() + 1)
-			var housing_capacity: int = _house_capacity
-
-			match building_type:
-				"straw_tent": housing_capacity = 1
-				"tarp_tent": housing_capacity = 2
-				"tent", "dugout": housing_capacity = 4
-				"earth_house", "clay_house": housing_capacity = 6
-				"house": housing_capacity = 8
-				"house_lvl2": housing_capacity = 10
-				"house_lvl3": housing_capacity = 12
-				"stone_house": housing_capacity = 10
-				"brick_house": housing_capacity = 12
-			building.set_meta("housing_capacity", housing_capacity)
+			# Housing capacity is authored on each `core:housing` zone's `residents`
+			# property, so the per-type table is gone. The constant remains only as a
+			# fallback for buildings without authored zones.
+			var state := BuildingRuntimeStateScript.from_node(building)
+			var housing_capacity: int = state.compute_housing_capacity()
+			if housing_capacity <= 0:
+				housing_capacity = _house_capacity
+			state.housing_capacity = housing_capacity
+			state.apply_to_node(building)
 			building.set_meta("spawn_slots", housing_capacity)
 			_add_building_selector.call(building, "house_selector", blueprint.footprint)
 			_add_house_light.call(building)

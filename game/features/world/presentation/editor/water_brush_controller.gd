@@ -48,10 +48,6 @@ var level := 0
 var ice_thickness := WaterGrid.MAX_ICE_THICKNESS
 var liquid_category: StringName = &"water"
 var water_type: WaterBody.Type = WaterBody.Type.LAKE
-## Automatic level is the default authoring path: a new body starts one height
-## step above the clicked ground. Turn it off only when an exact shared surface
-## level is needed across several basins.
-var auto_level := true
 
 func active_body_type() -> WaterBody.Type:
 	if liquid_category == &"lava":
@@ -282,7 +278,7 @@ func _flood() -> void:
 	# may leave one selected); a body with a contour is not.
 	if dry_cell and body_id != WaterBody.NO_BODY and _water.cells_of_body(body_id).size() > 0:
 		body_id = WaterBody.NO_BODY
-	if dry_cell and body_id == WaterBody.NO_BODY and auto_level and _terrain != null:
+	if dry_cell and _terrain != null:
 		level = _terrain.height_of(hovered_cell) + 1
 	if body_id == WaterBody.NO_BODY:
 		var body := _service.create_and_flood(hovered_cell, active_body_type(), level)
@@ -319,10 +315,7 @@ func _flood() -> void:
 func _adopt_body_at_hover() -> void:
 	if _water == null or not _water.has_water(hovered_cell):
 		return
-	var requested_level := level
 	select_body(_water.body_id_at(hovered_cell))
-	if not auto_level:
-		level = requested_level
 
 
 func _set_frozen(frozen: bool) -> void:

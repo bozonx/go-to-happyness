@@ -495,8 +495,6 @@ func _test_water_mode(editor: Node) -> void:
 	editor._water_brush.hovered_cell = cell
 	editor._water_brush.has_hover = true
 	editor._water_brush.tool = WaterBrushController.TOOL_FLOOD
-	editor._water_brush.level = 0
-	editor._water_brush.auto_level = false
 	# The scene test has no real viewport pointer over this authored cell; drive
 	# the production brush after selecting the mode exactly as the controller does.
 	editor._context.set_edit_label("наполнение водоёма")
@@ -506,7 +504,7 @@ func _test_water_mode(editor: Node) -> void:
 	assert(editor._water_brush.body_id != WaterBody.NO_BODY, "and selected it")
 	var body_id: int = editor._water_brush.body_id
 	assert(water.is_wet(terrain, cell), "the stroke filled the hollow")
-	assert(water.depth_steps_at(terrain, cell) == 2, "two steps deep")
+	assert(water.depth_steps_at(terrain, cell) == 1, "one step deep")
 	assert(editor.history.undo_depth() == undo_before + 1, "the stroke is on the SHARED stack")
 	assert(editor._nav_grid.topology_revision() != topology_before, "routing heard about it")
 	assert(not editor._nav_grid.is_walkable(cell), "and refuses to walk through it")
