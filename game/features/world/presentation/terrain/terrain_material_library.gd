@@ -43,7 +43,7 @@ const AUTHORED_SURFACE_PATHS: Dictionary = {
 	TerrainMaterialCatalog.LUNAR_ROCK: ["lunar_rock_breccia", "lunar_rock_light_rock"],
 	TerrainMaterialCatalog.MARS_REGOLITH: ["mars_regolith_red", "mars_regolith_ochre"],
 	TerrainMaterialCatalog.MARS_ROCK: ["mars_rock_basalt", "mars_rock_layered"],
-	TerrainMaterialCatalog.CLAY: ["clay_red", "clay_grey", "clay_dry"],
+	TerrainMaterialCatalog.CLAY: ["clay_red", "clay_grey"],
 }
 
 ## Auto-rock cliff faces (`terrain_materials.md` §3). Same 512² layout as tops —

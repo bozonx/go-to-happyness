@@ -24,7 +24,7 @@ const VARIANTS_BY_INDEX: Array = [
 	[&"breccia", &"light_rock"],                            # lunar_rock
 	[&"red", &"ochre"],                                     # mars_regolith
 	[&"basalt", &"layered"],                                # mars_rock
-	[&"red", &"grey", &"dry"],                              # clay
+	[&"red", &"grey"],                                     # clay
 ]
 
 ## Stored variant -> authored surface style. Flower colour belongs to the
@@ -43,7 +43,7 @@ const SURFACE_STYLE_BY_VARIANT: Array = [
 	[0, 1],
 	[0, 1],
 	[0, 1],
-	[0, 1, 2],
+	[0, 1],
 ]
 
 
