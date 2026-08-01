@@ -31,6 +31,7 @@ const SHAPE_WEDGE := &"wedge"
 const SHAPE_WEDGE_LOW := &"wedge_low"
 const SHAPE_SLOPE_CORNER_IN := &"slope_corner_in"
 const SHAPE_SLOPE_CORNER_OUT := &"slope_corner_out"
+const SHAPE_ROOF_ANGLE := &"roof_angle"
 const SHAPE_CYLINDER := &"cylinder"
 const SHAPE_HALF_CYLINDER := &"half_cylinder"
 const SHAPE_STAIRS := &"stairs"
@@ -42,7 +43,6 @@ const SHAPE_STAIRS_CORNER_QUARTER := &"stairs_corner_quarter"
 const SHAPE_WINDOW_WALL := &"window_wall"
 const SHAPE_DOOR_WALL := &"door_wall"
 const SHAPE_ARCH := &"arch"
-const SHAPE_ARCH_TOP := &"arch_top"
 const SHAPE_HALF_ARCH := &"half_arch"
 const SHAPE_RAILING := &"railing"
 const SHAPE_FENCE := &"fence"
@@ -81,11 +81,11 @@ const BLOCKS: Array = [
 		"name": "Арка",
 		"category": Category.STRUCTURE,
 		"size": Vector3(1.0, 1.0, 1.0),
-		"mesh_shape": SHAPE_ARCH_TOP,
+		"mesh_shape": SHAPE_HALF_ARCH,
 		"rotatable": true,
 		"variants": [
-			{"id": &"1", "name": "1", "size": Vector3(1.0, 1.0, 1.0), "mesh_shape": SHAPE_ARCH_TOP},
-			{"id": &"1_2", "name": "1/2", "size": Vector3(1.0, 1.0, 1.0), "mesh_shape": SHAPE_HALF_ARCH},
+			{"id": &"1", "name": "1", "size": Vector3(1.0, 1.0, 1.0), "mesh_shape": SHAPE_HALF_ARCH},
+			{"id": &"1_2", "name": "1/2", "size": Vector3(1.0, 1.0, 1.0), "mesh_shape": SHAPE_ARCH},
 			{"id": &"1_4", "name": "1/4", "size": Vector3(0.5, 0.5, 1.0), "mesh_shape": SHAPE_HALF_ARCH},
 		],
 	},
@@ -201,6 +201,22 @@ const BLOCKS: Array = [
 		"category": Category.ROOF,
 		"size": Vector3(1.0, 0.5, 1.0),
 		"mesh_shape": SHAPE_SLOPE_CORNER_OUT,
+		"rotatable": true,
+	},
+	{
+		"id": &"roof_angle_large",
+		"name": "Большой угол",
+		"category": Category.ROOF,
+		"size": Vector3(1.0, 1.0, 1.0),
+		"mesh_shape": SHAPE_ROOF_ANGLE,
+		"rotatable": true,
+	},
+	{
+		"id": &"roof_angle_small",
+		"name": "Малый угол",
+		"category": Category.ROOF,
+		"size": Vector3(1.0, 0.5, 1.0),
+		"mesh_shape": SHAPE_ROOF_ANGLE,
 		"rotatable": true,
 	},
 	# --- Проходы -----------------------------------------------------------

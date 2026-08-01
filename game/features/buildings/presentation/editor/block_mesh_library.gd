@@ -61,6 +61,8 @@ func mesh_for(block_id: StringName, variant: StringName = &"") -> Mesh:
 			mesh = _build_slope_corner_in(size)
 		BuildingBlockCatalogScript.SHAPE_SLOPE_CORNER_OUT:
 			mesh = _build_slope_corner_out(size)
+		BuildingBlockCatalogScript.SHAPE_ROOF_ANGLE:
+			mesh = _build_roof_angle(size)
 		BuildingBlockCatalogScript.SHAPE_CYLINDER:
 			mesh = _build_cylinder(size)
 		BuildingBlockCatalogScript.SHAPE_HALF_CYLINDER:
@@ -83,8 +85,6 @@ func mesh_for(block_id: StringName, variant: StringName = &"") -> Mesh:
 			mesh = _build_door_wall(size)
 		BuildingBlockCatalogScript.SHAPE_ARCH:
 			mesh = _build_arch(size)
-		BuildingBlockCatalogScript.SHAPE_ARCH_TOP:
-			mesh = _build_arch_top(size)
 		BuildingBlockCatalogScript.SHAPE_HALF_ARCH:
 			mesh = _build_half_arch(size)
 		BuildingBlockCatalogScript.SHAPE_RAILING:
@@ -214,6 +214,20 @@ func _build_slope_corner_out(size: Vector3) -> ArrayMesh:
 	_add_tri(st, btl, fbl, fbr)       # Sloped face 1
 	_add_tri(st, btl, fbr, bbr)       # Sloped face 2
 	return st.commit()
+
+
+## Symmetrical triangular prism that closes the gable beneath two meeting roof
+## pitches. The large and small palette entries share this profile and differ
+## only in height.
+func _build_roof_angle(size: Vector3) -> ArrayMesh:
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var profile := PackedVector2Array([
+		Vector2(-hx, -hy),
+		Vector2(hx, -hy),
+		Vector2(0.0, hy),
+	])
+	return _build_extrusion(profile, size.z)
 
 
 func _build_cylinder(size: Vector3, segments: int = 16) -> ArrayMesh:
@@ -354,22 +368,6 @@ func _build_arch(size: Vector3, segments: int = 16) -> ArrayMesh:
 		profile.append(Vector2(cos(a) * radius, -hy + sin(a) * radius))
 	profile.append(Vector2(hx, hy))
 	profile.append(Vector2(-hx, hy))
-	return _build_extrusion(profile, size.z)
-
-
-## Same slab as `_build_arch` but the semicircular cut-out is traced along the
-## top edge, so the opening faces downward — the upper half of an arch.
-func _build_arch_top(size: Vector3, segments: int = 16) -> ArrayMesh:
-	var hx := size.x * 0.5
-	var hy := size.y * 0.5
-	var radius := hx
-	var profile := PackedVector2Array()
-	profile.append(Vector2(-hx, -hy))
-	profile.append(Vector2(hx, -hy))
-	# Semicircle traced right → left along the top edge, dipping downward.
-	for i in range(segments + 1):
-		var a := float(i) / float(segments) * PI
-		profile.append(Vector2(cos(a) * radius, hy - sin(a) * radius))
 	return _build_extrusion(profile, size.z)
 
 

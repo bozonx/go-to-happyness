@@ -134,13 +134,13 @@ func set_options(options: Array) -> void:
 		return
 	var has_push_bottom := false
 	for option in options:
-		if option is ToolOption and option.is_header and option.push_bottom:
+		if option is MapEditorMode.ToolOption and option.is_header and option.push_bottom:
 			has_push_bottom = true
 			break
 	_options.size_flags_vertical = Control.SIZE_EXPAND_FILL if has_push_bottom else Control.SIZE_SHRINK_BEGIN
 	var rows: Dictionary = {}
 	for option in options:
-		if option is ToolOption and option.is_header:
+		if option is MapEditorMode.ToolOption and option.is_header:
 			if option.push_bottom:
 				var spacer := Control.new()
 				spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL

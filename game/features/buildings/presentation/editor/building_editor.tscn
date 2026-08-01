@@ -889,7 +889,7 @@ theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
 layout_mode = 2
 columns = 3
 
-[node name="PosXLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="CellXLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
 text = "Клетка X"
 
@@ -900,23 +900,10 @@ min_value = -128.0
 max_value = 128.0
 step = 1.0
 
-
-[node name="PosYLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
-layout_mode = 2
-text = "Слой (этаж)"
-
-[node name="FillPosYSpin" type="SpinBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
-unique_name_in_owner = true
-layout_mode = 2
-min_value = 0.0
-max_value = 64.0
-step = 1.0
-
-
 [node name="TransformSpacer1" type="Control" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
 
-[node name="PosZLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="CellZLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
 text = "Клетка Z"
 
@@ -927,8 +914,21 @@ min_value = -128.0
 max_value = 128.0
 step = 1.0
 
-
 [node name="TransformSpacer2" type="Control" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+layout_mode = 2
+
+[node name="LayerLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+layout_mode = 2
+text = "Слой (этаж)"
+
+[node name="FillPosYSpin" type="SpinBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 0.0
+max_value = 64.0
+step = 1.0
+
+[node name="TransformSpacer3" type="Control" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
 
 [node name="OffXLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
@@ -959,7 +959,7 @@ min_value = -1.0
 max_value = 1.0
 step = 0.25
 
-[node name="TransformSpacerOff1" type="Control" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="TransformSpacer4" type="Control" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
 
 [node name="OffZLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
@@ -973,7 +973,7 @@ min_value = -1.0
 max_value = 1.0
 step = 0.25
 
-[node name="TransformSpacerOff2" type="Control" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="TransformSpacer5" type="Control" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
 
 [node name="YawLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
@@ -986,7 +986,6 @@ layout_mode = 2
 min_value = -360.0
 max_value = 360.0
 step = 15.0
-
 
 [node name="FillRotResetBtn" type="Button" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 unique_name_in_owner = true
@@ -1005,8 +1004,7 @@ min_value = -360.0
 max_value = 360.0
 step = 15.0
 
-
-[node name="TransformSpacer3" type="Control" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="TransformSpacer6" type="Control" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
 
 [node name="RollLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
@@ -1020,8 +1018,7 @@ min_value = -360.0
 max_value = 360.0
 step = 15.0
 
-
-[node name="TransformSpacer4" type="Control" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+[node name="TransformSpacer7" type="Control" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
 
 [node name="ScaleLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
@@ -1035,7 +1032,6 @@ min_value = 0.2
 max_value = 5.0
 step = 0.05
 value = 1.0
-
 
 [node name="FillScaleResetBtn" type="Button" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 unique_name_in_owner = true

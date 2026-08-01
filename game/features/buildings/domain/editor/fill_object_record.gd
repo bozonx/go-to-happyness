@@ -36,19 +36,6 @@ static func make(p_asset_id: StringName, p_pos: Vector3, unique_suffix: int) -> 
 	return record
 
 
-func duplicate_record(unique_suffix: int) -> FillObjectRecord:
-	var copy := FillObjectRecord.new()
-	copy.id = "fill_%s_%d" % [String(asset_id), unique_suffix]
-	copy.asset_id = asset_id
-	copy.owner_zone_id = owner_zone_id
-	copy.pos = pos
-	copy.offset = offset
-	copy.rot = rot
-	copy.scale = scale
-	copy.appearance = appearance.duplicate(true)
-	return copy
-
-
 ## The cell-snapped point the object belongs to, with the authored offset taken
 ## back out.
 func anchor_pos() -> Vector3:

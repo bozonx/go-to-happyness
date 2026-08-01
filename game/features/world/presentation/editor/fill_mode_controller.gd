@@ -12,15 +12,22 @@ extends MapEditorMode
 ## автору никто не сообщал.  Раскладка совпадает с редактором зданий там, где
 ## действие то же самое (`map_fill_mode.md` §9.1).
 
-const INSPECTOR_POSITION := &"editor_position"
+const INSPECTOR_CELL := &"editor_cell"
+const INSPECTOR_OFFSET := &"editor_offset"
 const INSPECTOR_YAW := &"editor_yaw"
 const INSPECTOR_SCALE := &"editor_scale"
-const TRANSFORM_PROPERTIES: Array[StringName] = [INSPECTOR_POSITION, INSPECTOR_YAW, INSPECTOR_SCALE]
+const TRANSFORM_PROPERTIES: Array[StringName] = [INSPECTOR_CELL, INSPECTOR_OFFSET, INSPECTOR_YAW, INSPECTOR_SCALE]
+## Действие «заменить выделенное на выбранный в палитре архетип».
+const OPTION_REPLACE := &"fill_replace"
 
 var _archetype_id: StringName = &""
+## Полный образец кисти: пипетка забирает у объекта не только архетип, но и
+## свойства, поворот, масштаб и смещение — поэтому отдельное дублирование не
+## нужно (`map_fill_mode.md` §9.1).
 var _brush_props: Dictionary = {}
 var _brush_yaw_degrees := 0.0
 var _brush_scale := 1.0
+var _brush_offset := Vector3.ZERO
 var _selected_id: StringName = &""
 var _additional_selected: Array[StringName] = []
 var _root: Node3D = null
@@ -85,7 +92,7 @@ func handle_input(event: InputEvent) -> bool:
 	if event is InputEventKey and event.is_pressed() and not event.is_echo():
 		var key := event as InputEventKey
 		if key.ctrl_pressed:
-			return _duplicate_selection() if key.keycode == KEY_D else false
+			return false
 		match key.keycode:
 			KEY_DELETE:
 				return _delete_selected()
@@ -188,6 +195,10 @@ func _cancel_current_action() -> bool:
 		return true
 	if _archetype_id != &"":
 		_archetype_id = &""
+		_brush_props.clear()
+		_brush_yaw_degrees = 0.0
+		_brush_scale = 1.0
+		_brush_offset = Vector3.ZERO
 		_hide_ghost()
 		notify_ui_changed()
 		context.set_status_message("Кисть наполнения сброшена.")
@@ -195,17 +206,71 @@ func _cancel_current_action() -> bool:
 	return false
 
 
+## Сколько целых клеток занимает архетип с учётом масштаба и поворота.
+func cell_span(archetype_id: StringName, scale: float = 1.0, yaw_deg: float = 0.0) -> Vector2i:
+	var asset := EntityArchetypeCatalog.asset_of(archetype_id)
+	var size := asset.placement_policy().footprint_cells if asset != null else Vector2i.ONE
+	return EditorFillConventions.cell_span(size, scale, yaw_deg)
+
+
+## Прямоугольник клеток, который занимает запись. Считается от якоря
+## (`position - offset`): авторское смещение подстраивает модель внутри своих
+## клеток и занятость не меняет.
+func occupied_cells(record: MapEntityRecord) -> Rect2i:
+	return Rect2i(record.cell(context.terrain), cell_span(record.archetype_id, record.scale, record.yaw_degrees))
+
+
+## Клетки, которые займёт кисть, если поставить её от клетки `cell`.
+func _brush_cells(cell: Vector2i) -> Rect2i:
+	return Rect2i(cell, cell_span(_archetype_id, _brush_scale, _brush_yaw_degrees))
+
+
+## Занятость по клеткам: две записи не делят клетку. Проверяется до постановки,
+## а не по факту — иначе «занято» ничего не значит.
+func _cells_free(cells: Rect2i, exclude_id: StringName = &"") -> bool:
+	for record: MapEntityRecord in context.document.entities.entities:
+		if record.id == exclude_id:
+			continue
+		if EditorFillConventions.rects_overlap(cells, occupied_cells(record)):
+			return false
+	return true
+
+
+## Все клетки прямоугольника внутри доски и ни одна не попадает в вырез.
+func _cells_placeable(cells: Rect2i) -> bool:
+	for x in range(cells.position.x, cells.end.x):
+		for z in range(cells.position.y, cells.end.y):
+			var cell := Vector2i(x, z)
+			if not context.terrain.is_inside(cell) or context.terrain.is_hole(cell):
+				return false
+	return true
+
+
+## Якорь — центр занятого прямоугольника клеток, поднятый на свою поверхность.
+## Для объекта 1×1 это центр клетки, как и раньше.
+func _anchor_position(cells: Rect2i, archetype: EntityArchetype) -> Vector3:
+	var centre := EditorFillConventions.anchor_of_cells(cells.position, cells.size, context.terrain.cell_size)
+	var probe := _surface_position(cells.position, archetype)
+	return Vector3(centre.x, probe.y, centre.y)
+
+
 func _place(cell: Vector2i) -> void:
-	if not context.terrain.is_inside(cell) or context.terrain.is_hole(cell):
-		return
 	var archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
 	if archetype == null:
+		return
+	var cells := _brush_cells(cell)
+	if not _cells_placeable(cells):
+		context.set_status_message("Здесь нельзя ставить: клетки вне карты или в вырезе.", true)
+		return
+	if not _cells_free(cells):
+		context.set_status_message("Эти клетки уже заняты другим объектом.", true)
 		return
 	var before := context.document.entities.to_json()
 	var record := MapEntityRecord.new()
 	record.id = _next_id("entity")
 	record.archetype_id = archetype.id
-	record.position = _surface_position(cell, archetype)
+	record.offset = _brush_offset
+	record.position = _anchor_position(cells, archetype) + _brush_offset
 	record.initial_state = archetype.states.default_state
 	record.activity = archetype.activity
 	record.props = _brush_props.duplicate(true)
@@ -299,11 +364,14 @@ func _pick_archetype(cell: Vector2i) -> bool:
 		context.set_status_message("Под курсором нет объекта для пипетки.", true)
 		return false
 	_archetype_id = record.archetype_id
+	# Полный образец, а не только архетип: следующий клик поставит точно такой же
+	# объект. Именно это делает отдельное «дублировать» ненужным.
 	_brush_props = record.props.duplicate(true)
 	_brush_yaw_degrees = record.yaw_degrees
 	_brush_scale = record.scale
+	_brush_offset = record.offset
 	var archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
-	context.set_status_message("Пипетка: выбран «%s»." % (archetype.name if archetype != null else String(_archetype_id)))
+	context.set_status_message("Пипетка: «%s» со всеми свойствами. Следующий клик поставит такой же." % (archetype.name if archetype != null else String(_archetype_id)))
 	notify_ui_changed()
 	return true
 
@@ -327,37 +395,6 @@ func _delete_selected() -> bool:
 	for entity_id: StringName in selected:
 		_forget(entity_id)
 	_commit(before, "удаление сущности" if selected.size() == 1 else "удаление %d сущностей" % selected.size())
-	return true
-
-
-func _duplicate_selection() -> bool:
-	var selected := _selected_ids()
-	if selected.is_empty():
-		return false
-	var before := context.document.entities.to_json()
-	var copies: Array[MapEntityRecord] = []
-	for entity_id: StringName in selected:
-		var original := context.document.entities.by_id(entity_id)
-		if original == null:
-			continue
-		var copy := MapEntityRecord.from_dict(original.to_dict())
-		copy.id = _next_id("entity")
-		copy.position.x += context.terrain.cell_size
-		var cell := copy.cell(context.terrain)
-		if not context.terrain.is_inside(cell) or context.terrain.is_hole(cell):
-			continue
-		var archetype := EntityArchetypeCatalog.get_archetype(copy.archetype_id)
-		if archetype != null:
-			copy.position = _surface_position(cell, archetype)
-		copies.append(copy)
-	if copies.is_empty():
-		return false
-	context.document.entities.entities.append_array(copies)
-	_selected_id = copies[0].id
-	_additional_selected.clear()
-	for copy: MapEntityRecord in copies.slice(1):
-		_additional_selected.append(copy.id)
-	_commit(before, "дублирование сущности")
 	return true
 
 
@@ -480,9 +517,11 @@ func _refresh_ghost() -> void:
 		_root.add_child(_ghost)
 		EditorFillConventions.apply_preview_look(_ghost, _ghost_material_resource())
 	_ghost.visible = true
-	_ghost.position = _world_position(_surface_position(cell, archetype))
-	_ghost.rotation_degrees.y = 0.0
-	var blocked := not context.terrain.is_inside(cell) or context.terrain.is_hole(cell)
+	var cells := _brush_cells(cell)
+	_ghost.position = _world_position(_anchor_position(cells, archetype) + _brush_offset)
+	_ghost.rotation_degrees.y = _brush_yaw_degrees
+	_ghost.scale = Vector3.ONE * _brush_scale
+	var blocked := not _cells_placeable(cells) or not _cells_free(cells)
 	var warned := not _placement_warnings(cell, archetype).is_empty()
 	_ghost_material_resource().albedo_color = EditorFillConventions.COLOR_GHOST_BLOCKED if blocked \
 		else (EditorFillConventions.COLOR_GHOST_WARNING if warned else EditorFillConventions.COLOR_GHOST_VALID)
@@ -520,6 +559,85 @@ func palette_entries() -> Array:
 
 func selected_palette_entry() -> StringName:
 	return _archetype_id
+
+
+## Замена существует вместо «удалить и поставить новый», потому что запись
+## сохраняет свой **id**, а с ним — ссылки правил, квестов и сейвов на неё
+## (`map_fill_mode.md` §8.3). Удаление рвёт их молча.
+func tool_options() -> Array:
+	var selected := _selected_ids()
+	if selected.is_empty() or _archetype_id == &"":
+		return []
+	var archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
+	if archetype == null:
+		return []
+	var replaceable := 0
+	for entity_id: StringName in selected:
+		var record := context.document.entities.by_id(entity_id)
+		if record != null and record.archetype_id != _archetype_id:
+			replaceable += 1
+	var label := "Заменить выделенное на «%s»" % archetype.name
+	if selected.size() > 1:
+		label = "Заменить %d объект(а) на «%s»" % [selected.size(), archetype.name]
+	return [ToolOption.of(OPTION_REPLACE, label, &"", false, replaceable == 0)]
+
+
+func activate_option(option_id: StringName) -> void:
+	if option_id == OPTION_REPLACE:
+		_replace_selection()
+
+
+## Меняет архетип у всего выделения, сохраняя id, клетки и трансформ. Свойства,
+## которых нет у нового архетипа, теряются — поэтому автора спрашивают заранее,
+## а не сообщают post factum.
+func _replace_selection() -> void:
+	var archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
+	if archetype == null:
+		return
+	var targets: Array[MapEntityRecord] = []
+	for entity_id: StringName in _selected_ids():
+		var record := context.document.entities.by_id(entity_id)
+		if record != null and record.archetype_id != archetype.id:
+			targets.append(record)
+	if targets.is_empty():
+		context.set_status_message("Объекты уже используют этот архетип.")
+		return
+	var lost_total := 0
+	for record: MapEntityRecord in targets:
+		lost_total += _lost_property_count(record, archetype)
+	if lost_total > 0:
+		var question := "Замена на «%s» потеряет настроенных свойств: %d. Продолжить?" % [archetype.name, lost_total]
+		if not await context.confirm_action(question, "Замена архетипа"):
+			context.set_status_message("Замена отменена.")
+			return
+	var before := context.document.entities.to_json()
+	for record: MapEntityRecord in targets:
+		var kept: Dictionary = {}
+		for key: Variant in record.props.keys():
+			if archetype.get_property(StringName(key)) != null:
+				kept[key] = record.props[key]
+		record.archetype_id = archetype.id
+		record.props = kept
+		record.initial_state = archetype.states.default_state
+		record.activity = archetype.activity
+		# Новый архетип может занимать другое число клеток: пересаживаем запись на
+		# её собственные клетки, чтобы занятость осталась честной.
+		var cells := Rect2i(record.cell(context.terrain), cell_span(archetype.id, record.scale, record.yaw_degrees))
+		record.position = _anchor_position(cells, archetype) + record.offset
+		_warnings_by_entity[record.id] = _placement_warnings(cells.position, archetype)
+	_commit(before, "замена архетипа")
+	if lost_total > 0:
+		context.set_status_message("Заменено объектов: %d. Потеряно свойств: %d." % [targets.size(), lost_total])
+	else:
+		context.set_status_message("Заменено объектов: %d." % targets.size())
+
+
+func _lost_property_count(record: MapEntityRecord, archetype: EntityArchetype) -> int:
+	var lost := 0
+	for key: Variant in record.props.keys():
+		if archetype.get_property(StringName(key)) == null:
+			lost += 1
+	return lost
 
 
 func select_palette_entry(entry_id: StringName) -> void:
@@ -592,10 +710,19 @@ func inspector_lines() -> Array[String]:
 func inspector_properties() -> Array[EntityPropertyDef]:
 	var selected := _selected_ids()
 	if not selected.is_empty():
-		var position_property := EntityPropertyDef.from_dict({"name": INSPECTOR_POSITION, "label": "Позиция" if selected.size() == 1 else "Сдвиг выделения", "type": "vector3", "section": "transform", "unit": "м"})
-		position_property.step = EditorFillConventions.OFFSET_STEP
+		# Автор оперирует клеткой и смещением внутри неё — теми же полями, что и в
+		# редакторе зданий. Мировая позиция производна и в полях не участвует.
+		var cell_property := EntityPropertyDef.from_dict({
+			"name": INSPECTOR_CELL, "label": "Клетка" if selected.size() == 1 else "Сдвиг по клеткам",
+			"type": "vector2", "section": "transform", "step": 1.0})
+		var offset_property := EntityPropertyDef.from_dict({
+			"name": INSPECTOR_OFFSET, "label": "Смещение", "type": "vector3", "section": "transform",
+			"unit": "м", "step": EditorFillConventions.OFFSET_STEP,
+			"min": -EditorFillConventions.MAX_OFFSET_CELLS, "max": EditorFillConventions.MAX_OFFSET_CELLS,
+			"default": [0.0, 0.0, 0.0]})
 		var properties: Array[EntityPropertyDef] = [
-			position_property,
+			cell_property,
+			offset_property,
 			EntityPropertyDef.from_dict({"name": INSPECTOR_YAW, "label": "Поворот Y", "type": "float", "section": "transform", "unit": "°", "min": 0.0, "max": 359.0, "step": EditorFillConventions.ROTATION_STEP_DEG, "default": 0.0}),
 			EntityPropertyDef.from_dict({"name": INSPECTOR_SCALE, "label": "Масштаб", "type": "float", "section": "transform", "min": EditorFillConventions.SCALE_MIN, "max": EditorFillConventions.SCALE_MAX, "step": EditorFillConventions.SCALE_STEP, "default": 1.0}),
 		]
@@ -618,7 +745,9 @@ func inspector_values() -> Dictionary:
 	if selected != null:
 		var archetype := EntityArchetypeCatalog.get_archetype(selected.archetype_id)
 		var values := archetype.resolved_properties(selected.props) if archetype != null else {}
-		values[INSPECTOR_POSITION] = selected.position
+		var cell := selected.cell(context.terrain)
+		values[INSPECTOR_CELL] = Vector2(cell.x, cell.y)
+		values[INSPECTOR_OFFSET] = selected.offset
 		values[INSPECTOR_YAW] = selected.yaw_degrees
 		values[INSPECTOR_SCALE] = selected.scale
 		return values
@@ -668,44 +797,62 @@ func reset_inspector_value(property_name: StringName) -> bool:
 		return _apply_transform_value(primary, property_name, 0.0, false)
 	if property_name == INSPECTOR_SCALE:
 		return _apply_transform_value(primary, property_name, 1.0, false)
-	if property_name == INSPECTOR_POSITION:
-		# Сброс смещения — это возврат в центр клетки и на поверхность, а не
-		# нулевые мировые координаты.
-		var archetype_at_cell := EntityArchetypeCatalog.get_archetype(primary.archetype_id)
-		if archetype_at_cell == null:
-			return false
-		var centred := _surface_position(primary.cell(context.terrain), archetype_at_cell)
-		return _apply_transform_value(primary, property_name, [centred.x, centred.y, centred.z], false)
+	if property_name == INSPECTOR_OFFSET:
+		# Сброс смещения ставит объект ровно по своим клеткам; сами клетки не
+		# двигаются — «нулевой клетки» не существует.
+		return _apply_transform_value(primary, property_name, [0.0, 0.0, 0.0], false)
+	if property_name == INSPECTOR_CELL:
+		return false
 	var archetype := EntityArchetypeCatalog.get_archetype(primary.archetype_id)
 	var definition := archetype.get_property(property_name) if archetype != null else null
 	return _apply_value(property_name, definition.default, false) if definition != null else false
 
 
-## Позиция при множественном выделении применяется сдвигом: одинаковые
-## абсолютные координаты сложили бы все выделенные объекты в одну точку.
+## Клетка применяется сдвигом: одинаковые абсолютные координаты сложили бы всё
+## выделение в одну клетку. Смещение, поворот и масштаб — абсолютом: поле
+## говорит именно это.
 func _apply_transform_value(record: MapEntityRecord, property_name: StringName, value: Variant, mergeable: bool = true) -> bool:
 	var selected := _selected_ids()
 	var before := context.document.entities.to_json()
 	var changed := false
-	if property_name == INSPECTOR_POSITION:
-		var position := EntityPropertyDef.from_dict({"name": "position", "type": "vector3"}).coerce_value(value) as Vector3
-		position = Vector3(
-			EditorFillConventions.snap_offset(position.x),
-			EditorFillConventions.snap_offset(position.y),
-			EditorFillConventions.snap_offset(position.z))
-		if record.position.is_equal_approx(position):
+	if property_name == INSPECTOR_CELL:
+		var requested := EntityPropertyDef.from_dict({"name": "cell", "type": "vector2"}).coerce_value(value) as Vector2
+		var target_cell := Vector2i(int(round(requested.x)), int(round(requested.y)))
+		var shift := target_cell - record.cell(context.terrain)
+		if shift == Vector2i.ZERO:
 			return false
-		var shift := position - record.position
+		# Сначала проверяем всё выделение, потом двигаем: половина переехавших
+		# объектов хуже, чем отказ.
 		for entity_id: StringName in selected:
 			var target := context.document.entities.by_id(entity_id)
 			if target == null:
 				continue
-			var next_position := target.position + shift
-			var cell := context.terrain.cell_from_position(next_position)
-			if not context.terrain.is_inside(cell) or context.terrain.is_hole(cell):
-				context.set_status_message("Позиция вне карты или попадает в отверстие.", true)
+			var cells := Rect2i(target.cell(context.terrain) + shift, occupied_cells(target).size)
+			if not _cells_placeable(cells):
+				context.set_status_message("Клетки вне карты или попадают в вырез.", true)
 				return false
-			target.position = next_position
+			if not _cells_free(cells, target.id) or not _selection_free_of(cells, selected, target.id, shift):
+				context.set_status_message("Эти клетки уже заняты другим объектом.", true)
+				return false
+		for entity_id: StringName in selected:
+			var target := context.document.entities.by_id(entity_id)
+			if target == null:
+				continue
+			var archetype := EntityArchetypeCatalog.get_archetype(target.archetype_id)
+			if archetype == null:
+				continue
+			var cells := Rect2i(target.cell(context.terrain) + shift, occupied_cells(target).size)
+			target.position = _anchor_position(cells, archetype) + target.offset
+			changed = true
+	elif property_name == INSPECTOR_OFFSET:
+		var raw := EntityPropertyDef.from_dict({"name": "offset", "type": "vector3"}).coerce_value(value) as Vector3
+		var offset := EditorFillConventions.clamp_offset(raw, context.terrain.cell_size)
+		for entity_id: StringName in selected:
+			var target := context.document.entities.by_id(entity_id)
+			if target == null or target.offset.is_equal_approx(offset):
+				continue
+			target.position = target.anchor_position() + offset
+			target.offset = offset
 			changed = true
 	elif property_name == INSPECTOR_YAW:
 		var yaw := fposmod(float(value), 360.0)
@@ -725,6 +872,20 @@ func _apply_transform_value(record: MapEntityRecord, property_name: StringName, 
 		return false
 	var merge_key := StringName("%s/%s" % [record.id, property_name]) if mergeable else &""
 	_commit(before, "трансформ сущности", merge_key)
+	return true
+
+
+## Не наедет ли сдвинутое выделение на другого своего же участника.
+func _selection_free_of(cells: Rect2i, selected: Array[StringName], self_id: StringName, shift: Vector2i) -> bool:
+	for entity_id: StringName in selected:
+		if entity_id == self_id:
+			continue
+		var other := context.document.entities.by_id(entity_id)
+		if other == null:
+			continue
+		var moved := Rect2i(other.cell(context.terrain) + shift, occupied_cells(other).size)
+		if EditorFillConventions.rects_overlap(cells, moved):
+			return false
 	return true
 
 

@@ -37,14 +37,13 @@ func _run() -> void:
 	assert(not editor.get_node("%Ghost").visible, "frame ghost hidden outside frame mode")
 	print("  mode switch ok, asset=", fill.current_asset_id)
 
-	# Snapping: 0.5 step lands on half-block centres, not on the origin.
-	fill.current_snap_step = 0.5
-	var snapped: Vector3 = fill.snapped_position(Vector3(3.13, 0.0, -1.4))
-	assert(snapped.is_equal_approx(Vector3(3.25, 0.0, -1.25)), "snap 0.5 -> %s" % snapped)
-	fill.current_snap_step = 1.0
-	snapped = fill.snapped_position(Vector3(3.13, 0.0, -1.4))
-	assert(snapped.is_equal_approx(Vector3(3.5, 0.0, -1.5)), "snap 1.0 -> %s" % snapped)
-	print("  snapping ok")
+	# Постановка идёт по клеткам: якорь 1×1-объекта — центр клетки под курсором.
+	var snapped: Vector3 = fill.snapped_position(Vector3(3.13, 0.0, -1.4), &"campfire")
+	assert(snapped.is_equal_approx(Vector3(3.5, 0.0, -1.5)), "cell anchor -> %s" % snapped)
+	# Половинных шагов больше нет: подстройка — это авторское смещение.
+	snapped = fill.snapped_position(Vector3(3.9, 0.0, 2.1), &"campfire")
+	assert(snapped.is_equal_approx(Vector3(3.5, 0.0, 2.5)), "cell anchor rounds to its own cell -> %s" % snapped)
+	print("  cell snapping ok")
 
 	# Place two objects through the real click path.
 	editor.cursor_valid = true
@@ -99,9 +98,19 @@ func _run() -> void:
 	assert(editor.blueprint.objects[0].appearance["light_color"] != "44aaff", "shared reset restores asset default")
 	print("  property bindings ok")
 
-	# Duplicate, delete, undo, redo.
-	fill.duplicate_selection()
-	assert(editor.blueprint.objects.size() == 3, "duplicated")
+	# Пипетка вместо дублирования: она снимает полный образец, и следующий клик
+	# ставит такой же объект. Отдельного «дублировать» больше нет.
+	fill.select_object(editor.blueprint.objects[0].id)
+	editor.cursor_hit_pos = editor.blueprint.objects[0].pos
+	fill.pick_asset_at_cursor()
+	editor.cursor_hit_pos = Vector3(0.4, 0.0, 7.4)
+	fill.on_left_pressed()
+	assert(editor.blueprint.objects.size() == 3, "пипетка + клик заменяют дублирование")
+	var copy = editor.blueprint.objects[2]
+	var source = editor.blueprint.objects[0]
+	assert(copy.asset_id == source.asset_id and copy.appearance == source.appearance,
+		"копия несёт свойства образца")
+	fill.select_object(copy.id)
 	fill.delete_selection()
 	assert(editor.blueprint.objects.size() == 2, "deleted")
 	fill.undo()
@@ -111,8 +120,8 @@ func _run() -> void:
 	fill.undo()
 	assert(editor.blueprint.objects.size() == 3, "undo restored the delete again")
 	fill.undo()
-	assert(editor.blueprint.objects.size() == 2, "undo restored the duplicate")
-	print("  undo/redo ok")
+	assert(editor.blueprint.objects.size() == 2, "undo restored the placement")
+	print("  eyedropper copy + undo/redo ok")
 
 	# Collision overlay: toggling on builds overlays, toggling off clears them.
 	fill._on_collision_overlay_toggled(true)
@@ -156,7 +165,12 @@ func _run() -> void:
 	fill._set_property("visual_flame_visible", false)
 	fill._set_property("light_energy", 3.5)
 	fill.current_asset_id = &"cooking_campfire"
-	fill._replace_selected_object()
+	# Замена спрашивает подтверждение, если свойства теряются: без свободных
+	# свойств этот путь не проверить, поэтому сначала убеждаемся, что он реален.
+	assert(fill._lost_property_count(editor.blueprint.objects[0], WorldAssetCatalog.get_asset(&"cooking_campfire")) > 0,
+		"замена campfire → cooking_campfire теряет хотя бы одно свойство")
+	editor.confirm_handler = func(_message: String, _title: String) -> bool: return true
+	await fill._replace_selected_object()
 	assert(editor.blueprint.objects[0].asset_id == &"cooking_campfire",
 		"object replaced with cooking_campfire")
 	assert(editor.blueprint.objects[0].appearance.get("visual_flame_visible", null) == false,
@@ -211,18 +225,30 @@ func _run() -> void:
 	assert(is_equal_approx(placed.rot.x, 15.0) and is_equal_approx(placed.rot.z, 345.0),
 		"постановка сохраняет поворот кисти по всем осям, а не только Y")
 
-	# Множественное выделение: трансформ применяется ко всем, позиция — сдвигом.
+	# Смещение — авторская подстройка внутри своих клеток: клетка остаётся той же.
+	fill.select_object(placed.id)
+	var cell_before: Rect2i = fill.occupied_cells(placed.anchor_pos(), placed.asset_id, placed.scale.x, placed.rot.y)
+	fill._syncing_ui = true
+	fill._off_x_spin.value = 0.5
+	fill._syncing_ui = false
+	fill._on_transform_spin_changed(0.5)
+	assert(is_equal_approx(placed.offset.x, 0.5), "смещение записано")
+	assert(fill.occupied_cells(placed.anchor_pos(), placed.asset_id, placed.scale.x, placed.rot.y) == cell_before,
+		"смещение не переселяет объект в соседнюю клетку")
+	fill.reset_offset()
+	assert(placed.offset.is_zero_approx(), "кнопка ↺ сбрасывает смещение")
+
+	# Множественное выделение: клетка применяется сдвигом ко всему выделению.
 	fill.select_object(editor.blueprint.objects[0].id)
 	fill.toggle_object_selection(placed.id)
 	assert(fill.selected_object_ids().size() == 2, "Ctrl+клик набирает выделение")
 	var other_pos_before: Vector3 = placed.pos
-	var primary = fill.find_record(fill.selected_object_id)
 	fill._syncing_ui = true
-	fill._pos_x_spin.value = primary.pos.x + 1.0
+	fill._pos_x_spin.value = fill._pos_x_spin.value + 1.0
 	fill._syncing_ui = false
 	fill._on_transform_spin_changed(0.0)
 	assert(placed.pos.is_equal_approx(other_pos_before + Vector3(1.0, 0.0, 0.0)),
-		"позиция применяется сдвигом ко всему выделению, а не абсолютом в одну точку")
+		"клетка применяется сдвигом ко всему выделению, а не абсолютом в одну клетку")
 	var other_rot_before: float = placed.rot.y
 	fill.rotate_selection("y", 1)
 	assert(is_equal_approx(placed.rot.y, fposmod(other_rot_before + EditorFillConventions.ROTATION_STEP_DEG, 360.0)),

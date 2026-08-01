@@ -25,6 +25,8 @@ var current_asset_id: StringName = &""
 ## Смещение кисти: с ним объект ставится сразу подстроенным — пипетка забирает
 ## смещение образца вместе с остальными свойствами.
 var current_offset: Vector3 = Vector3.ZERO
+## Масштаб кисти — тоже часть образца, снятого пипеткой.
+var current_scale: float = 1.0
 var current_yaw_deg: float = 0.0
 var current_pitch_deg: float = 0.0
 var current_roll_deg: float = 0.0
@@ -75,7 +77,10 @@ var _layer_label: Label = null
 var _collision_overlay_btn: Button = null
 var _collision_overlay: Node3D = null
 var _catalog_panel: EditorCatalogPanel = null
-var _pos_reset_btn: Button = null
+var _off_x_spin: SpinBox = null
+var _off_y_spin: SpinBox = null
+var _off_z_spin: SpinBox = null
+var _offset_reset_btn: Button = null
 var _rot_reset_btn: Button = null
 var _scale_reset_btn: Button = null
 var _zone_filter_option: OptionButton = null
@@ -117,7 +122,10 @@ func setup(editor: Node) -> void:
 	_replace_btn = editor.get_node("%FillReplaceBtn")
 	_toolbar_delete_btn = editor.get_node("%FillDeleteSelectionBtn")
 	_layer_label = editor.get_node("%FillLayerLabel")
-	_pos_reset_btn = editor.get_node("%FillPosResetBtn")
+	_off_x_spin = editor.get_node("%FillOffXSpin")
+	_off_y_spin = editor.get_node("%FillOffYSpin")
+	_off_z_spin = editor.get_node("%FillOffZSpin")
+	_offset_reset_btn = editor.get_node("%FillOffsetResetBtn")
 	_rot_reset_btn = editor.get_node("%FillRotResetBtn")
 	_scale_reset_btn = editor.get_node("%FillScaleResetBtn")
 
@@ -151,16 +159,19 @@ func setup(editor: Node) -> void:
 	_replace_btn.pressed.connect(_replace_selected_object)
 	_controls_vbox.property_committed.connect(_on_appearance_property_committed)
 	_controls_vbox.property_reset_requested.connect(_on_appearance_property_reset)
-	for spin: SpinBox in [_pos_x_spin, _pos_y_spin, _pos_z_spin, _yaw_spin, _pitch_spin, _roll_spin, _scale_spin]:
+	for spin: SpinBox in _transform_spins():
 		spin.value_changed.connect(_on_transform_spin_changed)
-	_pos_x_spin.step = EditorFillConventions.OFFSET_STEP
-	_pos_y_spin.step = EditorFillConventions.OFFSET_STEP
-	_pos_z_spin.step = EditorFillConventions.OFFSET_STEP
+	# Клетка и слой — целые; смещение — общий шаг обоих редакторов и предел в одну
+	# клетку; поворот — общий шаг.
+	for spin: SpinBox in [_off_x_spin, _off_y_spin, _off_z_spin]:
+		spin.step = EditorFillConventions.OFFSET_STEP
+		spin.min_value = -EditorFillConventions.MAX_OFFSET_CELLS
+		spin.max_value = EditorFillConventions.MAX_OFFSET_CELLS
 	_yaw_spin.step = EditorFillConventions.ROTATION_STEP_DEG
 	_pitch_spin.step = EditorFillConventions.ROTATION_STEP_DEG
 	_roll_spin.step = EditorFillConventions.ROTATION_STEP_DEG
 	_scale_spin.step = EditorFillConventions.SCALE_STEP
-	_pos_reset_btn.pressed.connect(reset_position)
+	_offset_reset_btn.pressed.connect(reset_offset)
 	_rot_reset_btn.pressed.connect(reset_rotation)
 	_scale_reset_btn.pressed.connect(reset_scale)
 
@@ -259,9 +270,11 @@ func pick_asset_at_cursor() -> bool:
 	current_pitch_deg = record.rot.x
 	current_yaw_deg = record.rot.y
 	current_roll_deg = record.rot.z
+	current_offset = record.offset
+	current_scale = record.scale.x
 	_brush_appearance = record.appearance.duplicate(true)
 	select_object("")
-	_editor.set_status("Пипетка: выбран «%s»." % WorldAssetCatalog.get_asset(record.asset_id).name)
+	_editor.set_status("Пипетка: «%s» со всеми свойствами. Следующий клик поставит такой же." % WorldAssetCatalog.get_asset(record.asset_id).name)
 	refresh_ghost()
 	return true
 
@@ -391,12 +404,12 @@ func find_record(object_id: String) -> FillObjectRecordScript:
 ## what this handles is the footprint of a neighbour reaching into the snapped
 ## position.
 func _place_or_select_at(hit: Vector3) -> void:
-	var position := snapped_position(hit)
+	var position := snapped_position(hit, current_asset_id, current_scale)
 	var asset := WorldAssetCatalog.get_asset(current_asset_id)
 	if asset == null:
 		_editor.set_status("Выберите ассет в каталоге наполнения.")
 		return
-	if not _is_valid_transform(position, Vector3(current_pitch_deg, current_yaw_deg, current_roll_deg), Vector3.ONE, asset.id):
+	if not _is_valid_transform(position, Vector3(current_pitch_deg, current_yaw_deg, current_roll_deg), Vector3.ONE * current_scale, asset.id):
 		# The hit can be near the edge of an object's footprint rather than inside
 		# its pick radius. Select that conflicting object where possible, so the
 		# click still has a useful result.
@@ -424,6 +437,7 @@ func _place_at(position: Vector3) -> void:
 	# считаются от якоря, поэтому смещение не переселяет его к соседям.
 	var record := FillObjectRecordScript.make(asset.id, position + current_offset, _next_object_suffix())
 	record.offset = current_offset
+	record.scale = Vector3.ONE * current_scale
 	# Every axis the brush carries, not just yaw: the ghost was previewed with
 	# all three, and dropping pitch/roll here made the placed object differ from
 	# what the author saw.
@@ -541,19 +555,20 @@ func reset_rotation() -> void:
 	refresh_ghost()
 
 
-## Drops the sub-cell offset: the object returns onto the current snap grid.
-## There is no "zero position" to go back to inside a building.
-func reset_position() -> void:
+## Drops the authored offset: the object sits exactly on the cells it owns. The
+## cells themselves do not move — there is no "zero cell" to go back to.
+func reset_offset() -> void:
+	current_offset = Vector3.ZERO
 	var changed := false
 	for record: FillObjectRecordScript in selected_records():
-		var snapped := snapped_position(record.pos)
-		if snapped.is_equal_approx(record.pos):
+		if record.offset.is_zero_approx():
 			continue
-		if _is_valid_transform(snapped, record.rot, record.scale, record.asset_id, record.id):
-			record.pos = snapped
-			_apply_transform_to_node(record)
-			changed = true
-	_commit_transform_reset(changed, "Смещение сброшено по сетке привязки.")
+		record.pos = record.anchor_pos()
+		record.offset = Vector3.ZERO
+		_apply_transform_to_node(record)
+		changed = true
+	_commit_transform_reset(changed, "Смещение сброшено: объект стоит ровно по своим клеткам.")
+	refresh_ghost()
 
 
 func reset_scale() -> void:
@@ -588,6 +603,9 @@ func cancel_current_action() -> void:
 		return
 	if not current_asset_id.is_empty():
 		_catalog_panel.clear_asset_selection()
+		_brush_appearance.clear()
+		current_offset = Vector3.ZERO
+		current_scale = 1.0
 		_editor.set_status("Кисть наполнения сброшена.")
 		return
 	_editor.set_status("Ничего не выбрано.")
@@ -718,8 +736,8 @@ func refresh_ghost() -> void:
 		add_child(_ghost)
 		EditorFillConventions.apply_preview_look(_ghost, _get_ghost_material())
 	_ghost.visible = true
-	var ghost_pos := snapped_position(_editor.cursor_hit_pos)
-	_ghost.position = ghost_pos
+	var ghost_pos := snapped_position(_editor.cursor_hit_pos, current_asset_id, current_scale)
+	_ghost.position = ghost_pos + current_offset
 	_ghost.rotation_degrees = Vector3(current_pitch_deg, current_yaw_deg, current_roll_deg)
 	# Update ghost colour based on placement state.
 	var state := _compute_ghost_state(ghost_pos)
@@ -1118,9 +1136,9 @@ func _set_property(property_name: String, value: Variant) -> void:
 
 
 func _set_transform_fields_enabled(enabled: bool) -> void:
-	for spin in [_pos_x_spin, _pos_y_spin, _pos_z_spin, _pitch_spin, _yaw_spin, _roll_spin, _scale_spin]:
+	for spin in _transform_spins():
 		spin.editable = enabled
-	for button: Button in [_pos_reset_btn, _rot_reset_btn, _scale_reset_btn]:
+	for button: Button in [_offset_reset_btn, _rot_reset_btn, _scale_reset_btn]:
 		button.disabled = not enabled
 	_zone_option.disabled = not enabled
 	_replace_btn.disabled = not enabled
@@ -1175,71 +1193,107 @@ func _update_badges(record: FillObjectRecordScript, asset: Variant) -> void:
 	_badges_label.text = "  ·  ".join(badges) if not badges.is_empty() else ""
 
 
-## Replace the selected object's asset with the current catalog selection.
-## Appearance properties that don't exist on the new asset are lost.
+## Replaces the asset of every selected object with the current catalog pick.
+##
+## This exists instead of "delete and place a new one" because the record keeps
+## its **id**, and with it the fixture link, the owning zone and every rule that
+## refers to it. Deleting breaks those references silently
+## (map_fill_mode.md §8.3), which is exactly the cost an author cannot see.
+##
+## Properties the new asset does not have are lost, so the author is asked first
+## — before the replacement, not after it.
 func _replace_selected_object() -> void:
-	var record := find_record(selected_object_id)
-	if record == null:
+	var records := selected_records()
+	if records.is_empty():
 		_editor.set_status("Выберите объект для замены.")
 		return
 	if current_asset_id == &"":
 		_editor.set_status("Выберите ассет в каталоге для замены.")
 		return
-	if current_asset_id == record.asset_id:
-		_editor.set_status("Объект уже использует этот ассет.")
-		return
-	var old_asset := WorldAssetCatalog.get_asset(record.asset_id)
 	var new_asset := WorldAssetCatalog.get_asset(current_asset_id)
 	if new_asset == null:
 		return
-	# Count how many appearance properties will be lost.
-	var lost_count := 0
-	if old_asset != null:
-		for key in record.appearance.keys():
-			var found := false
-			for control in new_asset.appearance_controls:
-				if String(control.get("name", "")) == String(key):
-					found = true
-					break
-			if not found:
-				lost_count += 1
+	var targets: Array = []
+	for record: FillObjectRecordScript in records:
+		if record.asset_id != new_asset.id:
+			targets.append(record)
+	if targets.is_empty():
+		_editor.set_status("Объект уже использует этот ассет.")
+		return
+
+	var lost_total := 0
+	for record: FillObjectRecordScript in targets:
+		lost_total += _lost_property_count(record, new_asset)
+	if lost_total > 0:
+		var question := "Замена на «%s» потеряет настроенных свойств: %d. Продолжить?" % [new_asset.name, lost_total]
+		if not await _editor.confirm_action(question, "Замена ассета"):
+			_editor.set_status("Замена отменена.")
+			return
+
+	# Замена всего выделения — одно действие, а не N шагов отмены.
+	_editor.begin_history_group("fill_replace")
+	var replaced := 0
+	for record: FillObjectRecordScript in targets:
+		_replace_one(record, new_asset)
+		replaced += 1
+	_editor.end_history_group()
+	_refresh_object_list()
+	_refresh_inspector()
+	if lost_total > 0:
+		_editor.set_status("Заменено объектов: %d на «%s». Потеряно свойств: %d." % [replaced, new_asset.name, lost_total])
+	else:
+		_editor.set_status("Заменено объектов: %d на «%s»." % [replaced, new_asset.name])
+
+
+## Свойства, которых у нового ассета нет и которые исчезнут при замене.
+func _lost_property_count(record: FillObjectRecordScript, new_asset: WorldAssetDef) -> int:
+	var lost := 0
+	for key: Variant in record.appearance.keys():
+		var found := false
+		for control: Dictionary in new_asset.appearance_controls:
+			if String(control.get("name", "")) == String(key):
+				found = true
+				break
+		if not found:
+			lost += 1
+	return lost
+
+
+func _replace_one(record: FillObjectRecordScript, new_asset: WorldAssetDef) -> void:
 	var old_appearance := record.appearance.duplicate(true)
 	record.asset_id = new_asset.id
 	record.appearance = new_asset.default_appearance()
 	# Carry over compatible properties: keys that exist in the new asset's
 	# appearance_controls with a matching type, preserving the old value.
-	if old_asset != null:
-		var new_controls_by_name: Dictionary = {}
-		for control in new_asset.appearance_controls:
-			new_controls_by_name[String(control.get("name", ""))] = control
-		for key in old_appearance.keys():
-			var key_str := String(key)
-			if not new_controls_by_name.has(key_str):
-				continue
-			var new_control: Dictionary = new_controls_by_name[key_str]
-			var new_type := String(new_control.get("type", "string"))
-			var old_value: Variant = old_appearance[key]
-			# Type compatibility check: bool, float, string, color (stored as html string).
-			var compatible := false
-			match new_type:
-				WorldAssetDef.TYPE_BOOL:
-					compatible = old_value is bool
-				WorldAssetDef.TYPE_FLOAT:
-					compatible = old_value is float or old_value is int
-				WorldAssetDef.TYPE_COLOR:
-					compatible = old_value is String or old_value is Color
-				_:
-					compatible = old_value is String
-			if compatible:
-				record.appearance[key_str] = old_value
+	var new_controls_by_name: Dictionary = {}
+	for control: Dictionary in new_asset.appearance_controls:
+		new_controls_by_name[String(control.get("name", ""))] = control
+	for key: Variant in old_appearance.keys():
+		var key_str := String(key)
+		if not new_controls_by_name.has(key_str):
+			continue
+		var new_control: Dictionary = new_controls_by_name[key_str]
+		var new_type := String(new_control.get("type", "string"))
+		var old_value: Variant = old_appearance[key]
+		# Type compatibility check: bool, float, string, color (stored as html string).
+		var compatible := false
+		match new_type:
+			WorldAssetDef.TYPE_BOOL:
+				compatible = old_value is bool
+			WorldAssetDef.TYPE_FLOAT:
+				compatible = old_value is float or old_value is int
+			WorldAssetDef.TYPE_COLOR:
+				compatible = old_value is String or old_value is Color
+			_:
+				compatible = old_value is String
+		if compatible:
+			record.appearance[key_str] = old_value
+	# Новый ассет может занимать другое число клеток: пересаживаем объект на его
+	# собственные клетки, чтобы занятость осталась честной.
+	var anchor := snapped_position(record.anchor_pos(), record.asset_id, record.scale.x, record.rot.y)
+	record.pos = anchor + record.offset
 	_spawn_node_for_existing(record)
 	_editor.mark_dirty()
-	_refresh_object_list()
-	_refresh_inspector()
-	if lost_count > 0:
-		_editor.set_status("Заменён на «%s». Потеряно свойств: %d." % [new_asset.name, lost_count])
-	else:
-		_editor.set_status("Заменён на «%s»." % new_asset.name)
 
 
 ## Re-spawn the visual node for an existing record (used by replace).
@@ -1248,11 +1302,23 @@ func _spawn_node_for_existing(record: FillObjectRecordScript) -> void:
 	_spawn_node(record)
 
 
+func _transform_spins() -> Array[SpinBox]:
+	return [_pos_x_spin, _pos_y_spin, _pos_z_spin, _off_x_spin, _off_y_spin, _off_z_spin,
+		_pitch_spin, _yaw_spin, _roll_spin, _scale_spin]
+
+
+## Инспектор показывает то, чем автор оперирует: клетку, слой и смещение внутри
+## своих клеток. Мировая позиция — производная (`якорь + смещение`) и в полях не
+## участвует: она заставляла бы считать доли метра в уме.
 func _sync_transform_fields(record: FillObjectRecordScript) -> void:
 	_syncing_ui = true
-	_pos_x_spin.value = record.pos.x
-	_pos_y_spin.value = record.pos.y
-	_pos_z_spin.value = record.pos.z
+	var cells := occupied_cells(record.anchor_pos(), record.asset_id, record.scale.x, record.rot.y)
+	_pos_x_spin.value = cells.position.x
+	_pos_z_spin.value = cells.position.y
+	_pos_y_spin.value = record.anchor_pos().y
+	_off_x_spin.value = record.offset.x
+	_off_y_spin.value = record.offset.y
+	_off_z_spin.value = record.offset.z
 	_pitch_spin.value = record.rot.x
 	_yaw_spin.value = record.rot.y
 	_roll_spin.value = record.rot.z
@@ -1266,65 +1332,81 @@ func _on_transform_spin_changed(_value: float) -> void:
 	var record := find_record(selected_object_id)
 	if record == null:
 		return
-	var old_pos := record.pos
+	var old_anchor := record.anchor_pos()
+	var old_offset := record.offset
 	var old_rot := record.rot
 	var old_scale := record.scale
-	var candidate_pos := Vector3(_pos_x_spin.value, _pos_y_spin.value, _pos_z_spin.value)
+
 	var candidate_rot := Vector3(_pitch_spin.value, _yaw_spin.value, _roll_spin.value)
-	# Clamp scale by asset policy.
-	var asset := WorldAssetCatalog.get_asset(record.asset_id)
-	var scale_val := _scale_spin.value
-	if asset != null:
-		if not asset.is_scale_allowed(scale_val):
-			# Snap to the closest allowed value.
-			match asset.scale_mode:
-				WorldAssetDef.SCALE_LOCKED:
-					scale_val = 1.0
-				WorldAssetDef.SCALE_UNIFORM_STEPS:
-					var best := asset.allowed_scales[0] if not asset.allowed_scales.is_empty() else 1.0
-					var best_diff := absf(scale_val - best)
-					for allowed in asset.allowed_scales:
-						var diff := absf(scale_val - allowed)
-						if diff < best_diff:
-							best = allowed
-							best_diff = diff
-					scale_val = best
-				WorldAssetDef.SCALE_FREE_UNIFORM:
-					if asset.allowed_scales.size() >= 2:
-						scale_val = clampf(scale_val, asset.allowed_scales[0], asset.allowed_scales[-1])
-					else:
-						scale_val = maxf(0.001, scale_val)
-			_syncing_ui = true
-			_scale_spin.value = scale_val
-			_syncing_ui = false
-	var candidate_scale := Vector3.ONE * scale_val
-	if not _is_valid_transform(candidate_pos, candidate_rot, candidate_scale, record.asset_id, record.id):
+	var candidate_scale := Vector3.ONE * _clamped_scale(record, _scale_spin.value)
+	var candidate_offset := EditorFillConventions.clamp_offset(
+		Vector3(_off_x_spin.value, _off_y_spin.value, _off_z_spin.value))
+	# Поле хранит левую-нижнюю клетку прямоугольника; якорь — его центр.
+	var span: Vector2i = _validator.cell_span(record.asset_id, candidate_scale.x, candidate_rot.y)
+	var base_cell := Vector2i(int(round(_pos_x_spin.value)), int(round(_pos_z_spin.value)))
+	var anchor_xz := EditorFillConventions.anchor_of_cells(base_cell, span)
+	var candidate_anchor := Vector3(anchor_xz.x, float(int(round(_pos_y_spin.value))), anchor_xz.y)
+
+	if not _is_valid_transform(candidate_anchor, candidate_rot, candidate_scale, record.asset_id, record.id):
 		_sync_transform_fields(record)
-		_editor.set_status("Этот трансформ пересекает каркас, проход или препятствие.")
+		_editor.set_status("Эти клетки заняты или выходят за границы здания.")
 		return
-	if old_pos.is_equal_approx(candidate_pos) and old_rot.is_equal_approx(candidate_rot) and old_scale.is_equal_approx(candidate_scale):
+	if old_anchor.is_equal_approx(candidate_anchor) and old_offset.is_equal_approx(candidate_offset) \
+			and old_rot.is_equal_approx(candidate_rot) and old_scale.is_equal_approx(candidate_scale):
 		return
-	# Position is applied as a shift so a multi-selection keeps its arrangement;
-	# rotation and scale are absolute, because that is what the field says.
-	var shift := candidate_pos - old_pos
+
+	# Клетка применяется сдвигом, чтобы выделение сохранило свою расстановку;
+	# смещение, поворот и масштаб — абсолютом: поле говорит именно это.
+	var shift := candidate_anchor - old_anchor
 	var records := selected_records()
 	for target: FillObjectRecordScript in records:
 		if target.id == record.id:
 			continue
-		var next_pos := target.pos + shift
-		if not _is_valid_transform(next_pos, candidate_rot, candidate_scale, target.asset_id, target.id):
+		if not _is_valid_transform(target.anchor_pos() + shift, candidate_rot, candidate_scale, target.asset_id, target.id):
 			_sync_transform_fields(record)
-			_editor.set_status("Трансформ не применён: одному из выбранных объектов мешает каркас или граница.")
+			_editor.set_status("Не применено: одному из выбранных объектов не хватает свободных клеток.")
 			return
 	for target: FillObjectRecordScript in records:
-		target.pos = candidate_pos if target.id == record.id else target.pos + shift
+		var anchor := candidate_anchor if target.id == record.id else target.anchor_pos() + shift
+		target.offset = candidate_offset
+		target.pos = anchor + candidate_offset
 		target.rot = candidate_rot
 		target.scale = candidate_scale
 		_apply_transform_to_node(target)
+	current_offset = candidate_offset
 	_update_selection_marker()
 	# One field of one object is one undo step, however many intermediate values
 	# the wheel or the arrows produced.
 	_editor.mark_dirty_coalesced("fill_transform/%s" % record.id)
+
+
+## Масштаб, приведённый к политике ассета.
+func _clamped_scale(record: FillObjectRecordScript, requested: float) -> float:
+	var asset := WorldAssetCatalog.get_asset(record.asset_id)
+	if asset == null or asset.is_scale_allowed(requested):
+		return requested
+	var scale_val := requested
+	match asset.scale_mode:
+		WorldAssetDef.SCALE_LOCKED:
+			scale_val = 1.0
+		WorldAssetDef.SCALE_UNIFORM_STEPS:
+			var best := asset.allowed_scales[0] if not asset.allowed_scales.is_empty() else 1.0
+			var best_diff := absf(scale_val - best)
+			for allowed in asset.allowed_scales:
+				var diff := absf(scale_val - allowed)
+				if diff < best_diff:
+					best = allowed
+					best_diff = diff
+			scale_val = best
+		WorldAssetDef.SCALE_FREE_UNIFORM:
+			if asset.allowed_scales.size() >= 2:
+				scale_val = clampf(scale_val, asset.allowed_scales[0], asset.allowed_scales[-1])
+			else:
+				scale_val = maxf(0.001, scale_val)
+	_syncing_ui = true
+	_scale_spin.value = scale_val
+	_syncing_ui = false
+	return scale_val
 
 
 # ---------------------------------------------------------------------------

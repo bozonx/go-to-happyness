@@ -8,6 +8,7 @@ const BuildingMaterialCatalogScript = preload("res://game/features/buildings/dom
 func _init() -> void:
 	print("--- Running test_block_mesh_library.gd ---")
 	_test_wedge_mesh_normals()
+	_test_roof_angle_meshes()
 	_test_stairs_mesh_normals()
 	_test_arch_and_railing_meshes()
 	_test_block_materials_and_textures()
@@ -15,25 +16,24 @@ func _init() -> void:
 	quit(0)
 
 
-## Guards against a degenerate arch (a prior version emitted a zero-height box for
-## the right pillar) and confirms the railing builds real, bounded geometry that
-## respects the variant height.
+## Guards the two distinct arch profiles and confirms the railing builds real,
+## bounded geometry that respects the variant height.
 func _test_arch_and_railing_meshes() -> void:
 	print("Testing arch + railing meshes...")
 	var lib := BlockMeshLibraryScript.new()
 
-	var arch := lib.mesh_for(&"arch") as ArrayMesh
-	assert(arch != null, "arch mesh must exist")
-	var arch_verts: PackedVector3Array = arch.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
-	assert(arch_verts.size() >= 72, "arch must build jambs + arch ring, got %d verts" % arch_verts.size())
-	var arch_aabb := arch.get_aabb()
-	assert(arch_aabb.size.y >= 0.49 and arch_aabb.size.y <= 0.501 and arch_aabb.size.x > 0.99, "arch must be cut from a 0.5m slab")
-	var has_half_column_apex := false
-	for vertex in arch_verts:
-		if absf(vertex.x) < 0.001 and is_equal_approx(vertex.y, arch_aabb.end.y):
-			has_half_column_apex = true
+	var arch_full := lib.mesh_for(&"arch", &"1") as ArrayMesh
+	var arch_half := lib.mesh_for(&"arch", &"1_2") as ArrayMesh
+	assert(arch_full != null and arch_half != null, "both arch variants must build meshes")
+	assert(arch_full.get_aabb().size.is_equal_approx(Vector3.ONE), "arch 1 must occupy a whole block")
+	assert(arch_half.get_aabb().size.is_equal_approx(Vector3.ONE), "arch 1/2 must occupy a whole block")
+	var half_verts: PackedVector3Array = arch_half.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var has_centred_opening_apex := false
+	for vertex in half_verts:
+		if absf(vertex.x) < 0.001 and is_equal_approx(vertex.y, 0.0):
+			has_centred_opening_apex = true
 			break
-	assert(has_half_column_apex, "arch opening must use the 1m half-column radius")
+	assert(has_centred_opening_apex, "arch 1/2 must have the centred semicircular opening from the reference")
 
 	var half_column := lib.mesh_for(&"column_half", &"0.5") as ArrayMesh
 	assert(half_column != null, "half-column mesh must exist")
@@ -71,6 +71,26 @@ func _test_wedge_mesh_normals() -> void:
 	for i in range(12, 18):
 		var n: Vector3 = normals[i]
 		assert(n.y < 0.0, "Bottom face normal Y component must be negative (downward)")
+
+
+func _test_roof_angle_meshes() -> void:
+	print("Testing large + small roof-angle meshes...")
+	var lib := BlockMeshLibraryScript.new()
+	var large := lib.mesh_for(&"roof_angle_large") as ArrayMesh
+	var small := lib.mesh_for(&"roof_angle_small") as ArrayMesh
+	assert(large != null and small != null, "both roof angles must build meshes")
+	var large_aabb := large.get_aabb()
+	var small_aabb := small.get_aabb()
+	assert(large_aabb.size.is_equal_approx(Vector3(1.0, 1.0, 1.0)), "large roof angle must fill one block")
+	assert(small_aabb.size.is_equal_approx(Vector3(1.0, 0.5, 1.0)), "small roof angle must be half a block high")
+	var vertices: PackedVector3Array = large.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var has_front_apex := false
+	var has_back_apex := false
+	for vertex in vertices:
+		if absf(vertex.x) < 0.001 and is_equal_approx(vertex.y, large_aabb.end.y):
+			has_front_apex = has_front_apex or is_equal_approx(vertex.z, large_aabb.end.z)
+			has_back_apex = has_back_apex or is_equal_approx(vertex.z, large_aabb.position.z)
+	assert(has_front_apex and has_back_apex, "roof angle must have a centred ridge along its depth")
 
 
 func _test_stairs_mesh_normals() -> void:

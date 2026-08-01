@@ -45,12 +45,14 @@ static func run_all() -> void:
 
 
 static func _test_catalog() -> void:
-	assert(BuildingBlockCatalogScript.all().size() == 21)
+	assert(BuildingBlockCatalogScript.all().size() == 23)
 	assert(BuildingBlockCatalogScript.has_block(&"cube"))
 	assert(BuildingBlockCatalogScript.has_block(&"stairs_corner_45"))
 	assert(BuildingBlockCatalogScript.has_block(&"stairs_corner_half"))
 	assert(BuildingBlockCatalogScript.has_block(&"stairs_corner_quarter"))
 	assert(BuildingBlockCatalogScript.has_block(&"foundation"))
+	assert(BuildingBlockCatalogScript.has_block(&"roof_angle_large"))
+	assert(BuildingBlockCatalogScript.has_block(&"roof_angle_small"))
 	assert(not BuildingBlockCatalogScript.has_block(&"nonexistent"))
 	# The WALL category was removed; its panels duplicated other blocks.
 	assert(not BuildingBlockCatalogScript.has_block(&"wall_panel"))
@@ -82,14 +84,20 @@ static func _test_catalog() -> void:
 	assert(BuildingBlockCatalogScript.size_of(&"arch") == Vector3(1.0, 1.0, 1.0))
 	assert(BuildingBlockCatalogScript.has_variants(&"arch"))
 	assert(BuildingBlockCatalogScript.default_variant(&"arch") == &"1")
-	assert(BuildingBlockCatalogScript.mesh_shape_of(&"arch", &"1") == BuildingBlockCatalogScript.SHAPE_ARCH_TOP)
-	assert(BuildingBlockCatalogScript.mesh_shape_of(&"arch", &"1_2") == BuildingBlockCatalogScript.SHAPE_HALF_ARCH)
+	assert(BuildingBlockCatalogScript.mesh_shape_of(&"arch", &"1") == BuildingBlockCatalogScript.SHAPE_HALF_ARCH)
+	assert(BuildingBlockCatalogScript.mesh_shape_of(&"arch", &"1_2") == BuildingBlockCatalogScript.SHAPE_ARCH)
 	assert(BuildingBlockCatalogScript.mesh_shape_of(&"arch", &"1_4") == BuildingBlockCatalogScript.SHAPE_HALF_ARCH)
 	assert(BuildingBlockCatalogScript.size_of(&"arch", &"1_4") == Vector3(0.5, 0.5, 1.0))
 	assert(not BuildingBlockCatalogScript.has_block(&"half_arch"))
 	assert(not BuildingBlockCatalogScript.has_variants(&"roof_pitch_low"))
 	assert(not BuildingBlockCatalogScript.has_variants(&"roof_corner_in_low"))
 	assert(not BuildingBlockCatalogScript.has_variants(&"roof_corner_out_low"))
+	assert(BuildingBlockCatalogScript.size_of(&"roof_angle_large") == Vector3(1.0, 1.0, 1.0))
+	assert(BuildingBlockCatalogScript.size_of(&"roof_angle_small") == Vector3(1.0, 0.5, 1.0))
+	assert(BuildingBlockCatalogScript.mesh_shape_of(&"roof_angle_large") == BuildingBlockCatalogScript.SHAPE_ROOF_ANGLE)
+	assert(BuildingBlockCatalogScript.get_block(&"roof_angle_large")["name"] == "Большой угол")
+	assert(BuildingBlockCatalogScript.get_block(&"roof_angle_small")["name"] == "Малый угол")
+	assert(BuildingBlockCatalogScript.get_block(&"roof_angle_large")["category"] == BuildingBlockCatalogScript.Category.ROOF)
 	assert(BuildingBlockCatalogScript.get_block(&"column_square")["category"] == BuildingBlockCatalogScript.Category.STRUCTURE)
 	# Single-cell blocks report a unit footprint.
 	assert(BuildingBlockCatalogScript.footprint_of(&"arch") == Vector3i(1, 1, 1))

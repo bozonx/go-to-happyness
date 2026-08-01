@@ -4,11 +4,14 @@ extends VBoxContainer
 ## Shared catalog panel for browsing, searching, tag filtering, and tracking recent
 ## assets across authoring tools (map editor fill mode, building editor decor mode).
 ##
-## State and callbacks delegate back to the parent controller or connect to
-## `asset_selected` / `snap_step_selected` signals.
+## Snap steps used to live here. They are gone on purpose: an object is placed on
+## whole cells and then nudged by an authored offset, so there is no second
+## placement grid to choose (map_fill_mode.md §9.3.1).
+##
+## State and callbacks delegate back to the parent controller or connect to the
+## `asset_selected` signal.
 
 signal asset_selected(asset_id: StringName)
-signal snap_step_selected(step: float)
 
 const RECENT_ASSET_LIMIT := 6
 
@@ -23,7 +26,6 @@ var _back_button: Button = null
 var _location_label: Label = null
 var _tag_filter_toggle: Button = null
 var _tag_filters: HFlowContainer = null
-var _snap_buttons: Dictionary = {}
 var _asset_buttons: Dictionary = {}
 var _recent_buttons: Dictionary = {}
 var _recent_assets: Array[StringName] = []
@@ -53,7 +55,6 @@ func setup(controller: Object, editor: Node = null, p_scope: StringName = WorldA
 		_location_label = editor.get_node("%FillCatalogLocation")
 		_tag_filter_toggle = editor.get_node("%FillTagFilterToggle")
 		_tag_filters = editor.get_node("%FillTagFilters")
-		_build_snap_options(editor)
 	else:
 		_build_dynamic_ui()
 
@@ -133,13 +134,6 @@ func activate() -> void:
 	_rebuild_tag_filters()
 	_rebuild_asset_buttons()
 	_rebuild_recent_assets()
-
-
-func _build_snap_options(editor: Node) -> void:
-	if editor.has_node("%FillSnap1Btn"):
-		_snap_buttons = {1.0: editor.get_node("%FillSnap1Btn"), 0.5: editor.get_node("%FillSnapHalfBtn"), 0.25: editor.get_node("%FillSnapQuarterBtn")}
-		for step in _snap_buttons.keys():
-			(_snap_buttons[step] as Button).pressed.connect(_select_snap_step.bind(float(step)))
 
 
 func _rebuild_asset_buttons() -> void:
@@ -336,9 +330,7 @@ func select_asset(asset_id: StringName) -> void:
 		(_asset_buttons[id] as Button).button_pressed = id == asset_id
 	for id in _recent_buttons.keys():
 		(_recent_buttons[id] as Button).button_pressed = id == asset_id
-	var asset := WorldAssetCatalog.get_asset(asset_id)
-	if asset != null:
-		_select_snap_step(asset.default_snap_step)
+	if WorldAssetCatalog.get_asset(asset_id) != null:
 		add_recent_asset(asset_id)
 	if _controller != null:
 		if _controller.has_method("refresh_ghost"):
@@ -402,16 +394,6 @@ func _rebuild_recent_assets() -> void:
 		button.pressed.connect(_select_asset.bind(asset_id))
 		_recent_container.add_child(button)
 		_recent_buttons[asset_id] = button
-
-
-func _select_snap_step(step: float) -> void:
-	if _controller != null and "current_snap_step" in _controller:
-		_controller.current_snap_step = step
-	for snap_step in _snap_buttons.keys():
-		(_snap_buttons[snap_step] as Button).button_pressed = is_equal_approx(float(snap_step), step)
-	if _controller != null and _controller.has_method("refresh_ghost"):
-		_controller.call("refresh_ghost")
-	snap_step_selected.emit(step)
 
 
 func _get_active_asset_id() -> StringName:

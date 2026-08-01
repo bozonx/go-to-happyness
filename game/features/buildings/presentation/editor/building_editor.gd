@@ -527,7 +527,16 @@ func select_mode(mode: int) -> void:
 	_select_mode(mode)
 
 
+## Кто отвечает на подтверждение. По умолчанию — модальный диалог этой сцены;
+## подменяется тем, кто гоняет редактор без интерфейса (тем же швом, что и
+## `MapEditorContext.confirm_handler`), иначе такой сценарий встаёт на диалоге,
+## который некому нажать.
+var confirm_handler: Callable = Callable()
+
+
 func confirm_action(message: String, title := "Подтверждение") -> bool:
+	if confirm_handler.is_valid():
+		return await confirm_handler.call(message, title)
 	var dialog := ConfirmationDialog.new()
 	dialog.title = title
 	dialog.dialog_text = message

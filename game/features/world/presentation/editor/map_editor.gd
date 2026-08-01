@@ -220,6 +220,7 @@ func _build_services() -> void:
 	_context.viewport = get_viewport()
 	if not _context.status_message_changed.is_connected(_on_status_message_changed):
 		_context.status_message_changed.connect(_on_status_message_changed)
+	_context.confirm_handler = Callable(self, "confirm_action")
 	ramp_preview.configure(document.terrain)
 	if water_highlight != null:
 		water_highlight.configure(document.water, document.terrain)
@@ -806,9 +807,17 @@ func _return_to_menu() -> void:
 func _confirm_discard_changes() -> bool:
 	if document == null or not document.dirty:
 		return true
+	return await confirm_action(
+		"Карта изменена и не сохранена. Продолжить и потерять правки?",
+		"Несохранённые изменения")
+
+
+## Модальное подтверждение для режимов: они спрашивают через `MapEditorContext`,
+## а диалог остаётся здесь, в сцене.
+func confirm_action(message: String, title: String = "Подтверждение") -> bool:
 	var dialog := ConfirmationDialog.new()
-	dialog.title = "Несохранённые изменения"
-	dialog.dialog_text = "Карта изменена и не сохранена. Продолжить и потерять правки?"
+	dialog.title = title
+	dialog.dialog_text = message
 	dialog.ok_button_text = "Продолжить"
 	dialog.cancel_button_text = "Отмена"
 	# The flag lives in an Array because GDScript lambdas capture locals by value:

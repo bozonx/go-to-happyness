@@ -73,3 +73,16 @@ func set_edit_label(label: String) -> void:
 
 func set_status_message(message: String, is_error: bool = false) -> void:
 	status_message_changed.emit(message, is_error)
+
+
+## Подтверждение действия, которое нельзя откатить бесплатно (замена архетипа
+## теряет настроенные свойства). Диалог принадлежит сцене редактора, поэтому
+## контекст держит только колбэк: режим не знает про дерево сцены. Без
+## обработчика действие считается подтверждённым — тесты гоняют режимы без UI.
+var confirm_handler: Callable = Callable()
+
+
+func confirm_action(message: String, title: String = "Подтверждение") -> bool:
+	if not confirm_handler.is_valid():
+		return true
+	return await confirm_handler.call(message, title)
