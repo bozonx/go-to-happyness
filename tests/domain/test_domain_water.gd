@@ -39,6 +39,7 @@ static func run_all() -> void:
 	_test_border_ocean_floods_only_what_touches_the_rim()
 	_test_border_ocean_retracts_when_the_rim_closes()
 	_test_terrain_reflow_updates_and_removes_an_inland_body()
+	_test_terrain_reflow_splits_disconnected_water()
 	_test_border_nothing_never_floods()
 	_test_border_lava_floods_edge_with_lava()
 	_test_access_service_finds_banks_not_water()
@@ -561,6 +562,27 @@ static func _test_terrain_reflow_updates_and_removes_an_inland_body() -> void:
 	assert(terrain.set_height(bank, 0))
 	var removed := service.reflow_bodies_after_terrain([core, bank])
 	assert(not removed.is_empty() and not water.has_body(lake.id), "burying every wet cell removed the lake")
+
+
+static func _test_terrain_reflow_splits_disconnected_water() -> void:
+	var terrain := _terrain()
+	var water := _water_over(terrain)
+	var service := WaterService.new()
+	service.configure(water, terrain)
+	var left := Vector2i(-1, 0)
+	var middle := Vector2i.ZERO
+	var right := Vector2i(1, 0)
+	for cell: Vector2i in [left, middle, right]:
+		assert(terrain.set_height(cell, -1))
+	var lake := service.create_body(WaterBody.Type.LAKE, 0)
+	assert(lake != null and service.flood(middle, lake.id, 0))
+
+	assert(terrain.set_height(middle, 0))
+	var edits := service.reflow_bodies_after_terrain([middle])
+	assert(edits.size() == 2, "one reflow kept the original lake and created one detached body")
+	assert(water.body_count() == 2, "a dry ridge split the lake into two bodies")
+	assert(water.is_wet(terrain, left) and water.is_wet(terrain, right), "both detached parts remain water")
+	assert(water.body_id_at(left) != water.body_id_at(right), "the detached parts have distinct ids")
 
 
 static func _test_border_nothing_never_floods() -> void:

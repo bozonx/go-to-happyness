@@ -83,6 +83,14 @@ static func resurface(grid: WaterGrid, terrain: TerrainGrid, body: WaterBody, ce
 	var next_cells: Dictionary = {}
 	for cell: Vector2i in cells_at_level:
 		next_cells[cell] = true
+	# Current belongs to a water footprint just as much as ice does. Once a bank
+	# retracts or a body splits, flow entries outside its remaining cells must not
+	# linger in the registry and unexpectedly return on a later re-flood.
+	var next_flow: Dictionary = {}
+	for cell: Vector2i in next_cells:
+		if edit._new_body.flow.has(cell):
+			next_flow[cell] = edit._new_body.flow[cell]
+	edit._new_body.flow = next_flow
 	var affected: Dictionary = {}
 	for cell: Vector2i in grid.cells_of_body(body.id):
 		affected[cell] = true

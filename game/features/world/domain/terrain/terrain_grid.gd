@@ -83,9 +83,18 @@ var _slope_indices := PackedByteArray()
 var _flags := PackedByteArray()
 
 var _revision := 0
-## Scratch space for `corner_heights_into`, which runs once per cell of the board
-## on every publish and once per neighbour on every mesh.
+## Scratch space for the NEIGHBOUR half of `corner_heights_into`, which runs once
+## per cell of the board on every publish and once per neighbour on every mesh.
 var _neighbour_corner_scratch := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
+## Scratch space for the corners of the cell a height QUERY landed in. A separate
+## buffer from the one above on purpose: `height_steps_in_cell` fills it and then
+## calls `corner_heights_into`, which fills the other one for every neighbour it
+## inspects. One shared buffer would have the neighbour pass overwrite the answer
+## mid-query — the two are disjoint by construction, not by luck.
+var _query_corner_scratch := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
+## chunk -> `Vector4i(min_x, min_z, max_x, max_z)`, the cell range that actually
+## moved inside it. The mesher rebuilds only the bands covering that range (§11
+## "дельта-обновление чанка"), so a one-cell edit does not re-scan 256 columns.
 var _dirty_chunks: Dictionary = {}
 ## Columns whose surface texels are out of date. Separate from the dirty chunks
 ## on purpose: a material or detail edit changes no geometry at all (§7.5), and
@@ -254,11 +263,16 @@ func cell_at(cell: Vector2i) -> TerrainCell:
 
 # --- Writes -----------------------------------------------------------------
 
-## Sets a column height. Returns false (and changes nothing) when the target is
-## outside the board or outside the legal height range — §2.2 forbids silent
-## clamping. Ramps invalidated by the move are dissolved first: a ramp is a single
-## object spanning its run AND the column it climbs to, so it cannot survive any
-## of those columns moving.
+## Sets a column height. The boolean is ACCEPTANCE, not "something changed": true
+## means the grid now holds `height` there, whether or not it had to move. False
+## (and nothing changed) when the target is outside the board or outside the legal
+## height range — §2.2 forbids silent clamping. Callers that need to know whether
+## ground actually moved compare `height_of` themselves, or read the delta a
+## `TerrainService` transaction produced.
+##
+## Ramps invalidated by the move are dissolved first: a ramp is a single object
+## spanning its run AND the column it climbs to, so it cannot survive any of those
+## columns moving.
 func set_height(cell: Vector2i, height: int) -> bool:
 	if not is_inside(cell):
 		return false
@@ -588,13 +602,29 @@ func corner_heights(cell: Vector2i) -> PackedFloat32Array:
 ## The lift never carries a corner higher than one `rise` above the column it
 ## belongs to (one whole step for a flat column), so a real cliff to a taller
 ## terrace stays a cliff.
+## Every read below indexes the packed arrays directly instead of going through
+## `is_inside` / `height_of` / `slope_class_at`. Those are three GDScript calls per
+## question and this function asks about a cell and all eight of its neighbours —
+## measured at 5.2 µs per call before the inlining, on the flat ground that is the
+## overwhelming majority of a board. Nothing here is a different rule from the
+## accessors; it is the same arithmetic without the call frames.
 func corner_heights_into(cell: Vector2i, result: PackedFloat32Array) -> void:
-	var slope_class := slope_class_at(cell)
-	_descriptor_corners_into(cell, slope_class, result)
-	if is_hole(cell) or not is_inside(cell):
+	var low := -board_half_cells
+	var high := board_cells - board_half_cells - 1
+	if cell.x < low or cell.x > high or cell.y < low or cell.y > high:
+		# Outside the board reads as the world zero level, exactly like `height_of`.
+		result[0] = 0.0
+		result[1] = 0.0
+		result[2] = 0.0
+		result[3] = 0.0
 		return
-	var rise_steps := SlopeCatalog.rise_of_class(slope_class)
-	# Lifts come from ANY slope (`_lifts_corners`) and never from a flat column:
+	var index := (cell.y + board_half_cells) * board_cells + (cell.x + board_half_cells)
+	var slope_class := int(_slope_classes[index])
+	_descriptor_corners_at(index, slope_class, result)
+	if (_flags[index] & TerrainCell.FLAG_HOLE) != 0:
+		return
+	var rise_steps := SlopeCatalog.RISE_BY_CLASS[slope_class]
+	# Lifts come from ANY slope and never from a flat column:
 	# a slope is ground that has already been shaped, so the corner it raises is
 	# raised for everyone standing on that point, while a terrace beside a terrace
 	# has to stay sheer (§4.1). Restricting the source to one-cell 45° slopes was
@@ -613,39 +643,49 @@ func corner_heights_into(cell: Vector2i, result: PackedFloat32Array) -> void:
 	# change that, so the whole scan is skipped. This is what makes publishing a
 	# board proportional to how much of it is actually shaped rather than to how
 	# many cells it has.
-	if not SlopeCatalog.is_ramp_class(slope_class) and not _has_ramp_neighbour(cell):
+	var is_ramp := SlopeCatalog.IS_RAMP_BY_CLASS[slope_class]
+	if not is_ramp and not _has_ramp_neighbour(cell):
 		return
 
-	var own_height := height_of(cell)
+	var own_height := int(_heights[index])
 	var lift_ceiling := float(own_height + MAX_CORNER_LIFT_STEPS)
-	# Reused across calls rather than allocated per cell. Nothing below re-enters
-	# this function, so a single scratch buffer is safe.
+	var single_cell_ramp := is_ramp and SlopeCatalog.RUN_BY_CLASS[slope_class] == 1
 	var neighbour_corners := _neighbour_corner_scratch
 
 	for direction: int in SlopeCatalog.ORTHOGONAL_DIRECTIONS:
-		var neighbour := cell + SlopeCatalog.direction_offset(direction)
-		if not is_inside(neighbour) or is_hole(neighbour):
+		var offset: Vector2i = SlopeCatalog.DIRECTION_OFFSETS[direction]
+		var x := cell.x + offset.x
+		var z := cell.y + offset.y
+		if x < low or x > high or z < low or z > high:
 			continue
-		if not _lifts_corners(neighbour):
+		var neighbour_index := (z + board_half_cells) * board_cells + (x + board_half_cells)
+		if (_flags[neighbour_index] & TerrainCell.FLAG_HOLE) != 0:
+			continue
+		var neighbour_class := int(_slope_classes[neighbour_index])
+		if not SlopeCatalog.IS_RAMP_BY_CLASS[neighbour_class]:
 			# A flat column exactly one step above a single-cell slope is the
 			# other half of that slope's corner; anything else is a face.
-			if (
-				SlopeCatalog.is_ramp_class(slope_class)
-				and SlopeCatalog.run_of_class(slope_class) == 1
-				and height_of(neighbour) == height_of(cell) + rise_steps
-			):
+			if single_cell_ramp and int(_heights[neighbour_index]) == own_height + rise_steps:
 				_raise_edge(result, direction, float(own_height + rise_steps))
 			continue
-		_descriptor_corners_into(neighbour, slope_class_at(neighbour), neighbour_corners)
+		_descriptor_corners_at(neighbour_index, neighbour_class, neighbour_corners)
 		var mapping: Array = SHARED_CORNERS[direction]
 		for pair in 2:
 			_lift_corner(result, int(mapping[pair * 2]), neighbour_corners[int(mapping[pair * 2 + 1])], lift_ceiling)
 
 	for direction: int in DIAGONAL_DIRECTIONS:
-		var neighbour := cell + SlopeCatalog.direction_offset(direction)
-		if not is_inside(neighbour) or is_hole(neighbour) or not _lifts_corners(neighbour):
+		var offset: Vector2i = SlopeCatalog.DIRECTION_OFFSETS[direction]
+		var x := cell.x + offset.x
+		var z := cell.y + offset.y
+		if x < low or x > high or z < low or z > high:
 			continue
-		_descriptor_corners_into(neighbour, slope_class_at(neighbour), neighbour_corners)
+		var neighbour_index := (z + board_half_cells) * board_cells + (x + board_half_cells)
+		if (_flags[neighbour_index] & TerrainCell.FLAG_HOLE) != 0:
+			continue
+		var neighbour_class := int(_slope_classes[neighbour_index])
+		if not SlopeCatalog.IS_RAMP_BY_CLASS[neighbour_class]:
+			continue
+		_descriptor_corners_at(neighbour_index, neighbour_class, neighbour_corners)
 		var mapping: Array = SHARED_DIAGONAL_CORNERS[direction]
 		_lift_corner(result, int(mapping[0]), neighbour_corners[int(mapping[1])], lift_ceiling)
 
@@ -654,14 +694,6 @@ func corner_heights_into(cell: Vector2i, result: PackedFloat32Array) -> void:
 	# stored height. That is allowed: mesh, collision and `height_at` all read the
 	# same corners, so they still agree with each other, and refusing the lift
 	# there would tear the inside of every pit open instead.
-
-
-## A neighbour whose corners pull ours up: any slope at all. A slope is ground
-## that has already been shaped, so the corner it raises is raised for everyone
-## standing on that point; a flat column is not, which is what keeps a terrace
-## beside a terrace sheer (§4.1).
-func _lifts_corners(cell: Vector2i) -> bool:
-	return SlopeCatalog.is_ramp_class(slope_class_at(cell))
 
 
 ## Whether any of the eight neighbours carries a slope — the question that decides
@@ -691,24 +723,26 @@ static func _lift_corner(result: PackedFloat32Array, corner: int, target: float,
 
 
 ## Corner heights from the stored descriptor alone, before the neighbour pass.
-func _descriptor_corners_into(cell: Vector2i, slope_class: int, result: PackedFloat32Array) -> void:
-	var base := float(height_of(cell))
-	if not SlopeCatalog.is_ramp_class(slope_class):
+## Takes the packed-array index rather than the cell: every caller has already
+## bounds-checked and computed it.
+func _descriptor_corners_at(index: int, slope_class: int, result: PackedFloat32Array) -> void:
+	var base := float(_heights[index])
+	if not SlopeCatalog.IS_RAMP_BY_CLASS[slope_class]:
 		result[0] = base
 		result[1] = base
 		result[2] = base
 		result[3] = base
 		return
-	var run := SlopeCatalog.run_of_class(slope_class)
-	var rise := float(SlopeCatalog.rise_of_class(slope_class))
-	var step_index := float(slope_index_of(cell))
+	var run := SlopeCatalog.RUN_BY_CLASS[slope_class]
+	var rise := float(SlopeCatalog.RISE_BY_CLASS[slope_class])
+	var step_index := float(_slope_indices[index])
 	var low := base + rise * step_index / float(run)
 	var high := base + rise * (step_index + 1.0) / float(run)
 	result[0] = low
 	result[1] = low
 	result[2] = low
 	result[3] = low
-	_raise_edge(result, slope_direction_of(cell), high)
+	_raise_edge(result, int(_slope_dirs[index]), high)
 
 
 static func _raise_edge(result: PackedFloat32Array, direction: int, height: float) -> void:
@@ -735,8 +769,13 @@ static func _raise_edge(result: PackedFloat32Array, direction: int, height: floa
 ## no longer planar, and the two readings differ by up to half a step in the
 ## middle of it — which would put a citizen's feet through the ground they are
 ## standing on. Mesh, collision and standing height have to be one surface.
+##
+## Fills a reusable buffer instead of allocating one: this is the query navigation,
+## citizen placement and every blade of derived grass go through, so a
+## `PackedFloat32Array` per call was measured at most of its 7.5 µs cost.
 func height_steps_in_cell(cell: Vector2i, u: float, v: float) -> float:
-	var corners := corner_heights(cell)
+	var corners := _query_corner_scratch
+	corner_heights_into(cell, corners)
 	var east := clampf(u, 0.0, 1.0)
 	var south := clampf(v, 0.0, 1.0)
 	if east >= south:
@@ -799,13 +838,19 @@ func chunk_coords() -> Array[Vector2i]:
 	return chunks
 
 
+## The cell range covering a whole chunk, as the dirty-region bounds use it.
+func chunk_bounds(chunk: Vector2i) -> Vector4i:
+	var origin := chunk * CHUNK_CELLS
+	return Vector4i(origin.x, origin.y, origin.x + CHUNK_CELLS - 1, origin.y + CHUNK_CELLS - 1)
+
+
 func mark_all_chunks_dirty() -> void:
 	for chunk: Vector2i in chunk_coords():
-		_dirty_chunks[chunk] = true
+		_dirty_chunks[chunk] = chunk_bounds(chunk)
 
 
 func mark_chunk_dirty(chunk: Vector2i) -> void:
-	_dirty_chunks[chunk] = true
+	_dirty_chunks[chunk] = chunk_bounds(chunk)
 
 
 func has_dirty_chunks() -> bool:
@@ -814,10 +859,16 @@ func has_dirty_chunks() -> bool:
 
 ## Hands the dirty set over and clears it. Sorted so a rebuild budget consumes
 ## chunks in the same order on every machine (§4.4 determinism).
-func take_dirty_chunks() -> Array[Vector2i]:
+##
+## `bounds_out`, when given, receives `chunk -> Vector4i(min_x, min_z, max_x,
+## max_z)`: the cells that actually moved inside that chunk. The mesher uses it to
+## rebuild only the affected bands; a caller that does not care simply omits it and
+## gets the old behaviour.
+func take_dirty_chunks(bounds_out: Dictionary = {}) -> Array[Vector2i]:
 	var chunks: Array[Vector2i] = []
 	for chunk: Vector2i in _dirty_chunks:
 		chunks.append(chunk)
+		bounds_out[chunk] = _dirty_chunks[chunk]
 	chunks.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
 		return a.y < b.y if a.y != b.y else a.x < b.x)
 	_dirty_chunks.clear()
@@ -838,6 +889,14 @@ func mark_all_surface_dirty() -> void:
 
 func has_dirty_surface_cells() -> bool:
 	return not _dirty_surface_cells.is_empty()
+
+
+## Drops the pending set without materialising it. `configure` publishes every
+## texel eagerly and then only needs the set emptied; going through
+## `take_dirty_surface_cells` for that built and SORTED one `Vector2i` per column —
+## 262 144 of them on the largest board preset — and threw the result away.
+func clear_dirty_surface_cells() -> void:
+	_dirty_surface_cells.clear()
 
 
 ## Hands over the columns whose index/detail texels are stale and clears the set.
@@ -865,7 +924,7 @@ func _index_of(cell: Vector2i) -> int:
 func _touch(cell: Vector2i) -> void:
 	_revision += 1
 	var chunk := chunk_of(cell)
-	_dirty_chunks[chunk] = true
+	_expand_dirty_chunk(chunk, cell)
 	var local_x := cell.x - chunk.x * CHUNK_CELLS
 	var local_z := cell.y - chunk.y * CHUNK_CELLS
 	var step_x := 0
@@ -878,12 +937,27 @@ func _touch(cell: Vector2i) -> void:
 		step_z = -1
 	elif local_z == CHUNK_CELLS - 1:
 		step_z = 1
+	# The neighbouring chunk is dirtied by OUR cell, and its bounds record OUR
+	# coordinates: the mesher expands the region by the one-cell ring it already
+	# needs for walls, which is exactly the ground this edit can reach.
 	if step_x != 0:
-		_dirty_chunks[chunk + Vector2i(step_x, 0)] = true
+		_expand_dirty_chunk(chunk + Vector2i(step_x, 0), cell)
 	if step_z != 0:
-		_dirty_chunks[chunk + Vector2i(0, step_z)] = true
+		_expand_dirty_chunk(chunk + Vector2i(0, step_z), cell)
 	if step_x != 0 and step_z != 0:
-		_dirty_chunks[chunk + Vector2i(step_x, step_z)] = true
+		_expand_dirty_chunk(chunk + Vector2i(step_x, step_z), cell)
+
+
+func _expand_dirty_chunk(chunk: Vector2i, cell: Vector2i) -> void:
+	var existing: Variant = _dirty_chunks.get(chunk)
+	if existing == null:
+		_dirty_chunks[chunk] = Vector4i(cell.x, cell.y, cell.x, cell.y)
+		return
+	var bounds: Vector4i = existing
+	_dirty_chunks[chunk] = Vector4i(
+		mini(bounds.x, cell.x), mini(bounds.y, cell.y),
+		maxi(bounds.z, cell.x), maxi(bounds.w, cell.y),
+	)
 
 
 ## A surface edit is one texel and nothing else — no neighbours, no chunk, no

@@ -193,12 +193,19 @@ func reflow_bodies_after_terrain(changed_cells: Array[Vector2i]) -> Array[WaterD
 		var body := grid.body(body_id)
 		if body == null:
 			continue
-		var footprint := _wet_footprint_after_terrain(body_id, body.surface_height)
-		if footprint.is_empty():
+		var components := _wet_components_after_terrain(body_id, body.surface_height)
+		if components.is_empty():
 			if remove_body(body_id):
 				edits.append(_last_delta)
-		elif _resurface_body(body_id, footprint, body.surface_height):
+			continue
+		# Keep the first component under its old id and give every detached part a
+		# new body. Component order is spatially deterministic, so save output and
+		# undo do not depend on dictionary iteration.
+		if _resurface_body(body_id, components[0], body.surface_height):
 			edits.append(_last_delta)
+		for index in range(1, components.size()):
+			if _create_split_body(body, components[index]):
+				edits.append(_last_delta)
 	return edits
 
 
@@ -207,20 +214,41 @@ func _collect_body_candidate(cell: Vector2i, candidates: Dictionary) -> void:
 		candidates[grid.body_id_at(cell)] = true
 
 
-func _wet_footprint_after_terrain(body_id: int, level: int) -> Array[Vector2i]:
-	var footprint: Dictionary = {}
+func _wet_components_after_terrain(body_id: int, level: int) -> Array[Array]:
+	var components: Array[Array] = []
+	var covered: Dictionary = {}
 	for cell: Vector2i in grid.cells_of_body(body_id):
-		if not grid.is_wet(terrain, cell) or footprint.has(cell):
+		if not grid.is_wet(terrain, cell) or covered.has(cell):
 			continue
-		for flooded: Vector2i in grid.flood_cells(terrain, cell, level, body_id):
-			footprint[flooded] = true
-	var ordered: Array[Vector2i] = []
-	for cell: Vector2i in footprint:
-		ordered.append(cell)
-	ordered.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		var component: Array[Vector2i] = grid.flood_cells(terrain, cell, level, body_id)
+		for flooded: Vector2i in component:
+			covered[flooded] = true
+		components.append(component)
+	components.sort_custom(func(first: Array, second: Array) -> bool:
+		var a: Vector2i = first[0]
+		var b: Vector2i = second[0]
 		return a.y < b.y if a.y != b.y else a.x < b.x
 	)
-	return ordered
+	return components
+
+
+func _create_split_body(source: WaterBody, cells: Array) -> bool:
+	var next_id := grid.next_free_body_id()
+	if next_id == WaterBody.NO_BODY:
+		return _reject(REASON_NOTHING_TO_DO)
+	var fragment := source.duplicate_body()
+	fragment.id = next_id
+	fragment.name = "%s (%d)" % [source.name, next_id]
+	fragment.flow = _flow_within(fragment.flow, cells)
+	return _commit_registry_edit(WaterBodyEdit.creation_with_cells(grid, terrain, fragment, cells))
+
+
+func _flow_within(source: Dictionary, cells: Array) -> Dictionary:
+	var kept: Dictionary = {}
+	for cell: Vector2i in cells:
+		if source.has(cell):
+			kept[cell] = source[cell]
+	return kept
 
 
 ## Changes a body's type in place: the id and cells stay, the metadata changes.
