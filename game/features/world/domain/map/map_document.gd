@@ -38,6 +38,12 @@ var terrain: TerrainGrid = TerrainGrid.new()
 ## an author paints — a map with no water carries no `water.bin` at all.
 var water: WaterGrid = WaterGrid.new()
 
+## Built coverage over the same board (§5.2.1): paths, pavements, roads. A layer
+## of its own and not a material index, because erasing it has to reveal the
+## ground underneath and a trail under it has to survive. Empty until an author
+## paints — a map with no paths carries no `surface.bin` at all.
+var coverage: CoverageLayer = CoverageLayer.new()
+
 ## The authored active-zone primitives. Unlike scenario rules they are understood
 ## by the editor and have one typed owner, `MapZoneLayer`.
 var zones: MapZoneLayer = MapZoneLayer.new()
@@ -78,6 +84,7 @@ static func create(id: StringName, name: String, board_cells := MapMeta.DEFAULT_
 func configure_terrain() -> void:
 	terrain.configure(meta.cell_size, meta.board_cells)
 	water.configure(meta.cell_size, meta.board_cells)
+	coverage.configure(meta.cell_size, meta.board_cells)
 
 
 func board_cells() -> int:

@@ -11,6 +11,8 @@ const BuildingMaterialCatalogScript = preload("res://game/features/buildings/dom
 
 var _mesh_cache: Dictionary = {}
 var _material_cache: Dictionary = {}
+var _texture_library: BlockTextureLibrary = null
+var _textures_enabled: bool = false
 
 
 ## World offset from the cell's minimum corner to the mesh origin.
@@ -98,15 +100,45 @@ func mesh_for(block_id: StringName, variant: StringName = &"") -> Mesh:
 
 
 func material_for(material_id: StringName) -> StandardMaterial3D:
-	if _material_cache.has(material_id):
-		return _material_cache[material_id]
+	var cache_key := _material_cache_key(material_id)
+	if _material_cache.has(cache_key):
+		return _material_cache[cache_key]
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = BuildingMaterialCatalogScript.color(material_id)
 	mat.roughness = 0.85
 	mat.uv1_triplanar = true
 	mat.uv1_world_triplanar = true
-	_material_cache[material_id] = mat
+	if _textures_enabled and _get_texture_library() != null:
+		var texture := _get_texture_library().texture_for(material_id)
+		if texture != null:
+			mat.albedo_texture = texture
+			mat.albedo_color = Color.WHITE
+		else:
+			mat.albedo_color = BuildingMaterialCatalogScript.color(material_id)
+	else:
+		mat.albedo_color = BuildingMaterialCatalogScript.color(material_id)
+	_material_cache[cache_key] = mat
 	return mat
+
+
+func set_textures_enabled(enabled: bool) -> void:
+	if _textures_enabled == enabled:
+		return
+	_textures_enabled = enabled
+	_material_cache.clear()
+
+
+func textures_enabled() -> bool:
+	return _textures_enabled
+
+
+func _get_texture_library() -> BlockTextureLibrary:
+	if _texture_library == null:
+		_texture_library = BlockTextureLibrary.new()
+	return _texture_library
+
+
+func _material_cache_key(material_id: StringName) -> String:
+	return "%s|%s" % [material_id, "tex" if _textures_enabled else "flat"]
 
 
 ## Semi-transparent variant used for the placement ghost cursor.

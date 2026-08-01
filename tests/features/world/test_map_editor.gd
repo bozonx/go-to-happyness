@@ -61,6 +61,38 @@ func _test_scene_came_up(editor: Node) -> void:
 	print("  scene up: board %d, camera at %.1f" % [editor.document.board_cells(), editor.camera.distance])
 
 
+## The coverage half of the same palette. Selecting a surface arms the coverage
+## brush, a stroke lands in the coverage layer and not in the ground, and undo
+## takes it back off — all without leaving the Surface mode.
+func _test_coverage_palette(editor: Node) -> void:
+	var mode: SurfaceModeController = editor._active
+	mode.select_palette_entry(SurfaceModeController.ACCORDION_COVERAGE)
+	var entries: Array = mode.palette_entries()
+	# Three headers, the eraser, and one entry per catalog surface.
+	assert(entries.size() == 3 + 1 + CoverageCatalog.indices().size(), "coverage group lists the catalog")
+
+	var stone_entry: StringName = StringName(SurfaceModeController.COVERAGE_ENTRY_PREFIX + String(CoverageCatalog.STONE))
+	mode.select_palette_entry(stone_entry)
+	assert(mode.selected_palette_entry() == stone_entry, "the coverage entry is selected")
+	assert(editor._coverage_brush.coverage_index == CoverageCatalog.index_of_id(CoverageCatalog.STONE))
+
+	var material_before: int = editor.document.terrain.material_index_at(Vector2i.ZERO)
+	var undo_before: int = editor.history.undo_depth()
+	assert(editor._coverage_service.paint([Vector2i.ZERO] as Array[Vector2i], editor._coverage_brush.coverage_index))
+	assert(editor.document.coverage.index_at(Vector2i.ZERO) != CoverageLayer.NO_COVERAGE, "the stroke landed in the coverage layer")
+	assert(editor.document.terrain.material_index_at(Vector2i.ZERO) == material_before, "and not in the ground")
+	assert(editor.history.undo_depth() == undo_before + 1, "one stroke, one entry on the shared stack")
+	assert(editor.document.dirty)
+	editor._undo()
+	assert(editor.document.coverage.index_at(Vector2i.ZERO) == CoverageLayer.NO_COVERAGE, "undo removes the coverage")
+
+	# Picking a material disarms the coverage brush, so what the next click does is
+	# never a question of which panel was touched last.
+	mode.select_palette_entry(TerrainMaterialCatalog.GRASS)
+	assert(mode.selected_palette_entry() == TerrainMaterialCatalog.GRASS)
+	print("  coverage palette ok")
+
+
 func _test_validation(editor: Node) -> void:
 	var result: Dictionary = editor._validate_map()
 	assert((result["errors"] as Array).is_empty(), "a blank sandbox map is valid for the generic test run")
@@ -69,32 +101,35 @@ func _test_validation(editor: Node) -> void:
 	print("  validation ok")
 
 
-## The mode strip is data. Five modes work, the rest are visibly present and
-## disabled, which is what tells the author the editor is unfinished rather than
-## broken.
+## The mode strip is data. Coverage is deliberately not one of its entries: it is
+## the second half of the surface palette, because a mode is a set of tools and
+## not the name of a storage layer (map_editor.md §5.2).
 func _test_mode_switching(editor: Node) -> void:
-	assert(editor._modes.size() == 5, "relief, surface, water, zones and fill")
+	assert(editor._modes.size() == 6, "relief, surface, water, zones, fill and scenario")
+	assert(editor.PLANNED_MODES.is_empty(), "no mode is a placeholder any more")
 	assert(editor._active.id == &"terrain", "opens on relief")
 
 	editor._select_mode(&"surface")
 	assert(editor._active.id == &"surface", "switched to surface")
 	assert(not editor._active.palette_entries().is_empty(), "surface palette is non-empty")
 	var initial_entries: Array = editor._active.palette_entries()
-	# Earth is open by default: catalog earth materials + 2 header buttons
-	assert(initial_entries.size() == (TerrainMaterialCatalog.count() - SurfaceModeController.EXOPLANET_MATERIALS.size()) + 2, "initial palette contains earth materials and group headers")
+	# Earth is open by default: catalog earth materials + 3 group headers
+	# (Земля, Экзопланеты, Покрытие).
+	assert(initial_entries.size() == (TerrainMaterialCatalog.count() - SurfaceModeController.EXOPLANET_MATERIALS.size()) + 3, "initial palette contains earth materials and group headers")
 	# Click Earth header to collapse it
 	editor._active.select_palette_entry(&"accordion_earth")
-	assert(editor._active.palette_entries().size() == 2, "collapsing earth leaves only 2 group headers")
+	assert(editor._active.palette_entries().size() == 3, "collapsing earth leaves only the group headers")
 	# Click Exoplanets header to expand it
 	editor._active.select_palette_entry(&"accordion_exoplanet")
-	assert(editor._active.palette_entries().size() == SurfaceModeController.EXOPLANET_MATERIALS.size() + 2, "expanding exoplanets shows exoplanet materials")
+	assert(editor._active.palette_entries().size() == SurfaceModeController.EXOPLANET_MATERIALS.size() + 3, "expanding exoplanets shows exoplanet materials")
 	# Select an exoplanet material
 	editor._active.select_palette_entry(TerrainMaterialCatalog.LUNAR_REGOLITH)
 	assert(editor._active.selected_palette_entry() == TerrainMaterialCatalog.LUNAR_REGOLITH, "selected lunar regolith")
 	# Select an earth material - automatically switches accordion back to earth
 	editor._active.select_palette_entry(TerrainMaterialCatalog.GRASS)
 	assert(editor._active.selected_palette_entry() == TerrainMaterialCatalog.GRASS, "selected grass")
-	assert(editor._active.palette_entries().size() == (TerrainMaterialCatalog.count() - SurfaceModeController.EXOPLANET_MATERIALS.size()) + 2, "accordion switched back to earth")
+	assert(editor._active.palette_entries().size() == (TerrainMaterialCatalog.count() - SurfaceModeController.EXOPLANET_MATERIALS.size()) + 3, "accordion switched back to earth")
+	_test_coverage_palette(editor)
 
 	editor._select_mode(&"water")
 	assert(editor._active.id == &"water", "switched to water")

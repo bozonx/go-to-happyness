@@ -23,6 +23,13 @@ uniform sampler2D detail_map : filter_nearest, repeat_disable;
 // Stored material+variant -> packed Texture2DArray layer.
 uniform sampler2D layer_lookup_map : filter_nearest, repeat_disable;
 uniform sampler2D simple_layer_lookup_map : filter_nearest, repeat_disable;
+// Built coverage over the ground (map_editor.md §5.2.1): R is the catalog index,
+// G is the coverage's own wear. Indices again, therefore nearest.
+uniform sampler2D coverage_map : filter_nearest, repeat_disable;
+// One texel per catalog index: RGB the surface colour, A how completely it hides
+// the ground. A separate row, so adding a surface changes its LENGTH and nothing else.
+uniform sampler2D coverage_palette : filter_nearest, repeat_disable;
+uniform float coverage_capacity = 8.0;
 
 uniform float board_cells = 96.0;
 uniform float cell_size = 1.0;
@@ -125,6 +132,7 @@ void fragment() {
 	vec4 samples[4];
 	vec3 normal_samples[4];
 	vec4 details[4];
+	vec4 coverages[4];
 	float weights[4];
 	float heights[4];
 	float highest = -1.0;
@@ -147,9 +155,20 @@ void fragment() {
 		vec4 texel = texture(surface_textures, vec3(tile_uv, layer));
 		float bilinear = mix(1.0 - f.x, f.x, offset.x) * mix(1.0 - f.y, f.y, offset.y);
 
+		// The coverage of the same column, resolved to a colour here so the tap
+		// blends with its neighbours by the same weights the ground does. A cell
+		// with no coverage contributes alpha 0 and changes nothing.
+		vec2 coverage_texel = texture(coverage_map, uv).rg;
+		float coverage_index = floor(coverage_texel.r * 255.0 + 0.5);
+		vec4 coverage_entry = texture(coverage_palette, vec2((coverage_index + 0.5) / coverage_capacity, 0.5));
+		coverage_entry.a *= step(0.5, coverage_index);
+		// Coverage wears the same way ground does: a rutted road shows its soil.
+		coverage_entry.rgb = mix(coverage_entry.rgb, wear_tint, coverage_texel.g * 0.45);
+
 		samples[i] = texel;
 		normal_samples[i] = texture(surface_normals, vec3(tile_uv, layer)).rgb;
 		details[i] = detail;
+		coverages[i] = coverage_entry;
 		heights[i] = texel.a;
 		weights[i] = bilinear;
 		highest = max(highest, texel.a + bilinear);
@@ -160,17 +179,23 @@ void fragment() {
 	vec3 albedo = vec3(0.0);
 	vec3 normal_map = vec3(0.0);
 	vec3 detail_sum = vec3(0.0);
+	vec3 coverage_colour = vec3(0.0);
+	float coverage_amount = 0.0;
 	float total = 0.0;
 	for (int i = 0; i < 4; i++) {
 		float weight = max(heights[i] + weights[i] - highest + blend_sharpness, 0.0);
 		albedo += samples[i].rgb * weight;
 		normal_map += normal_samples[i] * weight;
 		detail_sum += details[i].gba * weight;
+		coverage_colour += coverages[i].rgb * coverages[i].a * weight;
+		coverage_amount += coverages[i].a * weight;
 		total += weight;
 	}
 	albedo /= max(total, 0.0001);
 	normal_map = normalize(normal_map / max(total, 0.0001) * 2.0 - 1.0);
 	detail_sum /= max(total, 0.0001);
+	coverage_colour /= max(coverage_amount, 0.0001);
+	coverage_amount /= max(total, 0.0001);
 
 	if (render_mode_idx > 2.5) {
 		// Mode 3: Simple - simplified shader textures without normal map noise
@@ -184,6 +209,10 @@ void fragment() {
 	// Wear is the ground being rubbed bare: less colour, more soil. Snow lies on
 	// top of whatever that ended up being.
 	albedo = mix(albedo, wear_tint, wear * 0.45);
+	// Built coverage lies OVER the ground and is a surface in its own right, so it
+	// replaces what is under it instead of tinting it — the same rule routing
+	// follows when it prices a paved cell without charging the mud beneath.
+	albedo = mix(albedo, coverage_colour, coverage_amount);
 	albedo = mix(albedo, snow_colour, smoothstep(0.0, 0.7, snow));
 	// Large-scale colour drift breaks the remaining repetition without changing
 	// material identity or adding another texture lookup.

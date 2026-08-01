@@ -180,8 +180,10 @@ func _setup_ai_and_navigation() -> void:
 		game.citizen_ai.name = "CitizenAI"
 		game.add_child(game.citizen_ai)
 	game.nav_grid = game.world_session.nav_grid
-	game.road_network_service = RoadNetworkService.new()
-	game.road_network_service.configure(game.nav_grid)
+	# Adopted, not created: the world session already seeded it from the map's
+	# coverage layer, and a second service would be a second write-owner of road
+	# weights in the same grid (map_editor.md §5.2.3).
+	game.road_network_service = game.world_session.road_network
 	game.navigation_obstacle_publisher = NavigationObstaclePublisher.new()
 	game.navigation_obstacle_publisher.configure(game.nav_grid)
 	game.trail_field = TrailFieldService.new()

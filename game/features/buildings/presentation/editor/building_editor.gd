@@ -702,6 +702,12 @@ func _on_layer_up_pressed() -> void:
 	_set_layer(active_layer + 1)
 
 
+func _on_textures_toggled(enabled: bool) -> void:
+	mesh_library.set_textures_enabled(enabled)
+	frame_mode.refresh_all_block_materials()
+	_update_status("Текстуры блоков: %s" % ("вкл" if enabled else "выкл"))
+
+
 func _on_eyedropper_pressed() -> void:
 	_update_cursor()
 	match current_mode:

@@ -681,6 +681,17 @@ func rebuild_all_block_nodes() -> void:
 	_update_count()
 
 
+## Re-assigns `material_override` on every spawned block node without touching
+## geometry. Called when the texture toggle flips — the mesh cache stays valid,
+## only the material cache was cleared in `BlockMeshLibrary.set_textures_enabled`.
+func refresh_all_block_materials() -> void:
+	for block in _editor.grid_model.all_blocks():
+		var key := _editor.grid_model.placement_key_for(block)
+		var node: MeshInstance3D = _block_nodes.get(key, null)
+		if node != null:
+			node.material_override = _editor.mesh_library.material_for(block.material_id)
+
+
 # ---------------------------------------------------------------------------
 # Bounds helpers
 # ---------------------------------------------------------------------------

@@ -24,10 +24,11 @@ const PACKAGE_SUFFIX := ".gdmap"
 const MAP_JSON := "map.json"
 const TERRAIN_BIN := "terrain.bin"
 const WATER_BIN := "water.bin"
+const SURFACE_BIN := "surface.bin"
 const PREVIEW_PNG := "preview.png"
-## Reserved names of the layers phase 3 adds. Listed so a save that does not write
-## them still knows not to treat them as strays when cleaning up.
-const KNOWN_FILES: Array[String] = [MAP_JSON, TERRAIN_BIN, WATER_BIN, "surface.bin", PREVIEW_PNG]
+## Every file a package may contain, so a save that omits an untouched layer still
+## knows not to treat the rest as strays when cleaning up.
+const KNOWN_FILES: Array[String] = [MAP_JSON, TERRAIN_BIN, WATER_BIN, SURFACE_BIN, PREVIEW_PNG]
 
 var last_error := ""
 ## Populated by every listing: duplicate ids and unreadable packages, so the editor
@@ -205,6 +206,15 @@ func load_package(path: String) -> MapDocument:
 			push_warning("[map] water.bin не подходит к доске %d: %s" % [
 				document.meta.board_cells, water_path,
 			])
+	# Coverage is independent of both layers above: it neither moves ground nor
+	# references a registry, so it decodes last and a mismatch costs only the paths.
+	var surface_path := path.path_join(SURFACE_BIN)
+	if FileAccess.file_exists(surface_path):
+		var surface_buffer := FileAccess.get_file_as_bytes(surface_path)
+		if not MapCoverageCodec.decode_into(surface_buffer, document.coverage):
+			push_warning("[map] surface.bin не подходит к доске %d: %s" % [
+				document.meta.board_cells, surface_path,
+			])
 	document.dirty = false
 	return document
 
@@ -286,6 +296,13 @@ func save_map_to(document: MapDocument, final_path: String, preview: Image = nul
 			_remove_directory(staging_path)
 			return ""
 
+	# ...and a map with no paths carries no coverage layer.
+	var surface_bytes := MapCoverageCodec.encode(document.coverage)
+	if not surface_bytes.is_empty():
+		if not _write_bytes(staging_path.path_join(SURFACE_BIN), surface_bytes):
+			_remove_directory(staging_path)
+			return ""
+
 	if preview != null:
 		preview.save_png(staging_path.path_join(PREVIEW_PNG))
 
@@ -335,6 +352,19 @@ static func _populate_required_content(document: MapDocument) -> void:
 		if asset != null:
 			var asset_ref := {"kind": "asset", "id": String(asset.id)}
 			found[JSON.stringify(asset_ref)] = asset_ref
+	# Coverage laid on the map is a dependency like any other: the layer stores an
+	# index, and an index means nothing without the entry it points at. Shipped
+	# surfaces are listed too — a reference to `core:` costs one line and makes the
+	# list say what the map actually uses instead of only what it borrows.
+	var used_coverage: Dictionary = {}
+	for cell: Vector2i in document.coverage.covered_cells():
+		used_coverage[document.coverage.index_at(cell)] = true
+	for index: int in used_coverage:
+		var coverage_id := CoverageCatalog.id_of_index(index)
+		if coverage_id == CoverageCatalog.NONE_ID:
+			continue
+		var coverage_ref := {"kind": "coverage", "id": String(coverage_id)}
+		found[JSON.stringify(coverage_ref)] = coverage_ref
 	var refs: Array[Dictionary] = []
 	for key in found:
 		refs.append(found[key])

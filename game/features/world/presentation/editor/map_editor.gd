@@ -20,9 +20,11 @@ const MapEditorModeBarScript = preload("res://game/features/world/presentation/e
 
 ## Phases that own the modes not yet built. They are listed so the author can see
 ## what the editor is going to be, and disabled so they cannot pretend to work.
-const PLANNED_MODES: Array = [
-	{"id": &"roads", "title": "Покрытия", "icon": "🛣️", "reason": "Слой покрытий — фаза 3"},
-]
+##
+## Coverage is deliberately NOT here: it is not a mode. It lives in the Surface
+## mode as the second half of one palette (map_editor.md §5.2), because a mode is
+## a set of tools and not the name of a storage layer.
+const PLANNED_MODES: Array = []
 
 @onready var terrain_world: GridTerrainWorld = $Terrain
 @onready var water_world: WaterWorld = $Water
@@ -71,6 +73,13 @@ var _nav_publisher := TerrainNavigationPublisher.new()
 var _brush := TerrainBrushController.new()
 var _water_service := WaterService.new()
 var _water_brush := WaterBrushController.new()
+var _coverage_service := CoverageService.new()
+var _coverage_brush := CoverageBrushController.new()
+## The map seeds routing with what the author paved, and keeps it seeded as they
+## paint (§5.2.3). Without it a route would ignore a road until the map is saved
+## and launched.
+var _road_network := RoadNetworkService.new()
+var _coverage_publisher := CoverageNavigationPublisher.new()
 var _border_ocean := BorderOceanService.new()
 var _test_run_service := MapTestRunService.new()
 
@@ -155,8 +164,9 @@ func _build_services() -> void:
 	_terrain_service.configure(document.terrain)
 	_wear_service.configure(_terrain_service)
 	_water_service.configure(document.water, document.terrain)
+	_coverage_service.configure(document.coverage, document.terrain, document.water)
 	_border_ocean.configure(_water_service, document.terrain, document.water, document.meta)
-	terrain_world.configure(document.terrain, camera)
+	terrain_world.configure(document.terrain, camera, document.coverage)
 	water_world.configure(document.water, document.terrain, _water_service, _terrain_service)
 	water_world.configure_border(document.meta.border_kind, document.meta.border_level)
 	# Binds navigation to the ground and the water, and keeps it current: every
@@ -166,8 +176,13 @@ func _build_services() -> void:
 		_terrain_service.edit_committed.connect(_on_terrain_committed)
 	if not _water_service.edit_committed.is_connected(_on_water_committed):
 		_water_service.edit_committed.connect(_on_water_committed)
+	if not _coverage_service.edit_committed.is_connected(_on_coverage_committed):
+		_coverage_service.edit_committed.connect(_on_coverage_committed)
 	_brush.configure(document.terrain, _terrain_service, _wear_service)
 	_water_brush.configure(document.terrain, document.water, _water_service, _border_ocean)
+	_coverage_brush.configure(document.terrain, document.coverage, _coverage_service)
+	_road_network.configure(_nav_grid)
+	_coverage_publisher.configure(document.coverage, _road_network, _coverage_service)
 	nav_overlay.configure(_nav_grid)
 	nav_overlay.visible = false
 	terrain_world.rebuild_pending_now()
@@ -183,6 +198,9 @@ func _build_services() -> void:
 	_context.water = document.water
 	_context.water_service = _water_service
 	_context.water_brush = _water_brush
+	_context.coverage = document.coverage
+	_context.coverage_service = _coverage_service
+	_context.coverage_brush = _coverage_brush
 	_context.nav_grid = _nav_grid
 	_context.nav_publisher = _nav_publisher
 	_context.history = history
@@ -292,6 +310,7 @@ func _replace_document(next: MapDocument, path: String) -> void:
 	history.clear()
 	_terrain_service.clear_history()
 	_water_service.clear_history()
+	_coverage_service.clear_history()
 	_build_services()
 	for mode: MapEditorMode in _modes:
 		mode.configure(_context)
@@ -662,6 +681,13 @@ func _on_water_committed(delta: WaterDelta) -> void:
 	if _replaying or _recording_border_fill:
 		return
 	history.push(WaterServiceCommand.of(_water_service, delta, _context.pending_edit_label))
+	document.mark_dirty()
+
+
+func _on_coverage_committed(delta: CoverageDelta) -> void:
+	if _replaying:
+		return
+	history.push(CoverageServiceCommand.of(_coverage_service, delta, _context.pending_edit_label))
 	document.mark_dirty()
 
 

@@ -12,6 +12,12 @@ var map_document: MapDocument
 var world_setup: WorldSetup = null
 var nav_grid := NavGrid.new()
 var terrain_navigation_publisher := TerrainNavigationPublisher.new()
+## Built coverage of the launched map, published into routing (map_editor.md
+## §5.2.3). The session owns the service so the map seeds it exactly once and
+## everything afterwards — construction, demolition, a save being restored — goes
+## through that one write-owner instead of a second copy per game.
+var road_network := RoadNetworkService.new()
+var coverage_navigation_publisher := CoverageNavigationPublisher.new()
 ## Stable map-entity identity and lifecycle are session data, not presentation
 ## metadata. WorldSetup merely projects this instance into the territory.
 var entity_runtime := MapEntityRuntime.new()
@@ -74,6 +80,11 @@ func publish_navigation() -> void:
 		world_setup.water_grid,
 	)
 	world_setup.water_access.configure(world_setup.water_grid, world_setup.terrain_grid, nav_grid)
+	# The map seeds the road network and stops there: no editing service is passed,
+	# because in a session the settlement's construction is what changes coverage.
+	road_network.configure(nav_grid)
+	if map_document != null:
+		coverage_navigation_publisher.configure(map_document.coverage, road_network)
 
 
 ## The world projects some visuals into the game host and territory, outside
@@ -88,6 +99,8 @@ func dispose() -> void:
 	world_setup = null
 	entity_runtime = MapEntityRuntime.new()
 	terrain_navigation_publisher = TerrainNavigationPublisher.new()
+	road_network = RoadNetworkService.new()
+	coverage_navigation_publisher = CoverageNavigationPublisher.new()
 	# The bus holds callables into the scenario runtime; clearing it before the
 	# runtime goes is what keeps a stopped session from receiving one more
 	# presence event from a tracker that has not been torn down yet.

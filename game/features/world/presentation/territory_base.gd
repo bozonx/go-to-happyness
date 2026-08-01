@@ -11,7 +11,9 @@ extends Node3D
 @onready var terrain: GridTerrainWorld = get_node_or_null("Terrain") as GridTerrainWorld
 @onready var water: WaterWorld = get_node_or_null("Water") as WaterWorld
 
-var terrain_grid: TerrainGrid = null
+var terrain_grid: TerrainGrid
+## The built-coverage layer of the launched map, when it has one.
+var coverage_layer: CoverageLayer = null
 ## The board's water (grid_terrain_system.md §9). Adopted from the launched map
 ## for the same reason the relief is: two copies of a lake would disagree the
 ## moment anything edited one of them.
@@ -26,14 +28,23 @@ var water_grid: WaterGrid = null
 ## It is adopted, not copied: the map's relief and the session's ground have to be
 ## the same object, or an edit made in play would be invisible to whatever still
 ## held the other one.
-func configure_terrain(cell_size: float, board_cells: int, camera: Camera3D = null, authored: TerrainGrid = null) -> TerrainGrid:
+func configure_terrain(
+	cell_size: float,
+	board_cells: int,
+	camera: Camera3D = null,
+	authored: TerrainGrid = null,
+	authored_coverage: CoverageLayer = null,
+) -> TerrainGrid:
 	if authored != null and authored.board_cells == board_cells:
 		terrain_grid = authored
 	else:
 		terrain_grid = TerrainGrid.new()
 		terrain_grid.configure(cell_size, board_cells)
+	# Coverage is adopted the same way the relief is: the paths the author laid are
+	# the paths the citizens walk on, and there is no second copy to fall behind.
+	coverage_layer = authored_coverage if authored_coverage != null and authored_coverage.board_cells == board_cells else null
 	if terrain != null:
-		terrain.configure(terrain_grid, camera)
+		terrain.configure(terrain_grid, camera, coverage_layer)
 		terrain.rebuild_pending_now()
 	return terrain_grid
 

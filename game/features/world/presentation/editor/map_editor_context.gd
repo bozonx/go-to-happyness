@@ -22,6 +22,12 @@ var brush: TerrainBrushController = null
 var water: WaterGrid = null
 var water_service: WaterService = null
 var water_brush: WaterBrushController = null
+## The built-coverage layer and its tools (map_editor.md §5.2). They live beside
+## the ground brush rather than in a mode of their own, because coverage is a
+## second layer of the same question and not a second tool set.
+var coverage: CoverageLayer = null
+var coverage_service: CoverageService = null
+var coverage_brush: CoverageBrushController = null
 var nav_grid: NavGrid = null
 var nav_publisher: TerrainNavigationPublisher = null
 

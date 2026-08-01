@@ -1,32 +1,58 @@
 class_name SurfaceModeController
 extends MapEditorMode
 
-## Mode 2, surface (map_editor.md §5.2).
+## Mode 2, surface: ground and coverage (map_editor.md §5.2).
 ##
-## Painting material, variant, wear and snow. None of it moves a vertex: the grid
-## keeps a dirty set for the surface separate from its dirty chunks, so a whole
-## drag of the material brush rebuilds no geometry at all. The pending-chunk
-## counter staying at zero while this mode is used is that promise made visible.
+## Everything a cell is covered with: the natural material of the ground, and the
+## surface built over it — a park path, a pavement, a road, an alien deck.
 ##
-## The palette is the material catalog and nothing else. The catalog has a hard
-## entry rule — a material is something that changes the angle of repose, the cost
-## of walking, the soil dug out of it or the rock it cliffs into; everything else
-## is a variant, decor, a road surface or a state of the detail byte. The editor
-## does not get to widen that rule by offering paints the catalog does not have.
+## **One mode, two layers, and that is deliberate.** The layers are genuinely
+## separate in storage — erasing coverage has to reveal the ground that was always
+## under it — but a mode is a set of tools, not the name of a file. The brush, the
+## overlay, the shape and radius, the undo record and the author's question are the
+## same, so splitting them would put internal storage in the top bar. The rule the
+## water mode already states applies here: the palette shows the author's choice,
+## not the internal registry (§5.3).
+##
+## Which layer a stroke writes into therefore follows from the palette entry, not
+## from a tab: pick a material and the ground brush paints, pick a coverage and
+## the coverage brush lays it.
+##
+## None of it moves a vertex. Both layers keep a dirty set separate from the dirty
+## chunks, so a whole drag rebuilds no geometry at all — the pending-chunk counter
+## staying at zero while this mode is used is that promise made visible.
+##
+## The material half of the palette is the material catalog and nothing else. The
+## catalog has a hard entry rule — a material is something that changes the angle
+## of repose, the cost of walking, the soil dug out of it or the rock it cliffs
+## into; a surface the player builds is never one of them. The editor does not get
+## to widen that rule: a road reaches the map through the coverage group or not at
+## all.
 
 const OPTION_VARIANT_PREFIX := "variant_"
 const OPTION_WEAR := &"wear"
 const OPTION_SNOW := &"snow"
 const OPTION_BRUSH_UP := &"brush_up"
 const OPTION_BRUSH_DOWN := &"brush_down"
+const OPTION_COVERAGE_WEAR := &"coverage_wear"
 
-## Sub-tools cycled with `Tab`: what the left button paints.
+## Palette ids of coverage entries are prefixed, so a catalog that one day names a
+## surface after a material cannot collide with it.
+const COVERAGE_ENTRY_PREFIX := "coverage:"
+const ENTRY_ERASE_COVERAGE := &"coverage:none"
+
+## Sub-tools cycled with `Tab`: what the left button paints on the GROUND. The
+## coverage half has its own two — lay and erase — and they are chosen by the
+## palette, not by this cycle.
 const TOOL_MATERIAL := &"material"
 const TOOL_WEAR := &"wear"
 const TOOL_SNOW := &"snow"
 const TOOLS: Array[StringName] = [TOOL_MATERIAL, TOOL_WEAR, TOOL_SNOW]
 
 var _tool: StringName = TOOL_MATERIAL
+## True while the palette selection is a coverage entry. It is derived state, not
+## a mode switch: selecting a material clears it again.
+var _coverage_selected := false
 var _painting := false
 ## The levels the wear and snow brushes PAINT. They are chosen once and then
 ## stamped, rather than stepped per stroke: a drag overlaps its own path, so a
@@ -44,30 +70,51 @@ func _init() -> void:
 
 func deactivate() -> void:
 	_painting = false
+	if _coverage_brush() != null:
+		_coverage_brush().set_painting(false)
 
 
 func clear_hover() -> void:
 	if context != null and context.brush != null:
 		context.brush.clear_hover()
+	if _coverage_brush() != null:
+		_coverage_brush().clear_hover()
 
 
+## The marker follows whichever brush the palette armed, so an author laying a
+## road sees the width they are about to pave and not the material brush.
 func hover_brush() -> BaseBrushController:
-	return context.brush if context != null else null
+	if context == null:
+		return null
+	return _coverage_brush() if _coverage_selected and _coverage_brush() != null else context.brush
 
 
 func adjust_brush_size(delta: int) -> void:
-	if context != null and context.brush != null:
-		context.brush.adjust_brush_size(delta)
+	var brush := hover_brush()
+	if brush != null:
+		brush.adjust_brush_size(delta)
 
 
 func pick_from_cell() -> void:
-	if context != null and context.brush != null:
-		context.brush.update_hover(context.camera, context.space_state(), context.mouse_position())
-		context.brush.pick_material()
-		notify_ui_changed()
+	if context == null:
+		return
+	var brush := hover_brush()
+	if brush == null:
+		return
+	brush.update_hover(context.camera, context.space_state(), context.mouse_position())
+	if _coverage_selected:
+		(brush as CoverageBrushController).pick_coverage()
+	else:
+		(brush as TerrainBrushController).pick_material()
+	notify_ui_changed()
 
 
 func process(_delta: float) -> void:
+	if _coverage_selected and _coverage_brush() != null:
+		# The coverage brush rasterises its own stroke between cursor samples, so
+		# it only needs the hover; the drag lives inside it.
+		_coverage_brush().update_hover(context.camera, context.space_state(), context.mouse_position())
+		return
 	var was := context.brush.hovered_cell
 	var had := context.brush.has_hover
 	context.brush.update_hover(context.camera, context.space_state(), context.mouse_position())
@@ -84,6 +131,11 @@ func handle_input(event: InputEvent) -> bool:
 			return true
 		if button.button_index != MOUSE_BUTTON_LEFT:
 			return false
+		if _coverage_selected and _coverage_brush() != null:
+			context.set_edit_label("покрытие")
+			_coverage_brush().set_painting(button.pressed, _erases_coverage())
+			notify_ui_changed()
+			return true
 		_painting = button.pressed
 		if button.pressed:
 			_paint()
@@ -92,6 +144,17 @@ func handle_input(event: InputEvent) -> bool:
 	if event is InputEventKey and event.is_pressed() and not event.is_echo():
 		return _handle_key(event as InputEventKey)
 	return false
+
+
+func _coverage_brush() -> CoverageBrushController:
+	return context.coverage_brush if context != null else null
+
+
+## The eraser is the "no coverage" palette entry rather than a modifier key: it is
+## a thing the author picks and keeps, and the status line can then say which of
+## the two the next stroke does.
+func _erases_coverage() -> bool:
+	return _coverage_brush() != null and _coverage_brush().coverage_index == CoverageCatalog.NONE_INDEX
 
 
 func _handle_key(event: InputEventKey) -> bool:
@@ -109,9 +172,9 @@ func _handle_key(event: InputEventKey) -> bool:
 			_snow_level = (_snow_level + 1) % (TerrainDetailCodec.MAX_SNOW_DEPTH + 1)
 			_tool = TOOL_SNOW
 		KEY_BRACKETLEFT:
-			context.brush.adjust_brush_size(-1)
+			adjust_brush_size(-1)
 		KEY_BRACKETRIGHT:
-			context.brush.adjust_brush_size(1)
+			adjust_brush_size(1)
 		_:
 			return false
 	notify_ui_changed()
@@ -167,6 +230,7 @@ func _snow_can_rest_on(cell: Vector2i) -> bool:
 
 const ACCORDION_EARTH := &"accordion_earth"
 const ACCORDION_EXOPLANET := &"accordion_exoplanet"
+const ACCORDION_COVERAGE := &"accordion_coverage"
 
 const EXOPLANET_MATERIALS: Array[StringName] = [
 	TerrainMaterialCatalog.LUNAR_REGOLITH,
@@ -199,14 +263,63 @@ func palette_entries() -> Array:
 			if EXOPLANET_MATERIALS.has(material_id):
 				entries.append(PaletteEntry.of(material_id, "  " + String(material_id), _swatch_of(index)))
 
+	# The second group: what is BUILT over the ground. It sits in the same palette
+	# because it is the same question and the same brush; the entry decides which
+	# layer the stroke lands in (§5.2).
+	var coverage_open := _expanded_accordion == &"coverage"
+	entries.append(PaletteEntry.header(ACCORDION_COVERAGE, "Покрытие", coverage_open))
+	if coverage_open:
+		# The eraser is an entry and not a modifier key: removing coverage is a
+		# thing the author picks and keeps, and it reveals the ground under it
+		# rather than painting anything.
+		entries.append(PaletteEntry.of(ENTRY_ERASE_COVERAGE, "  снять покрытие", Color(0, 0, 0, 0)))
+		for index in CoverageCatalog.indices():
+			entries.append(PaletteEntry.of(
+				_coverage_entry_id(index),
+				"  " + CoverageCatalog.title_of_index(index),
+				CoverageLibrary.colour_of_index(index),
+			))
+
 	return entries
 
 
 func selected_palette_entry() -> StringName:
+	if _coverage_selected and _coverage_brush() != null:
+		return _coverage_entry_id(_coverage_brush().coverage_index)
 	return context.brush.material_id()
 
 
+static func _coverage_entry_id(index: int) -> StringName:
+	if index == CoverageCatalog.NONE_INDEX:
+		return ENTRY_ERASE_COVERAGE
+	return StringName(COVERAGE_ENTRY_PREFIX + String(CoverageCatalog.id_of_index(index)))
+
+
+static func _is_coverage_entry(entry_id: StringName) -> bool:
+	return String(entry_id).begins_with(COVERAGE_ENTRY_PREFIX)
+
+
+func _select_coverage_entry(entry_id: StringName) -> void:
+	var brush := _coverage_brush()
+	if brush == null:
+		return
+	var index := CoverageCatalog.NONE_INDEX
+	if entry_id != ENTRY_ERASE_COVERAGE:
+		index = CoverageCatalog.index_of_id(StringName(String(entry_id).trim_prefix(COVERAGE_ENTRY_PREFIX)))
+	brush.set_coverage_index(index)
+	_coverage_selected = true
+	_expanded_accordion = &"coverage"
+	notify_ui_changed()
+
+
 func select_palette_entry(entry_id: StringName) -> void:
+	if _is_coverage_entry(entry_id):
+		_select_coverage_entry(entry_id)
+		return
+	if entry_id == ACCORDION_COVERAGE:
+		_expanded_accordion = &"" if _expanded_accordion == &"coverage" else &"coverage"
+		notify_ui_changed()
+		return
 	if entry_id == ACCORDION_EARTH:
 		_expanded_accordion = &"" if _expanded_accordion == &"earth" else &"earth"
 		notify_ui_changed()
@@ -218,6 +331,9 @@ func select_palette_entry(entry_id: StringName) -> void:
 
 	var index := TerrainMaterialCatalog.index_of(entry_id)
 	if index >= 0:
+		# Picking a material disarms the coverage brush. Two armed brushes would
+		# make what the next click does depend on which panel was touched last.
+		_coverage_selected = false
 		context.brush.set_material_index(index)
 		if EXOPLANET_MATERIALS.has(entry_id):
 			_expanded_accordion = &"exoplanet"
@@ -229,6 +345,8 @@ func select_palette_entry(entry_id: StringName) -> void:
 
 
 func tool_options() -> Array:
+	if _coverage_selected:
+		return _coverage_tool_options()
 	var options: Array = []
 	options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (context.brush.brush_size - 1), &"brush", false, true))
 	options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", &"brush"))
@@ -248,7 +366,31 @@ func tool_options() -> Array:
 	return options
 
 
+## The coverage half has no snow brush and no material variants: snow on a road is
+## weather, and the variant of a surface follows its catalog entry. What is left
+## is the width of the stroke and how worn it is laid.
+func _coverage_tool_options() -> Array:
+	var brush := _coverage_brush()
+	var options: Array = []
+	var width := brush.brush_size * 2 - 1 if brush != null else 1
+	options.append(ToolOption.of(&"brush_size", "Ширина: %d" % width, &"brush", false, true))
+	options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", &"brush"))
+	options.append(ToolOption.of(OPTION_BRUSH_UP, "+", &"brush"))
+	if brush != null and CoverageCatalog.supports_wear_index(brush.coverage_index):
+		options.append(ToolOption.of(OPTION_COVERAGE_WEAR, "Износ: %d" % brush.wear))
+	return options
+
+
 func activate_option(option_id: StringName) -> void:
+	if option_id == OPTION_COVERAGE_WEAR and _coverage_brush() != null:
+		var brush := _coverage_brush()
+		brush.set_wear((brush.wear + 1) % (TerrainDetailCodec.MAX_WEAR + 1))
+		notify_ui_changed()
+		return
+	if _coverage_selected and (option_id == OPTION_BRUSH_UP or option_id == OPTION_BRUSH_DOWN):
+		adjust_brush_size(1 if option_id == OPTION_BRUSH_UP else -1)
+		notify_ui_changed()
+		return
 	if String(option_id).begins_with(OPTION_VARIANT_PREFIX):
 		context.set_edit_label("вариант")
 		context.brush.set_variant(String(option_id).trim_prefix(OPTION_VARIANT_PREFIX).to_int())
@@ -290,6 +432,8 @@ func _variant_option_id(variant_index: int) -> StringName:
 
 
 func inspector_lines() -> Array[String]:
+	if _coverage_selected:
+		return _coverage_inspector_lines()
 	var index := context.brush.material_index
 	var lines: Array[String] = []
 	lines.append("Инструмент: %s" % _tool)
@@ -307,7 +451,36 @@ func inspector_lines() -> Array[String]:
 	return lines
 
 
+## What the coverage entry IS, in the four numbers that make it one: its weight,
+## who may use it, when it can be built and whether it is maintained by traffic.
+func _coverage_inspector_lines() -> Array[String]:
+	var brush := _coverage_brush()
+	var lines: Array[String] = []
+	if brush == null:
+		lines.append("Слой покрытий недоступен")
+		return lines
+	var index := brush.coverage_index
+	if index == CoverageCatalog.NONE_INDEX:
+		lines.append("Инструмент: снять покрытие")
+		lines.append("")
+		lines.append("Снятие открывает материал земли под покрытием")
+		lines.append("и не трогает тропинку под ним.")
+		return lines
+	lines.append("Инструмент: покрытие")
+	lines.append("Покрытие: %s" % CoverageCatalog.title_of_index(index))
+	lines.append("ID: %s" % CoverageCatalog.id_of_index(index))
+	lines.append("Ширина: %d" % (brush.brush_size * 2 - 1))
+	lines.append("")
+	lines.append("Вес прохода: %.2f" % CoverageCatalog.weight_of_index(index))
+	lines.append("Эра постройки: %d" % CoverageCatalog.minimum_era_of_index(index))
+	lines.append("Органическое: %s" % ("да" if CoverageCatalog.is_organic_index(index) else "нет"))
+	lines.append("Износ: %d" % brush.wear)
+	return lines
+
+
 func status_text() -> String:
+	if _coverage_selected:
+		return _coverage_status_text()
 	if not context.brush.has_hover:
 		return "клетка —"
 	var cell := context.brush.hovered_cell
@@ -318,6 +491,24 @@ func status_text() -> String:
 		context.terrain.wear_at(cell), context.terrain.snow_depth_at(cell),
 		context.terrain.surface_weight_at(cell),
 		context.terrain_world.pending_chunk_count() if context.terrain_world != null else 0,
+	]
+
+
+func _coverage_status_text() -> String:
+	var brush := _coverage_brush()
+	if brush == null or not brush.has_hover:
+		return "клетка —"
+	var cell := brush.hovered_cell
+	var layer := context.coverage
+	var laid := layer.index_at(cell) if layer != null else CoverageCatalog.NONE_INDEX
+	# The material under it is shown alongside, because that is what erasing the
+	# coverage would bring back.
+	return "клетка %d,%d · покрытие %s · земля %s · вес %s" % [
+		cell.x, cell.y,
+		CoverageCatalog.title_of_index(laid),
+		context.terrain.material_of(cell),
+		"%.2f" % CoverageCatalog.weight_of_index(laid) if laid != CoverageCatalog.NONE_INDEX \
+			else "×%.2f" % context.terrain.surface_weight_at(cell),
 	]
 
 

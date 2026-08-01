@@ -49,6 +49,9 @@ enum RenderMode {
 @export var render_mode: RenderMode = RenderMode.FULL
 
 var grid: TerrainGrid = null
+## The built-coverage layer over the same board (map_editor.md §5.2.1). Optional:
+## a board with no coverage draws exactly what it drew before coverage existed.
+var coverage: CoverageLayer = null
 ## Optional: without it every chunk is built at full detail.
 var camera: Camera3D = null
 
@@ -57,6 +60,7 @@ var _chunk_lods: Dictionary = {}
 var _pending_chunks: Array[Vector2i] = []
 var _queued_lookup: Dictionary = {}
 var _library := TerrainMaterialLibrary.new()
+var _coverage_library := CoverageLibrary.new()
 var _surface_maps := TerrainSurfaceMaps.new()
 var _medium_grass := TerrainMediumGrass.new()
 var _tall_grass := TerrainTallGrass.new()
@@ -68,9 +72,10 @@ func _ready() -> void:
 	set_process(true)
 
 
-func configure(next_grid: TerrainGrid, next_camera: Camera3D = null) -> void:
+func configure(next_grid: TerrainGrid, next_camera: Camera3D = null, next_coverage: CoverageLayer = null) -> void:
 	grid = next_grid
 	camera = next_camera
+	coverage = next_coverage
 	for child: Node in _chunk_bodies.values():
 		child.queue_free()
 	_chunk_bodies.clear()
@@ -81,9 +86,12 @@ func configure(next_grid: TerrainGrid, next_camera: Camera3D = null) -> void:
 		return
 	_surface_maps.configure(grid.board_cells)
 	_surface_maps.rebuild(grid)
+	_surface_maps.rebuild_coverage(coverage)
 	_medium_grass.set_lod_distance(lod_distance)
 	_tall_grass.set_lod_distance(lod_distance)
 	grid.take_dirty_surface_cells()
+	if coverage != null:
+		coverage.take_dirty_cells()
 	_ground_material = null
 	_cliff_material = null
 	grid.mark_all_chunks_dirty()
@@ -180,6 +188,10 @@ func _collect_dirty() -> void:
 ## Drain the dirty cells once, then hand the same set to both GPU maps and the
 ## affected chunk MultiMeshes so neither presentation keeps a second state list.
 func _sync_surface_visuals() -> void:
+	# Coverage is drained first and on its own: it has a separate owner and a
+	# separate dirty set, and a road stroke must show up on the frame it was laid
+	# even when no material was painted at all.
+	_surface_maps.sync_coverage(coverage)
 	if not grid.has_dirty_surface_cells():
 		return
 	var cells := grid.take_dirty_surface_cells()
@@ -373,6 +385,9 @@ func _ground_shader_material() -> ShaderMaterial:
 	_ground_material.set_shader_parameter(&"surface_normals", _library.normal_array())
 	_ground_material.set_shader_parameter(&"index_map", _surface_maps.index_texture())
 	_ground_material.set_shader_parameter(&"detail_map", _surface_maps.detail_texture())
+	_ground_material.set_shader_parameter(&"coverage_map", _surface_maps.coverage_texture())
+	_ground_material.set_shader_parameter(&"coverage_palette", _coverage_library.palette_texture())
+	_ground_material.set_shader_parameter(&"coverage_capacity", float(_coverage_library.palette_size()))
 	_ground_material.set_shader_parameter(&"layer_lookup_map", _library.layer_lookup_texture())
 	_ground_material.set_shader_parameter(&"simple_layer_lookup_map", _library.simple_layer_lookup_texture())
 	_ground_material.set_shader_parameter(&"board_cells", float(grid.board_cells))

@@ -164,7 +164,9 @@ func _build_terrain(parent: Node) -> void:
 	if _map_document == null:
 		push_error("[world] WorldSetup requires a map document")
 		return
-	terrain_grid = territory.configure_terrain(_cell_size, _board_cells, _camera, _map_document.terrain)
+	terrain_grid = territory.configure_terrain(
+		_cell_size, _board_cells, _camera, _map_document.terrain, _map_document.coverage,
+	)
 	water_grid = territory.configure_water(_board_cells, _cell_size, _map_document.water)
 	territory.configure_water_border(_map_document.meta.border_kind, _map_document.meta.border_level)
 	water_access.configure(water_grid, terrain_grid)

@@ -4,8 +4,15 @@ extends RefCounted
 ## Owns completed constructed-road coverage. Construction may stage work in the
 ## buildings feature, but only this service publishes completed coverage to the
 ## routing grid. This gives roads one write-owner and one atomic nav update.
-
-const RoadTypeScript = preload("res://game/features/routing/domain/road_type.gd")
+##
+## What each surface costs and who may use it is a record in `CoverageCatalog`,
+## never a branch here: this service knows that a cell has coverage, not what
+## paving is made of. In a session the map seeds it once through
+## `CoverageNavigationPublisher` (map_editor.md §5.2.3).
+##
+## Ids are normalised on entry, so a save written when coverage was `RoadType`
+## (`stone`) and one written since (`core:stone`) name the same surface and
+## compare equal.
 
 var _grid: NavGrid
 var _roads: Dictionary = {}
@@ -17,13 +24,15 @@ func configure(next_grid: NavGrid) -> void:
 
 
 func complete_cells(cells: Array[Vector2i], road_type: StringName, current_era := -1) -> bool:
-	if not RoadTypeScript.is_known(road_type) or (current_era >= 0 and current_era < RoadTypeScript.minimum_era(road_type)):
+	var canonical := _canonical(road_type)
+	if canonical == CoverageCatalog.NONE_ID \
+			or (current_era >= 0 and current_era < CoverageCatalog.minimum_era(canonical)):
 		return false
 	var changed := false
 	for cell in cells:
-		if _roads.get(cell, StringName()) == road_type:
+		if _roads.get(cell, StringName()) == canonical:
 			continue
-		_roads[cell] = road_type
+		_roads[cell] = canonical
 		changed = true
 	if changed:
 		_publish()
@@ -46,9 +55,9 @@ func road_type_at(cell: Vector2i) -> StringName:
 
 func road_weight_for_profile(cell: Vector2i, profile: StringName) -> float:
 	var type := road_type_at(cell)
-	if type.is_empty() or not RoadTypeScript.supports_profile(type, profile):
+	if type.is_empty() or not CoverageCatalog.supports_profile(type, profile):
 		return INF
-	return RoadTypeScript.traversal_weight(type)
+	return CoverageCatalog.weight_of_id(type)
 
 
 func completed_roads() -> Dictionary:
@@ -67,8 +76,8 @@ func restore_state(entries: Array) -> void:
 	for entry: Variant in entries:
 		if not entry is Dictionary:
 			continue
-		var type := StringName(str(entry.get("type", "")))
-		if RoadTypeScript.is_known(type):
+		var type := _canonical(StringName(str(entry.get("type", ""))))
+		if type != CoverageCatalog.NONE_ID:
 			restored[Vector2i(int(entry.get("x", 0)), int(entry.get("y", 0)))] = type
 	restore_completed_roads(restored)
 
@@ -77,8 +86,11 @@ func restore_completed_roads(next_roads: Dictionary) -> void:
 	_roads.clear()
 	for cell: Variant in next_roads:
 		var road_type: Variant = next_roads[cell]
-		if cell is Vector2i and road_type is StringName and RoadTypeScript.is_known(road_type):
-			_roads[cell] = road_type
+		if not (cell is Vector2i and road_type is StringName):
+			continue
+		var canonical := _canonical(road_type)
+		if canonical != CoverageCatalog.NONE_ID:
+			_roads[cell] = canonical
 	_publish()
 
 
@@ -91,9 +103,16 @@ func _publish() -> void:
 		var road_type: StringName = _roads[cell]
 		road_cells[cell] = true
 		for profile: TravelerProfile in TravelerProfile.registered_profiles():
-			if not RoadTypeScript.supports_profile(road_type, profile.profile_id):
+			if not CoverageCatalog.supports_profile(road_type, profile.profile_id):
 				continue
 			var weights: Dictionary = weights_by_profile.get(profile.profile_id, {})
-			weights[cell] = RoadTypeScript.traversal_weight(road_type)
+			weights[cell] = CoverageCatalog.weight_of_id(road_type)
 			weights_by_profile[profile.profile_id] = weights
 	_grid.set_road_profile_weights(weights_by_profile, road_cells)
+
+
+## The catalog id a name resolves to, or `NONE_ID` when this build has no such
+## surface — an uninstalled pack surface, or a typo in a hand-edited save.
+static func _canonical(road_type: StringName) -> StringName:
+	var index := CoverageCatalog.index_of_id(road_type)
+	return CoverageCatalog.id_of_index(index)
