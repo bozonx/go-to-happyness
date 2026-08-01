@@ -30,6 +30,9 @@ var _undo_stack: Array[TerrainDelta] = []
 var _redo_stack: Array[TerrainDelta] = []
 var _last_rejection: StringName = CascadeSolver.REASON_NONE
 var _last_delta: TerrainDelta = null
+## How many cells the last `paint_material` call skipped because the slope was
+## too steep for the requested material. Zero when the whole brush was stable.
+var _last_material_skipped := 0
 
 
 func configure(next_grid: TerrainGrid) -> void:
@@ -177,6 +180,7 @@ func dissolve_ramp(cell: Vector2i) -> bool:
 ## `variant` picks the look inside the material; -1 keeps whatever variant the
 ## column already had.
 func paint_material(cells: Array[Vector2i], material_id: StringName, variant: int = -1) -> bool:
+	_last_material_skipped = 0
 	if _grid == null:
 		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
 	var material_index := TerrainMaterialCatalog.index_of(material_id)
@@ -184,15 +188,21 @@ func paint_material(cells: Array[Vector2i], material_id: StringName, variant: in
 		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
 	var paint_cells := CellUtils.sorted_unique(cells)
 	# Painting is intentionally a texel-only operation. Since it cannot cascade
-	# or rebuild geometry, reject a material which cannot hold the current slope
-	# rather than silently authoring a sand or mud cliff.
-	for cell: Vector2i in paint_cells:
-		if _grid.is_inside(cell) and not _material_is_stable_at(cell, material_index):
-			return _reject(REASON_UNSTABLE_MATERIAL)
-	var delta := TerrainDelta.new()
+	# or rebuild geometry, skip cells whose slope cannot hold the material rather
+	# than silently authoring a sand or mud cliff. A partial brush paints what it
+	# can; only when every cell is unstable does the whole stroke fail.
+	var stable_cells: Array[Vector2i] = []
 	for cell: Vector2i in paint_cells:
 		if not _grid.is_inside(cell):
 			continue
+		if _material_is_stable_at(cell, material_index):
+			stable_cells.append(cell)
+		else:
+			_last_material_skipped += 1
+	if stable_cells.is_empty():
+		return _reject(REASON_UNSTABLE_MATERIAL)
+	var delta := TerrainDelta.new()
+	for cell: Vector2i in stable_cells:
 		var old_state := TerrainDelta.state_of(_grid, cell)
 		var new_state := old_state.duplicate()
 		new_state[TerrainDelta.STATE_MATERIAL] = material_index
@@ -211,6 +221,10 @@ func paint_material(cells: Array[Vector2i], material_id: StringName, variant: in
 		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
 	_commit(delta)
 	return true
+
+
+func last_material_skipped() -> int:
+	return _last_material_skipped
 
 
 ## The detail brush (§4): a different look, identical mechanics. Kept a

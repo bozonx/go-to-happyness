@@ -194,7 +194,13 @@ func apply_material() -> void:
 		return
 	var id := material_id()
 	if _service.paint_material(brush_cells(hovered_cell), id, variant):
-		last_message = "покрашено: %s/%s" % [id, TerrainMaterialVariants.variant_name(material_index, variant)]
+		var skipped := _service.last_material_skipped()
+		if skipped > 0:
+			last_message = "покрашено: %s/%s · %d клеток пропущено (крутой уклон)" % [
+				id, TerrainMaterialVariants.variant_name(material_index, variant), skipped,
+			]
+		else:
+			last_message = "покрашено: %s/%s" % [id, TerrainMaterialVariants.variant_name(material_index, variant)]
 		return
 	if _service.last_rejection() == TerrainService.REASON_UNSTABLE_MATERIAL:
 		last_message = "покраска %s ОТКЛОНЕНО (слишком крутой уклон)" % id

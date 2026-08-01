@@ -19,6 +19,7 @@ const BOARD_CELLS := 32
 static func run_all() -> void:
 	_test_paint_writes_texels_and_no_geometry()
 	_test_paint_rejects_an_unstable_material()
+	_test_paint_partial_on_mixed_stability()
 	_test_material_paint_clamps_the_carried_variant()
 	_test_undo_restores_material_and_detail()
 	_test_detail_survives_a_height_edit()
@@ -105,6 +106,24 @@ static func _test_paint_rejects_an_unstable_material() -> void:
 	assert(service.last_rejection() == TerrainService.REASON_UNSTABLE_MATERIAL)
 	assert(grid.material_of(cell) == TerrainMaterialCatalog.DEFAULT_MATERIAL)
 	assert(service.paint_material(_brush([cell]), TerrainMaterialCatalog.STONE))
+
+
+## A brush that spans both stable and unstable cells paints what it can and
+## skips the rest, rather than rejecting the whole stroke. Only when every cell
+## is unstable does the operation fail.
+static func _test_paint_partial_on_mixed_stability() -> void:
+	var world := _make()
+	var grid: TerrainGrid = world["grid"]
+	var service: TerrainService = world["service"]
+	# Cell (2, 0) at height 1 creates a cliff sand cannot hold; cell (0, 0)
+	# stays flat and stable.
+	assert(grid.set_height(Vector2i(2, 0), 1))
+	var cells := _brush([Vector2i(0, 0), Vector2i(2, 0)])
+	assert(service.paint_material(cells, TerrainMaterialCatalog.SAND))
+	# The stable cell got the new material; the unstable one kept the default.
+	assert(grid.material_of(Vector2i(0, 0)) == TerrainMaterialCatalog.SAND)
+	assert(grid.material_of(Vector2i(2, 0)) == TerrainMaterialCatalog.DEFAULT_MATERIAL)
+	assert(service.last_material_skipped() == 1)
 
 
 ## Variant numbers are meaningful only within their material palette. A carried
