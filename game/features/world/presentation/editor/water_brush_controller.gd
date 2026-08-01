@@ -278,7 +278,10 @@ func _flood() -> void:
 	# may leave one selected); a body with a contour is not.
 	if dry_cell and body_id != WaterBody.NO_BODY and _water.cells_of_body(body_id).size() > 0:
 		body_id = WaterBody.NO_BODY
-	if dry_cell and body_id == WaterBody.NO_BODY and _terrain != null:
+	# Fresh water starts at the exact level shown by the phantom: one terrain
+	# step above the clicked ground. This also discards stale levels from an empty
+	# selection, which previously made the new surface appear above its preview.
+	if dry_cell and _terrain != null:
 		level = _terrain.height_of(hovered_cell) + 1
 	if body_id == WaterBody.NO_BODY:
 		var body := _service.create_and_flood(hovered_cell, active_body_type(), level)

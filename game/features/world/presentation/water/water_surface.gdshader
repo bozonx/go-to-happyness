@@ -90,12 +90,15 @@ void fragment() {
 		float direction_angle = flow_direction_index * 0.78539816339;
 		vec2 flow_direction = vec2(sin(direction_angle), -cos(direction_angle));
 		vec2 lateral_direction = vec2(-flow_direction.y, flow_direction.x);
-		float along = dot(world_position.xz, flow_direction) - TIME * (0.8 + flow_strength * 1.4);
+		// Level 1 is a visibly slow current; stronger values move faster without
+		// cycling the current indication completely out of view.
+		float along = dot(world_position.xz, flow_direction) - TIME * (0.12 + flow_strength * 0.28);
 		float crest = smoothstep(0.76, 0.96, sin(along * 8.0) * 0.5 + 0.5);
 		float taper = 1.0 - smoothstep(0.08, 0.30, abs(fract(along * 1.25) - 0.5));
 		float across = abs(fract(dot(world_position.xz, lateral_direction) * 1.2) - 0.5);
 		float width = 1.0 - smoothstep(0.10, 0.31, across);
-		float whitecap = crest * taper * width * (0.28 + flow_strength * 0.62);
+		float continuous_ripple = (0.16 + 0.12 * (0.5 + 0.5 * sin(along * 5.0))) * flow_strength;
+		float whitecap = continuous_ripple + crest * taper * width * (0.16 + flow_strength * 0.45);
 		liquid = mix(liquid, foam_colour, whitecap * (1.0 - frozen));
 	}
 

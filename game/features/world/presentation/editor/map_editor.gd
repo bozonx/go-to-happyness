@@ -716,6 +716,8 @@ func _on_terrain_committed(delta: TerrainDelta) -> void:
 	# it joins the same command. Two entries here would mean two Ctrl+Z for one
 	# thing the author did.
 	_recording_border_fill = true
+	for water_delta: WaterDelta in _water_service.remove_bodies_buried_by_terrain(delta.cells):
+		parts.append(WaterServiceCommand.of(_water_service, water_delta, label))
 	var flooded := _border_ocean.apply()
 	_recording_border_fill = false
 	if flooded:

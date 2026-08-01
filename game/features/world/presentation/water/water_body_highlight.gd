@@ -84,11 +84,24 @@ func refresh() -> void:
 	for cell: Vector2i in cells:
 		var level_y := float(_water.height_of(cell)) * TerrainGrid.HEIGHT_STEP + OUTLINE_OFFSET
 		var center := _terrain.cell_center(cell)
-		for point in [
-			Vector3(center.x - half, level_y, center.z - half), Vector3(center.x + half, level_y, center.z - half),
-			Vector3(center.x + half, level_y, center.z + half), Vector3(center.x - half, level_y, center.z + half),
-		]:
-			intersections[point] = true
+		var nw := Vector3(center.x - half, level_y, center.z - half)
+		var ne := Vector3(center.x + half, level_y, center.z - half)
+		var se := Vector3(center.x + half, level_y, center.z + half)
+		var sw := Vector3(center.x - half, level_y, center.z + half)
+		# Mark only shore corners: an edge shared with dry terrain. Interior grid
+		# intersections and seams with other wet bodies remain unmarked.
+		if not _water.is_wet(_terrain, cell + Vector2i(0, -1)):
+			intersections[nw] = true
+			intersections[ne] = true
+		if not _water.is_wet(_terrain, cell + Vector2i(1, 0)):
+			intersections[ne] = true
+			intersections[se] = true
+		if not _water.is_wet(_terrain, cell + Vector2i(0, 1)):
+			intersections[se] = true
+			intersections[sw] = true
+		if not _water.is_wet(_terrain, cell + Vector2i(-1, 0)):
+			intersections[sw] = true
+			intersections[nw] = true
 	for point: Vector3 in intersections:
 		_add_disc(immediate, point, cell_size * MARKER_RADIUS_RATIO)
 

@@ -143,6 +143,31 @@ func remove_body(body_id: int) -> bool:
 	return _commit_registry_edit(WaterBodyEdit.removal(grid, body))
 
 
+## A terrain stroke can cover every cell of a body. Partial coverage is already
+## dry by the derived wetness rule; once none remains wet, remove its registry
+## entry through normal undoable WaterBodyEdits.
+func remove_bodies_buried_by_terrain(changed_cells: Array[Vector2i]) -> Array[WaterDelta]:
+	var removed: Array[WaterDelta] = []
+	if grid == null or terrain == null:
+		return removed
+	var candidate_ids: Dictionary = {}
+	for cell: Vector2i in changed_cells:
+		if grid.is_inside(cell) and grid.has_water(cell):
+			candidate_ids[grid.body_id_at(cell)] = true
+	for body_id: int in candidate_ids:
+		var body_cells := grid.cells_of_body(body_id)
+		if body_cells.is_empty():
+			continue
+		var still_wet := false
+		for body_cell: Vector2i in body_cells:
+			if grid.is_wet(terrain, body_cell):
+				still_wet = true
+				break
+		if not still_wet and remove_body(body_id):
+			removed.append(_last_delta)
+	return removed
+
+
 ## Changes a body's type in place: the id and cells stay, the metadata changes.
 ## One undoable operation that emits registry_changed so the presentation drops
 ## its cached per-body material.
