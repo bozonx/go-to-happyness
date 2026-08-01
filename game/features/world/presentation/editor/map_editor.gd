@@ -89,6 +89,7 @@ var _context := MapEditorContext.new()
 var _modes: Array[MapEditorMode] = []
 var _active: MapEditorMode = null
 var _message := ""
+var _message_is_error := false
 var dev_mode := false
 ## True while the history is replaying a command, so the commits that replay emits
 ## are not recorded as new commands.
@@ -226,8 +227,9 @@ func _build_services() -> void:
 		water_flood_preview.configure(document.water, document.terrain)
 
 
-func _on_status_message_changed(message: String) -> void:
+func _on_status_message_changed(message: String, is_error: bool) -> void:
 	_message = message
+	_message_is_error = is_error
 	_refresh_panels()
 
 
@@ -493,6 +495,7 @@ func _refresh_panels() -> void:
 	_undo_button.disabled = not history.can_undo()
 	_redo_button.disabled = not history.can_redo()
 	_status_message.text = _message
+	_status_message.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3) if _message_is_error else Color.WHITE)
 
 
 func _on_inspector_property_committed(property_name: StringName, value: Variant) -> void:
@@ -530,18 +533,13 @@ func _update_hover_marker() -> void:
 	# Water-state brushes operate on the water sheet, not visually on its bed.
 	# The cell still comes from the terrain ray (open water has no collider), but
 	# its cursor is drawn where the authored water surface actually is.
-	# Tools that only act on existing water (freeze/thaw/flow/still) hide the
-	# marker on dry ground — the brush has nothing to do there.
+	# The cursor only appears on real water — dry ground has no water to act on.
 	if brush is WaterBrushController:
 		var water_brush := brush as WaterBrushController
-		var has_water := document.water.has_water(water_brush.hovered_cell)
-		if water_brush.tool != WaterBrushController.TOOL_FLOOD and not has_water:
+		if not document.water.has_water(water_brush.hovered_cell):
 			hover_marker.visible = false
 			return
-		if has_water:
-			centre.y = float(document.water.height_of(water_brush.hovered_cell)) * TerrainGrid.HEIGHT_STEP
-		else:
-			centre.y = float(water_brush.level) * TerrainGrid.HEIGHT_STEP
+		centre.y = float(document.water.height_of(water_brush.hovered_cell)) * TerrainGrid.HEIGHT_STEP
 	hover_marker.position = Vector3(centre.x, centre.y + 0.03, centre.z)
 	var span := float(brush.brush_size * 2 - 1)
 	hover_marker.scale = Vector3(span, 1.0, span)
@@ -751,6 +749,7 @@ func _on_coverage_committed(delta: CoverageDelta) -> void:
 func _undo() -> void:
 	if not history.can_undo():
 		_message = "нечего отменять"
+		_message_is_error = false
 		_refresh_panels()
 		return
 	var label := history.undo_label()
@@ -758,18 +757,21 @@ func _undo() -> void:
 	var ok := history.undo()
 	_replaying = false
 	_message = "отменено: %s" % label if ok else "отмена не удалась"
+	_message_is_error = not ok
 	_after_history_change()
 
 
 func _redo() -> void:
 	if not history.can_redo():
 		_message = "нечего повторять"
+		_message_is_error = false
 		_refresh_panels()
 		return
 	_replaying = true
 	var ok := history.redo()
 	_replaying = false
 	_message = "повторено" if ok else "повтор не удался"
+	_message_is_error = not ok
 	_after_history_change()
 
 

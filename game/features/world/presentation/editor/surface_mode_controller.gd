@@ -163,7 +163,9 @@ func _coverage_brush() -> CoverageBrushController:
 func _propagate_brush_message() -> void:
 	var brush := hover_brush()
 	if brush != null and brush.last_message != "":
-		context.set_status_message(brush.last_message)
+		var msg := brush.last_message
+		var is_error := msg.contains("ОТКЛОНЕНО") or msg.contains("не удалось") or msg.contains("нельзя")
+		context.set_status_message(msg, is_error)
 
 
 ## The eraser is the "no coverage" palette entry rather than a modifier key: it is

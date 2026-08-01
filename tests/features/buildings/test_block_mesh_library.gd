@@ -2,6 +2,7 @@ extends SceneTree
 
 const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
 const BlockTextureLibraryScript = preload("res://game/features/buildings/presentation/editor/block_texture_library.gd")
+const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
 
 
 func _init() -> void:
@@ -91,9 +92,13 @@ func _test_stairs_mesh_normals() -> void:
 
 
 func _test_block_materials_and_textures() -> void:
-	print("Testing block materials and textures (branches, tarp, thatch)...")
+	print("Testing all block materials and textures from BuildingMaterialCatalog...")
 	var tex_lib := BlockTextureLibraryScript.new()
-	var materials: Array[StringName] = [&"branches", &"tarp", &"thatch"]
+	var materials: Array[StringName] = []
+	for mat in BuildingMaterialCatalogScript.all():
+		materials.append(mat["id"])
+	assert(materials.size() == 13, "Expected 13 materials in catalog, got %d" % materials.size())
+
 	for mat_id in materials:
 		assert(tex_lib.has_texture(mat_id), "Texture must exist for material '%s'" % mat_id)
 		assert(tex_lib.texture_for(mat_id) != null, "Texture for '%s' must load as Texture2D" % mat_id)

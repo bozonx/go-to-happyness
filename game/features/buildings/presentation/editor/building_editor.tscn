@@ -147,27 +147,31 @@ tooltip_text = "Пипетка: включить выбор элемента п�
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
-text = "1. Каркас"
+text = "🏗️"
+tooltip_text = "Режим 1: Каркас (1)"
 
 [node name="ModeFinishesBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 disabled = true
-text = "2. Отделка"
+text = "🎨"
+tooltip_text = "Режим 2: Отделка (2)"
 
 [node name="ModeFillBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
-text = "3. Наполнение"
+text = "🪑"
+tooltip_text = "Режим 3: Наполнение (3)"
 
 
 [node name="ModeZonesBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
-text = "4. Зоны"
+text = "🗺️"
+tooltip_text = "Режим 4: Зоны (4)"
 
 [node name="VSep2" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox"]
 layout_mode = 2
@@ -182,13 +186,13 @@ unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 text = "🔨"
-tooltip_text = "Строить"
+tooltip_text = "Режим строительства"
 
 [node name="ToolEraseBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
-text = "🧹 (E)"
+text = "🧹"
 tooltip_text = "Стереть (E)"
 
 [node name="VSepTools" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
@@ -198,14 +202,14 @@ layout_mode = 2
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
-text = "📏 (L)"
+text = "📏"
 tooltip_text = "Линия (L)"
 
 [node name="BrushRectBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
-text = "🔲 (M)"
+text = "🔲"
 tooltip_text = "Прямоугольник (M)"
 
 [node name="VSepBrush" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
@@ -214,19 +218,19 @@ layout_mode = 2
 [node name="RotXBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "🔄X (X)"
+text = "🔄X"
 tooltip_text = "Поворот вокруг оси X (X)"
 
 [node name="RotBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "🔄Y (C)"
-tooltip_text = "Поворот вокруг оси Y (C)"
+text = "🔄Y"
+tooltip_text = "Поворот вокруг оси Y (C / R)"
 
 [node name="RotZBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "🔄Z (Z)"
+text = "🔄Z"
 tooltip_text = "Поворот вокруг оси Z (Z)"
 
 [node name="LayerLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
@@ -237,13 +241,13 @@ text = "Слой 0"
 [node name="LayerDownBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "➖ (PgDn)"
+text = "➖"
 tooltip_text = "Слой ниже (PageDown)"
 
 [node name="LayerUpBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "➕ (PgUp)"
+text = "➕"
 tooltip_text = "Слой выше (PageUp)"
 
 [node name="VSepTextures" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
@@ -254,7 +258,7 @@ unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 button_pressed = true
-text = "🧱 Текстуры"
+text = "🧱"
 tooltip_text = "Показать текстуры материалов блоков"
 
 [node name="FillToolbar" type="HBoxContainer" parent="EditorUI/Root/TopBar/Margin/HBox"]
@@ -276,45 +280,20 @@ layout_mode = 2
 [node name="FillRotXBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "🔄X (X)"
+text = "🔄X"
 tooltip_text = "Поворот вокруг оси X (X)"
 
 [node name="FillRotYBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "🔄Y (C)"
-tooltip_text = "Поворот вокруг оси Y (C)"
+text = "🔄Y"
+tooltip_text = "Поворот вокруг оси Y (C / R)"
 
 [node name="FillRotZBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "🔄Z (Z)"
+text = "🔄Z"
 tooltip_text = "Поворот вокруг оси Z (Z)"
-
-[node name="FillSnapButtons" type="HBoxContainer" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
-layout_mode = 2
-theme_override_constants/separation = 2
-
-[node name="FillSnap1Btn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar/FillSnapButtons"]
-unique_name_in_owner = true
-layout_mode = 2
-toggle_mode = true
-text = "1"
-tooltip_text = "Привязка к сетке: 1 м"
-
-[node name="FillSnapHalfBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar/FillSnapButtons"]
-unique_name_in_owner = true
-layout_mode = 2
-toggle_mode = true
-text = "0.5"
-tooltip_text = "Привязка к сетке: 0.5 м"
-
-[node name="FillSnapQuarterBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar/FillSnapButtons"]
-unique_name_in_owner = true
-layout_mode = 2
-toggle_mode = true
-text = "0.25"
-tooltip_text = "Привязка к сетке: 0.25 м"
 
 [node name="VSepFillLayer" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 layout_mode = 2
@@ -327,13 +306,13 @@ text = "Слой 0"
 [node name="FillLayerDownBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "➖ (PgDn)"
+text = "➖"
 tooltip_text = "Слой ниже (PageDown)"
 
 [node name="FillLayerUpBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "➕ (PgUp)"
+text = "➕"
 tooltip_text = "Слой выше (PageUp)"
 
 [node name="VSepFillOverlay" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
@@ -453,13 +432,13 @@ text = "Слой Y: 0"
 unique_name_in_owner = true
 layout_mode = 2
 text = "−"
-tooltip_text = "Слой ниже"
+tooltip_text = "Слой ниже (PageDown)"
 
 [node name="ZoneLayerUpBtn" type="Button" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows/LayerRow"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "+"
-tooltip_text = "Слой выше"
+tooltip_text = "Слой выше (PageUp)"
 
 [node name="DisplayTitle" type="Label" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
 layout_mode = 2
@@ -912,32 +891,26 @@ columns = 3
 
 [node name="PosXLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
-text = "Позиция X"
+text = "Клетка X"
 
 [node name="FillPosXSpin" type="SpinBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = -128.0
 max_value = 128.0
-step = 0.25
+step = 1.0
 
-
-[node name="FillPosResetBtn" type="Button" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "↺"
-tooltip_text = "Сбросить смещение: вернуть объект на сетку привязки"
 
 [node name="PosYLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
-text = "Позиция Y"
+text = "Слой (этаж)"
 
 [node name="FillPosYSpin" type="SpinBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 unique_name_in_owner = true
 layout_mode = 2
-min_value = -16.0
+min_value = 0.0
 max_value = 64.0
-step = 0.25
+step = 1.0
 
 
 [node name="TransformSpacer1" type="Control" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
@@ -945,17 +918,62 @@ layout_mode = 2
 
 [node name="PosZLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
-text = "Позиция Z"
+text = "Клетка Z"
 
 [node name="FillPosZSpin" type="SpinBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = -128.0
 max_value = 128.0
-step = 0.25
+step = 1.0
 
 
 [node name="TransformSpacer2" type="Control" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+layout_mode = 2
+
+[node name="OffXLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+layout_mode = 2
+text = "Смещение X"
+
+[node name="FillOffXSpin" type="SpinBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = -1.0
+max_value = 1.0
+step = 0.25
+
+[node name="FillOffsetResetBtn" type="Button" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "↺"
+tooltip_text = "Сбросить смещение: поставить объект ровно по своим клеткам"
+
+[node name="OffYLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+layout_mode = 2
+text = "Смещение Y"
+
+[node name="FillOffYSpin" type="SpinBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = -1.0
+max_value = 1.0
+step = 0.25
+
+[node name="TransformSpacerOff1" type="Control" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+layout_mode = 2
+
+[node name="OffZLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+layout_mode = 2
+text = "Смещение Z"
+
+[node name="FillOffZSpin" type="SpinBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = -1.0
+max_value = 1.0
+step = 0.25
+
+[node name="TransformSpacerOff2" type="Control" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
 
 [node name="YawLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
@@ -1225,8 +1243,8 @@ unique_name_in_owner = true
 layout_mode = 2
 
 [node name="ShortcutTooltip" parent="EditorUI/Root/StatusBar/HBox" instance=ExtResource("4_shortcuts")]
+unique_name_in_owner = true
 layout_mode = 2
-shortcuts_text = "Общее\nЛКМ — строить / выбрать · Shift+ЛКМ — пипетка\nShift+ПКМ — стереть · ПКМ — камера · СКМ — панорама · Колесо — зум\nWASD/QE — движение камеры · Ctrl+Z / Ctrl+Y — отменить / повторить\n\nКаркас\nE — ластик · L — линия · M — прямоугольник · Z/X/C — поворот\nPageUp/PageDown — слой выше / ниже · Shift+СКМ — взять кисть\n\nНаполнение\nC/R, X, Z — поворот по осям · Ctrl+D — дублировать · Delete — удалить\n\nЗоны\nQ/W — область / точка · Tab — следующая роль · F — поворот точки\nEsc — снять выделение / режим выбора · Shift+ПКМ — стереть клетку · Delete — удалить выбранное"
 
 [node name="MetadataPanel" type="ConfirmationDialog" parent="EditorUI/Root"]
 unique_name_in_owner = true

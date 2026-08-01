@@ -1030,13 +1030,16 @@ func _anchor_label(kind: int) -> String:
 func _update_rotation_label() -> void:
 	if _rot_x_btn != null:
 		var deg_x := _editor.current_rot_x * 90
-		_rot_x_btn.text = "🔄X %d° (X)" % deg_x if deg_x != 0 else "🔄X (X)"
+		_rot_x_btn.text = "🔄X %d°" % deg_x if deg_x != 0 else "🔄X"
+		_rot_x_btn.tooltip_text = "Поворот вокруг оси X: %d° (X)" % deg_x if deg_x != 0 else "Поворот вокруг оси X (X)"
 	if _rot_btn != null:
 		var deg_y := _editor.current_rot * 90
-		_rot_btn.text = "🔄Y %d° (C)" % deg_y if deg_y != 0 else "🔄Y (C)"
+		_rot_btn.text = "🔄Y %d°" % deg_y if deg_y != 0 else "🔄Y"
+		_rot_btn.tooltip_text = "Поворот вокруг оси Y: %d° (C / R)" % deg_y if deg_y != 0 else "Поворот вокруг оси Y (C / R)"
 	if _rot_z_btn != null:
 		var deg_z := _editor.current_rot_z * 90
-		_rot_z_btn.text = "🔄Z %d° (Z)" % deg_z if deg_z != 0 else "🔄Z (Z)"
+		_rot_z_btn.text = "🔄Z %d°" % deg_z if deg_z != 0 else "🔄Z"
+		_rot_z_btn.tooltip_text = "Поворот вокруг оси Z: %d° (Z)" % deg_z if deg_z != 0 else "Поворот вокруг оси Z (Z)"
 
 
 func _update_count() -> void:

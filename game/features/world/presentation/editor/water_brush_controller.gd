@@ -416,15 +416,16 @@ func redo() -> void:
 	last_message = "повторено" if _service.redo() else "нечего повторять"
 
 
-static func _tool_label() -> String:
-	match TOOL_FLOOD:
+func _tool_label() -> String:
+	match tool:
 		TOOL_SELECT: return "выбор"
 		TOOL_FLOOD: return "затопление"
 		TOOL_DRAIN: return "осушение"
 		TOOL_FLOW: return "течение"
+		TOOL_STILL: return "штиль"
 		TOOL_FREEZE: return "заморозка"
 		TOOL_THAW: return "оттайка"
-	return String(TOOL_FLOOD)
+	return String(tool)
 
 
 static func _water_rejection_label(reason: StringName) -> String:

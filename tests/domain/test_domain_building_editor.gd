@@ -45,7 +45,7 @@ static func run_all() -> void:
 
 
 static func _test_catalog() -> void:
-	assert(BuildingBlockCatalogScript.all().size() == 22)
+	assert(BuildingBlockCatalogScript.all().size() == 21)
 	assert(BuildingBlockCatalogScript.has_block(&"cube"))
 	assert(BuildingBlockCatalogScript.has_block(&"stairs_corner_45"))
 	assert(BuildingBlockCatalogScript.has_block(&"stairs_corner_half"))
@@ -79,11 +79,17 @@ static func _test_catalog() -> void:
 	assert(BuildingBlockCatalogScript.size_of(&"column_half", &"0.5_quarter") == Vector3(0.5, 0.25, 0.25))
 	assert(BuildingBlockCatalogScript.variant_for_options(&"column_round", &"0.5", &"quarter") == &"0.5_quarter")
 	assert(BuildingBlockCatalogScript.mesh_shape_of(&"column_round", &"0.5") == BuildingBlockCatalogScript.SHAPE_CYLINDER)
-	assert(BuildingBlockCatalogScript.size_of(&"arch") == Vector3(1.0, 0.5, 1.0))
+	assert(BuildingBlockCatalogScript.size_of(&"arch") == Vector3(1.0, 1.0, 1.0))
 	assert(BuildingBlockCatalogScript.has_variants(&"arch"))
-	assert(BuildingBlockCatalogScript.default_variant(&"arch") == &"bottom")
-	assert(BuildingBlockCatalogScript.mesh_shape_of(&"arch", &"bottom") == BuildingBlockCatalogScript.SHAPE_ARCH)
-	assert(BuildingBlockCatalogScript.mesh_shape_of(&"arch", &"top") == BuildingBlockCatalogScript.SHAPE_ARCH_TOP)
+	assert(BuildingBlockCatalogScript.default_variant(&"arch") == &"1")
+	assert(BuildingBlockCatalogScript.mesh_shape_of(&"arch", &"1") == BuildingBlockCatalogScript.SHAPE_ARCH_TOP)
+	assert(BuildingBlockCatalogScript.mesh_shape_of(&"arch", &"1_2") == BuildingBlockCatalogScript.SHAPE_HALF_ARCH)
+	assert(BuildingBlockCatalogScript.mesh_shape_of(&"arch", &"1_4") == BuildingBlockCatalogScript.SHAPE_HALF_ARCH)
+	assert(BuildingBlockCatalogScript.size_of(&"arch", &"1_4") == Vector3(0.5, 0.5, 1.0))
+	assert(not BuildingBlockCatalogScript.has_block(&"half_arch"))
+	assert(not BuildingBlockCatalogScript.has_variants(&"roof_pitch_low"))
+	assert(not BuildingBlockCatalogScript.has_variants(&"roof_corner_in_low"))
+	assert(not BuildingBlockCatalogScript.has_variants(&"roof_corner_out_low"))
 	assert(BuildingBlockCatalogScript.get_block(&"column_square")["category"] == BuildingBlockCatalogScript.Category.STRUCTURE)
 	# Single-cell blocks report a unit footprint.
 	assert(BuildingBlockCatalogScript.footprint_of(&"arch") == Vector3i(1, 1, 1))

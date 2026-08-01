@@ -22,7 +22,9 @@ const FillCollisionOverlayScript = preload("res://game/features/buildings/presen
 var current_group: StringName = &""  ## empty = all groups
 var current_category: StringName = &"camping"
 var current_asset_id: StringName = &""
-var current_snap_step: float = 1.0
+## Смещение кисти: с ним объект ставится сразу подстроенным — пипетка забирает
+## смещение образца вместе с остальными свойствами.
+var current_offset: Vector3 = Vector3.ZERO
 var current_yaw_deg: float = 0.0
 var current_pitch_deg: float = 0.0
 var current_roll_deg: float = 0.0
@@ -269,7 +271,7 @@ func _select_for_drag(object_id: String, hit: Vector3) -> void:
 	var record := find_record(object_id)
 	if record == null:
 		return
-	_drag_offset = record.pos - Vector3(hit.x, record.pos.y, hit.z)
+	_drag_offset = record.anchor_pos() - Vector3(hit.x, record.anchor_pos().y, hit.z)
 	_dragging = true
 	_drag_started = false
 
@@ -286,10 +288,12 @@ func on_drag() -> void:
 		_editor.begin_history_group("fill_drag/%s" % record.id)
 		_drag_started = true
 	var hit: Vector3 = _editor.cursor_hit_pos
-	var candidate := snapped_position(hit + _drag_offset)
-	if candidate.is_equal_approx(record.pos):
+	var candidate := snapped_position(hit + _drag_offset, record.asset_id, record.scale.x, record.rot.y)
+	if candidate.is_equal_approx(record.anchor_pos()):
 		return
-	var shift := candidate - record.pos
+	# Перетаскивание двигает якорь по клеткам; авторское смещение едет вместе с
+	# объектом и не сбрасывается.
+	var shift := candidate - record.anchor_pos()
 	# Everything selected moves together: dragging one of five chairs must not
 	# silently leave the other four behind.
 	var records := selected_records()
@@ -310,9 +314,6 @@ func on_drag() -> void:
 ## before delegating.
 func handle_key(event: InputEventKey) -> bool:
 	if event.ctrl_pressed:
-		if event.keycode == KEY_D:
-			duplicate_selection()
-			return true
 		return false
 	match event.keycode:
 		KEY_P:
@@ -339,8 +340,16 @@ func handle_key(event: InputEventKey) -> bool:
 # Placement maths — delegated to FillPlacementValidator
 # ---------------------------------------------------------------------------
 
-func snapped_position(raw_hit: Vector3) -> Vector3:
-	return _validator.snapped_position(raw_hit, _editor.active_layer, current_asset_id, current_snap_step)
+## Точка, в которую сядет якорь объекта: центр прямоугольника целых клеток,
+## который он занимает.
+func snapped_position(raw_hit: Vector3, asset_id: StringName = current_asset_id, scale: float = 1.0, yaw_deg: float = NAN) -> Vector3:
+	var yaw := current_yaw_deg if is_nan(yaw_deg) else yaw_deg
+	return _validator.snapped_position(raw_hit, _editor.active_layer, asset_id, scale, yaw)
+
+
+## Клетки, которые займёт объект — для подсветки и для проверки занятости.
+func occupied_cells(anchor: Vector3, asset_id: StringName, scale: float = 1.0, yaw_deg: float = 0.0) -> Rect2i:
+	return _validator.occupied_cells(anchor, asset_id, scale, yaw_deg)
 
 
 func _is_in_bounds(pos: Vector3, asset_id: StringName = current_asset_id, scale: Vector3 = Vector3.ONE) -> bool:
@@ -356,7 +365,7 @@ func _is_valid_transform(pos: Vector3, rot: Vector3, scale: Vector3, asset_id: S
 
 
 func _compute_ghost_state(pos: Vector3) -> int:
-	return _validator.compute_ghost_state(pos, _editor.blueprint, current_asset_id)
+	return _validator.compute_ghost_state(pos, _editor.blueprint, current_asset_id, current_yaw_deg)
 
 
 func _pick_objects_at(world_pos: Vector3) -> Array[String]:
@@ -411,7 +420,10 @@ func _place_at(position: Vector3) -> void:
 	if _compute_ghost_state(position) != FillPlacementValidatorScript.GhostState.VALID:
 		_editor.set_status("Нельзя разместить наполнение поверх другого объекта.")
 		return
-	var record := FillObjectRecordScript.make(asset.id, position, _next_object_suffix())
+	# `pos` — итог: якорь по клеткам плюс авторское смещение кисти. Клетки объекта
+	# считаются от якоря, поэтому смещение не переселяет его к соседям.
+	var record := FillObjectRecordScript.make(asset.id, position + current_offset, _next_object_suffix())
+	record.offset = current_offset
 	# Every axis the brush carries, not just yaw: the ghost was previewed with
 	# all three, and dropping pitch/roll here made the placed object differ from
 	# what the author saw.
@@ -456,38 +468,6 @@ func delete_selection() -> void:
 		_erase_object(object_id)
 	_editor.end_history_group()
 	_editor.set_status("Объект удалён." if targets.size() == 1 else "Удалено объектов: %d." % targets.size())
-
-
-func duplicate_selection() -> void:
-	var record := find_record(selected_object_id)
-	if record == null:
-		_editor.set_status("Нечего дублировать: объект не выбран.")
-		return
-	var copy := record.duplicate_record(_next_object_suffix())
-	# Offset by one snap step so the copy is visible rather than hidden inside
-	# the original.
-	var offset := maxf(current_snap_step, 0.5)
-	var offset_candidates := [
-		Vector3(offset, 0.0, offset),
-		Vector3(-offset, 0.0, offset),
-		Vector3(offset, 0.0, -offset),
-		Vector3(-offset, 0.0, -offset),
-	]
-	var placed := false
-	for off in offset_candidates:
-		copy.pos = record.pos + off
-		if _is_valid_transform(copy.pos, copy.rot, copy.scale, copy.asset_id, record.id):
-			placed = true
-			break
-	if not placed:
-		_editor.set_status("Невозможно дублировать: нет места в границах здания.")
-		return
-	_editor.blueprint.objects.append(copy)
-	_spawn_node(copy)
-	_editor.mark_dirty()
-	_refresh_object_list()
-	select_object(copy.id)
-	_editor.set_status("Объект продублирован.")
 
 
 ## Rotation applies to every selected object and to the brush. The step is the

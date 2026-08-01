@@ -80,16 +80,15 @@ const BLOCKS: Array = [
 		"id": &"arch",
 		"name": "Арка",
 		"category": Category.STRUCTURE,
-		# A 1 m half-column laid on the floor is cut out of a 0.5 m slab.
-		"size": Vector3(1.0, 0.5, 1.0),
-		"mesh_shape": SHAPE_ARCH,
+		"size": Vector3(1.0, 1.0, 1.0),
+		"mesh_shape": SHAPE_ARCH_TOP,
 		"rotatable": true,
 		"variants": [
-			{"id": &"bottom", "name": "Нижний", "mesh_shape": SHAPE_ARCH},
-			{"id": &"top", "name": "Верхний", "mesh_shape": SHAPE_ARCH_TOP},
+			{"id": &"1", "name": "1", "size": Vector3(1.0, 1.0, 1.0), "mesh_shape": SHAPE_ARCH_TOP},
+			{"id": &"1_2", "name": "1/2", "size": Vector3(1.0, 1.0, 1.0), "mesh_shape": SHAPE_HALF_ARCH},
+			{"id": &"1_4", "name": "1/4", "size": Vector3(0.5, 0.5, 1.0), "mesh_shape": SHAPE_HALF_ARCH},
 		],
 	},
-	{"id": &"half_arch", "name": "Полуарка", "category": Category.STRUCTURE, "size": Vector3(1.0, 1.0, 1.0), "mesh_shape": SHAPE_HALF_ARCH, "rotatable": true},
 	# --- Фундамент ---------------------------------------------------------
 	{
 		"id": &"foundation",
@@ -187,7 +186,6 @@ const BLOCKS: Array = [
 		"size": Vector3(1.0, 0.5, 1.0),
 		"mesh_shape": SHAPE_WEDGE_LOW,
 		"rotatable": true,
-		"variants": [{"id": &"lower", "name": "Нижний", "size": Vector3(1.0, 0.5, 1.0)}, {"id": &"upper", "name": "Верхний", "size": Vector3(1.0, 0.5, 1.0), "vertical_offset": 0.5}],
 	},
 	{
 		"id": &"roof_corner_in_low",
@@ -196,7 +194,6 @@ const BLOCKS: Array = [
 		"size": Vector3(1.0, 0.5, 1.0),
 		"mesh_shape": SHAPE_SLOPE_CORNER_IN,
 		"rotatable": true,
-		"variants": [{"id": &"lower", "name": "Нижний", "size": Vector3(1.0, 0.5, 1.0)}, {"id": &"upper", "name": "Верхний", "size": Vector3(1.0, 0.5, 1.0), "vertical_offset": 0.5}],
 	},
 	{
 		"id": &"roof_corner_out_low",
@@ -205,7 +202,6 @@ const BLOCKS: Array = [
 		"size": Vector3(1.0, 0.5, 1.0),
 		"mesh_shape": SHAPE_SLOPE_CORNER_OUT,
 		"rotatable": true,
-		"variants": [{"id": &"lower", "name": "Нижний", "size": Vector3(1.0, 0.5, 1.0)}, {"id": &"upper", "name": "Верхний", "size": Vector3(1.0, 0.5, 1.0), "vertical_offset": 0.5}],
 	},
 	# --- Проходы -----------------------------------------------------------
 	{

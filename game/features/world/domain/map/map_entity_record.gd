@@ -11,6 +11,11 @@ extends RefCounted
 var id: StringName = &""
 var archetype_id: StringName = &""
 var position := Vector3.ZERO
+## Авторская подстройка внутри своих клеток. Занятые клетки считаются по якорю
+## (`position - offset`), поэтому смещение никогда не «переселяет» объект в
+## соседнюю клетку и не ломает проверку занятости
+## (`map_fill_mode.md` §9.3.1). Y — подъём над поверхностью.
+var offset := Vector3.ZERO
 var yaw_degrees := 0.0
 var scale := 1.0
 var initial_state: StringName = EntityStateSet.FOLLOW_SEASON
@@ -19,8 +24,14 @@ var tags: Array[StringName] = []
 var activity: StringName = &""
 
 
+## Клетка, которой объект принадлежит: она выводится из якоря, а не из
+## итоговой позиции.
 func cell(terrain: TerrainGrid) -> Vector2i:
-	return terrain.cell_from_position(position)
+	return terrain.cell_from_position(anchor_position())
+
+
+func anchor_position() -> Vector3:
+	return position - offset
 
 
 func to_dict() -> Dictionary:
@@ -29,6 +40,7 @@ func to_dict() -> Dictionary:
 		"archetype": String(archetype_id),
 		"transform": {
 			"position": [position.x, position.y, position.z],
+			"offset": [offset.x, offset.y, offset.z],
 			"yaw": yaw_degrees,
 			"scale": scale,
 		},
@@ -53,6 +65,9 @@ static func from_dict(source: Dictionary) -> MapEntityRecord:
 		var raw_position: Variant = (transform as Dictionary).get("position", [])
 		if raw_position is Array and (raw_position as Array).size() >= 3:
 			record.position = Vector3(float(raw_position[0]), float(raw_position[1]), float(raw_position[2]))
+		var raw_offset: Variant = (transform as Dictionary).get("offset", [])
+		if raw_offset is Array and (raw_offset as Array).size() >= 3:
+			record.offset = Vector3(float(raw_offset[0]), float(raw_offset[1]), float(raw_offset[2]))
 		record.yaw_degrees = float((transform as Dictionary).get("yaw", 0.0))
 		record.scale = maxf(float((transform as Dictionary).get("scale", 1.0)), 0.01)
 	var state := StringName(source.get("state", EntityStateSet.FOLLOW_SEASON))

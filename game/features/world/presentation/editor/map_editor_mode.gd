@@ -50,6 +50,11 @@ class ToolOption:
 	var selected := false
 	var disabled := false
 	var color := Color(0, 0, 0, 0)
+	## Headers render as section labels (like the palette OptionsTitle), not buttons.
+	var is_header := false
+	## When true, an expanding spacer is inserted before this header so everything
+	## after it sits at the bottom of the options area.
+	var push_bottom := false
 
 	static func of(option_id: StringName, option_label: String, option_row: StringName = &"", is_selected := false, is_disabled := false, swatch := Color(0, 0, 0, 0)) -> ToolOption:
 		var option := ToolOption.new()
@@ -59,6 +64,14 @@ class ToolOption:
 		option.selected = is_selected
 		option.disabled = is_disabled
 		option.color = swatch
+		return option
+
+	static func header(option_id: StringName, option_label: String, to_bottom := false) -> ToolOption:
+		var option := ToolOption.new()
+		option.id = option_id
+		option.label = option_label
+		option.is_header = true
+		option.push_bottom = to_bottom
 		return option
 
 

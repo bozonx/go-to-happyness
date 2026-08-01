@@ -19,6 +19,10 @@ var id: String = ""
 var asset_id: StringName = &""
 var owner_zone_id: StringName = &""
 var pos: Vector3 = Vector3.ZERO
+## Authored fine-tuning inside the object's own cells. Occupancy is computed from
+## the anchor (`pos - offset`), so nudging a chair never moves it into a
+## neighbouring cell behind the author's back (building_furnishing.md §6.2).
+var offset: Vector3 = Vector3.ZERO
 var rot: Vector3 = Vector3.ZERO  ## degrees
 var scale: Vector3 = Vector3.ONE
 var appearance: Dictionary = {}
@@ -38,10 +42,17 @@ func duplicate_record(unique_suffix: int) -> FillObjectRecord:
 	copy.asset_id = asset_id
 	copy.owner_zone_id = owner_zone_id
 	copy.pos = pos
+	copy.offset = offset
 	copy.rot = rot
 	copy.scale = scale
 	copy.appearance = appearance.duplicate(true)
 	return copy
+
+
+## The cell-snapped point the object belongs to, with the authored offset taken
+## back out.
+func anchor_pos() -> Vector3:
+	return pos - offset
 
 
 func to_dict() -> Dictionary:
@@ -50,6 +61,7 @@ func to_dict() -> Dictionary:
 		"asset_id": String(asset_id),
 		"owner_zone": String(owner_zone_id),
 		"pos": [pos.x, pos.y, pos.z],
+		"offset": [offset.x, offset.y, offset.z],
 		"rot": [rot.x, rot.y, rot.z],
 		"scale": [scale.x, scale.y, scale.z],
 		"appearance": json_safe_appearance(),
@@ -85,6 +97,7 @@ static func from_dict(data: Dictionary) -> FillObjectRecord:
 	record.asset_id = StringName(data.get("asset_id", ""))
 	record.owner_zone_id = StringName(data.get("owner_zone", ""))
 	record.pos = _arr_to_vec3(data.get("pos", []), Vector3.ZERO)
+	record.offset = _arr_to_vec3(data.get("offset", []), Vector3.ZERO)
 	record.rot = _arr_to_vec3(data.get("rot", []), Vector3.ZERO)
 	record.scale = _arr_to_vec3(data.get("scale", []), Vector3.ONE)
 	var raw_appearance: Variant = data.get("appearance", {})

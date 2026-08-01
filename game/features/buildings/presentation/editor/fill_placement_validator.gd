@@ -20,42 +20,38 @@ var _pick_cycle_index: int = 0
 var _last_picked_ids: Array[String] = []
 
 
-## Snap grid points are the *centres* of `step`-sized cells, so an object always
-## lands centred in its snap cell (1.0 → block centres, 0.5 → half-block centres).
-## Free placement (step 0) is only allowed when the asset's snap_steps includes 0.
-func snapped_position(raw_hit: Vector3, active_layer: int, asset_id: StringName, snap_step: float) -> Vector3:
-	var y := float(active_layer)
+## Placement is per cell: an object occupies a whole number of cells and its
+## anchor is the centre of that rectangle. Sub-cell positioning is a separate,
+## explicitly authored `offset` — not a second snapping grid (design §6.2).
+func snapped_position(raw_hit: Vector3, active_layer: int, asset_id: StringName, scale: float = 1.0, yaw_deg: float = 0.0) -> Vector3:
+	var span := cell_span(asset_id, scale, yaw_deg)
+	var base := EditorFillConventions.base_cell_at(raw_hit.x, raw_hit.z, span)
+	var anchor := EditorFillConventions.anchor_of_cells(base, span)
+	return Vector3(anchor.x, float(active_layer), anchor.y)
+
+
+## How many whole cells the asset takes, rotation and scale included.
+func cell_span(asset_id: StringName, scale: float = 1.0, yaw_deg: float = 0.0) -> Vector2i:
 	var asset := WorldAssetCatalog.get_asset(asset_id)
-	var step := snap_step
-	# If the asset restricts snap steps, clamp to the closest allowed one.
-	if asset != null and not asset.snap_steps.is_empty():
-		var best_step := asset.snap_steps[0]
-		var best_diff := absf(step - best_step)
-		for allowed in asset.snap_steps:
-			var diff := absf(step - allowed)
-			if diff < best_diff:
-				best_step = allowed
-				best_diff = diff
-		step = best_step
-	if step <= 0.001:
-		return Vector3(raw_hit.x, y, raw_hit.z)
-	var half := step * 0.5
-	return Vector3(
-		snappedf(raw_hit.x - half, step) + half,
-		y,
-		snappedf(raw_hit.z - half, step) + half)
+	var size := Vector2i(1, 1)
+	if asset != null:
+		size = Vector2i(maxi(1, asset.size_in_blocks.x), maxi(1, asset.size_in_blocks.z))
+	return EditorFillConventions.cell_span(size, scale, yaw_deg)
 
 
-## Returns true when the position is inside the building footprint.
-func is_in_bounds(pos: Vector3, blueprint: RefCounted, asset_id: StringName, scale: Vector3) -> bool:
+## The cells an object standing at `anchor` claims.
+func occupied_cells(anchor: Vector3, asset_id: StringName, scale: float = 1.0, yaw_deg: float = 0.0) -> Rect2i:
+	return EditorFillConventions.occupied_rect(anchor.x, anchor.z, cell_span(asset_id, scale, yaw_deg))
+
+
+## Returns true when every claimed cell is inside the building footprint.
+func is_in_bounds(pos: Vector3, blueprint: RefCounted, asset_id: StringName, scale: Vector3, yaw_deg: float = 0.0) -> bool:
 	if blueprint == null:
 		return true
 	var footprint: Vector2i = blueprint.footprint
-	var asset := WorldAssetCatalog.get_asset(asset_id)
-	var size := asset.footprint_m() if asset != null else Vector3.ONE
-	var half_x := size.x * scale.x * 0.5
-	var half_z := size.z * scale.z * 0.5
-	return pos.x - half_x >= 0.0 and pos.x + half_x <= float(footprint.x) and pos.z - half_z >= 0.0 and pos.z + half_z <= float(footprint.y)
+	var cells := occupied_cells(pos, asset_id, scale.x, yaw_deg)
+	return cells.position.x >= 0 and cells.position.y >= 0 \
+		and cells.end.x <= footprint.x and cells.end.y <= footprint.y
 
 
 func fill_aabb(pos: Vector3, asset_id: StringName, scale: Vector3) -> AABB:
@@ -73,7 +69,12 @@ func aabbs_intersect(a: AABB, b: AABB) -> bool:
 
 ## Returns true only for conflicts that affect physical collision/navigation.
 ## Decorative objects with `none` policy may intentionally overlap.
-func is_collision_conflict(pos: Vector3, blueprint: RefCounted, asset_id: StringName, scale: Vector3, exclude_id: String = "") -> bool:
+##
+## Objects claim **cells**, and two claims on one cell are refused. The authored
+## `offset` is deliberately not part of this: it moves the model inside the cells
+## the object already owns, and re-checking it would mean an object could be
+## refused for a nudge the author made on purpose (design §6.2).
+func is_collision_conflict(pos: Vector3, blueprint: RefCounted, asset_id: StringName, scale: Vector3, exclude_id: String = "", yaw_deg: float = 0.0) -> bool:
 	var asset := WorldAssetCatalog.get_asset(asset_id)
 	if asset == null:
 		return false
@@ -87,15 +88,20 @@ func is_collision_conflict(pos: Vector3, blueprint: RefCounted, asset_id: String
 			return true
 	if not candidate_blocks:
 		return false
+	var candidate_cells := occupied_cells(pos, asset_id, scale.x, yaw_deg)
 	for record: FillObjectRecordScript in blueprint.objects:
 		if record.id == exclude_id:
+			continue
+		# Objects on other floors share cells in plan and never conflict.
+		if not is_equal_approx(record.anchor_pos().y, pos.y):
 			continue
 		var other_asset := WorldAssetCatalog.get_asset(record.asset_id)
 		if other_asset == null:
 			continue
 		if other_asset.collision_policy == WorldAssetDef.COLLISION_NONE and not other_asset.blocking_navigation:
 			continue
-		if aabbs_intersect(candidate, fill_aabb(record.pos, record.asset_id, record.scale)):
+		var other_cells := occupied_cells(record.anchor_pos(), record.asset_id, record.scale.x, record.rot.y)
+		if EditorFillConventions.rects_overlap(candidate_cells, other_cells):
 			return true
 	return false
 
@@ -109,28 +115,30 @@ func is_valid_transform(pos: Vector3, rot: Vector3, scale: Vector3, asset_id: St
 			var value := rot.x if axis == "x" else (rot.y if axis == "y" else rot.z)
 			if not is_zero_approx(value) and not asset.is_rotation_axis_allowed(axis):
 				return false
-	return is_in_bounds(pos, blueprint, asset_id, scale) and not is_collision_conflict(pos, blueprint, asset_id, scale, exclude_id)
+	return is_in_bounds(pos, blueprint, asset_id, scale, rot.y) \
+		and not is_collision_conflict(pos, blueprint, asset_id, scale, exclude_id, rot.y)
 
 
 ## Computes the current ghost state for placement feedback.
-func compute_ghost_state(pos: Vector3, blueprint: RefCounted, asset_id: StringName) -> int:
-	if not is_in_bounds(pos, blueprint, asset_id, Vector3.ONE):
+func compute_ghost_state(pos: Vector3, blueprint: RefCounted, asset_id: StringName, yaw_deg: float = 0.0) -> int:
+	if not is_in_bounds(pos, blueprint, asset_id, Vector3.ONE, yaw_deg):
 		return GhostState.OUT_OF_BOUNDS
-	if is_collision_conflict(pos, blueprint, asset_id, Vector3.ONE):
+	if is_collision_conflict(pos, blueprint, asset_id, Vector3.ONE, "", yaw_deg):
 		return GhostState.INTERSECTION
 	return GhostState.VALID
 
 
-## Objects whose footprint contains `world_pos`, sorted nearest first.
-## Returns all candidates so the caller can cycle through overlapping ones.
+## Objects whose cells contain `world_pos`, sorted nearest first. Picking follows
+## the claimed cells rather than a radius, so a long table is clickable along its
+## whole length instead of only near its centre.
 func pick_objects_at(world_pos: Vector3, blueprint: RefCounted) -> Array[String]:
 	var candidates: Array[Dictionary] = []
+	var pointer_cell := Vector2i(int(floor(world_pos.x)), int(floor(world_pos.z)))
 	for record: FillObjectRecordScript in blueprint.objects:
-		var asset := WorldAssetCatalog.get_asset(record.asset_id)
-		var size := asset.footprint_m() if asset != null else Vector3.ONE
-		var radius := maxf(MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
+		var anchor := record.anchor_pos()
+		var cells := occupied_cells(anchor, record.asset_id, record.scale.x, record.rot.y)
 		var distance := Vector2(record.pos.x - world_pos.x, record.pos.z - world_pos.z).length()
-		if distance <= radius:
+		if cells.has_point(pointer_cell) or distance <= MIN_PICK_RADIUS:
 			candidates.append({"id": record.id, "dist": distance})
 	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return float(a["dist"]) < float(b["dist"]))

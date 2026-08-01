@@ -130,9 +130,26 @@ func set_options(options: Array) -> void:
 	_separator.visible = has_options and has_entries
 	_options.visible = has_options
 	if not has_options:
+		_options.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 		return
+	var has_push_bottom := false
+	for option in options:
+		if option is ToolOption and option.is_header and option.push_bottom:
+			has_push_bottom = true
+			break
+	_options.size_flags_vertical = Control.SIZE_EXPAND_FILL if has_push_bottom else Control.SIZE_SHRINK_BEGIN
 	var rows: Dictionary = {}
 	for option in options:
+		if option is ToolOption and option.is_header:
+			if option.push_bottom:
+				var spacer := Control.new()
+				spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+				_options.add_child(spacer)
+			var header_label := Label.new()
+			header_label.text = option.label
+			header_label.add_theme_font_size_override("font_size", 14)
+			_options.add_child(header_label)
+			continue
 		var parent: Container = _options
 		if option.row != &"":
 			if not rows.has(option.row):

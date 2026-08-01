@@ -95,7 +95,7 @@ func handle_input(event: InputEvent) -> bool:
 				# Обе оси существуют в редакторе зданий, но запись карты хранит
 				# только рыскание: врать автору поворотом, который некуда
 				# положить, хуже, чем сказать это в статусе.
-				context.set_status_message("На карте объект поворачивается только вокруг Y: C или R.")
+				context.set_status_message("На карте объект поворачивается только вокруг Y: C или R.", true)
 				return true
 			KEY_ESCAPE:
 				return _cancel_current_action()
@@ -136,7 +136,7 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 		return false
 	if _archetype_id == &"":
 		_select(&"", false)
-		context.set_status_message("Выберите ассет в палитре или щёлкните по объекту.")
+		context.set_status_message("Выберите ассет в палитре или щёлкните по объекту.", true)
 		rebuild_views()
 		notify_ui_changed()
 		return true
@@ -220,7 +220,7 @@ func _place(cell: Vector2i) -> void:
 func _erase_at(cell: Vector2i) -> bool:
 	var entity_id := _entity_at(cell)
 	if entity_id == &"":
-		context.set_status_message("Под курсором нет объекта наполнения.")
+		context.set_status_message("Под курсором нет объекта наполнения.", true)
 		return true
 	var before := context.document.entities.to_json()
 	for index in range(context.document.entities.entities.size() - 1, -1, -1):
@@ -296,7 +296,7 @@ func _pick_archetype(cell: Vector2i) -> bool:
 	var entity_id := _entity_at(cell)
 	var record := context.document.entities.by_id(entity_id)
 	if record == null:
-		context.set_status_message("Под курсором нет объекта для пипетки.")
+		context.set_status_message("Под курсором нет объекта для пипетки.", true)
 		return false
 	_archetype_id = record.archetype_id
 	_brush_props = record.props.duplicate(true)
@@ -533,7 +533,7 @@ func select_palette_entry(entry_id: StringName) -> void:
 			# как сломанная палитра.
 			var asset := WorldAssetCatalog.get_asset(entry_id)
 			var asset_name := asset.name if asset != null else String(entry_id)
-			context.set_status_message("«%s» пока не описан архетипом и не может быть поставлен на карту." % asset_name)
+			context.set_status_message("«%s» пока не описан архетипом и не может быть поставлен на карту." % asset_name, true)
 			return
 		_archetype_id = archetype.id
 	notify_ui_changed()
@@ -703,7 +703,7 @@ func _apply_transform_value(record: MapEntityRecord, property_name: StringName, 
 			var next_position := target.position + shift
 			var cell := context.terrain.cell_from_position(next_position)
 			if not context.terrain.is_inside(cell) or context.terrain.is_hole(cell):
-				context.set_status_message("Позиция вне карты или попадает в отверстие.")
+				context.set_status_message("Позиция вне карты или попадает в отверстие.", true)
 				return false
 			target.position = next_position
 			changed = true

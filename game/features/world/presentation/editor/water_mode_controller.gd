@@ -168,6 +168,7 @@ func handle_input(event: InputEvent) -> bool:
 				brush.apply_secondary()
 				notify_ui_changed()
 				_update_highlight()
+				_propagate_brush_message()
 				return true
 			return false
 		if button.button_index != MOUSE_BUTTON_LEFT:
@@ -248,7 +249,9 @@ func _handle_key(event: InputEventKey) -> bool:
 
 func _propagate_brush_message() -> void:
 	if context != null and context.water_brush != null and context.water_brush.last_message != "":
-		context.set_status_message(context.water_brush.last_message)
+		var msg := context.water_brush.last_message
+		var is_error := msg.contains("ОТКЛОНЕНО") or msg.contains("не удалось") or msg.contains("нельзя")
+		context.set_status_message(msg, is_error)
 
 
 func _stroke() -> void:
@@ -322,6 +325,8 @@ func tool_options() -> Array:
 	var brush := context.water_brush
 	var options: Array = []
 
+	options.append(ToolOption.header(&"header_body", "Водоём"))
+
 	options.append(ToolOption.of(OPTION_WATER, "Вода", ROW_LIQUID_CAT, brush.liquid_category == &"water", false, Color(0.2, 0.55, 0.85, 1.0)))
 	options.append(ToolOption.of(OPTION_LAVA, "Лава", ROW_LIQUID_CAT, brush.liquid_category == &"lava", false, Color(0.95, 0.3, 0.08, 1.0)))
 
@@ -352,6 +357,8 @@ func tool_options() -> Array:
 			var freeze_label := "Разморозить водоём" if is_frozen else "Заморозить водоём"
 			options.append(ToolOption.of(OPTION_ACTION_ICE, freeze_label, ROW_BODY_ACTIONS, is_frozen))
 		options.append(ToolOption.of(OPTION_DELETE_BODY, "🗑 Удалить водоём", ROW_BODY_ACTIONS))
+
+	options.append(ToolOption.header(&"header_brush", "Кисть", true))
 
 	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_FLOW]), "Течение", ROW_BRUSH_TOOLS, brush.tool == WaterBrushController.TOOL_FLOW))
 	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_STILL]), "Стоячая", ROW_BRUSH_TOOLS, brush.tool == WaterBrushController.TOOL_STILL))

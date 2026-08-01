@@ -1,7 +1,7 @@
 class_name MapEditorContext
 extends RefCounted
 
-signal status_message_changed(message: String)
+signal status_message_changed(message: String, is_error: bool)
 
 ## Everything a mode is allowed to reach (map_editor.md §3.5).
 ##
@@ -71,5 +71,5 @@ func set_edit_label(label: String) -> void:
 	pending_edit_label = label
 
 
-func set_status_message(message: String) -> void:
-	status_message_changed.emit(message)
+func set_status_message(message: String, is_error: bool = false) -> void:
+	status_message_changed.emit(message, is_error)

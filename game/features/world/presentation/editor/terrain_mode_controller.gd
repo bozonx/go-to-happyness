@@ -229,6 +229,7 @@ func _handle_key(event: InputEventKey) -> bool:
 			context.set_edit_label("выравнивание")
 			context.brush.apply_flatten()
 			_redraw_overlay()
+			_propagate_brush_message()
 		KEY_M:
 			_toggle_overlay()
 		KEY_T:
@@ -525,12 +526,16 @@ func _set_ramp_status(message: String) -> void:
 	if message == _last_ramp_status:
 		return
 	_last_ramp_status = message
-	context.set_status_message(message)
+	context.set_status_message(message, _is_error_message(message))
 
 
 func _propagate_brush_message() -> void:
 	if context != null and context.brush != null and context.brush.last_message != "":
-		context.set_status_message(context.brush.last_message)
+		context.set_status_message(context.brush.last_message, _is_error_message(context.brush.last_message))
+
+
+static func _is_error_message(message: String) -> bool:
+	return message.contains("ОТКЛОНЕНО") or message.contains("не удалось") or message.contains("нельзя")
 
 
 func _cancel_ramp_drag() -> void:

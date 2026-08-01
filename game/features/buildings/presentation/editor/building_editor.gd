@@ -78,6 +78,7 @@ var _orbiting: bool = false
 ## only reports where they landed (active_zones.md §5.2).
 @onready var _entrance_label: Label = %EntranceDerivedLabel
 @onready var _status_label: Label = %StatusLabel
+@onready var _shortcut_tooltip: EditorShortcutTooltip = %ShortcutTooltip
 @onready var _metadata_panel: ConfirmationDialog = %MetadataPanel
 @onready var _load_popup: PopupPanel = %LoadPopup
 @onready var _load_list: ItemList = %LoadList
@@ -556,6 +557,7 @@ func _select_mode(mode: int) -> void:
 	current_mode = mode
 	for m in _mode_buttons.keys():
 		(_mode_buttons[m] as Button).button_pressed = m == mode
+	_update_shortcut_tooltip()
 	if mode == EditMode.FILL:
 		frame_mode.deactivate()
 		zones_mode.deactivate()
@@ -797,6 +799,7 @@ func _setup_ui() -> void:
 	_load_list.item_activated.connect(_on_load_item_activated)
 	_save_as_dialog.confirmed.connect(_on_save_as_confirmed)
 	_metadata_panel.confirmed.connect(_on_settings_confirmed)
+	_update_shortcut_tooltip()
 
 	frame_mode.sync_metadata_fields()
 	frame_mode.clear_block_selection()
@@ -813,6 +816,25 @@ func _setup_ui() -> void:
 func _update_status(message: String) -> void:
 	if _status_label != null:
 		_status_label.text = message
+
+
+func _update_shortcut_tooltip() -> void:
+	if _shortcut_tooltip == null:
+		return
+	var text := "Общее\n• ПКМ — камера · СКМ — панорама · Колесо — зум\n• WASD / Q E — перемещение камеры\n• P — пипетка · Esc — отмена / очистить выбор\n• Ctrl+Z / Ctrl+Shift+Z (Ctrl+Y) — отмена / повтор\n• 1–4 — выбор режима\n\n"
+	match current_mode:
+		EditMode.FRAME:
+			text += "Каркас:\n• 🔨 / 🧹 (E) — режим строительства / ластик\n• 📏 (L) — линия · 🔲 (M) — прямоугольник\n• 🔄 (Z / X / C или R) — поворот блока (оси Z, X, Y)\n• ➖ / ➕ (PageDown / PageUp) — смена слоя Y\n• Alt+PageUp / Alt+PageDown — дробный сдвиг Y (0.25 м)\n• Shift+ЛКМ — пипетка блока под курсором\n• Shift+ПКМ — быстрый ластик при зажатии"
+		EditMode.FINISHES:
+			text += "Отделка (в разработке):\n• Выбор и нанесение материалов отделки"
+		EditMode.FILL:
+			text += "Наполнение:\n• ЛКМ — разместить из каталога или выбрать объект\n• Ctrl+ЛКМ — добавить к выделению\n• Shift+ЛКМ — пипетка объекта под курсором\n• 🔄 (Z / X / C или R) — поворот объекта (оси Z, X, Y)\n• Ctrl+D — дублировать выделение\n• Delete / Shift+ПКМ — удалить объект\n• ➖ / ➕ (PageDown / PageUp) — смена слоя Y\n• Esc — снять выделение"
+		EditMode.ZONES:
+			text += "Зоны:\n• Q — рисование области · W — установка точек\n• Tab — следующая роль зоны\n• F — поворот точки на 90°\n• ➖ / ➕ — смена слоя Y\n• Shift+ПКМ — стереть клетку зоны\n• Delete — удалить выбранное\n• Esc — очистить выделение / в режим выбора"
+	_shortcut_tooltip.shortcuts_text = text
+	var label: Label = _shortcut_tooltip.get_node_or_null("Popup/Margin/Label")
+	if label != null:
+		label.text = text
 
 
 func _mark_dirty() -> void:
