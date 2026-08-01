@@ -212,11 +212,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			if cursor_valid:
 				if current_mode == EditMode.FILL:
 					fill_mode.on_drag()
-				elif current_mode == EditMode.FRAME and current_brush == Brush.RECT:
-					frame_mode.paint_rect(frame_mode.paint_anchor, cursor_cell)
-				else:
-					frame_mode.paint_line(frame_mode.last_paint_cell, cursor_cell)
-				frame_mode.last_paint_cell = cursor_cell
+				elif current_mode == EditMode.FRAME:
+					frame_mode.continue_paint_stroke()
 		elif frame_mode.is_shift_erasing():
 			_update_cursor()
 			if cursor_valid:
@@ -301,15 +298,14 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 					fill_mode.on_left_pressed(event.ctrl_pressed)
 					frame_mode.painting = true
 				else:
-					frame_mode.painting = true
-					frame_mode.last_paint_cell = cursor_cell
-					frame_mode.paint_anchor = cursor_cell
-					if current_brush == Brush.RECT:
-						frame_mode.paint_rect(frame_mode.paint_anchor, cursor_cell)
-					else:
-						frame_mode.apply_tool_at_cursor()
+					_update_cursor()
+					if cursor_valid:
+						frame_mode.begin_paint_stroke()
 			else:
-				frame_mode.painting = false
+				if current_mode == EditMode.FRAME:
+					frame_mode.end_paint_stroke()
+				else:
+					frame_mode.painting = false
 				if current_mode == EditMode.FILL:
 					fill_mode.on_left_released()
 				elif current_mode == EditMode.ZONES:

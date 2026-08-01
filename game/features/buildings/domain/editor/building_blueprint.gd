@@ -167,6 +167,14 @@ func rooms() -> Array[ZoneAreaRecord]:
 	return result
 
 
+func overlays() -> Array[ZoneAreaRecord]:
+	var result: Array[ZoneAreaRecord] = []
+	for area in areas:
+		if area.is_overlay():
+			result.append(area)
+	return result
+
+
 func to_dict() -> Dictionary:
 	var block_dicts: Array = []
 	for block in blocks:

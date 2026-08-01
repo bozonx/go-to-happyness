@@ -126,6 +126,12 @@ func level_target_height() -> int:
 	return _level_target_height
 
 
+## Sets the absolute plateau height for Level mode without capturing from hover.
+func set_level_target_height(value: int) -> void:
+	_level_target_height = value
+	_has_level_target = true
+
+
 func _capture_level_target() -> void:
 	if not has_hover:
 		return

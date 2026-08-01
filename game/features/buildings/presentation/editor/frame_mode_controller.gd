@@ -32,6 +32,12 @@ var _ghost_tool: int = -1
 var _ghost_rot: int = -1
 var _ghost_valid: bool = false
 
+## Blocks that existed when the current paint stroke began. Newly placed
+## blocks must not become a new snap surface and make a held brush climb or
+## jump to another sub-slot.
+var _paint_snap_blocks: Array[BlueprintBlock] = []
+var _paint_anchor: int = BuildingBlockCatalog.ANCHOR_CENTER
+
 # UI bindings
 var _ghost: MeshInstance3D = null
 var _layer_plane: MeshInstance3D = null
@@ -174,7 +180,7 @@ func activate() -> void:
 
 
 func deactivate() -> void:
-	painting = false
+	end_paint_stroke()
 	shift_erasing = false
 	# The frame ghost is shared scene UI, not part of the palette.  It must not
 	# survive a switch to fill/zones and look like a stray block in the world.
@@ -247,35 +253,36 @@ func _placement_target_from_hit(cursor_plane_cell: Vector3i, hit_info: Dictionar
 	if not hit_info.is_empty():
 		var normal: Vector3 = hit_info["normal"]
 		var hit_pos: Vector3 = hit_info["hit_pos"]
+		var hit_block := hit_info["block"] as BlueprintBlock
+		var hit_aabb := BuildingBlockCatalog.occupied_aabb(hit_block.pos, hit_block.block_id,
+			hit_block.variant, hit_block.rot, hit_block.anchor, hit_block.rot_x, hit_block.rot_z)
+		var probe := hit_pos + normal * 0.0001
+		# At an exact edge, keep tangential coordinates on the face that was hit;
+		# otherwise floor() can redirect a side snap into the cell above/beside it.
+		var hit_center := hit_aabb.get_center()
+		for axis in 3:
+			if absf(normal[axis]) < 0.5:
+				probe[axis] += signf(hit_center[axis] - hit_pos[axis]) * 0.0001
+		target_cell = Vector3i(int(floor(probe.x)), maxi(0, int(floor(probe.y))), int(floor(probe.z)))
 
-		if normal.y > 0.5:
-			var hit_block := hit_info["block"] as BlueprintBlock
-			# `cursor_cell.xz` comes from the active-layer plane, which is displaced
-			# from the top face under an angled camera.  The hit block owns the cell
-			# that receives the next sub-block.
-			target_cell.x = hit_block.pos.x
-			target_cell.z = hit_block.pos.z
-			var target_y_world := hit_pos.y
-			target_cell.y = int(floor(target_y_world - 0.0001))
-			if target_cell.y < 0:
-				target_cell.y = 0
-			var unrot_y := target_y_world - float(target_cell.y)
-			if unrot_y >= 0.999:
-				target_cell.y += 1
-				unrot_y = 0.0
-			var cell_center_x := float(target_cell.x) + 0.5
-			var cell_center_z := float(target_cell.z) + 0.5
-			var local_xz := Vector2(hit_pos.x - cell_center_x, hit_pos.z - cell_center_z)
-			var rot_basis := Basis(Vector3.UP, deg_to_rad(-90.0 * float(_editor.current_rot)))
-			var unrot_xz3 := rot_basis * Vector3(local_xz.x, 0.0, local_xz.y)
-			local_p3 = Vector3(unrot_xz3.x, unrot_y, unrot_xz3.z)
-		else:
-			var cell_center_x := float(target_cell.x) + 0.5
-			var cell_center_z := float(target_cell.z) + 0.5
-			var local_xz := Vector2(_editor.cursor_hit_pos.x - cell_center_x, _editor.cursor_hit_pos.z - cell_center_z)
-			var rot_basis := Basis(Vector3.UP, deg_to_rad(-90.0 * float(_editor.current_rot)))
-			var unrot_xz3 := rot_basis * Vector3(local_xz.x, 0.0, local_xz.y)
-			local_p3 = Vector3(unrot_xz3.x, manual_subgrid_y, unrot_xz3.z)
+		# Put the candidate flush against whichever face the ray reached. The
+		# remaining two axes follow the pointer, so the same rule covers tops and
+		# all four sides of full blocks and sub-blocks.
+		var size := BuildingBlockCatalog.size_of(_editor.current_block_id, _editor.current_variant)
+		var basis := Basis.from_euler(_current_ghost_euler())
+		var half := size * 0.5
+		var extent := Vector3(
+			absf(basis.x.x) * half.x + absf(basis.y.x) * half.y + absf(basis.z.x) * half.z,
+			absf(basis.x.y) * half.x + absf(basis.y.y) * half.y + absf(basis.z.y) * half.z,
+			absf(basis.x.z) * half.x + absf(basis.y.z) * half.y + absf(basis.z.z) * half.z)
+		var desired_center := hit_pos
+		for axis in 3:
+			if absf(normal[axis]) > 0.5:
+				desired_center[axis] += normal[axis] * extent[axis]
+		var cell_center := Vector3(target_cell) + Vector3(0.5, 0.5, 0.5)
+		var unrotated := basis.inverse() * (desired_center - cell_center
+			- Vector3.UP * BuildingBlockCatalog.vertical_offset_of(_editor.current_block_id, _editor.current_variant))
+		local_p3 = Vector3(unrotated.x, unrotated.y - size.y * 0.5 + 0.5, unrotated.z)
 	else:
 		var cell_center_x := float(target_cell.x) + 0.5
 		var cell_center_z := float(target_cell.z) + 0.5
@@ -342,14 +349,57 @@ func apply_tool_at_cursor() -> void:
 	refresh_ghost()
 
 
-func _apply_tool_at_cell(cell: Vector3i) -> void:
+func begin_paint_stroke() -> void:
+	_paint_snap_blocks.clear()
+	for block: BlueprintBlock in _editor.grid_model.all_blocks():
+		_paint_snap_blocks.append(block)
+	_update_current_subgrid_anchor()
+	painting = true
+	last_paint_cell = _editor.cursor_cell
+	paint_anchor = _editor.cursor_cell
+	_paint_anchor = _editor.current_anchor
+	if _editor.current_brush == Brush.RECT:
+		paint_rect(paint_anchor, _editor.cursor_cell, _paint_anchor)
+	else:
+		_apply_tool_at_cell(_editor.cursor_cell, _paint_anchor)
+	refresh_ghost()
+
+
+func continue_paint_stroke() -> void:
+	if not painting or not _editor.cursor_valid:
+		return
+	_update_current_subgrid_anchor()
+	_continue_paint_to_target(_editor.cursor_cell, _editor.current_anchor)
+
+
+func _continue_paint_to_target(target_cell: Vector3i, target_anchor: int) -> void:
+	if _editor.current_brush == Brush.RECT:
+		paint_rect(paint_anchor, target_cell, _paint_anchor)
+	elif target_cell.y == last_paint_cell.y and target_anchor == _paint_anchor:
+		paint_line(last_paint_cell, target_cell, _paint_anchor)
+	else:
+		# A discontinuous surface/slot change is a new target, not a line through
+		# unrelated cells. This is the guard against stray blocks during a drag.
+		_apply_tool_at_cell(target_cell, target_anchor)
+		refresh_ghost()
+	last_paint_cell = target_cell
+	_paint_anchor = target_anchor
+
+
+func end_paint_stroke() -> void:
+	painting = false
+	_paint_snap_blocks.clear()
+
+
+func _apply_tool_at_cell(cell: Vector3i, anchor_override: int = -1) -> void:
+	var placement_anchor := _editor.current_anchor if anchor_override < 0 else anchor_override
 	match _editor.current_tool:
 		Tool.PLACE:
 			if _editor.current_block_id.is_empty() and _stamp_brush.is_empty():
 				return
 			if not _stamp_brush.is_empty():
 				_apply_stamp_at_cell(cell)
-			elif is_block_in_bounds(cell, _editor.current_block_id, _editor.current_variant, _editor.current_rot) and _editor.grid_model.place(cell, _editor.current_block_id, _editor.current_rot, _editor.current_material_id, _editor.current_variant, _editor.current_anchor, _editor.current_rot_x, _editor.current_rot_z):
+			elif is_block_in_bounds(cell, _editor.current_block_id, _editor.current_variant, _editor.current_rot) and _editor.grid_model.place(cell, _editor.current_block_id, _editor.current_rot, _editor.current_material_id, _editor.current_variant, placement_anchor, _editor.current_rot_x, _editor.current_rot_z):
 				_spawn_or_update_block_node(_editor.grid_model.get_block_at(cell))
 				_update_count()
 				_editor.mark_dirty()
@@ -409,9 +459,9 @@ func erase_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
 	refresh_ghost()
 
 
-func paint_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
+func paint_line(from_cell: Vector3i, to_cell: Vector3i, anchor_override: int = -1) -> void:
 	for cell in _bresenham_cells(from_cell, to_cell):
-		_apply_tool_at_cell(cell)
+		_apply_tool_at_cell(cell, anchor_override)
 	refresh_ghost()
 
 
@@ -425,7 +475,7 @@ func _bresenham_cells(from_cell: Vector3i, to_cell: Vector3i) -> Array[Vector3i]
 	var err := dx - dz
 	var cells: Array[Vector3i] = []
 	while true:
-		cells.append(Vector3i(x, _editor.active_layer, z))
+		cells.append(Vector3i(x, from_cell.y, z))
 		if x == to_cell.x and z == to_cell.z:
 			break
 		var e2 := 2 * err
@@ -438,15 +488,15 @@ func _bresenham_cells(from_cell: Vector3i, to_cell: Vector3i) -> Array[Vector3i]
 	return cells
 
 
-func paint_rect(from_cell: Vector3i, to_cell: Vector3i) -> void:
+func paint_rect(from_cell: Vector3i, to_cell: Vector3i, anchor_override: int = -1) -> void:
 	var x0 := mini(from_cell.x, to_cell.x)
 	var x1 := maxi(from_cell.x, to_cell.x)
 	var z0 := mini(from_cell.z, to_cell.z)
 	var z1 := maxi(from_cell.z, to_cell.z)
-	var y := _editor.active_layer
+	var y := from_cell.y
 	for x in range(x0, x1 + 1):
 		for z in range(z0, z1 + 1):
-			_apply_tool_at_cell(Vector3i(x, y, z))
+			_apply_tool_at_cell(Vector3i(x, y, z), anchor_override)
 	refresh_ghost()
 
 
@@ -502,10 +552,11 @@ func _placement_block_hit_info_on_ray(origin: Vector3, direction: Vector3, activ
 	var plane_distance := (float(active_layer) - origin.y) / direction.y
 	if plane_distance < 0.0:
 		return {}
-	return _block_hit_info_on_ray(plane_distance + 0.0001, origin, direction)
+	var candidates: Variant = _paint_snap_blocks if painting else null
+	return _block_hit_info_on_ray(plane_distance + 0.0001, origin, direction, candidates)
 
 
-func _block_hit_info_on_ray(max_distance: float, origin := Vector3.INF, direction := Vector3.ZERO) -> Dictionary:
+func _block_hit_info_on_ray(max_distance: float, origin := Vector3.INF, direction := Vector3.ZERO, candidates: Variant = null) -> Dictionary:
 	if _camera_controller == null or _camera_controller.camera == null:
 		return {}
 	if origin == Vector3.INF:
@@ -517,13 +568,14 @@ func _block_hit_info_on_ray(max_distance: float, origin := Vector3.INF, directio
 	var closest_distance := max_distance
 	var hit_normal := Vector3.UP
 	var hit_pos := Vector3.ZERO
-	for block: BlueprintBlock in _editor.grid_model.all_blocks():
+	var source_blocks: Array = _editor.grid_model.all_blocks() if candidates == null else candidates
+	for block: BlueprintBlock in source_blocks:
 		var aabb := BuildingBlockCatalog.occupied_aabb(block.pos, block.block_id,
 			block.variant, block.rot, block.anchor, block.rot_x, block.rot_z)
 		var hit_info := _ray_aabb_hit_info(origin, direction, aabb)
 		if not hit_info.is_empty():
 			var dist: float = hit_info["distance"]
-			if dist >= 0.0 and dist <= closest_distance:
+			if dist >= 0.0 and dist < closest_distance - 0.000001:
 				closest_block = block
 				closest_distance = dist
 				hit_normal = hit_info["normal"]

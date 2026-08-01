@@ -100,7 +100,7 @@ func pick_from_cell() -> bool:
 			return false
 		context.brush.pick_material()
 		if context.brush.has_hover and context.terrain != null:
-			context.brush.target_level = context.terrain.height_of(context.brush.hovered_cell)
+			context.brush.set_level_target_height(context.terrain.height_of(context.brush.hovered_cell))
 		notify_ui_changed()
 		return true
 	return false

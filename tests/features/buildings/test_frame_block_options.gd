@@ -36,7 +36,9 @@ func _run() -> void:
 
 	_test_top_face_uses_the_hit_block_cell(editor, frame)
 	_test_quarter_block_stacks_in_the_same_subslot(editor, frame)
+	_test_quarter_block_snaps_to_each_side(editor, frame)
 	_test_upper_active_layer_is_not_stolen_by_a_lower_block(editor, frame)
+	_test_drag_does_not_bridge_different_subslots(editor, frame)
 	_test_subcube_stack_and_history(editor, frame)
 
 	editor.queue_free()
@@ -80,6 +82,30 @@ func _test_quarter_block_stacks_in_the_same_subslot(editor: BuildingEditor, fram
 	assert(is_equal_approx(offset.y, 0.5), "quarter-block top selects the Y slot immediately above it")
 
 
+## Side faces use the same placement rule as the top face. Internal faces stay
+## in the voxel; faces on a voxel boundary correctly cross into its neighbour.
+func _test_quarter_block_snaps_to_each_side(editor: BuildingEditor, frame: FrameModeController) -> void:
+	editor.grid_model.clear()
+	var base_anchor := BuildingBlockCatalog.snap_subgrid_anchor_3d(&"cube", &"0.25", Vector3(-0.375, 0.0, -0.375))
+	assert(editor.grid_model.place(Vector3i(3, 0, 3), &"cube", 0, &"stone", &"0.25", base_anchor))
+	frame.select_block(&"cube", &"0.25")
+	var block := editor.grid_model.get_block_at(Vector3i(3, 0, 3))
+	var cases := [
+		{"normal": Vector3.RIGHT, "hit": Vector3(3.25, 0.125, 3.125), "cell": Vector3i(3, 0, 3), "offset": Vector3(-0.125, 0.0, -0.375)},
+		{"normal": Vector3.LEFT, "hit": Vector3(3.0, 0.125, 3.125), "cell": Vector3i(2, 0, 3), "offset": Vector3(0.375, 0.0, -0.375)},
+		{"normal": Vector3.BACK, "hit": Vector3(3.125, 0.125, 3.25), "cell": Vector3i(3, 0, 3), "offset": Vector3(-0.375, 0.0, -0.125)},
+		{"normal": Vector3.FORWARD, "hit": Vector3(3.125, 0.125, 3.0), "cell": Vector3i(3, 0, 2), "offset": Vector3(-0.375, 0.0, 0.375)},
+	]
+	for side in cases:
+		var target := frame._placement_target_from_hit(Vector3i(0, 0, 0), {
+			"block": block, "normal": side["normal"], "hit_pos": side["hit"]})
+		assert(target["cell"] == side["cell"], "side snap chooses adjacent anchor cell for %s" % side["normal"])
+		var offset := BuildingBlockCatalog.anchor_base_offset_3d(&"cube", &"0.25", target["anchor"])
+		assert(offset.is_equal_approx(side["offset"]), "side snap offset for %s: %s" % [side["normal"], offset])
+		assert(editor.grid_model.can_place(target["cell"], &"cube", 0, &"stone", &"0.25", target["anchor"]),
+			"side ghost is valid and its click can place for %s" % side["normal"])
+
+
 ## Choosing a higher layer is explicit user intent.  A lower block that is
 ## farther down the ray must not redirect the ghost back onto its top face.
 func _test_upper_active_layer_is_not_stolen_by_a_lower_block(editor: BuildingEditor, frame: FrameModeController) -> void:
@@ -90,6 +116,26 @@ func _test_upper_active_layer_is_not_stolen_by_a_lower_block(editor: BuildingEdi
 	var direction := (Vector3(3.5, 2.0, 3.5) - origin).normalized()
 	var hit := frame._placement_block_hit_info_on_ray(origin, direction, 2)
 	assert(hit.is_empty(), "a block behind the active-layer plane cannot replace the cursor target")
+
+
+## A pointer jump to another surface/anchor during a held stroke must place only
+## that resolved target, never a Bresenham bridge through unrelated cells.
+func _test_drag_does_not_bridge_different_subslots(editor: BuildingEditor, frame: FrameModeController) -> void:
+	editor.grid_model.clear()
+	editor.blueprint.clear_blocks()
+	frame.rebuild_all_block_nodes()
+	frame.select_block(&"cube", &"0.25")
+	editor.current_brush = FrameModeController.Brush.LINE
+	var first := Vector3i(1, 0, 1)
+	var second := Vector3i(4, 0, 4)
+	var first_anchor := BuildingBlockCatalog.snap_subgrid_anchor_3d(&"cube", &"0.25", Vector3(-0.375, 0.0, -0.375))
+	var second_anchor := BuildingBlockCatalog.snap_subgrid_anchor_3d(&"cube", &"0.25", Vector3(0.375, 0.0, 0.375))
+	frame._apply_tool_at_cell(first, first_anchor)
+	frame.last_paint_cell = first
+	frame.set("_paint_anchor", first_anchor)
+	frame._continue_paint_to_target(second, second_anchor)
+	assert(editor.grid_model.count() == 2, "a sub-slot change adds only its resolved target, without stray bridge blocks")
+	assert(editor.grid_model.blocks_anchored_at(second).size() == 1, "the resolved second sub-block is placed")
 
 
 ## Four quarter-cubes share an anchor cell.  Every click must create its own
