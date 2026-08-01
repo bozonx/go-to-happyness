@@ -17,6 +17,7 @@ const OPTION_ICE := &"ice"
 const OPTION_FLOW_DIR := &"flow_dir"
 const OPTION_FLOW_STRENGTH := &"flow_strength"
 const OPTION_ACTION_ICE := &"action_ice"
+const OPTION_DELETE_BODY := &"delete_body"
 
 const OPTION_WATER := &"liquid_water"
 const OPTION_LAVA := &"liquid_lava"
@@ -26,6 +27,7 @@ const OPTION_SEA := &"type_sea"
 const OPTION_AUTO_LEVEL := &"auto_level"
 
 const ROW_BODY_TOOLS := &"row_body_tools"
+const ROW_BODY_ACTIONS := &"row_body_actions"
 const ROW_LIQUID_CAT := &"row_liquid_cat"
 const ROW_WATER_TYPE := &"row_water_type"
 const ROW_LEVEL := &"row_level"
@@ -51,7 +53,7 @@ func activate() -> void:
 	if context != null and context.water_brush != null:
 		if not context.water_brush.body_selected.is_connected(_on_body_selected):
 			context.water_brush.body_selected.connect(_on_body_selected)
-		context.water_brush.tool = WaterBrushController.TOOL_SELECT
+		context.water_brush.tool = WaterBrushController.TOOL_FLOOD
 		var bodies := context.water.bodies()
 		var found_non_empty := false
 		for b in bodies:
@@ -257,37 +259,39 @@ func tool_options() -> Array:
 
 	# --- ВОДОЕМ ---
 	options.append(ToolOption.of(&"header_body", "Водоём:", &"", false, true))
-	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_SELECT]), "Выбрать", ROW_BODY_TOOLS, brush.tool == WaterBrushController.TOOL_SELECT))
-	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_FLOOD]), "Залить", ROW_BODY_TOOLS, brush.tool == WaterBrushController.TOOL_FLOOD))
-	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_DRAIN]), "Удалить", ROW_BODY_TOOLS, brush.tool == WaterBrushController.TOOL_DRAIN))
 
-	var body_is_frozen := false
-	if context.water != null and brush.body_id != WaterBody.NO_BODY:
+	options.append(ToolOption.of(OPTION_WATER, "Вода", ROW_LIQUID_CAT, brush.liquid_category == &"water", false, Color(0.2, 0.55, 0.85, 1.0)))
+	options.append(ToolOption.of(OPTION_LAVA, "Лава", ROW_LIQUID_CAT, brush.liquid_category == &"lava", false, Color(0.95, 0.3, 0.08, 1.0)))
+
+	if brush.liquid_category == &"water":
+		options.append(ToolOption.of(OPTION_SEA, "Море", ROW_WATER_TYPE, brush.water_type == WaterBody.Type.SEA))
+		options.append(ToolOption.of(OPTION_LAKE, "Озеро", ROW_WATER_TYPE, brush.water_type == WaterBody.Type.LAKE))
+		options.append(ToolOption.of(OPTION_RIVER, "Река", ROW_WATER_TYPE, brush.water_type == WaterBody.Type.RIVER))
+
+	var display_level := brush.level
+	if context != null and context.water != null and brush.body_id != WaterBody.NO_BODY:
+		var body := context.water.body(brush.body_id)
+		if body != null:
+			display_level = body.surface_height
+	options.append(ToolOption.of(&"water_level", "Уровень %d" % display_level, ROW_LEVEL, false, true))
+	options.append(ToolOption.of(OPTION_LEVEL_DOWN, "−", ROW_LEVEL))
+	options.append(ToolOption.of(OPTION_LEVEL_UP, "+", ROW_LEVEL))
+	options.append(ToolOption.of(OPTION_AUTO_LEVEL, "Авто", ROW_LEVEL, brush.auto_level))
+
+	var has_selected_body := false
+	var is_frozen := false
+	if context != null and context.water != null and brush.body_id != WaterBody.NO_BODY:
 		var cells := context.water.cells_of_body(brush.body_id)
-		if not cells.is_empty() and context.water.is_frozen(cells[0]):
-			body_is_frozen = true
-	options.append(ToolOption.of(OPTION_ACTION_ICE, "Лёд", ROW_BODY_TOOLS, body_is_frozen))
+		if not cells.is_empty():
+			has_selected_body = true
+			if context.water.is_frozen(cells[0]):
+				is_frozen = true
 
-	var is_body_mode := brush.tool in [WaterBrushController.TOOL_SELECT, WaterBrushController.TOOL_FLOOD]
-
-	if is_body_mode:
-		options.append(ToolOption.of(OPTION_WATER, "Вода", ROW_LIQUID_CAT, brush.liquid_category == &"water", false, Color(0.2, 0.55, 0.85, 1.0)))
-		options.append(ToolOption.of(OPTION_LAVA, "Лава", ROW_LIQUID_CAT, brush.liquid_category == &"lava", false, Color(0.95, 0.3, 0.08, 1.0)))
-
+	if has_selected_body:
 		if brush.liquid_category == &"water":
-			options.append(ToolOption.of(OPTION_SEA, "Море", ROW_WATER_TYPE, brush.water_type == WaterBody.Type.SEA))
-			options.append(ToolOption.of(OPTION_LAKE, "Озеро", ROW_WATER_TYPE, brush.water_type == WaterBody.Type.LAKE))
-			options.append(ToolOption.of(OPTION_RIVER, "Река", ROW_WATER_TYPE, brush.water_type == WaterBody.Type.RIVER))
-
-		var display_level := brush.level
-		if brush.tool == WaterBrushController.TOOL_SELECT and context.water != null and brush.body_id != WaterBody.NO_BODY:
-			var body := context.water.body(brush.body_id)
-			if body != null:
-				display_level = body.surface_height
-		options.append(ToolOption.of(&"water_level", "Уровень %d" % display_level, ROW_LEVEL, false, true))
-		options.append(ToolOption.of(OPTION_LEVEL_DOWN, "−", ROW_LEVEL))
-		options.append(ToolOption.of(OPTION_LEVEL_UP, "+", ROW_LEVEL))
-		options.append(ToolOption.of(OPTION_AUTO_LEVEL, "Авто", ROW_LEVEL, brush.auto_level))
+			var freeze_label := "Разморозить водоём" if is_frozen else "Заморозить водоём"
+			options.append(ToolOption.of(OPTION_ACTION_ICE, freeze_label, ROW_BODY_ACTIONS, is_frozen))
+		options.append(ToolOption.of(OPTION_DELETE_BODY, "🗑 Удалить водоём", ROW_BODY_ACTIONS))
 
 	# --- КИСТЬ ---
 	options.append(ToolOption.of(&"header_brush", "Кисть:", &"", false, true))
@@ -311,11 +315,19 @@ func activate_option(option_id: StringName) -> void:
 	var brush := context.water_brush
 	var text := String(option_id)
 	if text.begins_with(OPTION_TOOL_PREFIX):
-		brush.tool = StringName(text.trim_prefix(OPTION_TOOL_PREFIX))
+		var target_tool := StringName(text.trim_prefix(OPTION_TOOL_PREFIX))
+		if brush.tool == target_tool:
+			brush.tool = WaterBrushController.TOOL_FLOOD
+		else:
+			brush.tool = target_tool
 		notify_ui_changed()
 		_update_highlight()
 		return
 	match option_id:
+		OPTION_DELETE_BODY:
+			if context != null and context.water_service != null and brush.body_id != WaterBody.NO_BODY:
+				context.water_service.remove_body(brush.body_id)
+				brush.body_id = WaterBody.NO_BODY
 		OPTION_ACTION_ICE:
 			brush.toggle_body_ice()
 		OPTION_WATER:

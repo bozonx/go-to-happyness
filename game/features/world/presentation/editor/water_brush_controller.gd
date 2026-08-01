@@ -81,7 +81,7 @@ var flow_strength := 1
 func select_liquid_category(category: StringName) -> void:
 	liquid_category = &"lava" if category == &"lava" else &"water"
 	last_message = "жидкость: %s" % ("лава" if liquid_category == &"lava" else "вода")
-	if tool == TOOL_SELECT and body_id != WaterBody.NO_BODY and _service != null:
+	if body_id != WaterBody.NO_BODY and _service != null:
 		_service.retype_body(body_id, active_body_type())
 
 
@@ -89,7 +89,7 @@ func select_water_type(body_type: WaterBody.Type) -> void:
 	liquid_category = &"water"
 	water_type = body_type if body_type != WaterBody.Type.LAVA else WaterBody.Type.LAKE
 	last_message = "тип воды: %s" % WaterBody.type_id_of(water_type)
-	if tool == TOOL_SELECT and body_id != WaterBody.NO_BODY and _service != null:
+	if body_id != WaterBody.NO_BODY and _service != null:
 		_service.retype_body(body_id, water_type)
 
 var _terrain: TerrainGrid
@@ -114,7 +114,7 @@ func cycle_tool() -> void:
 func adjust_level(delta: int) -> void:
 	level = clampi(level + delta, WaterGrid.MIN_HEIGHT, WaterGrid.MAX_HEIGHT)
 	last_message = "level %d (%.1f m)" % [level, float(level) * TerrainGrid.HEIGHT_STEP]
-	if tool == TOOL_SELECT and body_id != WaterBody.NO_BODY and _service != null:
+	if body_id != WaterBody.NO_BODY and _service != null:
 		_service.set_body_level(body_id, level)
 
 

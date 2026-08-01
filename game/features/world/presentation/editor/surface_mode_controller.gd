@@ -331,16 +331,14 @@ func select_palette_entry(entry_id: StringName) -> void:
 
 	var index := TerrainMaterialCatalog.index_of(entry_id)
 	if index >= 0:
-		# Picking a material disarms the coverage brush. Two armed brushes would
-		# make what the next click does depend on which panel was touched last.
+		# Picking a material disarms the coverage brush and returns to material tool.
 		_coverage_selected = false
 		context.brush.set_material_index(index)
+		_tool = TOOL_MATERIAL
 		if EXOPLANET_MATERIALS.has(entry_id):
 			_expanded_accordion = &"exoplanet"
 		else:
 			_expanded_accordion = &"earth"
-		if _tool == TOOL_WEAR and not _selected_material_supports_wear():
-			_tool = TOOL_MATERIAL
 		notify_ui_changed()
 
 
@@ -356,13 +354,13 @@ func tool_options() -> Array:
 		options.append(ToolOption.of(
 			_variant_option_id(variant_index),
 			String(TerrainMaterialVariants.variant_name(context.brush.material_index, variant_index)),
-			&"variants", variant_index == context.brush.variant,
+			&"variants", variant_index == context.brush.variant and _tool == TOOL_MATERIAL,
 		))
 	# The wear brush is only useful on recoverable natural cover; do not offer a
 	# misleading brown path on rock, ice or extraterrestrial ground.
 	if _selected_material_supports_wear():
-		options.append(ToolOption.of(OPTION_WEAR, "Износ: %d" % _wear_level))
-	options.append(ToolOption.of(OPTION_SNOW, "Снег: %d" % _snow_level))
+		options.append(ToolOption.of(OPTION_WEAR, "Износ: %d" % _wear_level, &"tools", _tool == TOOL_WEAR))
+	options.append(ToolOption.of(OPTION_SNOW, "Снег: %d" % _snow_level, &"tools", _tool == TOOL_SNOW))
 	return options
 
 
@@ -394,6 +392,7 @@ func activate_option(option_id: StringName) -> void:
 	if String(option_id).begins_with(OPTION_VARIANT_PREFIX):
 		context.set_edit_label("вариант")
 		context.brush.set_variant(String(option_id).trim_prefix(OPTION_VARIANT_PREFIX).to_int())
+		_tool = TOOL_MATERIAL
 		notify_ui_changed()
 		return
 	match option_id:
@@ -404,14 +403,10 @@ func activate_option(option_id: StringName) -> void:
 		OPTION_WEAR:
 			if not _selected_material_supports_wear():
 				return
-			# Pressing it again steps the level, so one button both picks the
-			# tool and sets what it paints.
-			if _tool == TOOL_WEAR:
-				_wear_level = (_wear_level + 1) % (TerrainDetailCodec.MAX_WEAR + 1)
+			_wear_level = (_wear_level + 1) % (TerrainDetailCodec.MAX_WEAR + 1)
 			_tool = TOOL_WEAR
 		OPTION_SNOW:
-			if _tool == TOOL_SNOW:
-				_snow_level = (_snow_level + 1) % (TerrainDetailCodec.MAX_SNOW_DEPTH + 1)
+			_snow_level = (_snow_level + 1) % (TerrainDetailCodec.MAX_SNOW_DEPTH + 1)
 			_tool = TOOL_SNOW
 	notify_ui_changed()
 

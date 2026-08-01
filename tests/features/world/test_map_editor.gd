@@ -129,6 +129,17 @@ func _test_mode_switching(editor: Node) -> void:
 	editor._active.select_palette_entry(TerrainMaterialCatalog.GRASS)
 	assert(editor._active.selected_palette_entry() == TerrainMaterialCatalog.GRASS, "selected grass")
 	assert(editor._active.palette_entries().size() == (TerrainMaterialCatalog.count() - SurfaceModeController.EXOPLANET_MATERIALS.size()) + 3, "accordion switched back to earth")
+	var surface_ctrl := editor._active as SurfaceModeController
+	var init_wear := surface_ctrl._wear_level
+	surface_ctrl.activate_option(SurfaceModeController.OPTION_WEAR)
+	assert(surface_ctrl._tool == SurfaceModeController.TOOL_WEAR, "wear option activated wear tool")
+	assert(surface_ctrl._wear_level == (init_wear + 1) % (TerrainDetailCodec.MAX_WEAR + 1), "wear option stepped level on first click")
+	var init_snow := surface_ctrl._snow_level
+	surface_ctrl.activate_option(SurfaceModeController.OPTION_SNOW)
+	assert(surface_ctrl._tool == SurfaceModeController.TOOL_SNOW, "snow option activated snow tool")
+	assert(surface_ctrl._snow_level == (init_snow + 1) % (TerrainDetailCodec.MAX_SNOW_DEPTH + 1), "snow option stepped level on first click")
+	surface_ctrl.select_palette_entry(TerrainMaterialCatalog.DIRT)
+	assert(surface_ctrl._tool == SurfaceModeController.TOOL_MATERIAL, "selecting material resets tool to material painting")
 	_test_coverage_palette(editor)
 
 	editor._select_mode(&"water")
@@ -519,12 +530,11 @@ func _test_water_mode(editor: Node) -> void:
 	assert(body_after_flow != null and body_after_flow.flow_strength_at(cell) == 2, "flow brush applied flow strength")
 	assert(body_after_flow.flow_direction_at(cell) == SlopeCatalog.DIR_E, "flow brush applied flow direction")
 
-	# Test select mode retyping and level adjustments
-	editor._water_brush.tool = WaterBrushController.TOOL_SELECT
+	# Test retyping and level adjustments on selected body
 	editor._water_brush.select_body(body_id)
 	assert(editor.water_highlight.visible, "water highlight visible when body selected")
 	editor._active.activate_option(WaterModeController.OPTION_RIVER)
-	assert(water.body(body_id).type == WaterBody.Type.RIVER, "retyped body to river in select mode")
+	assert(water.body(body_id).type == WaterBody.Type.RIVER, "retyped body to river")
 
 	print("  water fill + flow brush + highlight + shared undo ok")
 
