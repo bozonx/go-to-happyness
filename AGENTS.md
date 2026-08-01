@@ -64,6 +64,12 @@ godot --headless --path . --script res://tests/features/simulation/test_startup.
 - Use `SimulationTestHelper` for scene tests: `setup_simulation`, `cleanup_simulation`,
   `appoint_test_official`.
 - `--headless` already implies `--display-driver headless --audio-driver Dummy`.
+- **Sandbox: always set `XDG_DATA_HOME` to a temp dir.** Godot creates `user://logs/`
+  during engine startup, before any project script runs. In a sandboxed environment the
+  default `user://` path (`~/.local/share/godot/...`) is not writable, so the engine exits
+  before the project loads — the error looks like a project failure but is a permissions
+  issue. `scripts/run_tests.sh` handles this; when running Godot manually, replicate it:
+  `XDG_DATA_HOME="$(mktemp -d)" godot --headless --path . ...`
 
 ## AI system
 
@@ -164,8 +170,8 @@ cameras and calibration geometry. The rules themselves are in
 - **Cloud cover and storm murk are two independent axes** (`weather.md` §4). Grey and
   haze come only from the storm front; cloudiness alone never seals the sky. Do not
   collapse them because one preset would look better.
-- Wind is a general weather parameter, not a cloud-shader input: waves, flags and smoke
-  read the same `wind_*` accessors so everything drifts one way.
+- Wind is a general weather parameter, not a cloud-shader input: flags and smoke
+  read the same `wind_*` accessors so everything drifts one way. Water waves are a future idea.
 - Keep deterministic forecast and time rules in `simulation/domain`; the lab and the game
   both feed visual values into `world/presentation`. A weather feature must not depend on
   `SettlementGame` to render.
