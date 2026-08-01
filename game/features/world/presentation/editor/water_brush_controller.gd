@@ -129,10 +129,12 @@ signal body_selected(body_id: int)
 func select_body(next_body_id: int) -> void:
 	if _water == null or not _water.has_body(next_body_id):
 		return
+	var changed := body_id != next_body_id
 	body_id = next_body_id
 	var body := _water.body(body_id)
 	if body != null:
-		level = body.surface_height
+		if changed:
+			level = body.surface_height
 		last_message = "body: %s" % body.name
 	body_selected.emit(body_id)
 
@@ -157,28 +159,7 @@ func create_body(body_type: WaterBody.Type) -> WaterBody:
 
 
 func update_hover(camera: Camera3D, space: PhysicsDirectSpaceState3D, mouse: Vector2) -> bool:
-	var base_result := super.update_hover(camera, space, mouse)
-	if not base_result or camera == null or _water == null or _terrain == null:
-		return base_result
-	var origin := camera.project_ray_origin(mouse)
-	var dir := camera.project_ray_normal(mouse)
-	if dir.y == 0.0:
-		return base_result
-
-	var target_height := level
-	if _water.has_water(hovered_cell):
-		target_height = _water.height_of(hovered_cell)
-
-	var plane_y := float(target_height) * TerrainGrid.HEIGHT_STEP
-	var t := (plane_y - origin.y) / dir.y
-	if t > 0.0:
-		var point := origin + dir * t
-		var water_cell := _terrain.cell_from_position(point)
-		if _terrain.is_inside(water_cell) and (_water.has_water(water_cell) or tool == TOOL_FLOOD):
-			hovered_cell = water_cell
-			has_hover = true
-
-	return has_hover
+	return super.update_hover(camera, space, mouse)
 
 
 # --- Eyedropper ---------------------------------------------------------------
@@ -278,7 +259,7 @@ func _flood() -> void:
 	# may leave one selected); a body with a contour is not.
 	if dry_cell and body_id != WaterBody.NO_BODY and _water.cells_of_body(body_id).size() > 0:
 		body_id = WaterBody.NO_BODY
-	if dry_cell and _terrain != null:
+	if dry_cell and body_id == WaterBody.NO_BODY and _terrain != null:
 		level = _terrain.height_of(hovered_cell) + 1
 	if body_id == WaterBody.NO_BODY:
 		var body := _service.create_and_flood(hovered_cell, active_body_type(), level)

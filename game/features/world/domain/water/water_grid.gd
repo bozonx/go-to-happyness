@@ -380,9 +380,6 @@ func flood_cells(terrain: TerrainGrid, seed: Vector2i, level: int, keep_body_id 
 			seen[neighbour] = true
 			if terrain.is_hole(neighbour) or terrain.height_of(neighbour) >= level:
 				continue
-			var occupant := body_id_at(neighbour)
-			if occupant != WaterBody.NO_BODY and occupant != keep_body_id:
-				continue
 			queue.append(neighbour)
 	found.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
 		return a.y < b.y if a.y != b.y else a.x < b.x)

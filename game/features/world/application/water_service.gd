@@ -100,17 +100,36 @@ func create_and_flood(seed: Vector2i, body_type: WaterBody.Type, surface_height:
 	if grid == null or terrain == null:
 		_reject(REASON_NO_GRID)
 		return null
+	var cells := grid.flood_cells(terrain, seed, surface_height)
+	if cells.is_empty():
+		_reject(REASON_NOTHING_TO_DO)
+		return null
+
+	var bodies_to_remove: Array[int] = []
+	for cell: Vector2i in cells:
+		var occupant := grid.body_id_at(cell)
+		if occupant != WaterBody.NO_BODY and not bodies_to_remove.has(occupant):
+			var existing_body := grid.body(occupant)
+			if existing_body != null and existing_body.surface_height != surface_height:
+				bodies_to_remove.append(occupant)
+
+	for old_id in bodies_to_remove:
+		remove_body(old_id)
+
+	cells = grid.flood_cells(terrain, seed, surface_height)
+	if cells.is_empty():
+		_reject(REASON_NOTHING_TO_DO)
+		return null
+
 	var next_id := grid.next_free_body_id()
 	if next_id == WaterBody.NO_BODY:
 		_reject(REASON_NOTHING_TO_DO)
 		return null
-	var cells := grid.flood_cells(terrain, seed, surface_height, next_id)
-	if cells.is_empty():
-		_reject(REASON_NOTHING_TO_DO)
-		return null
+
 	var body := WaterBody.of_type(next_id, body_type)
 	body.surface_height = surface_height
 	_commit_registry_edit(WaterBodyEdit.creation_with_cells(grid, terrain, body, cells))
+	prune_empty_bodies()
 	return grid.body(next_id)
 
 
@@ -178,7 +197,26 @@ func flood(seed: Vector2i, body_id: int, level: int) -> bool:
 	var cells := grid.flood_cells(terrain, seed, level, body_id)
 	if cells.is_empty():
 		return _reject(REASON_NOTHING_TO_DO)
-	return _resurface_body(body_id, cells, level)
+
+	var bodies_to_remove: Array[int] = []
+	for cell: Vector2i in cells:
+		var occupant := grid.body_id_at(cell)
+		if occupant != WaterBody.NO_BODY and occupant != body_id and not bodies_to_remove.has(occupant):
+			var existing_body := grid.body(occupant)
+			if existing_body != null and existing_body.surface_height != level:
+				bodies_to_remove.append(occupant)
+
+	for old_id in bodies_to_remove:
+		remove_body(old_id)
+
+	cells = grid.flood_cells(terrain, seed, level, body_id)
+	if cells.is_empty():
+		return _reject(REASON_NOTHING_TO_DO)
+
+	var ok := _resurface_body(body_id, cells, level)
+	if ok:
+		prune_empty_bodies()
+	return ok
 
 
 ## Floods every low area connected to the board edge.  This is the authored
