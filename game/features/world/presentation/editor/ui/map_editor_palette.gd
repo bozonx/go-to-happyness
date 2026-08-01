@@ -60,6 +60,9 @@ func catalog_panel() -> EditorCatalogPanel:
 ## `entries` is an array of `MapEditorMode.PaletteEntry`.
 func set_entries(entries: Array, selected: StringName) -> void:
 	show_standard_entries()
+	var has_entries := not entries.is_empty()
+	_title.visible = has_entries
+	_scroll.visible = has_entries
 	var prev_scroll := _scroll.scroll_vertical if _scroll != null else 0
 	for child in _entries.get_children():
 		child.queue_free()
@@ -112,8 +115,9 @@ func set_options(options: Array) -> void:
 	for child in _options.get_children():
 		child.queue_free()
 	var has_options := not options.is_empty()
-	_options_title.visible = has_options
-	_separator.visible = has_options
+	var has_entries := not _entry_buttons.is_empty() or _is_catalog_mode
+	_options_title.visible = has_options and has_entries
+	_separator.visible = has_options and has_entries
 	_options.visible = has_options
 	if not has_options:
 		return
@@ -137,6 +141,11 @@ func set_options(options: Array) -> void:
 		button.focus_mode = Control.FOCUS_NONE
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN if option.row != &"" else Control.SIZE_EXPAND_FILL
+		if option.color.a > 0.0:
+			var readable := _readable(option.color)
+			button.add_theme_color_override("font_color", readable)
+			button.add_theme_color_override("font_pressed_color", readable)
+			button.add_theme_color_override("font_hover_color", readable.lightened(0.25))
 		var option_id: StringName = option.id
 		button.pressed.connect(func() -> void: option_activated.emit(option_id))
 		parent.add_child(button)

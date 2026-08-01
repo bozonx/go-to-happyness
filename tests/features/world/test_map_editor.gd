@@ -133,7 +133,7 @@ func _test_mode_switching(editor: Node) -> void:
 
 	editor._select_mode(&"water")
 	assert(editor._active.id == &"water", "switched to water")
-	assert(editor._active.palette_entries().size() == 2, "water palette is the water/lava choice")
+	assert(editor._active.palette_entries().is_empty(), "water palette entries are empty (moved to tool options)")
 	assert(editor._active.selected_palette_entry() == &"liquid_water", "water is selected by default")
 	editor._active.select_palette_entry(&"liquid_lava")
 	assert(editor._active.selected_palette_entry() == &"liquid_lava", "lava is selected directly")

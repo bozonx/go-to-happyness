@@ -49,14 +49,16 @@ class ToolOption:
 	var row: StringName = &""
 	var selected := false
 	var disabled := false
+	var color := Color(0, 0, 0, 0)
 
-	static func of(option_id: StringName, option_label: String, option_row: StringName = &"", is_selected := false, is_disabled := false) -> ToolOption:
+	static func of(option_id: StringName, option_label: String, option_row: StringName = &"", is_selected := false, is_disabled := false, swatch := Color(0, 0, 0, 0)) -> ToolOption:
 		var option := ToolOption.new()
 		option.id = option_id
 		option.label = option_label
 		option.row = option_row
 		option.selected = is_selected
 		option.disabled = is_disabled
+		option.color = swatch
 		return option
 
 

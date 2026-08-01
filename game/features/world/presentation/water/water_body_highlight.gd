@@ -46,7 +46,7 @@ func refresh() -> void:
 	var body := _water.body(_body_id)
 	var is_lava := body != null and body.is_lava()
 	var fill_color := Color(1.0, 0.45, 0.1, 0.25) if is_lava else Color(0.2, 0.85, 1.0, 0.25)
-	var edge_color := Color(1.0, 0.9, 0.2, 0.95) if is_lava else Color(0.3, 1.0, 1.0, 0.95)
+	var edge_color := Color(1.0, 0.95, 0.15, 1.0)
 
 	_material.albedo_color = fill_color
 

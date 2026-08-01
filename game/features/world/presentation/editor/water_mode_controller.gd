@@ -240,10 +240,7 @@ func _update_highlight() -> void:
 # --- Panels -------------------------------------------------------------------
 
 func palette_entries() -> Array:
-	return [
-		PaletteEntry.of(OPTION_WATER, "Вода", Color(0.2, 0.55, 0.85, 1.0)),
-		PaletteEntry.of(OPTION_LAVA, "Лава", Color(0.95, 0.3, 0.08, 1.0)),
-	]
+	return []
 
 
 func selected_palette_entry() -> StringName:
@@ -251,12 +248,7 @@ func selected_palette_entry() -> StringName:
 
 
 func select_palette_entry(entry_id: StringName) -> void:
-	if entry_id == OPTION_LAVA:
-		context.water_brush.select_liquid_category(&"lava")
-	elif entry_id == OPTION_WATER:
-		context.water_brush.select_liquid_category(&"water")
-	notify_ui_changed()
-	_update_highlight()
+	activate_option(entry_id)
 
 
 func tool_options() -> Array:
@@ -279,8 +271,8 @@ func tool_options() -> Array:
 	var is_body_mode := brush.tool in [WaterBrushController.TOOL_SELECT, WaterBrushController.TOOL_FLOOD]
 
 	if is_body_mode:
-		options.append(ToolOption.of(OPTION_WATER, "Вода", ROW_LIQUID_CAT, brush.liquid_category == &"water"))
-		options.append(ToolOption.of(OPTION_LAVA, "Лава", ROW_LIQUID_CAT, brush.liquid_category == &"lava"))
+		options.append(ToolOption.of(OPTION_WATER, "Вода", ROW_LIQUID_CAT, brush.liquid_category == &"water", false, Color(0.2, 0.55, 0.85, 1.0)))
+		options.append(ToolOption.of(OPTION_LAVA, "Лава", ROW_LIQUID_CAT, brush.liquid_category == &"lava", false, Color(0.95, 0.3, 0.08, 1.0)))
 
 		if brush.liquid_category == &"water":
 			options.append(ToolOption.of(OPTION_SEA, "Море", ROW_WATER_TYPE, brush.water_type == WaterBody.Type.SEA))
