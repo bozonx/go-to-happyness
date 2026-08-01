@@ -292,7 +292,14 @@ func _emit_cell(builder: Dictionary, cell: Vector2i, shore: float, ice_triangles
 	var east := west + size
 	var south := north + size
 	var depth := water.depth_metres_at(terrain, cell)
-	var tint := Color(depth, shore, 0.0, 1.0)
+	var body := water.body_at(cell)
+	var flow_direction := body.flow_direction_at(cell) if body != null else 0
+	var flow_strength := body.flow_strength_at(cell) if body != null else 0
+	# COLOR carries the authored current along with depth and shore distance:
+	# b is the compass direction (0..7), a is its 0..3 strength.  This keeps the
+	# current a property of each painted cell without a texture atlas or another
+	# renderer-side registry.
+	var tint := Color(depth, shore, float(flow_direction) / 8.0, float(flow_strength) / float(WaterBody.MAX_FLOW_STRENGTH))
 
 	var nw := Vector3(west, level, north)
 	var ne := Vector3(east, level, north)
@@ -450,7 +457,7 @@ func _rebuild_border() -> void:
 	var far := half + BORDER_OCEAN_REACH
 	var level := float(_border_level) * TerrainGrid.HEIGHT_STEP + SURFACE_EPSILON
 	var builder := _new_builder()
-	var tint := Color(4.0, float(SHORE_RANGE_CELLS) * water.cell_size, 0.0, 1.0)
+	var tint := Color(4.0, float(SHORE_RANGE_CELLS) * water.cell_size, 0.0, 0.0)
 	_add_border_band(builder, -far, far, -far, -half, level, tint)
 	_add_border_band(builder, -far, far, half, far, level, tint)
 	_add_border_band(builder, -far, -half, -half, half, level, tint)

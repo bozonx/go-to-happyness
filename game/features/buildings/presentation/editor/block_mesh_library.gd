@@ -83,8 +83,8 @@ func mesh_for(block_id: StringName, variant: StringName = &"") -> Mesh:
 			mesh = _build_window_wall(size)
 		BuildingBlockCatalogScript.SHAPE_DOOR_WALL:
 			mesh = _build_door_wall(size)
-		BuildingBlockCatalogScript.SHAPE_ARCH:
-			mesh = _build_arch(size)
+		BuildingBlockCatalogScript.SHAPE_ARCH_RING:
+			mesh = _build_arch_ring(size)
 		BuildingBlockCatalogScript.SHAPE_HALF_ARCH:
 			mesh = _build_half_arch(size)
 		BuildingBlockCatalogScript.SHAPE_RAILING:
@@ -216,18 +216,24 @@ func _build_slope_corner_out(size: Vector3) -> ArrayMesh:
 	return st.commit()
 
 
-## Symmetrical triangular prism that closes the gable beneath two meeting roof
-## pitches. The large and small palette entries share this profile and differ
-## only in height.
+## A corner-anchored triangular pyramid (tetrahedron). Three triangular side
+## faces meet at the top corner; quarter-turn rotation selects another corner.
+## The large and small palette entries share the form and differ only in height.
 func _build_roof_angle(size: Vector3) -> ArrayMesh:
 	var hx := size.x * 0.5
 	var hy := size.y * 0.5
-	var profile := PackedVector2Array([
-		Vector2(-hx, -hy),
-		Vector2(hx, -hy),
-		Vector2(0.0, hy),
-	])
-	return _build_extrusion(profile, size.z)
+	var hz := size.z * 0.5
+	var apex := Vector3(-hx, hy, -hz)
+	var below := Vector3(-hx, -hy, -hz)
+	var along_x := Vector3(hx, -hy, -hz)
+	var along_z := Vector3(-hx, -hy, hz)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_add_tri(st, below, along_x, along_z) # Bottom triangular base (-Y)
+	_add_tri(st, apex, below, along_z)    # Side at -X
+	_add_tri(st, apex, along_x, below)    # Side at -Z
+	_add_tri(st, apex, along_z, along_x)  # Diagonal sloping side
+	return st.commit()
 
 
 func _build_cylinder(size: Vector3, segments: int = 16) -> ArrayMesh:
@@ -353,21 +359,20 @@ func _build_door_wall(size: Vector3) -> ArrayMesh:
 	return st.commit()
 
 
-## A 0.5 m slab with the profile of a 1 m half-column removed from it. In the
-## default orientation its flat diameter spans the lower edge and its rounded
-## side cuts upward through the slab.
-func _build_arch(size: Vector3, segments: int = 16) -> ArrayMesh:
-	var hx := size.x * 0.5
-	var hy := size.y * 0.5
-	var radius := hx
+## A free-standing semicircular arch band with no rectangular spandrel above
+## the curve; its full height is half a grid block.
+func _build_arch_ring(size: Vector3, segments: int = 16) -> ArrayMesh:
+	var outer_radius := size.x * 0.5
+	var band_thickness := minf(size.y * 0.32, outer_radius * 0.32)
+	var inner_radius := outer_radius - band_thickness
+	var center_y := -size.y * 0.5
 	var profile := PackedVector2Array()
-	# Cut-out first: the semicircle is traced left → right along the bottom edge,
-	# which keeps the whole outline counter-clockwise.
 	for i in range(segments + 1):
-		var a := PI - float(i) / float(segments) * PI
-		profile.append(Vector2(cos(a) * radius, -hy + sin(a) * radius))
-	profile.append(Vector2(hx, hy))
-	profile.append(Vector2(-hx, hy))
+		var angle := float(i) / float(segments) * PI
+		profile.append(Vector2(cos(angle) * outer_radius, center_y + sin(angle) * outer_radius))
+	for i in range(segments + 1):
+		var angle := PI - float(i) / float(segments) * PI
+		profile.append(Vector2(cos(angle) * inner_radius, center_y + sin(angle) * inner_radius))
 	return _build_extrusion(profile, size.z)
 
 

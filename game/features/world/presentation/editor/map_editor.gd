@@ -240,7 +240,9 @@ func _build_hover_marker() -> void:
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.albedo_color = Color(1.0, 0.87, 0.25, 0.45)
+	material.no_depth_test = true
+	material.albedo_color = Color(1.0, 0.82, 0.08, 0.9)
+	material.render_priority = 127
 	mesh.material = material
 	hover_marker.mesh = mesh
 
@@ -489,7 +491,7 @@ func _refresh_panels() -> void:
 	_side_panel.set_inspector("Инспектор — %s" % _active.title, _active.inspector_lines())
 	_side_panel.set_property_fields(_active.inspector_properties(), _active.inspector_values())
 	_side_panel.set_entries(
-		_active.list_title(), _active.list_entries(), _active.empty_list_hint(), _active.selected_list_index(),
+		_active.list_title(), _active.list_entries(), _active.empty_list_hint(), _active.selected_list_index(), _active.list_filters(),
 	)
 	# A stack you cannot pop says so by being grey, the way the building editor's
 	# fill buttons do.
@@ -541,7 +543,7 @@ func _update_hover_marker() -> void:
 			hover_marker.visible = false
 			return
 		centre.y = float(document.water.height_of(water_brush.hovered_cell)) * TerrainGrid.HEIGHT_STEP
-	hover_marker.position = Vector3(centre.x, centre.y + 0.03, centre.z)
+	hover_marker.position = Vector3(centre.x, centre.y + 0.07, centre.z)
 	var span := float(brush.brush_size * 2 - 1)
 	hover_marker.scale = Vector3(span, 1.0, span)
 

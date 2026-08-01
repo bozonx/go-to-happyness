@@ -2,11 +2,14 @@ class_name WaterBodyHighlight
 extends MeshInstance3D
 
 ## Visualizer for the selected water body in the editor.
-## Draws a semi-transparent cell overlay and bright outer contour edge lines
-## for all cells belonging to the active `body_id`.
+## Draws a subtle cell overlay and yellow markers at the intersections of the
+## selected body's cells.  Markers read cleanly against both water and lava and
+## do not turn a jagged bank into a second, misleading contour.
 
 const SURFACE_OFFSET := 0.04
 const OUTLINE_OFFSET := 0.05
+const MARKER_RADIUS_RATIO := 0.11
+const MARKER_SEGMENTS := 12
 
 var _water: WaterGrid = null
 var _terrain: TerrainGrid = null
@@ -46,16 +49,12 @@ func refresh() -> void:
 	var body := _water.body(_body_id)
 	var is_lava := body != null and body.is_lava()
 	var fill_color := Color(1.0, 0.45, 0.1, 0.25) if is_lava else Color(0.2, 0.85, 1.0, 0.25)
-	var edge_color := Color(1.0, 0.95, 0.15, 1.0)
+	var marker_color := Color(1.0, 0.88, 0.08, 1.0)
 
 	_material.albedo_color = fill_color
 
 	var immediate := ImmediateMesh.new()
 	immediate.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _material)
-
-	var cell_set: Dictionary = {}
-	for cell: Vector2i in cells:
-		cell_set[cell] = true
 
 	var cell_size := _water.cell_size
 	var half := cell_size * 0.5
@@ -72,33 +71,26 @@ func refresh() -> void:
 
 	immediate.surface_end()
 
-	var line_mat := StandardMaterial3D.new()
-	line_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	line_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	line_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	line_mat.albedo_color = edge_color
+	var marker_mat := StandardMaterial3D.new()
+	marker_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	marker_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	marker_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	marker_mat.no_depth_test = true
+	marker_mat.render_priority = 127
+	marker_mat.albedo_color = marker_color
 
-	immediate.surface_begin(Mesh.PRIMITIVE_LINES, line_mat)
+	immediate.surface_begin(Mesh.PRIMITIVE_TRIANGLES, marker_mat)
+	var intersections: Dictionary = {}
 	for cell: Vector2i in cells:
 		var level_y := float(_water.height_of(cell)) * TerrainGrid.HEIGHT_STEP + OUTLINE_OFFSET
 		var center := _terrain.cell_center(cell)
-
-		# North edge (-z)
-		if not cell_set.has(cell + Vector2i(0, -1)):
-			immediate.surface_add_vertex(Vector3(center.x - half, level_y, center.z - half))
-			immediate.surface_add_vertex(Vector3(center.x + half, level_y, center.z - half))
-		# East edge (+x)
-		if not cell_set.has(cell + Vector2i(1, 0)):
-			immediate.surface_add_vertex(Vector3(center.x + half, level_y, center.z - half))
-			immediate.surface_add_vertex(Vector3(center.x + half, level_y, center.z + half))
-		# South edge (+z)
-		if not cell_set.has(cell + Vector2i(0, 1)):
-			immediate.surface_add_vertex(Vector3(center.x + half, level_y, center.z + half))
-			immediate.surface_add_vertex(Vector3(center.x - half, level_y, center.z + half))
-		# West edge (-x)
-		if not cell_set.has(cell + Vector2i(-1, 0)):
-			immediate.surface_add_vertex(Vector3(center.x - half, level_y, center.z + half))
-			immediate.surface_add_vertex(Vector3(center.x - half, level_y, center.z - half))
+		for point in [
+			Vector3(center.x - half, level_y, center.z - half), Vector3(center.x + half, level_y, center.z - half),
+			Vector3(center.x + half, level_y, center.z + half), Vector3(center.x - half, level_y, center.z + half),
+		]:
+			intersections[point] = true
+	for point: Vector3 in intersections:
+		_add_disc(immediate, point, cell_size * MARKER_RADIUS_RATIO)
 
 	immediate.surface_end()
 
@@ -109,3 +101,12 @@ func refresh() -> void:
 static func _add_quad(immediate: ImmediateMesh, a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
 	for vertex: Vector3 in [a, b, c, a, c, d]:
 		immediate.surface_add_vertex(vertex)
+
+
+static func _add_disc(immediate: ImmediateMesh, center: Vector3, radius: float) -> void:
+	for index in MARKER_SEGMENTS:
+		var first := TAU * float(index) / float(MARKER_SEGMENTS)
+		var second := TAU * float(index + 1) / float(MARKER_SEGMENTS)
+		immediate.surface_add_vertex(center)
+		immediate.surface_add_vertex(center + Vector3(cos(first) * radius, 0.0, sin(first) * radius))
+		immediate.surface_add_vertex(center + Vector3(cos(second) * radius, 0.0, sin(second) * radius))

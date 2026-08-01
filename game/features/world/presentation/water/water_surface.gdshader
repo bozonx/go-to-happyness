@@ -45,6 +45,8 @@ uniform float roughness_value = 0.06;
 varying float depth_metres;
 varying float shore_distance;
 varying vec3 world_position;
+varying float flow_direction_index;
+varying float flow_strength;
 
 // Two crossing waves rather than one, so the surface never shows the single
 // stripe direction a lone sine gives at this camera angle.
@@ -59,6 +61,8 @@ float wave_height(vec2 position, float time) {
 void vertex() {
 	depth_metres = COLOR.r;
 	shore_distance = COLOR.g;
+	flow_direction_index = floor(COLOR.b * 8.0 + 0.5);
+	flow_strength = COLOR.a;
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	// Ice does not move, and shallow water moves less than deep: a wave with the
 	// full amplitude at the bank would lift the surface through the ground.
@@ -77,6 +81,23 @@ void fragment() {
 	float ripple = 0.5 + 0.5 * sin(dot(world_position.xz, normalize(wind_direction + vec2(0.0001, 0.0))) * 3.1 + TIME * 2.2);
 	float foam = shore * shore * foam_strength * clamp(wind_strength, 0.2, 1.0) * (0.6 + 0.4 * ripple);
 	liquid = mix(liquid, foam_colour, clamp(foam, 0.0, 1.0) * (1.0 - frozen));
+
+	// Authored river flow is rendered as small travelling foam crests.  Each
+	// cell supplies its own compass direction and strength, so a bend visibly
+	// turns rather than inheriting the weather wind.  The repeated tapered marks
+	// read like miniature whitecaps moving down the channel.
+	if (flow_strength > 0.01 && frozen < 0.5) {
+		float direction_angle = flow_direction_index * 0.78539816339;
+		vec2 flow_direction = vec2(sin(direction_angle), -cos(direction_angle));
+		vec2 lateral_direction = vec2(-flow_direction.y, flow_direction.x);
+		float along = dot(world_position.xz, flow_direction) - TIME * (0.8 + flow_strength * 1.4);
+		float crest = smoothstep(0.76, 0.96, sin(along * 8.0) * 0.5 + 0.5);
+		float taper = 1.0 - smoothstep(0.08, 0.30, abs(fract(along * 1.25) - 0.5));
+		float across = abs(fract(dot(world_position.xz, lateral_direction) * 1.2) - 0.5);
+		float width = 1.0 - smoothstep(0.10, 0.31, across);
+		float whitecap = crest * taper * width * (0.28 + flow_strength * 0.62);
+		liquid = mix(liquid, foam_colour, whitecap * (1.0 - frozen));
+	}
 
 	// Ice: the same surface, opaque, matt and pale, with the water still readable
 	// through the thin edges near the bank.

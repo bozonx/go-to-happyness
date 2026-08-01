@@ -42,7 +42,7 @@ const SHAPE_STAIRS_CORNER_HALF := &"stairs_corner_half"
 const SHAPE_STAIRS_CORNER_QUARTER := &"stairs_corner_quarter"
 const SHAPE_WINDOW_WALL := &"window_wall"
 const SHAPE_DOOR_WALL := &"door_wall"
-const SHAPE_ARCH := &"arch"
+const SHAPE_ARCH_RING := &"arch_ring"
 const SHAPE_HALF_ARCH := &"half_arch"
 const SHAPE_RAILING := &"railing"
 const SHAPE_FENCE := &"fence"
@@ -85,7 +85,7 @@ const BLOCKS: Array = [
 		"rotatable": true,
 		"variants": [
 			{"id": &"1", "name": "1", "size": Vector3(1.0, 1.0, 1.0), "mesh_shape": SHAPE_HALF_ARCH},
-			{"id": &"1_2", "name": "1/2", "size": Vector3(1.0, 1.0, 1.0), "mesh_shape": SHAPE_ARCH},
+			{"id": &"1_2", "name": "1/2", "size": Vector3(1.0, 0.5, 1.0), "mesh_shape": SHAPE_ARCH_RING},
 			{"id": &"1_4", "name": "1/4", "size": Vector3(0.5, 0.5, 1.0), "mesh_shape": SHAPE_HALF_ARCH},
 		],
 	},

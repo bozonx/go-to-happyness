@@ -315,7 +315,7 @@ func tool_options() -> Array:
 		if context.brush.edit_mode != TerrainEditOperation.Mode.TERRACE:
 			options.append(ToolOption.of(OPTION_TERRAIN_SLOPE, "Откос: %s" % _terrain_slope_label()))
 	if _tool != TOOL_RAMP:
-		options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (context.brush.brush_size - 1), &"brush", false, true))
+		options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (context.brush.brush_size * 2 - 1), &"brush", false, true))
 		options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", &"brush"))
 		options.append(ToolOption.of(OPTION_BRUSH_UP, "+", &"brush"))
 	if _tool == TOOL_HOLE:

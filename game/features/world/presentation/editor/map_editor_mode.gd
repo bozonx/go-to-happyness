@@ -203,6 +203,12 @@ func list_entries() -> Array[String]:
 	return []
 
 
+## Optional categorical filters for the side list.  Most modes keep the text
+## search; Water supplies its four authored body types instead.
+func list_filters() -> Array[String]:
+	return []
+
+
 ## The mode owns the side-list wording.  Placeholder copy must not claim that
 ## every mode is about zones and routes while the list is intentionally empty.
 func list_title() -> String:

@@ -345,10 +345,16 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 	assert(editor.document.entities.entities[0].props == {&"fuel_units": 5}, "reset is undoable")
 	editor._undo()
 	assert(editor.document.entities.entities[0].props.is_empty(), "property undo restored defaults")
-	editor._active.handle_input(_key(KEY_D, true))
-	assert(editor.document.entities.entities.size() == 2, "Ctrl+D duplicated the selected entity")
+	# Дублирования нет: пипетка снимает полный образец, и следующий клик ставит
+	# такой же объект в свободные клетки.
+	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true, true))
+	editor._brush.hovered_cell = Vector2i(9, 9)
+	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	assert(editor.document.entities.entities.size() == 2, "пипетка + клик заменяют дублирование")
+	assert(editor.document.entities.entities[1].archetype_id == editor.document.entities.entities[0].archetype_id,
+		"копия несёт архетип образца")
 	editor._active.handle_input(_key(KEY_R))
-	assert(is_equal_approx(editor.document.entities.entities[1].yaw_degrees, 15.0), "R rotated the duplicate")
+	assert(is_equal_approx(editor.document.entities.entities[1].yaw_degrees, 15.0), "R повернул поставленную копию")
 	var side_list := editor._side_panel.get_node("Margin/Scroll/Rows/List") as ItemList
 	side_list.item_selected.emit(0)
 	assert(editor._active.selected_list_index() == 0, "side list selects the corresponding map entity")
@@ -390,6 +396,47 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 	fill_ctrl.rebuild_views()
 	fill_ctrl._refresh_ghost()
 	assert(is_instance_valid(fill_ctrl._ghost), "призрак выжил пересборку видов")
+
+	# Клетки: объект занимает целое число клеток, занятую клетку второй раз не
+	# занять, а смещение подстраивает модель внутри своих клеток.
+	var depth_before_cells: int = editor.history.undo_depth()
+	var busy_cell: Vector2i = editor.document.entities.entities[0].cell(editor.document.terrain)
+	editor._brush.hovered_cell = busy_cell
+	var count_before: int = editor.document.entities.entities.size()
+	fill_ctrl._place(busy_cell)
+	assert(editor.document.entities.entities.size() == count_before, "занятые клетки повторно не занимаются")
+	fill_ctrl._select(editor.document.entities.entities[0].id, false)
+	var cells_before: Rect2i = fill_ctrl.occupied_cells(editor.document.entities.entities[0])
+	assert(editor._active.apply_inspector_value(FillModeController.INSPECTOR_OFFSET, [0.25, 0.0, -0.5]),
+		"смещение записывается через общий инспектор")
+	assert(editor.document.entities.entities[0].offset.is_equal_approx(Vector3(0.25, 0.0, -0.5)),
+		"смещение доехало до записи")
+	assert(fill_ctrl.occupied_cells(editor.document.entities.entities[0]) == cells_before,
+		"смещение не переселяет запись в соседнюю клетку")
+	assert(editor._active.apply_inspector_value(FillModeController.INSPECTOR_OFFSET, [4.0, 0.0, 0.0]),
+		"смещение больше клетки принимается, но обрезается")
+	assert(editor.document.entities.entities[0].offset.x <= EditorFillConventions.MAX_OFFSET_CELLS,
+		"смещение ограничено одной клеткой")
+	assert(editor._active.reset_inspector_value(FillModeController.INSPECTOR_OFFSET),
+		"смещение сбрасывается")
+	assert(editor.document.entities.entities[0].offset.is_zero_approx(), "сброс вернул объект на свои клетки")
+	# Клетка правится числом и переносит объект целиком.
+	assert(editor._active.apply_inspector_value(FillModeController.INSPECTOR_CELL, [busy_cell.x + 3, busy_cell.y]),
+		"клетка правится числом")
+	assert(editor.document.entities.entities[0].cell(editor.document.terrain) == busy_cell + Vector2i(3, 0),
+		"запись переехала в заданную клетку")
+	editor._undo()
+	# Замена: id сохраняется, поэтому ссылки на объект не рвутся.
+	var kept_id: StringName = editor.document.entities.entities[0].id
+	fill_ctrl._select(kept_id, false)
+	fill_ctrl._archetype_id = &"core:campfire"
+	var options: Array = editor._active.tool_options()
+	assert(not options.is_empty() and options[0].id == FillModeController.OPTION_REPLACE,
+		"действие замены появляется в опциях палитры")
+	# Возвращаем стек к тому, что было: дальше тест считает шаги отмены.
+	while editor.history.undo_depth() > depth_before_cells:
+		editor._undo()
+	print("  cells + offset + replace action ok")
 	# Raising its cell is one terrain action. The record keeps its authored local
 	# offset; the view projects it onto the new surface rather than double-counting
 	# the terrain height.

@@ -365,7 +365,7 @@ func tool_options() -> Array:
 	if _coverage_selected:
 		return _coverage_tool_options()
 	var options: Array = []
-	options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (context.brush.brush_size - 1), &"brush", false, true))
+	options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (context.brush.brush_size * 2 - 1), &"brush", false, true))
 	options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", &"brush"))
 	options.append(ToolOption.of(OPTION_BRUSH_UP, "+", &"brush"))
 	var variant_count := TerrainMaterialVariants.variant_count(context.brush.material_index)

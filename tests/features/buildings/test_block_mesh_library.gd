@@ -26,14 +26,15 @@ func _test_arch_and_railing_meshes() -> void:
 	var arch_half := lib.mesh_for(&"arch", &"1_2") as ArrayMesh
 	assert(arch_full != null and arch_half != null, "both arch variants must build meshes")
 	assert(arch_full.get_aabb().size.is_equal_approx(Vector3.ONE), "arch 1 must occupy a whole block")
-	assert(arch_half.get_aabb().size.is_equal_approx(Vector3.ONE), "arch 1/2 must occupy a whole block")
+	assert(arch_half.get_aabb().size.is_equal_approx(Vector3(1.0, 0.5, 1.0)), "arch 1/2 must occupy half a block in height")
 	var half_verts: PackedVector3Array = arch_half.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
-	var has_centred_opening_apex := false
+	var top_y := arch_half.get_aabb().end.y
+	var top_is_only_the_arch_crown := true
 	for vertex in half_verts:
-		if absf(vertex.x) < 0.001 and is_equal_approx(vertex.y, 0.0):
-			has_centred_opening_apex = true
+		if is_equal_approx(vertex.y, top_y) and absf(vertex.x) > 0.001:
+			top_is_only_the_arch_crown = false
 			break
-	assert(has_centred_opening_apex, "arch 1/2 must have the centred semicircular opening from the reference")
+	assert(top_is_only_the_arch_crown, "arch 1/2 must not have a slab above its curved band")
 
 	var half_column := lib.mesh_for(&"column_half", &"0.5") as ArrayMesh
 	assert(half_column != null, "half-column mesh must exist")
@@ -84,13 +85,14 @@ func _test_roof_angle_meshes() -> void:
 	assert(large_aabb.size.is_equal_approx(Vector3(1.0, 1.0, 1.0)), "large roof angle must fill one block")
 	assert(small_aabb.size.is_equal_approx(Vector3(1.0, 0.5, 1.0)), "small roof angle must be half a block high")
 	var vertices: PackedVector3Array = large.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
-	var has_front_apex := false
-	var has_back_apex := false
+	assert(vertices.size() == 12, "roof angle must be a tetrahedron with four triangular faces")
+	var expected_apex := Vector3(large_aabb.position.x, large_aabb.end.y, large_aabb.position.z)
+	var has_corner_apex := false
 	for vertex in vertices:
-		if absf(vertex.x) < 0.001 and is_equal_approx(vertex.y, large_aabb.end.y):
-			has_front_apex = has_front_apex or is_equal_approx(vertex.z, large_aabb.end.z)
-			has_back_apex = has_back_apex or is_equal_approx(vertex.z, large_aabb.position.z)
-	assert(has_front_apex and has_back_apex, "roof angle must have a centred ridge along its depth")
+		if vertex.is_equal_approx(expected_apex):
+			has_corner_apex = true
+			break
+	assert(has_corner_apex, "roof angle apex must sit in a corner of its block")
 
 
 func _test_stairs_mesh_normals() -> void:

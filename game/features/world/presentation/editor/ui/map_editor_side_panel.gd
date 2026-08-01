@@ -33,6 +33,7 @@ signal property_reset_requested(property_name: StringName)
 @onready var _separator: HSeparator = $Margin/Scroll/Rows/Separator
 @onready var _list_title: Label = $Margin/Scroll/Rows/ListTitle
 @onready var _list_search: LineEdit = $Margin/Scroll/Rows/ListSearch
+@onready var _list_filters: HFlowContainer = $Margin/Scroll/Rows/ListFilters
 @onready var _list: ItemList = $Margin/Scroll/Rows/List
 
 var _has_inspector_lines: bool = false
@@ -41,6 +42,8 @@ var _has_list: bool = false
 var _all_entries: Array[String] = []
 var _source_indices: Array[int] = []
 var _selected_source_index := -1
+var _filters: Array[String] = []
+var _active_filter := ""
 
 
 func _ready() -> void:
@@ -73,13 +76,17 @@ func set_property_fields(properties: Array[EntityPropertyDef], values: Dictionar
 	_update_section_visibilities()
 
 
-func set_entries(title: String, entries: Array[String], empty_hint := "", selected_index := -1) -> void:
+func set_entries(title: String, entries: Array[String], empty_hint := "", selected_index := -1, filters: Array[String] = []) -> void:
 	_list_title.text = title
 	_all_entries = entries.duplicate()
 	_selected_source_index = selected_index
+	_filters = filters.duplicate()
+	if not _filters.has(_active_filter):
+		_active_filter = ""
 	_has_list = not title.is_empty() and (not entries.is_empty() or not empty_hint.is_empty())
-	_list_search.visible = _has_list and not entries.is_empty()
+	_list_search.visible = _has_list and not entries.is_empty() and _filters.is_empty()
 	_list_search.set_meta("empty_hint", empty_hint)
+	_rebuild_filter_buttons()
 	_rebuild_filtered_entries()
 	_update_section_visibilities()
 
@@ -90,6 +97,8 @@ func _rebuild_filtered_entries() -> void:
 	var query := _list_search.text.strip_edges().to_lower()
 	for source_index in _all_entries.size():
 		var entry := _all_entries[source_index]
+		if not _active_filter.is_empty() and not entry.begins_with(_active_filter):
+			continue
 		if not query.is_empty() and not entry.to_lower().contains(query):
 			continue
 		var visible_index := _list.add_item(entry)
@@ -103,6 +112,26 @@ func _rebuild_filtered_entries() -> void:
 			_list.set_item_disabled(index, true)
 
 
+func _rebuild_filter_buttons() -> void:
+	for child in _list_filters.get_children():
+		child.queue_free()
+	_list_filters.visible = _has_list and not _all_entries.is_empty() and not _filters.is_empty()
+	if not _list_filters.visible:
+		return
+	for filter in ["Все"] + _filters:
+		var button := Button.new()
+		button.text = filter
+		button.toggle_mode = true
+		button.focus_mode = Control.FOCUS_NONE
+		button.button_pressed = (_active_filter.is_empty() and filter == "Все") or filter == _active_filter
+		var target_filter: String = "" if filter == "Все" else filter
+		button.pressed.connect(func() -> void:
+			_active_filter = target_filter
+			_rebuild_filter_buttons()
+			_rebuild_filtered_entries())
+		_list_filters.add_child(button)
+
+
 func _on_list_item_selected(index: int) -> void:
 	if index >= 0 and index < _source_indices.size():
 		entry_activated.emit(_source_indices[index])
@@ -114,7 +143,8 @@ func _update_section_visibilities() -> void:
 	_inspector.visible = _has_inspector_lines
 	_inspector_fields.visible = _has_inspector_properties
 	_list_title.visible = _has_list
-	_list_search.visible = _has_list and not _all_entries.is_empty()
+	_list_search.visible = _has_list and not _all_entries.is_empty() and _filters.is_empty()
+	_list_filters.visible = _has_list and not _all_entries.is_empty() and not _filters.is_empty()
 	_list.visible = _has_list
 	_map_separator.visible = has_inspector or _has_list
 	_separator.visible = has_inspector and _has_list

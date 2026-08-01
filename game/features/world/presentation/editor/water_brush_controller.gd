@@ -319,10 +319,15 @@ func _adopt_body_at_hover() -> void:
 
 
 func _set_frozen(frozen: bool) -> void:
-	if _service.set_frozen(brush_cells(hovered_cell), frozen, ice_thickness, true):
+	var changed := _service.set_frozen(brush_cells(hovered_cell), frozen, ice_thickness, true)
+	if changed:
 		last_message = "%s: %d клеток" % ["заморожено" if frozen else "оттаяло", _service.last_delta_size()]
-		return
-	last_message = "лёд не изменился (%s)" % _water_rejection_label(_service.last_rejection())
+	else:
+		last_message = "лёд не изменился (%s)" % _water_rejection_label(_service.last_rejection())
+	# Ice is a one-shot state edit.  Returning to Flood keeps the normal
+	# select/create gesture available instead of leaving the brush silently in a
+	# freeze/thaw mode — including after a harmless no-op click.
+	tool = TOOL_FLOOD
 
 
 ## Shift+right drains the whole body under the cursor. Plain right button remains

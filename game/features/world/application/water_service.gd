@@ -282,6 +282,13 @@ func set_body_level(body_id: int, level: int) -> bool:
 	var current_cells := cells_of_body(body_id)
 	if current_cells.is_empty():
 		return _resurface_body(body_id, current_cells, level)
+	var body := grid.body(body_id)
+	# Lowering must keep every part of the existing footprint that is still below
+	# the new surface.  Re-flooding from the first stored cell made the result
+	# depend on array order: when that (often shallow) cell dried, the whole body
+	# disappeared although deeper cells still had room for water.
+	if body != null and level < body.surface_height:
+		return _resurface_body(body_id, current_cells, level)
 	var seed := current_cells[0]
 	var cells := grid.flood_cells(terrain, seed, level, body_id)
 	return _resurface_body(body_id, cells, level)

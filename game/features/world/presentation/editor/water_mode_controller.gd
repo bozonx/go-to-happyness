@@ -327,8 +327,8 @@ func tool_options() -> Array:
 
 	options.append(ToolOption.header(&"header_body", "Водоём"))
 
-	options.append(ToolOption.of(OPTION_WATER, "Вода", ROW_LIQUID_CAT, brush.liquid_category == &"water", false, Color(0.2, 0.55, 0.85, 1.0)))
-	options.append(ToolOption.of(OPTION_LAVA, "Лава", ROW_LIQUID_CAT, brush.liquid_category == &"lava", false, Color(0.95, 0.3, 0.08, 1.0)))
+	options.append(ToolOption.of(OPTION_WATER, "💧 Вода", ROW_LIQUID_CAT, brush.liquid_category == &"water", false, Color(0.2, 0.55, 0.85, 1.0)))
+	options.append(ToolOption.of(OPTION_LAVA, "🔥 Лава", ROW_LIQUID_CAT, brush.liquid_category == &"lava", false, Color(0.95, 0.3, 0.08, 1.0)))
 
 	if brush.liquid_category == &"water":
 		options.append(ToolOption.of(OPTION_SEA, "Море", ROW_WATER_TYPE, brush.water_type == WaterBody.Type.SEA))
@@ -354,9 +354,9 @@ func tool_options() -> Array:
 		options.append(ToolOption.of(OPTION_LEVEL_UP, "+", ROW_LEVEL))
 
 		if brush.liquid_category == &"water":
-			var freeze_label := "Разморозить водоём" if is_frozen else "Заморозить водоём"
+			var freeze_label := "💧 Разморозить" if is_frozen else "❄️ Заморозить"
 			options.append(ToolOption.of(OPTION_ACTION_ICE, freeze_label, ROW_BODY_ACTIONS, is_frozen))
-		options.append(ToolOption.of(OPTION_DELETE_BODY, "🗑 Удалить водоём", ROW_BODY_ACTIONS))
+		options.append(ToolOption.of(OPTION_DELETE_BODY, "🗑 Удалить", ROW_BODY_ACTIONS))
 
 	options.append(ToolOption.header(&"header_brush", "Кисть", true))
 
@@ -370,7 +370,7 @@ func tool_options() -> Array:
 		options.append(ToolOption.of(OPTION_FLOW_STRENGTH, "Сила: %d" % brush.flow_strength, ROW_FLOW_PARAMS))
 
 	if _brush_has_size():
-		options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (brush.brush_size - 1), ROW_BRUSH_SIZE, false, true))
+		options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (brush.brush_size * 2 - 1), ROW_BRUSH_SIZE, false, true))
 		options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", ROW_BRUSH_SIZE))
 		options.append(ToolOption.of(OPTION_BRUSH_UP, "+", ROW_BRUSH_SIZE))
 
@@ -398,8 +398,10 @@ func activate_option(option_id: StringName) -> void:
 			brush.toggle_body_ice()
 		OPTION_WATER:
 			brush.select_liquid_category(&"water")
+			brush.tool = WaterBrushController.TOOL_FLOOD
 		OPTION_LAVA:
 			brush.select_liquid_category(&"lava")
+			brush.tool = WaterBrushController.TOOL_FLOOD
 		OPTION_LAKE:
 			brush.select_water_type(WaterBody.Type.LAKE)
 		OPTION_RIVER:
@@ -444,6 +446,10 @@ func list_entries() -> Array[String]:
 			entries.append("%s · уровень %d" % [_type_display_name(body.type), body.surface_height])
 			_list_body_ids.append(body.id)
 	return entries
+
+
+func list_filters() -> Array[String]:
+	return ["Море", "Озеро", "Река", "Лава"]
 
 
 static func _type_display_name(body_type: WaterBody.Type) -> String:
