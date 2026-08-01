@@ -204,7 +204,7 @@
 			"variant": "default",
 			"function": "core:housing",
 			"properties": {
-				"residents": 4
+				"residents": 1
 			},
 			"rects": [
 				[

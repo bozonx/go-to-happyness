@@ -109,6 +109,17 @@ func _test_mode_switching(editor: Node) -> void:
 	assert(editor.PLANNED_MODES.is_empty(), "no mode is a placeholder any more")
 	assert(editor._active.id == &"terrain", "opens on relief")
 
+	var terrain_ctrl: TerrainModeController = editor._active
+	var nav_props := terrain_ctrl.inspector_properties()
+	assert(nav_props.size() == 1 and nav_props[0].name == TerrainModeController.INSPECTOR_NAV_OVERLAY, "relief mode exposes nav overlay inspector property")
+	assert(terrain_ctrl.inspector_values()[TerrainModeController.INSPECTOR_NAV_OVERLAY] == "Нет", "starts hidden")
+	assert(terrain_ctrl.apply_inspector_value(TerrainModeController.INSPECTOR_NAV_OVERLAY, "Pedestrian"), "applies pedestrian overlay")
+	assert(editor.nav_overlay.visible and terrain_ctrl.inspector_values()[TerrainModeController.INSPECTOR_NAV_OVERLAY] == "Pedestrian")
+	assert(terrain_ctrl.apply_inspector_value(TerrainModeController.INSPECTOR_NAV_OVERLAY, "Cart"), "applies cart overlay")
+	assert(editor.nav_overlay.visible and terrain_ctrl.inspector_values()[TerrainModeController.INSPECTOR_NAV_OVERLAY] == "Cart")
+	assert(terrain_ctrl.apply_inspector_value(TerrainModeController.INSPECTOR_NAV_OVERLAY, "Нет"), "hides overlay")
+	assert(not editor.nav_overlay.visible)
+
 	editor._select_mode(&"surface")
 	assert(editor._active.id == &"surface", "switched to surface")
 	assert(not editor._active.palette_entries().is_empty(), "surface palette is non-empty")

@@ -13,6 +13,7 @@
 [ext_resource type="Script" uid="uid://dvuwd0lsd080y" path="res://game/features/world/presentation/water/water_world.gd" id="11_water"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_dialogs.tscn" id="12_dialogs"]
 [ext_resource type="Script" path="res://game/features/world/presentation/water/water_body_highlight.gd" id="14_water_highlight"]
+[ext_resource type="Script" path="res://game/features/world/presentation/water/water_flood_preview.gd" id="15_water_flood_preview"]
 
 [sub_resource type="Environment" id="env_map_editor"]
 background_mode = 1
@@ -56,6 +57,11 @@ script = ExtResource("5_ramp_preview")
 visible = false
 cast_shadow = 0
 script = ExtResource("14_water_highlight")
+
+[node name="WaterFloodPreview" type="MeshInstance3D" parent="."]
+visible = false
+cast_shadow = 0
+script = ExtResource("15_water_flood_preview")
 
 [node name="Camera3D" type="Camera3D" parent="." unique_id=1817952013]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 40, 40)

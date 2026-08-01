@@ -32,6 +32,7 @@ const PLANNED_MODES: Array = []
 @onready var hover_marker: MeshInstance3D = $HoverMarker
 @onready var ramp_preview: RampPreview = $RampPreview
 @onready var water_highlight: WaterBodyHighlight = $WaterHighlight
+@onready var water_flood_preview: WaterFloodPreview = $WaterFloodPreview
 @onready var camera: MapEditorCamera = $Camera3D
 
 @onready var _top_bar: Control = $UI/Screen/TopBar
@@ -41,6 +42,7 @@ const PLANNED_MODES: Array = []
 @onready var _palette: MapEditorPalette = $UI/Screen/Middle/Palette
 @onready var _status_cell: Label = $UI/Screen/StatusBar/Margin/Row/CellLabel
 @onready var _status_message: Label = $UI/Screen/StatusBar/Margin/Row/MessageLabel
+@onready var _shortcut_tooltip: EditorShortcutTooltip = $UI/Screen/StatusBar/Margin/Row/ShortcutTooltip
 @onready var _back_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/BackButton
 @onready var _new_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/NewButton
 @onready var _load_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/LoadButton
@@ -211,6 +213,7 @@ func _build_services() -> void:
 	_context.hover_marker = hover_marker
 	_context.ramp_preview = ramp_preview
 	_context.water_highlight = water_highlight
+	_context.water_flood_preview = water_flood_preview
 	_context.world_3d = get_world_3d()
 	_context.viewport = get_viewport()
 	if not _context.status_message_changed.is_connected(_on_status_message_changed):
@@ -218,6 +221,8 @@ func _build_services() -> void:
 	ramp_preview.configure(document.terrain)
 	if water_highlight != null:
 		water_highlight.configure(document.water, document.terrain)
+	if water_flood_preview != null:
+		water_flood_preview.configure(document.water, document.terrain)
 
 
 func _on_status_message_changed(message: String) -> void:
@@ -355,6 +360,27 @@ func _select_mode(mode_id: StringName) -> void:
 	_mode_bar.set_active(_active.id)
 	_rebuild_palette()
 	_refresh_panels()
+	_update_shortcut_tooltip()
+
+
+func _update_shortcut_tooltip() -> void:
+	if _shortcut_tooltip == null or _active == null:
+		return
+	var text := "Общее\nЛКМ — применить · Shift+ПКМ — обратное действие\nПКМ — камера · СКМ — панорама · Колесо — зум\nWASD/QE — движение камеры · Home — показать всю карту\nCtrl+S — сохранить · Ctrl+Z / Ctrl+Shift+Z — отменить / повторить\n1–5 — режим редактора · Esc — снять выделение / в меню\n\n"
+	if _active.id == &"water":
+		text += "Вода:\n• ЛКМ по суше — затопить во впадине на выбранном уровне\n• ЛКМ по воде — выбрать водоём\n• Клик по суше вне водоёма или Esc — снять выделение\n• Клик по заблокированной/высокой клетке — снимает выделение без затопления\n• Голубые точки — предпросмотр границ затопления на текущем уровне\n• Shift+колесо или [ ] — размер кисти течения/льда\n• +/− — уровень воды · G — взятие уровня с грунта\n• F — кисть течения · V/C — направление и сила течения\n• Z/R — кисти заморозки и разморозки"
+	elif _active.id == &"terrain":
+		text += "Рельеф:\n• Пандус — протянуть ЛКМ между высотами · C — уклон · Shift+ПКМ — удалить\n• Подъём: V — форма откоса · Shift+ЛКМ — пипетка · F — выровнять · M — навигация · T — профиль"
+	elif _active.id == &"surface":
+		text += "Поверхность:\n• B — вариант · U/J — износ / снег · Shift+ЛКМ — пипетка"
+	elif _active.id == &"fill":
+		text += "Наполнение:\n• ЛКМ — разместить объект · R — повернуть · Ctrl+D — дублировать · Del — удалить"
+	elif _active.id == &"entities":
+		text += "Зоны и спавн:\n• ЛКМ — создать зону или спавн · Del — удалить"
+	_shortcut_tooltip.shortcuts_text = text
+	var label: Label = _shortcut_tooltip.get_node_or_null("Popup/Margin/Label")
+	if label != null:
+		label.text = text
 
 
 # --- UI wiring ----------------------------------------------------------------

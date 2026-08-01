@@ -15,7 +15,33 @@
 	"blocks": [],
 	"surface_finishes": [],
 	"decor_trims": [],
-	"areas": [],
+	"areas": [
+		{
+			"id": "main",
+			"name": "Помещение",
+			"role": "room",
+			"style": "generic",
+			"variant": "default",
+			"function": "core:workplace",
+			"properties": {
+				"profession": "cook",
+				"max_workers": 1,
+				"food_capacity": 4
+			},
+			"rects": [
+				[
+					0,
+					0,
+					3,
+					3
+				]
+			],
+			"y": [
+				0,
+				2
+			]
+		}
+	],
 	"anchors": [
 		{
 			"id": "door",

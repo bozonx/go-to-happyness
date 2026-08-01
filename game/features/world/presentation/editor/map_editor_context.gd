@@ -39,6 +39,7 @@ var nav_overlay: NavTerrainOverlay = null
 var hover_marker: Node3D = null
 var ramp_preview: RampPreview = null
 var water_highlight: WaterBodyHighlight = null
+var water_flood_preview: WaterFloodPreview = null
 
 ## Set by the editor so a mode can raycast without knowing the scene tree.
 var world_3d: World3D = null

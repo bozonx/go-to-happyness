@@ -54,15 +54,7 @@ func activate() -> void:
 		if not context.water_brush.body_selected.is_connected(_on_body_selected):
 			context.water_brush.body_selected.connect(_on_body_selected)
 		context.water_brush.tool = WaterBrushController.TOOL_FLOOD
-		var bodies := context.water.bodies()
-		var found_non_empty := false
-		for b in bodies:
-			if context.water.cells_of_body(b.id).size() > 0:
-				context.water_brush.select_body(b.id)
-				found_non_empty = true
-				break
-		if not found_non_empty:
-			context.water_brush.body_id = WaterBody.NO_BODY
+		context.water_brush.body_id = WaterBody.NO_BODY
 	_update_highlight()
 
 
@@ -86,11 +78,15 @@ func deactivate() -> void:
 			context.water_brush.body_selected.disconnect(_on_body_selected)
 	if context != null and context.water_highlight != null:
 		context.water_highlight.hide_highlight()
+	if context != null and context.water_flood_preview != null:
+		context.water_flood_preview.hide_preview()
 
 
 func clear_hover() -> void:
 	if context != null and context.water_brush != null:
 		context.water_brush.clear_hover()
+	if context != null and context.water_flood_preview != null:
+		context.water_flood_preview.hide_preview()
 
 
 func hover_brush() -> BaseBrushController:
@@ -119,18 +115,59 @@ func process(_delta: float) -> void:
 	brush.update_hover(context.camera, context.space_state(), context.mouse_position())
 	if _painting and brush.has_hover and (not had or was != brush.hovered_cell):
 		_stroke()
+	_update_flood_preview()
+
+
+func _update_flood_preview() -> void:
+	if context == null or context.water_flood_preview == null or context.water == null or context.terrain == null:
+		return
+	var brush := context.water_brush
+	if brush == null or not brush.has_hover or brush.tool != WaterBrushController.TOOL_FLOOD:
+		context.water_flood_preview.hide_preview()
+		return
+
+	var cell := brush.hovered_cell
+	if context.water.has_water(cell):
+		context.water_flood_preview.hide_preview()
+		return
+
+	var preview_level := brush.level
+	if brush.auto_level and context.terrain != null:
+		preview_level = context.terrain.height_of(cell) + 1
+
+	if context.terrain.height_of(cell) >= preview_level:
+		context.water_flood_preview.hide_preview()
+		return
+
+	var flood_cells := context.water.flood_cells(context.terrain, cell, preview_level)
+	if flood_cells.is_empty():
+		context.water_flood_preview.hide_preview()
+		return
+
+	context.water_flood_preview.show_preview(flood_cells, preview_level)
 
 
 func handle_input(event: InputEvent) -> bool:
+	var brush := context.water_brush
+	if event is InputEventKey and event.is_pressed() and not event.is_echo():
+		var key_event := event as InputEventKey
+		if key_event.keycode == KEY_ESCAPE:
+			if brush != null and brush.body_id != WaterBody.NO_BODY:
+				brush.body_id = WaterBody.NO_BODY
+				notify_ui_changed()
+				_update_highlight()
+				return true
+		return _handle_key(key_event)
+
 	if event is InputEventMouseButton:
 		var button := event as InputEventMouseButton
 		if _handle_common_mouse(button):
 			return true
 		if button.button_index == MOUSE_BUTTON_RIGHT:
 			if button.pressed and button.shift_pressed:
-				context.water_brush.update_hover(context.camera, context.space_state(), context.mouse_position())
+				brush.update_hover(context.camera, context.space_state(), context.mouse_position())
 				context.set_edit_label("вода")
-				context.water_brush.apply_secondary()
+				brush.apply_secondary()
 				notify_ui_changed()
 				_update_highlight()
 				return true
@@ -138,20 +175,51 @@ func handle_input(event: InputEvent) -> bool:
 		if button.button_index != MOUSE_BUTTON_LEFT:
 			return false
 		if button.pressed and button.shift_pressed:
-			context.water_brush.update_hover(context.camera, context.space_state(), context.mouse_position())
-			context.water_brush.pick_from_cell()
+			brush.update_hover(context.camera, context.space_state(), context.mouse_position())
+			brush.pick_from_cell()
 			notify_ui_changed()
 			_update_highlight()
 			return true
 		_painting = button.pressed
 		if button.pressed:
-			_stroke()
+			_handle_left_click()
 		notify_ui_changed()
 		_update_highlight()
 		return true
-	if event is InputEventKey and event.is_pressed() and not event.is_echo():
-		return _handle_key(event as InputEventKey)
+
 	return false
+
+
+func _handle_left_click() -> void:
+	var brush := context.water_brush
+	brush.update_hover(context.camera, context.space_state(), context.mouse_position())
+	if not brush.has_hover:
+		return
+
+	var cell := brush.hovered_cell
+
+	if brush.tool == WaterBrushController.TOOL_FLOOD:
+		if not context.water.has_water(cell):
+			var preview_level := brush.level
+			if brush.auto_level and context.terrain != null:
+				preview_level = context.terrain.height_of(cell) + 1
+
+			# If ground is >= preview_level (cannot flood here):
+			if context.terrain.height_of(cell) >= preview_level:
+				if brush.body_id != WaterBody.NO_BODY:
+					brush.body_id = WaterBody.NO_BODY
+					_update_highlight()
+					notify_ui_changed()
+				return
+
+			# If a body was previously selected, first click on dry land deselects it
+			if brush.body_id != WaterBody.NO_BODY:
+				brush.body_id = WaterBody.NO_BODY
+				_update_highlight()
+				notify_ui_changed()
+				return
+
+	_stroke()
 
 
 func _handle_key(event: InputEventKey) -> bool:
@@ -166,20 +234,17 @@ func _handle_key(event: InputEventKey) -> bool:
 			if _brush_has_size():
 				brush.adjust_brush_size(1)
 		KEY_EQUAL, KEY_KP_ADD:
-			if brush.tool in [WaterBrushController.TOOL_SELECT, WaterBrushController.TOOL_FLOOD]:
-				brush.adjust_level(1)
+			brush.adjust_level(1)
 		KEY_MINUS, KEY_KP_SUBTRACT:
-			if brush.tool in [WaterBrushController.TOOL_SELECT, WaterBrushController.TOOL_FLOOD]:
-				brush.adjust_level(-1)
+			brush.adjust_level(-1)
 		KEY_G:
-			if brush.tool in [WaterBrushController.TOOL_SELECT, WaterBrushController.TOOL_FLOOD]:
-				brush.pick_level_from_ground()
+			brush.pick_level_from_ground()
 		KEY_F:
-			brush.tool = WaterBrushController.TOOL_FLOW
+			brush.tool = WaterBrushController.TOOL_FLOW if brush.tool != WaterBrushController.TOOL_FLOW else WaterBrushController.TOOL_FLOOD
 		KEY_Z:
-			brush.tool = WaterBrushController.TOOL_FREEZE
+			brush.tool = WaterBrushController.TOOL_FREEZE if brush.tool != WaterBrushController.TOOL_FREEZE else WaterBrushController.TOOL_FLOOD
 		KEY_R:
-			brush.tool = WaterBrushController.TOOL_THAW
+			brush.tool = WaterBrushController.TOOL_THAW if brush.tool != WaterBrushController.TOOL_THAW else WaterBrushController.TOOL_FLOOD
 		KEY_I:
 			brush.cycle_ice_thickness()
 		KEY_V:
@@ -363,37 +428,7 @@ func activate_option(option_id: StringName) -> void:
 
 
 func inspector_lines() -> Array[String]:
-	var brush := context.water_brush
-	var body := context.water.body(brush.body_id)
-	var lines: Array[String] = []
-	lines.append("Инструмент: %s" % brush.tool)
-	if _brush_has_size():
-		lines.append("Кисть: %d×%d" % [brush.brush_size * 2 - 1, brush.brush_size * 2 - 1])
-	if brush.tool in [WaterBrushController.TOOL_SELECT, WaterBrushController.TOOL_FLOOD]:
-		lines.append("Уровень: %d (%.1f м)" % [brush.level, float(brush.level) * TerrainGrid.HEIGHT_STEP])
-	lines.append("")
-	if body == null:
-		lines.append("ЛКМ по суше создаст новый водоём")
-	else:
-		lines.append("Водоём: %s" % body.name)
-		lines.append("Тип: %s, %s" % [body.type_id(), "солёная" if body.salinity == WaterBody.Salinity.SALT else "пресная"])
-		lines.append("Волна: %.2f м, пена ×%.2f" % [body.wave_amplitude, body.foam_strength])
-		lines.append("Замерзает: %s" % ("да" if body.freezes else "нет"))
-		lines.append("Клеток течения: %d" % body.flow.size())
-	lines.append("")
-	if brush.tool == WaterBrushController.TOOL_FLOW:
-		lines.append("Течение: %s, сила %d" % [TerrainBrushController.direction_name(brush.flow_direction), brush.flow_strength])
-	if brush.tool == WaterBrushController.TOOL_FREEZE:
-		lines.append("Толщина льда: %d (пешеход %d, тележка %d)" % [
-			brush.ice_thickness,
-			TravelerProfile.MIN_ICE_THICKNESS_PEDESTRIAN,
-			TravelerProfile.MIN_ICE_THICKNESS_CART,
-		])
-	lines.append("")
-	lines.append("ЛКМ по воде выбирает этот водоём")
-	lines.append("ЛКМ по суше создаёт новый водоём выбранного типа")
-	lines.append("Удалить или Shift+ПКМ удаляет весь водоём; океан защищён")
-	return lines
+	return []
 
 
 func list_title() -> String:
@@ -414,17 +449,37 @@ func list_entries() -> Array[String]:
 
 func status_text() -> String:
 	var brush := context.water_brush
+	if brush == null:
+		return ""
+
+	var parts: Array[String] = []
+
 	if not brush.has_hover:
-		return "клетка —"
-	var cell := brush.hovered_cell
-	var ground := context.terrain.height_of(cell)
-	if not context.water.is_wet(context.terrain, cell):
-		return "клетка %d,%d · суша · рельеф %d" % [cell.x, cell.y, ground]
-	var body := context.water.body_at(cell)
-	var depth := context.water.depth_steps_at(context.terrain, cell)
-	return "клетка %d,%d · %s · дно %d · уровень %d · глубина %d (%.1f м) · %s%s" % [
-		cell.x, cell.y, body.name if body != null else "?", ground, context.water.height_of(cell),
-		depth, float(depth) * TerrainGrid.HEIGHT_STEP,
-		"брод" if context.water.is_ford(context.terrain, cell) else "глубоко",
-		" · лёд %d" % context.water.ice_thickness_at(cell) if context.water.is_frozen(cell) else "",
-	]
+		parts.append("клетка —")
+	else:
+		var cell := brush.hovered_cell
+		var ground := context.terrain.height_of(cell)
+		if not context.water.is_wet(context.terrain, cell):
+			parts.append("клетка %d,%d · суша · рельеф %d" % [cell.x, cell.y, ground])
+		else:
+			var body_at := context.water.body_at(cell)
+			var depth := context.water.depth_steps_at(context.terrain, cell)
+			parts.append("клетка %d,%d · %s · дно %d · уровень %d · глубина %d (%.1f м) · %s%s" % [
+				cell.x, cell.y, body_at.name if body_at != null else "?", ground, context.water.height_of(cell),
+				depth, float(depth) * TerrainGrid.HEIGHT_STEP,
+				"брод" if context.water.is_ford(context.terrain, cell) else "глубоко",
+				" · лёд %d" % context.water.ice_thickness_at(cell) if context.water.is_frozen(cell) else "",
+			])
+
+	if brush.body_id != WaterBody.NO_BODY and context.water != null:
+		var sel_body := context.water.body(brush.body_id)
+		if sel_body != null and context.water.cells_of_body(brush.body_id).size() > 0:
+			parts.append("Выбран водоём: %s (%s, %s, уровень %d, клеток: %d)" % [
+				sel_body.name,
+				sel_body.type_id(),
+				"солёная" if sel_body.salinity == WaterBody.Salinity.SALT else "пресная",
+				sel_body.surface_height,
+				context.water.cells_of_body(brush.body_id).size()
+			])
+
+	return "  │  ".join(parts)

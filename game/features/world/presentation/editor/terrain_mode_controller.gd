@@ -23,6 +23,7 @@ const OPTION_NAV_NONE := &"nav_none"
 const OPTION_NAV_PEDESTRIAN := &"nav_pedestrian"
 const OPTION_NAV_CART := &"nav_cart"
 const OPTION_HOLE_MODE := &"hole_mode"
+const INSPECTOR_NAV_OVERLAY := &"nav_overlay"
 
 ## What a map has to be checked against: what a citizen can climb, and what a
 ## loaded cart can. A ramp only a walker can use is a supply route that silently
@@ -299,9 +300,6 @@ func select_palette_entry(entry_id: StringName) -> void:
 
 func tool_options() -> Array:
 	var options: Array = []
-	options.append(ToolOption.of(OPTION_NAV_NONE, "Нет", &"navigation", context.nav_overlay == null or not context.nav_overlay.visible))
-	options.append(ToolOption.of(OPTION_NAV_PEDESTRIAN, "Pedestrian", &"navigation", _overlay_profile_is(&"pedestrian")))
-	options.append(ToolOption.of(OPTION_NAV_CART, "Cart", &"navigation", _overlay_profile_is(&"cart")))
 	if _tool == TOOL_SCULPT:
 		options.append(ToolOption.of(OPTION_MODE, "Режим: %s" % TerrainEditOperation.mode_name(context.brush.edit_mode)))
 		if context.brush.edit_mode != TerrainEditOperation.Mode.TERRACE:
@@ -337,12 +335,6 @@ func activate_option(option_id: StringName) -> void:
 			_reshape_hovered_ramp(true)
 		OPTION_RAMP_STEEPER:
 			_reshape_hovered_ramp(false)
-		OPTION_NAV_NONE:
-			_set_overlay_profile(&"")
-		OPTION_NAV_PEDESTRIAN:
-			_set_overlay_profile(&"pedestrian")
-		OPTION_NAV_CART:
-			_set_overlay_profile(&"cart")
 		OPTION_HOLE_MODE:
 			_hole_cutting = not _hole_cutting
 	notify_ui_changed()
@@ -350,6 +342,43 @@ func activate_option(option_id: StringName) -> void:
 
 func inspector_lines() -> Array[String]:
 	return []
+
+
+func inspector_properties() -> Array[EntityPropertyDef]:
+	var prop := EntityPropertyDef.new()
+	prop.name = INSPECTOR_NAV_OVERLAY
+	prop.label = "Зоны навигации"
+	prop.type = EntityPropertyDef.TYPE_ENUM
+	prop.section = EntityPropertyDef.SECTION_MAIN
+	prop.options = ["Нет", "Pedestrian", "Cart"]
+	prop.default = "Нет"
+	return [prop]
+
+
+func inspector_values() -> Dictionary:
+	var nav_value := "Нет"
+	if context != null and context.nav_overlay != null and context.nav_overlay.visible:
+		if NAV_PROFILES[_nav_profile_index] == &"pedestrian":
+			nav_value = "Pedestrian"
+		elif NAV_PROFILES[_nav_profile_index] == &"cart":
+			nav_value = "Cart"
+	return {
+		INSPECTOR_NAV_OVERLAY: nav_value,
+	}
+
+
+func apply_inspector_value(property_name: StringName, value: Variant) -> bool:
+	if property_name == INSPECTOR_NAV_OVERLAY:
+		match String(value):
+			"Нет":
+				_set_overlay_profile(&"")
+			"Pedestrian":
+				_set_overlay_profile(&"pedestrian")
+			"Cart":
+				_set_overlay_profile(&"cart")
+		notify_ui_changed()
+		return true
+	return false
 
 
 func status_text() -> String:

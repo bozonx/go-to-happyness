@@ -9,7 +9,8 @@
 			"properties": [
 				{"key": "profession", "label": "Профессия", "type": "enum", "default": "craftsman",
 					"options": ["cook", "teacher", "seller", "official", "researcher", "craftsman", "forager", "trader"]},
-				{"key": "max_workers", "label": "Работников", "type": "int", "default": 1, "min": 0, "max": 16}
+				{"key": "max_workers", "label": "Работников", "type": "int", "default": 1, "min": 0, "max": 16},
+				{"key": "food_capacity", "label": "Запас еды", "type": "int", "default": 0, "min": 0, "max": 32}
 			]
 		},
 		{
@@ -21,7 +22,8 @@
 			"fallback": {"clay": "clay_bakery", "earth": "dugout_kitchen", "wood": "canteen", "default": "cook_campfire"},
 			"properties": [
 				{"key": "profession", "label": "Профессия", "type": "enum", "default": "cook", "options": ["cook"]},
-				{"key": "max_workers", "label": "Работников", "type": "int", "default": 1, "min": 0, "max": 8}
+				{"key": "max_workers", "label": "Работников", "type": "int", "default": 1, "min": 0, "max": 8},
+				{"key": "food_capacity", "label": "Запас еды", "type": "int", "default": 0, "min": 0, "max": 32}
 			]
 		},
 		{
@@ -110,7 +112,8 @@
 			"properties": [
 				{"key": "flavour", "label": "Вид отдыха", "type": "enum", "default": "plaza",
 					"options": ["park", "plaza", "playground", "sports_field", "gym", "cinema", "theater"]},
-				{"key": "visitors", "label": "Посетителей", "type": "int", "default": 4, "min": 0, "max": 64}
+				{"key": "visitors", "label": "Посетителей", "type": "int", "default": 4, "min": 0, "max": 64},
+				{"key": "food_capacity", "label": "Запас еды", "type": "int", "default": 0, "min": 0, "max": 32}
 			]
 		},
 		{"id": "cook", "label": "Готовка", "scope": "activity"},
