@@ -11,18 +11,13 @@ extends Node3D
 ##
 ## One contextual gesture owns the left mouse button: it drops the selected
 ## catalog asset on empty ground, or selects and drags an existing object.
+## `Ctrl` on that click adds to the selection, `Shift` is the eyedropper and
+## `Shift+RMB` erases — the same three gestures the map editor uses.
 
 const FillObjectRecordScript = preload("res://game/features/buildings/domain/editor/fill_object_record.gd")
 const FixtureEditorPanelScript = preload("res://game/features/buildings/presentation/editor/fixture_editor_panel.gd")
 const FillPlacementValidatorScript = preload("res://game/features/buildings/presentation/editor/fill_placement_validator.gd")
 const FillCollisionOverlayScript = preload("res://game/features/buildings/presentation/editor/fill_collision_overlay.gd")
-
-
-const ROTATION_STEP_DEG := 15.0
-## Ghost feedback colours (design §6.2).
-const GHOST_COLOR_VALID := Color(0.45, 0.85, 1.0, 0.4)
-const GHOST_COLOR_INTERSECTION := Color(1.0, 0.3, 0.2, 0.5)
-const GHOST_COLOR_OUT_OF_BOUNDS := Color(1.0, 0.85, 0.2, 0.5)
 
 var current_group: StringName = &""  ## empty = all groups
 var current_category: StringName = &"camping"
@@ -31,7 +26,11 @@ var current_snap_step: float = 1.0
 var current_yaw_deg: float = 0.0
 var current_pitch_deg: float = 0.0
 var current_roll_deg: float = 0.0
+## Primary selection: the object the inspector describes and drags follow.
 var selected_object_id: String = ""
+## Everything else selected alongside it. Transform edits apply to all of them;
+## per-asset properties stay single-object work (design §7.4).
+var additional_selected_ids: Array[String] = []
 
 var _editor: Node = null
 var _validator: RefCounted = null
@@ -39,7 +38,7 @@ var _nodes: Dictionary = {}  ## object id (String) -> Node3D
 var _ghost: Node3D = null
 var _ghost_asset_id: StringName = &""
 var _ghost_material: StandardMaterial3D = null
-var _selection_marker: MeshInstance3D = null
+var _selection_markers: Dictionary = {}  ## object id (String) -> MeshInstance3D
 var _hover_marker: MeshInstance3D = null
 var _hovered_object_id: String = ""
 var _object_search_edit: LineEdit = null
@@ -72,7 +71,10 @@ var _toolbar_delete_btn: Button = null
 var _layer_label: Label = null
 var _collision_overlay_btn: Button = null
 var _collision_overlay: Node3D = null
-var _catalog_panel: FillCatalogPanel = null
+var _catalog_panel: EditorCatalogPanel = null
+var _pos_reset_btn: Button = null
+var _rot_reset_btn: Button = null
+var _scale_reset_btn: Button = null
 var _zone_filter_option: OptionButton = null
 var _zone_out_of_bounds_label: Label = null
 
@@ -112,14 +114,18 @@ func setup(editor: Node) -> void:
 	_replace_btn = editor.get_node("%FillReplaceBtn")
 	_toolbar_delete_btn = editor.get_node("%FillDeleteSelectionBtn")
 	_layer_label = editor.get_node("%FillLayerLabel")
+	_pos_reset_btn = editor.get_node("%FillPosResetBtn")
+	_rot_reset_btn = editor.get_node("%FillRotResetBtn")
+	_scale_reset_btn = editor.get_node("%FillScaleResetBtn")
 
 	# Fixture editor — delegated to FixtureEditorPanel
 	_fixture_panel = FixtureEditorPanelScript.new()
-	_fixture_panel.setup(editor, Callable(self, "_push_undo"))
+	_fixture_panel.setup(editor)
 
-	# Catalog panel — delegated to FillCatalogPanel
-	_catalog_panel = FillCatalogPanel.new()
-	_catalog_panel.setup(self, editor)
+	# Catalog panel — the shared widget, used directly: a subclass that only
+	# forwarded `setup` to `super` was pure indirection.
+	_catalog_panel = EditorCatalogPanel.new()
+	_catalog_panel.setup(self, editor, WorldAssetDef.SCOPE_BUILDING)
 
 	editor.get_node("%FillRotXBtn").pressed.connect(rotate_selection.bind("x", 1))
 	editor.get_node("%FillRotYBtn").pressed.connect(rotate_selection.bind("y", 1))
@@ -133,20 +139,27 @@ func setup(editor: Node) -> void:
 	_collision_overlay_btn.toggled.connect(_on_collision_overlay_toggled)
 
 	_object_search_edit.text_changed.connect(_on_object_search_changed)
+	_object_list.select_mode = ItemList.SELECT_MULTI
 	_object_list.item_selected.connect(_on_object_list_selected)
+	_object_list.multi_selected.connect(_on_object_list_multi_selected)
 	_zone_option.item_selected.connect(_on_zone_selected)
 	_zone_filter_option.item_selected.connect(_on_zone_filter_selected)
 	_toolbar_delete_btn.pressed.connect(delete_selection)
 	_replace_btn.pressed.connect(_replace_selected_object)
 	_controls_vbox.property_committed.connect(_on_appearance_property_committed)
 	_controls_vbox.property_reset_requested.connect(_on_appearance_property_reset)
-	_pos_x_spin.value_changed.connect(_on_transform_spin_changed)
-	_pos_y_spin.value_changed.connect(_on_transform_spin_changed)
-	_pos_z_spin.value_changed.connect(_on_transform_spin_changed)
-	_yaw_spin.value_changed.connect(_on_transform_spin_changed)
-	_pitch_spin.value_changed.connect(_on_transform_spin_changed)
-	_roll_spin.value_changed.connect(_on_transform_spin_changed)
-	_scale_spin.value_changed.connect(_on_transform_spin_changed)
+	for spin: SpinBox in [_pos_x_spin, _pos_y_spin, _pos_z_spin, _yaw_spin, _pitch_spin, _roll_spin, _scale_spin]:
+		spin.value_changed.connect(_on_transform_spin_changed)
+	_pos_x_spin.step = EditorFillConventions.OFFSET_STEP
+	_pos_y_spin.step = EditorFillConventions.OFFSET_STEP
+	_pos_z_spin.step = EditorFillConventions.OFFSET_STEP
+	_yaw_spin.step = EditorFillConventions.ROTATION_STEP_DEG
+	_pitch_spin.step = EditorFillConventions.ROTATION_STEP_DEG
+	_roll_spin.step = EditorFillConventions.ROTATION_STEP_DEG
+	_scale_spin.step = EditorFillConventions.SCALE_STEP
+	_pos_reset_btn.pressed.connect(reset_position)
+	_rot_reset_btn.pressed.connect(reset_rotation)
+	_scale_reset_btn.pressed.connect(reset_scale)
 
 	current_category = WorldAssetCatalog.first_populated_category(current_category)
 	_catalog_panel.activate()
@@ -190,13 +203,18 @@ func is_active() -> bool:
 # Input
 # ---------------------------------------------------------------------------
 
-func on_left_pressed() -> void:
+func on_left_pressed(additive: bool = false) -> void:
 	if not _editor.cursor_valid:
 		return
 	var hit: Vector3 = _editor.cursor_hit_pos
 	var picked := pick_object_at(hit)
 	if not picked.is_empty():
+		if additive:
+			toggle_object_selection(picked)
+			return
 		_select_for_drag(picked, hit)
+		return
+	if additive:
 		return
 	if current_asset_id.is_empty():
 		select_object("")
@@ -206,6 +224,8 @@ func on_left_pressed() -> void:
 
 
 func on_left_released() -> void:
+	if _drag_started and _editor != null:
+		_editor.end_history_group()
 	_dragging = false
 	_drag_started = false
 	refresh_hover()
@@ -218,7 +238,6 @@ func erase_at_cursor() -> void:
 	if target.is_empty():
 		_editor.set_status("Под курсором нет объекта наполнения.")
 		return
-	_push_undo()
 	_erase_object(target)
 	_editor.set_status("Объект удалён.")
 	refresh_hover()
@@ -258,37 +277,39 @@ func on_drag() -> void:
 	var record := find_record(selected_object_id)
 	if record == null:
 		return
-	# Snapshot once per drag, not once per mouse-motion event.
+	# One drag is one step of undo, however long it lasts and however many motion
+	# events it produces.
 	if not _drag_started:
-		_push_undo()
+		_editor.begin_history_group("fill_drag/%s" % record.id)
 		_drag_started = true
 	var hit: Vector3 = _editor.cursor_hit_pos
 	var candidate := snapped_position(hit + _drag_offset)
-	if not _is_valid_transform(candidate, record.rot, record.scale, record.asset_id, record.id):
+	if candidate.is_equal_approx(record.pos):
 		return
-	record.pos = candidate
-	_apply_transform_to_node(record)
+	var shift := candidate - record.pos
+	# Everything selected moves together: dragging one of five chairs must not
+	# silently leave the other four behind.
+	var records := selected_records()
+	for target: FillObjectRecordScript in records:
+		var next_pos := target.pos + shift
+		if not _is_valid_transform(next_pos, target.rot, target.scale, target.asset_id, target.id):
+			return
+	for target: FillObjectRecordScript in records:
+		target.pos += shift
+		_apply_transform_to_node(target)
 	_editor.mark_dirty()
 	_sync_transform_fields(record)
 	_update_selection_marker()
 
 
-## Returns true when the key was consumed by fill mode.
+## Returns true when the key was consumed by fill mode. Ctrl+Z / Ctrl+Y never
+## arrive here: `BuildingEditor` owns the blueprint-wide history and handles them
+## before delegating.
 func handle_key(event: InputEventKey) -> bool:
 	if event.ctrl_pressed:
-		match event.keycode:
-			KEY_Z:
-				if event.shift_pressed:
-					redo()
-				else:
-					undo()
-				return true
-			KEY_Y:
-				redo()
-				return true
-			KEY_D:
-				duplicate_selection()
-				return true
+		if event.keycode == KEY_D:
+			duplicate_selection()
+			return true
 		return false
 	match event.keycode:
 		KEY_P:
@@ -353,12 +374,11 @@ func find_record(object_id: String) -> FillObjectRecordScript:
 
 ## A placement click that lands on occupied geometry selects the conflicting
 ## object where possible instead of silently stacking another instance inside it.
+##
+## The caller has already established that nothing is under the cursor itself;
+## what this handles is the footprint of a neighbour reaching into the snapped
+## position.
 func _place_or_select_at(hit: Vector3) -> void:
-	var target := pick_object_at(hit)
-	if not target.is_empty():
-		select_object(target)
-		_editor.set_status("Выбран объект под курсором.")
-		return
 	var position := snapped_position(hit)
 	var asset := WorldAssetCatalog.get_asset(current_asset_id)
 	if asset == null:
@@ -388,9 +408,11 @@ func _place_at(position: Vector3) -> void:
 	if _compute_ghost_state(position) != FillPlacementValidatorScript.GhostState.VALID:
 		_editor.set_status("Нельзя разместить наполнение поверх другого объекта.")
 		return
-	_push_undo()
 	var record := FillObjectRecordScript.make(asset.id, position, _next_object_suffix())
-	record.rot = Vector3(0.0, current_yaw_deg, 0.0)
+	# Every axis the brush carries, not just yaw: the ghost was previewed with
+	# all three, and dropping pitch/roll here made the placed object differ from
+	# what the author saw.
+	record.rot = Vector3(current_pitch_deg, current_yaw_deg, current_roll_deg)
 	record.appearance = asset.default_appearance()
 	_editor.blueprint.objects.append(record)
 	_spawn_node(record)
@@ -412,18 +434,25 @@ func _erase_object(object_id: String) -> void:
 	_remove_node(object_id)
 	_editor.mark_dirty()
 	_refresh_object_list()
-	if selected_object_id == object_id:
-		select_object("")
+	if selected_object_id == object_id or object_id in additional_selected_ids:
+		additional_selected_ids.erase(object_id)
+		if selected_object_id == object_id:
+			selected_object_id = additional_selected_ids.pop_front() if not additional_selected_ids.is_empty() else ""
+		_after_selection_changed()
 	if not _editor.blueprint.fixtures.is_empty():
 		_fixture_panel.refresh_fixture_ui()
 
 
 func delete_selection() -> void:
-	if selected_object_id.is_empty():
+	var targets := selected_object_ids()
+	if targets.is_empty():
 		return
-	_push_undo()
-	_erase_object(selected_object_id)
-	_editor.set_status("Объект удалён.")
+	# Deleting a selection is one action: one Ctrl+Z brings all of it back.
+	_editor.begin_history_group("fill_delete")
+	for object_id: String in targets:
+		_erase_object(object_id)
+	_editor.end_history_group()
+	_editor.set_status("Объект удалён." if targets.size() == 1 else "Удалено объектов: %d." % targets.size())
 
 
 func duplicate_selection() -> void:
@@ -450,7 +479,6 @@ func duplicate_selection() -> void:
 	if not placed:
 		_editor.set_status("Невозможно дублировать: нет места в границах здания.")
 		return
-	_push_undo()
 	_editor.blueprint.objects.append(copy)
 	_spawn_node(copy)
 	_editor.mark_dirty()
@@ -459,54 +487,119 @@ func duplicate_selection() -> void:
 	_editor.set_status("Объект продублирован.")
 
 
+## Rotation applies to every selected object and to the brush. The step is the
+## shared one for both editors: an asset-specific step made the same key turn
+## different objects by different amounts.
 func rotate_selection(axis: String, direction: int) -> void:
-	var record := find_record(selected_object_id)
-	var asset := WorldAssetCatalog.get_asset(record.asset_id if record != null else current_asset_id)
-	if asset != null and not asset.is_rotation_axis_allowed(axis):
-		_editor.set_status("Этот ассет нельзя вращать вокруг оси %s." % axis.to_upper())
-		return
-	var step := asset.quick_rotation_step if asset != null else ROTATION_STEP_DEG
-	step = step if step > 0.0 else ROTATION_STEP_DEG
-	var delta := step * direction
-	if axis == "x":
-		current_pitch_deg = fposmod(current_pitch_deg + delta, 360.0)
-	elif axis == "y":
-		current_yaw_deg = fposmod(current_yaw_deg + delta, 360.0)
-	elif axis == "z":
-		current_roll_deg = fposmod(current_roll_deg + delta, 360.0)
-	else:
+	if axis not in ["x", "y", "z"]:
 		push_warning("BuildingFillModeController: invalid rotation axis '%s'" % axis)
 		return
-	if record != null:
-		var candidate := Vector3(current_pitch_deg, current_yaw_deg, current_roll_deg)
+	var records := selected_records()
+	var brush_asset := WorldAssetCatalog.get_asset(current_asset_id)
+	if records.is_empty() and brush_asset != null and not brush_asset.is_rotation_axis_allowed(axis):
+		_editor.set_status("Этот ассет нельзя вращать вокруг оси %s." % axis.to_upper())
+		return
+	var rotated := 0
+	var refused := 0
+	for record: FillObjectRecordScript in records:
+		var asset := WorldAssetCatalog.get_asset(record.asset_id)
+		if asset != null and not asset.is_rotation_axis_allowed(axis):
+			refused += 1
+			continue
+		var candidate := _rotated_vector(record.rot, axis, direction)
 		if not _is_valid_transform(record.pos, candidate, record.scale, record.asset_id, record.id):
-			return
-		_push_undo()
+			refused += 1
+			continue
 		record.rot = candidate
 		_apply_transform_to_node(record)
+		rotated += 1
+	# The brush follows only when it is not describing a rejected rotation: its
+	# angle and the object's must not drift apart.
+	if records.is_empty() or rotated > 0:
+		var brush := _rotated_vector(Vector3(current_pitch_deg, current_yaw_deg, current_roll_deg), axis, direction)
+		current_pitch_deg = brush.x
+		current_yaw_deg = brush.y
+		current_roll_deg = brush.z
+	if rotated > 0:
 		_editor.mark_dirty()
-		_sync_transform_fields(record)
+		var primary := find_record(selected_object_id)
+		if primary != null:
+			_sync_transform_fields(primary)
+	if refused > 0:
+		_editor.set_status("Поворот не применён к %d объект(ам): ось запрещена ассетом или мешает каркас." % refused)
 	refresh_ghost()
 
 
-func _reset_rotation() -> void:
+func _rotated_vector(rotation: Vector3, axis: String, direction: int) -> Vector3:
+	var next := rotation
+	match axis:
+		"x":
+			next.x = EditorFillConventions.rotated_by(rotation.x, direction)
+		"y":
+			next.y = EditorFillConventions.rotated_by(rotation.y, direction)
+		"z":
+			next.z = EditorFillConventions.rotated_by(rotation.z, direction)
+	return next
+
+
+## Reset buttons of the transform section. Each one resets its own field of every
+## selected object, and the brush along with the rotation.
+func reset_rotation() -> void:
 	current_pitch_deg = 0.0
 	current_yaw_deg = 0.0
 	current_roll_deg = 0.0
-	var record := find_record(selected_object_id)
-	if record != null:
-		_push_undo()
-		record.rot = Vector3.ZERO
-		_apply_transform_to_node(record)
-		_editor.mark_dirty()
-		_sync_transform_fields(record)
+	var changed := false
+	for record: FillObjectRecordScript in selected_records():
+		if _is_valid_transform(record.pos, Vector3.ZERO, record.scale, record.asset_id, record.id):
+			record.rot = Vector3.ZERO
+			_apply_transform_to_node(record)
+			changed = true
+	_commit_transform_reset(changed, "Поворот сброшен.")
 	refresh_ghost()
+
+
+## Drops the sub-cell offset: the object returns onto the current snap grid.
+## There is no "zero position" to go back to inside a building.
+func reset_position() -> void:
+	var changed := false
+	for record: FillObjectRecordScript in selected_records():
+		var snapped := snapped_position(record.pos)
+		if snapped.is_equal_approx(record.pos):
+			continue
+		if _is_valid_transform(snapped, record.rot, record.scale, record.asset_id, record.id):
+			record.pos = snapped
+			_apply_transform_to_node(record)
+			changed = true
+	_commit_transform_reset(changed, "Смещение сброшено по сетке привязки.")
+
+
+func reset_scale() -> void:
+	var changed := false
+	for record: FillObjectRecordScript in selected_records():
+		if is_equal_approx(record.scale.x, 1.0):
+			continue
+		if _is_valid_transform(record.pos, record.rot, Vector3.ONE, record.asset_id, record.id):
+			record.scale = Vector3.ONE
+			_apply_transform_to_node(record)
+			changed = true
+	_commit_transform_reset(changed, "Масштаб сброшен.")
+
+
+func _commit_transform_reset(changed: bool, message: String) -> void:
+	if not changed:
+		return
+	_editor.mark_dirty()
+	var primary := find_record(selected_object_id)
+	if primary != null:
+		_sync_transform_fields(primary)
+	_update_selection_marker()
+	_editor.set_status(message)
 
 
 func cancel_current_action() -> void:
 	_dragging = false
 	_drag_started = false
-	if not selected_object_id.is_empty():
+	if not selected_object_ids().is_empty():
 		select_object("")
 		_editor.set_status("Выделение снято.")
 		return
@@ -531,14 +624,10 @@ func _next_object_suffix() -> int:
 
 
 # ---------------------------------------------------------------------------
-# Undo / Redo (delegated to the editor-wide history)
+# Undo / Redo — fill has no history of its own. `BuildingEditor.mark_dirty`
+# snapshots the whole blueprint after every mutation, which is what keeps Ctrl+Z
+# chronological across frame, zones and fill.
 # ---------------------------------------------------------------------------
-
-func _push_undo() -> void:
-	# Compatibility hook for fixture/fill callers.  The authoritative snapshot
-	# is recorded by BuildingEditor.mark_dirty after the mutation.
-	pass
-
 
 func undo() -> bool:
 	return _editor != null and _editor.undo()
@@ -546,14 +635,6 @@ func undo() -> bool:
 
 func redo() -> bool:
 	return _editor != null and _editor.redo()
-
-
-func refresh_history_buttons() -> void:
-	pass
-
-
-func clear_undo_history() -> void:
-	pass
 
 
 # ---------------------------------------------------------------------------
@@ -564,6 +645,9 @@ func rebuild_nodes() -> void:
 	for node: Node3D in _nodes.values():
 		node.queue_free()
 	_nodes.clear()
+	# Selection markers are keyed by object id; the ids of the previous blueprint
+	# mean nothing here.
+	_clear_selection_markers()
 	for record: FillObjectRecordScript in _editor.blueprint.objects:
 		_spawn_node(record)
 	_update_selection_marker()
@@ -573,20 +657,39 @@ func rebuild_nodes() -> void:
 
 func _spawn_node(record: FillObjectRecordScript) -> void:
 	var asset := WorldAssetCatalog.get_asset(record.asset_id)
-	if asset == null:
-		push_warning("BuildingFillModeController: unknown asset %s, object %s not shown" % [record.asset_id, record.id])
-		return
-	var scene := load(asset.scene_path) as PackedScene
-	if scene == null:
-		return
-	var instance := scene.instantiate() as Node3D
+	var instance: Node3D = null
+	if asset != null:
+		var scene := load(asset.scene_path) as PackedScene
+		if scene != null:
+			instance = scene.instantiate() as Node3D
 	if instance == null:
-		return
+		# A blueprint from a pack that is not installed must stay editable and
+		# visible: an object that silently disappears from the viewport while
+		# staying in the data is worse than a marker (map_fill_mode.md §11).
+		push_warning("BuildingFillModeController: unknown asset %s, object %s drawn as a placeholder" % [record.asset_id, record.id])
+		instance = _make_placeholder()
 	add_child(instance)
 	_nodes[record.id] = instance
 	_apply_transform_to_node(record)
 	if instance.has_method("apply_decor_properties"):
 		instance.call("apply_decor_properties", record.appearance)
+
+
+## Deliberately a placeholder, not a second asset system — the same marker the
+## map editor draws for content it cannot resolve.
+func _make_placeholder() -> Node3D:
+	var placeholder := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.28
+	mesh.bottom_radius = 0.38
+	mesh.height = 0.65
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(0.9, 0.15, 0.85)
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mesh.material = material
+	placeholder.mesh = mesh
+	placeholder.position.y = 0.325
+	return placeholder
 
 
 func _apply_transform_to_node(record: FillObjectRecordScript) -> void:
@@ -630,7 +733,7 @@ func refresh_ghost() -> void:
 			return
 		_ghost_asset_id = asset.id
 		add_child(_ghost)
-		_apply_preview_look(_ghost)
+		EditorFillConventions.apply_preview_look(_ghost, _get_ghost_material())
 	_ghost.visible = true
 	var ghost_pos := snapped_position(_editor.cursor_hit_pos)
 	_ghost.position = ghost_pos
@@ -658,13 +761,8 @@ func _update_hover_marker() -> void:
 			_hover_marker.visible = false
 		return
 	if _hover_marker == null:
-		_hover_marker = _create_torus_marker(Color(1.0, 0.8, 0.2, 0.9))
-	var asset := WorldAssetCatalog.get_asset(record.asset_id)
-	var size := asset.footprint_m() if asset != null else Vector3.ONE
-	var radius := maxf(FillPlacementValidatorScript.MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
-	_hover_marker.visible = true
-	_hover_marker.scale = Vector3.ONE * (radius / 0.5)
-	_hover_marker.position = record.pos + Vector3(0.0, 0.05, 0.0)
+		_hover_marker = _create_torus_marker(EditorFillConventions.COLOR_HOVER)
+	_place_marker(_hover_marker, record, 0.05)
 
 
 func _hide_ghost() -> void:
@@ -674,73 +772,65 @@ func _hide_ghost() -> void:
 
 ## Updates the ghost material colour based on placement state (design §6.2).
 func _update_ghost_color(state: int) -> void:
-	var color: Color = GHOST_COLOR_VALID
+	var color: Color = EditorFillConventions.COLOR_GHOST_VALID
 	match state:
 		FillPlacementValidatorScript.GhostState.INTERSECTION:
-			color = GHOST_COLOR_INTERSECTION
+			color = EditorFillConventions.COLOR_GHOST_BLOCKED
 		FillPlacementValidatorScript.GhostState.OUT_OF_BOUNDS:
-			color = GHOST_COLOR_OUT_OF_BOUNDS
+			color = EditorFillConventions.COLOR_GHOST_WARNING
 	_get_ghost_material().albedo_color = color
-
-
-## Makes an instance read as a preview rather than a placed object: translucent
-## meshes, no lights and no live particles. Without this the ghost lit the scene
-## and was indistinguishable from real fill.
-func _apply_preview_look(root: Node3D) -> void:
-	var targets: Array[Node] = [root]
-	targets.append_array(root.find_children("*", "", true, false))
-	for node in targets:
-		if node is Light3D:
-			(node as Light3D).visible = false
-		elif node is GPUParticles3D:
-			(node as GPUParticles3D).emitting = false
-		elif node is CPUParticles3D:
-			(node as CPUParticles3D).emitting = false
-		elif node is MeshInstance3D:
-			(node as MeshInstance3D).material_override = _get_ghost_material()
-		elif node is Label3D:
-			(node as Label3D).modulate = Color(0.6, 0.9, 1.0, 0.6)
 
 
 func _get_ghost_material() -> StandardMaterial3D:
 	if _ghost_material == null:
-		_ghost_material = StandardMaterial3D.new()
-		_ghost_material.albedo_color = Color(0.45, 0.85, 1.0, 0.4)
-		_ghost_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		_ghost_material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-		_ghost_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+		_ghost_material = EditorFillConventions.make_ghost_material()
 	return _ghost_material
 
 
 func _create_torus_marker(color: Color) -> MeshInstance3D:
-	var marker := MeshInstance3D.new()
-	var torus := TorusMesh.new()
-	torus.inner_radius = 0.42
-	torus.outer_radius = 0.5
-	marker.mesh = torus
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	marker.material_override = material
+	var marker := EditorFillConventions.make_ring_marker(color)
 	add_child(marker)
 	return marker
 
 
-func _update_selection_marker() -> void:
-	var record := find_record(selected_object_id)
-	if record == null or not is_active():
-		if _selection_marker != null:
-			_selection_marker.visible = false
-		return
-	if _selection_marker == null:
-		_selection_marker = _create_torus_marker(Color(0.35, 0.95, 1.0, 0.85))
+## Scales a ring to the object's footprint. Both markers read the same way, so
+## they are positioned by one function.
+func _place_marker(marker: MeshInstance3D, record: FillObjectRecordScript, lift: float) -> void:
 	var asset := WorldAssetCatalog.get_asset(record.asset_id)
 	var size := asset.footprint_m() if asset != null else Vector3.ONE
 	var radius := maxf(FillPlacementValidatorScript.MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
-	_selection_marker.visible = true
-	_selection_marker.scale = Vector3.ONE * (radius / 0.5)
-	_selection_marker.position = record.pos + Vector3(0.0, 0.03, 0.0)
+	marker.visible = true
+	marker.scale = Vector3.ONE * (radius / 0.5)
+	marker.position = record.pos + Vector3(0.0, lift, 0.0)
+
+
+## One ring per selected object. The primary selection is the brighter one: with
+## several objects selected the author still has to see which one the inspector
+## and the drag are about.
+func _update_selection_marker() -> void:
+	var selected := selected_object_ids() if is_active() else ([] as Array[String])
+	for object_id: Variant in _selection_markers.keys():
+		if object_id not in selected:
+			(_selection_markers[object_id] as MeshInstance3D).queue_free()
+			_selection_markers.erase(object_id)
+	for object_id: String in selected:
+		var record := find_record(object_id)
+		if record == null:
+			continue
+		if not _selection_markers.has(object_id):
+			_selection_markers[object_id] = _create_torus_marker(EditorFillConventions.COLOR_SELECTION)
+		var marker: MeshInstance3D = _selection_markers[object_id]
+		var material := marker.material_override as StandardMaterial3D
+		if material != null:
+			material.albedo_color = EditorFillConventions.COLOR_SELECTION if object_id == selected_object_id \
+				else Color(EditorFillConventions.COLOR_SELECTION, 0.45)
+		_place_marker(marker, record, 0.03)
+
+
+func _clear_selection_markers() -> void:
+	for marker: Variant in _selection_markers.values():
+		(marker as MeshInstance3D).queue_free()
+	_selection_markers.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -762,6 +852,47 @@ func _on_collision_overlay_toggled(pressed: bool) -> void:
 
 func select_object(object_id: String) -> void:
 	selected_object_id = object_id if find_record(object_id) != null else ""
+	additional_selected_ids.clear()
+	_after_selection_changed()
+
+
+## Ctrl+LMB. Shift is the eyedropper in both editors, so additive selection gets
+## Ctrl — the same gesture on the map.
+func toggle_object_selection(object_id: String) -> void:
+	if find_record(object_id) == null:
+		return
+	if object_id == selected_object_id:
+		selected_object_id = additional_selected_ids.pop_front() if not additional_selected_ids.is_empty() else ""
+	elif object_id in additional_selected_ids:
+		additional_selected_ids.erase(object_id)
+	elif selected_object_id.is_empty():
+		selected_object_id = object_id
+	else:
+		additional_selected_ids.append(object_id)
+	_after_selection_changed()
+
+
+## Primary first: the inspector, drags and status messages are about that one.
+func selected_object_ids() -> Array[String]:
+	var ids: Array[String] = []
+	if not selected_object_id.is_empty():
+		ids.append(selected_object_id)
+	for object_id: String in additional_selected_ids:
+		if object_id not in ids and find_record(object_id) != null:
+			ids.append(object_id)
+	return ids
+
+
+func selected_records() -> Array:
+	var records: Array = []
+	for object_id: String in selected_object_ids():
+		var record := find_record(object_id)
+		if record != null:
+			records.append(record)
+	return records
+
+
+func _after_selection_changed() -> void:
 	_inspector_panel.visible = is_active()
 	_toolbar_delete_btn.disabled = selected_object_id.is_empty()
 	_sync_object_list_selection()
@@ -797,11 +928,29 @@ func _refresh_object_list() -> void:
 func _sync_object_list_selection() -> void:
 	_syncing_ui = true
 	_object_list.deselect_all()
+	var selected := selected_object_ids()
 	for i in _object_list.item_count:
-		if String(_object_list.get_item_metadata(i)) == selected_object_id:
-			_object_list.select(i)
-			break
+		if String(_object_list.get_item_metadata(i)) in selected:
+			_object_list.select(i, false)
 	_syncing_ui = false
+
+
+## The list mirrors the 3D selection, multiple rows included. The clicked row
+## becomes the primary one so the inspector follows the pointer.
+func _on_object_list_multi_selected(index: int, _selected: bool) -> void:
+	if _syncing_ui:
+		return
+	var ids: Array[String] = []
+	for i in _object_list.item_count:
+		if _object_list.is_selected(i):
+			ids.append(String(_object_list.get_item_metadata(i)))
+	var clicked := String(_object_list.get_item_metadata(index))
+	selected_object_id = clicked if clicked in ids else (ids[0] if not ids.is_empty() else "")
+	additional_selected_ids.clear()
+	for object_id: String in ids:
+		if object_id != selected_object_id:
+			additional_selected_ids.append(object_id)
+	_after_selection_changed()
 
 
 func _on_object_search_changed(_new_text: String) -> void:
@@ -912,15 +1061,31 @@ func _refresh_inspector() -> void:
 		return
 
 	var asset := WorldAssetCatalog.get_asset(record.asset_id)
-	_inspector_title.text = "Свойства: %s" % (asset.name if asset != null else String(record.asset_id))
-	_id_label.text = "ID: %s" % record.id
-	_asset_label.text = "Ассет: %s" % (asset.name if asset != null else String(record.asset_id))
+	var selection_size := selected_object_ids().size()
 	_set_transform_fields_enabled(true)
 	_sync_transform_fields(record)
 	_refresh_replace_action(record)
 	_refresh_zone_options(record.owner_zone_id, record)
 	_update_badges(record, asset)
 	_update_zone_highlight()
+
+	# With several objects selected only what is meaningful for all of them is
+	# editable: transform. Per-asset appearance, the owning zone and replacement
+	# stay single-object work — an inspector showing the first object's value and
+	# writing into all of them would be silent data loss (design §7.4).
+	if selection_size > 1:
+		_inspector_title.text = "Выбрано объектов: %d" % selection_size
+		_id_label.text = "Основной: %s" % record.id
+		_asset_label.text = "Правятся общие поля: позиция (сдвигом), поворот, масштаб"
+		_badges_label.text = ""
+		_zone_option.disabled = true
+		_replace_btn.disabled = true
+		_controls_vbox.set_fields([], {})
+		return
+
+	_inspector_title.text = "Свойства: %s" % (asset.name if asset != null else String(record.asset_id))
+	_id_label.text = "ID: %s" % record.id
+	_asset_label.text = "Ассет: %s" % (asset.name if asset != null else String(record.asset_id))
 	if asset == null:
 		return
 
@@ -960,17 +1125,20 @@ func _set_property(property_name: String, value: Variant) -> void:
 		return
 	if record.appearance.get(property_name, null) == value:
 		return
-	_push_undo()
 	record.appearance[property_name] = value
 	var node: Node3D = _nodes.get(record.id, null)
 	if node != null and node.has_method("set_decor_property"):
 		node.call("set_decor_property", property_name, value)
-	_editor.mark_dirty()
+	# One property of one object is one merge key: a slider dragged through
+	# twenty values is one author action, but two different fields never merge.
+	_editor.mark_dirty_coalesced("fill_prop/%s/%s" % [record.id, property_name])
 
 
 func _set_transform_fields_enabled(enabled: bool) -> void:
 	for spin in [_pos_x_spin, _pos_y_spin, _pos_z_spin, _pitch_spin, _yaw_spin, _roll_spin, _scale_spin]:
 		spin.editable = enabled
+	for button: Button in [_pos_reset_btn, _rot_reset_btn, _scale_reset_btn]:
+		button.disabled = not enabled
 	_zone_option.disabled = not enabled
 	_replace_btn.disabled = not enabled
 	if not enabled:
@@ -1008,7 +1176,6 @@ func _on_zone_selected(index: int) -> void:
 	var record := find_record(selected_object_id)
 	if record == null:
 		return
-	_push_undo()
 	record.owner_zone_id = _zone_option.get_item_metadata(index)
 	_editor.mark_dirty()
 
@@ -1053,7 +1220,6 @@ func _replace_selected_object() -> void:
 					break
 			if not found:
 				lost_count += 1
-	_push_undo()
 	var old_appearance := record.appearance.duplicate(true)
 	record.asset_id = new_asset.id
 	record.appearance = new_asset.default_appearance()
@@ -1153,14 +1319,29 @@ func _on_transform_spin_changed(_value: float) -> void:
 		_sync_transform_fields(record)
 		_editor.set_status("Этот трансформ пересекает каркас, проход или препятствие.")
 		return
-	if not old_pos.is_equal_approx(candidate_pos) or not old_rot.is_equal_approx(candidate_rot) or not old_scale.is_equal_approx(candidate_scale):
-		_push_undo()
-	record.pos = candidate_pos
-	record.rot = candidate_rot
-	record.scale = candidate_scale
-	_apply_transform_to_node(record)
+	if old_pos.is_equal_approx(candidate_pos) and old_rot.is_equal_approx(candidate_rot) and old_scale.is_equal_approx(candidate_scale):
+		return
+	# Position is applied as a shift so a multi-selection keeps its arrangement;
+	# rotation and scale are absolute, because that is what the field says.
+	var shift := candidate_pos - old_pos
+	var records := selected_records()
+	for target: FillObjectRecordScript in records:
+		if target.id == record.id:
+			continue
+		var next_pos := target.pos + shift
+		if not _is_valid_transform(next_pos, candidate_rot, candidate_scale, target.asset_id, target.id):
+			_sync_transform_fields(record)
+			_editor.set_status("Трансформ не применён: одному из выбранных объектов мешает каркас или граница.")
+			return
+	for target: FillObjectRecordScript in records:
+		target.pos = candidate_pos if target.id == record.id else target.pos + shift
+		target.rot = candidate_rot
+		target.scale = candidate_scale
+		_apply_transform_to_node(target)
 	_update_selection_marker()
-	_editor.mark_dirty()
+	# One field of one object is one undo step, however many intermediate values
+	# the wheel or the arrows produced.
+	_editor.mark_dirty_coalesced("fill_transform/%s" % record.id)
 
 
 # ---------------------------------------------------------------------------

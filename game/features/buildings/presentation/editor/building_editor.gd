@@ -111,6 +111,16 @@ var _redo_stack: Array[Dictionary] = []
 var _history_baseline: Dictionary = {}
 var _saved_snapshot: Dictionary = {}
 var _history_replaying := false
+## Continuous editing — a spin turned by the wheel, a slider dragged — is one
+## author action and therefore one step of undo. The key identifies what is being
+## edited (object and field), so consecutive changes of the same thing merge and
+## changes of different things never do.
+var _history_merge_key := ""
+var _history_merge_msec := 0
+## An explicit group holds the merge open regardless of the timer: a drag lasting
+## ten seconds is still one action.
+var _history_group_key := ""
+var _history_group_open := false
 
 
 func _ready() -> void:
@@ -272,7 +282,9 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 						frame_mode.last_paint_cell = cursor_cell
 					return
 				elif current_mode == EditMode.FILL:
-					fill_mode.on_left_pressed()
+					# Ctrl adds to the selection; `painting` is what routes the
+					# following motion events into the drag.
+					fill_mode.on_left_pressed(event.ctrl_pressed)
 					frame_mode.painting = true
 				else:
 					frame_mode.painting = true
@@ -431,7 +443,17 @@ func mark_dirty() -> void:
 	_mark_dirty()
 
 
+## Same as `mark_dirty`, but consecutive edits of the same `key` collapse into one
+## step of undo.
+func mark_dirty_coalesced(key: String) -> void:
+	if blueprint != null and grid_model != null:
+		grid_model.write_to_blueprint(blueprint)
+	_record_history_change(key)
+	_mark_dirty()
+
+
 func undo() -> bool:
+	end_history_group()
 	if _undo_stack.is_empty():
 		_update_status("Отменять нечего.")
 		return false
@@ -459,6 +481,7 @@ func is_document_dirty() -> bool:
 
 
 func redo() -> bool:
+	end_history_group()
 	if _redo_stack.is_empty():
 		_update_status("Повторять нечего.")
 		return false
@@ -526,7 +549,7 @@ func _select_mode(mode: int) -> void:
 		frame_mode.deactivate()
 		zones_mode.deactivate()
 		fill_mode.activate()
-		_update_status("Режим наполнения: щелчок — поставить или выбрать, Delete — удалить, Esc — снять выделение.")
+		_update_status("Наполнение: ЛКМ — поставить или выбрать, Ctrl+ЛКМ — добавить к выделению, Shift+ЛКМ — пипетка, Shift+ПКМ — удалить, Esc — снять выделение.")
 	else:
 		fill_mode.deactivate()
 		if mode == EditMode.ZONES:
@@ -742,7 +765,10 @@ func _setup_ui() -> void:
 		_export_mesh_btn.pressed.connect(_on_export_mesh_pressed)
 		_navmesh_preview_btn.pressed.connect(_on_navmesh_preview_pressed)
 
-	_eyedropper_btn.pressed.connect(_on_eyedropper_pressed)
+	# The scene already wires this button; connecting again fired the eyedropper
+	# twice per click and logged an error on every editor start.
+	if not _eyedropper_btn.pressed.is_connected(_on_eyedropper_pressed):
+		_eyedropper_btn.pressed.connect(_on_eyedropper_pressed)
 	_load_list.item_activated.connect(_on_load_item_activated)
 	_save_as_dialog.confirmed.connect(_on_save_as_confirmed)
 	_metadata_panel.confirmed.connect(_on_settings_confirmed)
@@ -768,25 +794,60 @@ func _mark_dirty() -> void:
 	_dirty = true
 
 
-func _record_history_change() -> void:
+func _record_history_change(merge_key: String = "") -> void:
 	if _history_replaying or blueprint == null:
 		return
 	var current := blueprint.to_dict()
 	if current == _history_baseline:
+		return
+	if _should_merge(merge_key):
+		# The pre-edit snapshot is already on the stack; moving the baseline
+		# forward keeps the whole series behind a single Ctrl+Z.
+		_history_baseline = current
+		_history_merge_msec = Time.get_ticks_msec()
+		_refresh_undo_redo_buttons()
 		return
 	_undo_stack.append(_history_baseline.duplicate(true))
 	if _undo_stack.size() > HISTORY_LIMIT:
 		_undo_stack.pop_front()
 	_redo_stack.clear()
 	_history_baseline = current
+	_history_merge_key = merge_key
+	_history_merge_msec = Time.get_ticks_msec()
+	if not _history_group_key.is_empty():
+		_history_group_open = true
 	_refresh_undo_redo_buttons()
-	if fill_mode != null:
-		fill_mode.refresh_history_buttons()
+
+
+func _should_merge(merge_key: String) -> bool:
+	if _undo_stack.is_empty():
+		return false
+	if not _history_group_key.is_empty() and _history_group_open:
+		return true
+	if merge_key.is_empty() or merge_key != _history_merge_key:
+		return false
+	return Time.get_ticks_msec() - _history_merge_msec <= EditorFillConventions.HISTORY_MERGE_MSEC
+
+
+## Opens and closes an explicit one-action group. A drag calls `begin` when it
+## starts and `end` when the button is released.
+func begin_history_group(key: String) -> void:
+	_history_group_key = key
+	_history_group_open = false
+
+
+func end_history_group() -> void:
+	_history_group_key = ""
+	_history_group_open = false
+	_history_merge_key = ""
 
 
 func reset_history() -> void:
 	_undo_stack.clear()
 	_redo_stack.clear()
+	_history_merge_key = ""
+	_history_group_key = ""
+	_history_group_open = false
 	_history_baseline = blueprint.to_dict() if blueprint != null else {}
 	_saved_snapshot = _history_baseline.duplicate(true)
 	_refresh_undo_redo_buttons()
@@ -845,7 +906,6 @@ func _run_confirmation_dialog(dialog: ConfirmationDialog, size: Vector2i) -> boo
 func _reset_fill_for_new_blueprint() -> void:
 	if fill_mode == null:
 		return
-	fill_mode.clear_undo_history()
 	fill_mode.select_object("")
 	fill_mode.rebuild_nodes()
 	if current_mode == EditMode.FILL:

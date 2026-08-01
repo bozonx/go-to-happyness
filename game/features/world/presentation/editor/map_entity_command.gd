@@ -41,6 +41,18 @@ func mark_applied() -> MapEntityCommand:
 	return self
 
 
+## Склейка снимков: «было» остаётся от первой правки серии, «стало» берётся от
+## последней. Промежуточные значения не нужны никому — автор всё равно вернётся
+## к состоянию до того, как начал крутить поле.
+func absorb(next: MapEditorCommand) -> bool:
+	var other := next as MapEntityCommand
+	if other == null or other._document != _document:
+		return false
+	_after = other._after.duplicate(true)
+	_first_apply = false
+	return true
+
+
 func _apply(snapshot: Array) -> void:
 	_document.entities.from_json(snapshot)
 	_document.mark_dirty()

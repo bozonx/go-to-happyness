@@ -24,6 +24,8 @@ signal option_activated(option_id: StringName)
 var _catalog_panel: EditorCatalogPanel = null
 var _entry_buttons: Dictionary = {}
 var _is_catalog_mode := false
+var _catalog_controller: Object = null
+var _catalog_scope: StringName = &""
 
 
 func _ready() -> void:
@@ -38,10 +40,18 @@ func set_title(text: String) -> void:
 	_title.text = text
 
 
+## Каталог собирается один раз на режим, а не на каждое обновление панелей.
+## Пересборка на каждый refresh стирала текст в поле поиска и отбирала фокус
+## после первого же клика по карте: `_refresh_panels` вызывается на каждое
+## действие автора.
 func show_catalog(controller: Object, scope: StringName) -> void:
 	_is_catalog_mode = true
 	_entries.visible = false
 	_catalog_panel.visible = true
+	if controller == _catalog_controller and scope == _catalog_scope:
+		return
+	_catalog_controller = controller
+	_catalog_scope = scope
 	_catalog_panel.setup(controller, null, scope)
 	_catalog_panel.activate()
 

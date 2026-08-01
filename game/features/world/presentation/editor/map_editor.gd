@@ -611,6 +611,13 @@ func _handle_key(event: InputEventKey) -> void:
 			camera.frame_board()
 			return
 		KEY_ESCAPE:
+			# Esc сначала принадлежит режиму: сбросить выделение или кисть — то,
+			# чего автор ждёт от него в первую очередь, и ровно то, что делает
+			# редактор зданий. Выход из редактора остаётся за ним только тогда,
+			# когда сбрасывать нечего.
+			if _active != null and _active.handle_input(event):
+				_refresh_panels()
+				return
 			_return_to_menu()
 			return
 	if _active != null and _active.handle_input(event):

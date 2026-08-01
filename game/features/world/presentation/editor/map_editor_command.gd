@@ -32,3 +32,10 @@ func undo() -> bool:
 ## commits as it validates it — answer false.
 func apply_on_push() -> bool:
 	return true
+
+
+## Поглощает следующую команду того же поля, чтобы серия непрерывных правок
+## осталась одним шагом отмены. Возвращает false, если склейка невозможна: тогда
+## история просто положит вторую команду поверх первой.
+func absorb(_next: MapEditorCommand) -> bool:
+	return false

@@ -38,6 +38,12 @@ func setup(controller: Object, editor: Node = null, p_scope: StringName = WorldA
 	_controller = controller
 	scope = p_scope
 
+	# Панель, уже собранную в этом узле, нельзя строить заново: вместе с
+	# кнопками пересоздалось бы поле поиска, и текст в нём (вместе с фокусом)
+	# терялся бы при каждом обновлении вызывающей панели.
+	if _search_edit != null and is_instance_valid(_search_edit):
+		return
+
 	if editor != null and editor.has_node("%FillSearchEdit"):
 		_search_edit = editor.get_node("%FillSearchEdit")
 		_recent_label = editor.get_node("%FillRecentLbl")

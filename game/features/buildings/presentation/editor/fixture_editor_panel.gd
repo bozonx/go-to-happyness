@@ -11,7 +11,6 @@ const FixtureDefinitionScript = preload("res://game/features/buildings/domain/ed
 const FireSourceDefaultsScript = preload("res://game/features/buildings/domain/editor/fire_source_defaults.gd")
 
 var _editor: Node = null
-var _push_undo_cb: Callable = Callable()
 
 var _fixture_list: ItemList = null
 var _fixture_id_label: Label = null
@@ -29,9 +28,10 @@ var _selected_fixture_index: int = -1
 var _syncing_ui: bool = false
 
 
-func setup(editor: Node, push_undo_cb: Callable) -> void:
+## История принадлежит `BuildingEditor`: снимок чертежа делает `mark_dirty`
+## после мутации, поэтому отдельного хука «запомни состояние» здесь нет.
+func setup(editor: Node) -> void:
 	_editor = editor
-	_push_undo_cb = push_undo_cb
 
 	_fixture_list = editor.get_node("%FixtureList")
 	_fixture_id_label = editor.get_node("%FixtureIdLbl")
@@ -140,7 +140,6 @@ func _refresh_fixture_inspector() -> void:
 
 
 func add_fixture() -> void:
-	_push_undo_cb.call()
 	var fixture := FixtureDefinitionScript.new()
 	var next_index := 1
 	var existing_ids: Array = _editor.blueprint.fixtures.map(func(f): return String(f.id))
@@ -164,7 +163,6 @@ func delete_fixture() -> void:
 	var warning := _fixture_deletion_warning(fixture)
 	if not warning.is_empty():
 		_editor.set_status("ВНИМАНИЕ: %s" % warning)
-	_push_undo_cb.call()
 	_editor.blueprint.fixtures.remove_at(_selected_fixture_index)
 	_selected_fixture_index = mini(_selected_fixture_index, _editor.blueprint.fixtures.size() - 1)
 	_editor.mark_dirty()
@@ -220,7 +218,6 @@ func _on_fixture_capability_selected(index: int) -> void:
 	# Replace capabilities with the single selected one (phase 2A: one cap per fixture).
 	if fixture.capabilities == [cap]:
 		return
-	_push_undo_cb.call()
 	fixture.capabilities = [cap]
 	_editor.mark_dirty()
 	_refresh_fixture_inspector()
@@ -239,7 +236,6 @@ func _on_fixture_visual_selected(index: int) -> void:
 			_editor.set_status("Этот визуальный объект уже связан с fixture «%s»." % String(other.id))
 			_refresh_fixture_inspector()
 			return
-	_push_undo_cb.call()
 	fixture.visual_object_id = visual_id
 	_editor.mark_dirty()
 
@@ -251,7 +247,6 @@ func _on_fixture_zone_selected(index: int) -> void:
 	var zone_id: StringName = _fixture_zone_option.get_item_metadata(index)
 	if fixture.owner_zone_id == zone_id:
 		return
-	_push_undo_cb.call()
 	fixture.owner_zone_id = zone_id
 	_editor.mark_dirty()
 
@@ -269,7 +264,6 @@ func _on_fixture_fire_param_changed(_value: Variant) -> void:
 	}
 	if fixture.runtime_defaults == defaults:
 		return
-	_push_undo_cb.call()
 	fixture.runtime_defaults = defaults
 	_editor.mark_dirty()
 

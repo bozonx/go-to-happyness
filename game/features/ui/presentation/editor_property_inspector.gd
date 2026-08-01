@@ -8,7 +8,36 @@ extends VBoxContainer
 signal property_committed(property_name: StringName, value: Variant)
 signal property_reset_requested(property_name: StringName)
 
+## Числовое поле правится непрерывно — стрелками, а позже и протягиванием
+## мышью. Коммит по каждому промежуточному значению превратил бы одно авторское
+## движение в сотню шагов undo, поэтому изменение откладывается на паузу, а
+## Enter и потеря фокуса фиксируют его немедленно (`map_fill_mode.md` §7.5).
+const COMMIT_DEBOUNCE_SEC := 0.35
+
 var _collapsed_sections: Dictionary[StringName, bool] = {}
+var _pending_values: Dictionary = {}
+## Растёт на каждую правку и на каждый немедленный коммит: отложенный вызов,
+## чей токен устарел, обязан промолчать.
+var _debounce_token := 0
+
+
+## Фиксирует значение сейчас, отменяя отложенный коммит того же поля.
+func commit_now(property_name: StringName, value: Variant) -> void:
+	_pending_values.erase(property_name)
+	_debounce_token += 1
+	property_committed.emit(property_name, value)
+
+
+func queue_commit(property_name: StringName, value: Variant) -> void:
+	_pending_values[property_name] = value
+	_debounce_token += 1
+	var token := _debounce_token
+	await get_tree().create_timer(COMMIT_DEBOUNCE_SEC).timeout
+	if token != _debounce_token or not _pending_values.has(property_name):
+		return
+	var pending: Variant = _pending_values[property_name]
+	_pending_values.erase(property_name)
+	property_committed.emit(property_name, pending)
 
 
 func set_fields(properties: Array[EntityPropertyDef], values: Dictionary, show_sections := true, editable := true) -> void:
@@ -116,8 +145,11 @@ func _build_control(property: EntityPropertyDef, value: Variant) -> Control:
 			spin.max_value = float(property.maximum) if property.maximum != null else 1000000.0
 			spin.step = float(property.step) if property.step != null else (1.0 if property.type == EntityPropertyDef.TYPE_INT else 0.1)
 			spin.value = float(value) if value != null else 0.0
+			var read := func() -> Variant:
+				return int(spin.value) if property.type == EntityPropertyDef.TYPE_INT else spin.value
 			var commit := func() -> void:
-				property_committed.emit(property.name, int(spin.value) if property.type == EntityPropertyDef.TYPE_INT else spin.value)
+				commit_now(property.name, read.call())
+			spin.value_changed.connect(func(_next: float) -> void: queue_commit(property.name, read.call()))
 			spin.get_line_edit().text_submitted.connect(func(_text: String) -> void: commit.call())
 			spin.get_line_edit().focus_exited.connect(commit)
 			return spin
@@ -189,8 +221,11 @@ func _vector_control(property: EntityPropertyDef, value: Variant) -> Control:
 		column.add_child(spin)
 		row.add_child(column)
 		spins.append(spin)
-		spin.get_line_edit().focus_exited.connect(func() -> void:
-			property_committed.emit(property.name, spins.map(func(item: SpinBox) -> float: return item.value)))
+		var read := func() -> Variant:
+			return spins.map(func(item: SpinBox) -> float: return item.value)
+		spin.value_changed.connect(func(_next: float) -> void: queue_commit(property.name, read.call()))
+		spin.get_line_edit().text_submitted.connect(func(_text: String) -> void: commit_now(property.name, read.call()))
+		spin.get_line_edit().focus_exited.connect(func() -> void: commit_now(property.name, read.call()))
 	return row
 
 

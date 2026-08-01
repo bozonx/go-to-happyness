@@ -190,8 +190,20 @@ func apply_tent_start(reset_progress := true) -> void:
 	apply_launch_config(GameLaunchConfig.for_tent_era(), reset_progress)
 
 
+## --- Weighted, reallocatable storage ------------------------------------------
+## Every stored good takes up "space units". The warehouse holds a fixed number of
+## units for the current era; the player splits that budget between resources in
+## the warehouse menu. Heavy goods (logs, bricks) cost more than a unit each;
+## water is light and packs several to a unit.
+## Compatibility aliases — use StorageState.STORED_RESOURCES / STORAGE_WEIGHTS in new code.
+const STORED_RESOURCES = StorageState.STORED_RESOURCES
+const STORAGE_WEIGHTS = StorageState.STORAGE_WEIGHTS
 
-func resources_for_era(p_era: Era) -> Array[String]:
+## Compatibility alias — use EraProgress.ERA_RESOURCES in new code.
+const ERA_RESOURCES = EraProgress.ERA_RESOURCES
+
+
+static func resources_for_era(p_era: Era) -> Array[String]:
 	return EraProgress.resources_for_era(p_era)
 
 func era_resources() -> Array[String]:

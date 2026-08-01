@@ -189,6 +189,55 @@ func _run() -> void:
 	fill.select_object(editor.blueprint.objects[0].id)
 	print("  multi-axis rotation + Esc ok")
 
+	# Шаг поворота общий на оба редактора и не зависит от ассета.
+	fill.select_object("")
+	fill.current_pitch_deg = 0.0
+	fill.current_yaw_deg = 0.0
+	fill.current_roll_deg = 0.0
+	fill.rotate_selection("y", 1)
+	assert(is_equal_approx(fill.current_yaw_deg, EditorFillConventions.ROTATION_STEP_DEG),
+		"шаг быстрого поворота — общий, а не заданный ассетом")
+
+	# Кисть несёт в постановку все три оси: призрак и результат совпадают.
+	fill.current_asset_id = &"campfire"
+	fill.current_pitch_deg = 15.0
+	fill.current_yaw_deg = 30.0
+	fill.current_roll_deg = 345.0
+	editor.cursor_hit_pos = Vector3(1.4, 0.0, 6.4)
+	var count_before: int = editor.blueprint.objects.size()
+	fill.on_left_pressed()
+	assert(editor.blueprint.objects.size() == count_before + 1, "объект поставлен")
+	var placed = editor.blueprint.objects[editor.blueprint.objects.size() - 1]
+	assert(is_equal_approx(placed.rot.x, 15.0) and is_equal_approx(placed.rot.z, 345.0),
+		"постановка сохраняет поворот кисти по всем осям, а не только Y")
+
+	# Множественное выделение: трансформ применяется ко всем, позиция — сдвигом.
+	fill.select_object(editor.blueprint.objects[0].id)
+	fill.toggle_object_selection(placed.id)
+	assert(fill.selected_object_ids().size() == 2, "Ctrl+клик набирает выделение")
+	var other_pos_before: Vector3 = placed.pos
+	var primary = fill.find_record(fill.selected_object_id)
+	fill._syncing_ui = true
+	fill._pos_x_spin.value = primary.pos.x + 1.0
+	fill._syncing_ui = false
+	fill._on_transform_spin_changed(0.0)
+	assert(placed.pos.is_equal_approx(other_pos_before + Vector3(1.0, 0.0, 0.0)),
+		"позиция применяется сдвигом ко всему выделению, а не абсолютом в одну точку")
+	var other_rot_before: float = placed.rot.y
+	fill.rotate_selection("y", 1)
+	assert(is_equal_approx(placed.rot.y, fposmod(other_rot_before + EditorFillConventions.ROTATION_STEP_DEG, 360.0)),
+		"поворот применён ко всему выделению")
+	var total_before: int = editor.blueprint.objects.size()
+	fill.delete_selection()
+	assert(editor.blueprint.objects.size() == total_before - 2, "Delete удаляет всё выделение")
+	editor.undo()
+	assert(editor.blueprint.objects.size() == total_before, "удаление выделения отменяется одним шагом")
+	# Убираем добавленный объект, чтобы дальнейшие проверки видели те же два.
+	fill.select_object(placed.id)
+	fill.delete_selection()
+	assert(editor.blueprint.objects.size() == 2, "тест продолжается с исходными двумя объектами")
+	print("  multi-selection + brush rotation ok")
+
 	# The same validation boundary protects placement and inspector fields from
 	# frame/circulation volumes.
 	editor.blueprint.blocks.append(BlueprintBlockScript.new(Vector3i(7, 0, 7), &"cube"))

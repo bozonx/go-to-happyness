@@ -167,7 +167,7 @@ func _test_mode_switching(editor: Node) -> void:
 
 	editor._select_mode(&"fill")
 	assert(editor._active.id == &"fill", "switched to fill")
-	assert(editor._active.palette_entries().size() > 2, "fill has tools and archetypes")
+	assert(not editor._active.palette_entries().is_empty(), "fill palette lists map archetypes")
 
 	editor._select_mode(&"roads")
 	assert(editor._active.id == &"fill", "an unbuilt mode cannot be entered")
@@ -329,7 +329,8 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 	assert(editor.document.entities.entities.size() == 1, "redo restored it")
 	# Select, duplicate, rotate and delete use the same record layer and history;
 	# these shortcuts keep common authoring work out of a bespoke inspector.
-	editor._active.select_palette_entry(&"select")
+	# There is no tool to switch to: a click on an occupied cell selects, exactly
+	# as in the building editor.
 	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true))
 	assert(editor._side_panel.get_node("Margin/Scroll/Rows/InspectorFields").get_child_count() > 0, "schema generated inspector controls")
 	assert(editor._active.apply_inspector_value(&"editor_scale", 1.5), "shared inspector edits entity scale")
@@ -363,6 +364,32 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 	editor._undo()
 	editor._undo()
 	assert(editor.document.entities.entities.size() == 1, "shortcut edits undo back to the original")
+
+	# Одна раскладка с редактором зданий: Shift+ЛКМ — пипетка, Shift+ПКМ —
+	# удаление под курсором, Ctrl+ЛКМ — добавить в выделение, Esc — снять его.
+	var fill_ctrl: FillModeController = editor._active as FillModeController
+	editor._brush.hovered_cell = editor.document.entities.entities[0].cell(editor.document.terrain)
+	editor._brush.has_hover = true
+	fill_ctrl._archetype_id = &""
+	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true, true))
+	assert(fill_ctrl._archetype_id == editor.document.entities.entities[0].archetype_id, "Shift+ЛКМ берёт архетип в кисть")
+	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	assert(fill_ctrl._selected_id != &"", "клик по занятой клетке выделяет, а не ставит второй объект")
+	editor._active.handle_input(_key(KEY_ESCAPE))
+	assert(fill_ctrl._selected_id == &"", "Esc снимает выделение")
+	var before_erase: int = editor.document.entities.entities.size()
+	editor._active.handle_input(_click(MOUSE_BUTTON_RIGHT, true, true))
+	assert(editor.document.entities.entities.size() == before_erase - 1, "Shift+ПКМ удаляет объект под курсором")
+	editor._undo()
+	assert(editor.document.entities.entities.size() == before_erase, "удаление отменяется общей историей")
+	# Призрак живёт в том же корне, что и виды: пересборка видов не должна его
+	# освобождать, иначе следующий кадр обратится к уничтоженному инстансу.
+	editor._brush.hovered_cell = Vector2i(20, 20)
+	fill_ctrl._archetype_id = &"core:campfire"
+	fill_ctrl._refresh_ghost()
+	fill_ctrl.rebuild_views()
+	fill_ctrl._refresh_ghost()
+	assert(is_instance_valid(fill_ctrl._ghost), "призрак выжил пересборку видов")
 	# Raising its cell is one terrain action. The record keeps its authored local
 	# offset; the view projects it onto the new surface rather than double-counting
 	# the terrain height.
@@ -735,16 +762,19 @@ func _test_read_only_source_detaches(editor: Node) -> void:
 	print("  read-only detach ok")
 
 
-func _click(button: int, pressed: bool) -> InputEventMouseButton:
+func _click(button: int, pressed: bool, shift := false, ctrl := false) -> InputEventMouseButton:
 	var event := InputEventMouseButton.new()
 	event.button_index = button
 	event.pressed = pressed
+	event.shift_pressed = shift
+	event.ctrl_pressed = ctrl
 	return event
 
 
-func _key(keycode: Key, ctrl := false) -> InputEventKey:
+func _key(keycode: Key, ctrl := false, shift := false) -> InputEventKey:
 	var event := InputEventKey.new()
 	event.keycode = keycode
 	event.ctrl_pressed = ctrl
+	event.shift_pressed = shift
 	event.pressed = true
 	return event

@@ -40,7 +40,7 @@ const STORAGE_WEIGHTS: Dictionary = {
 	BRANCHES: 1.0, GRASS: 1.0, WATER: 0.5, FOOD: 1.0,
 	HIDES: 1.0, GOODS: 1.0, LOGS: 2.0, WOOD: 2.0,
 	SOIL: 1.0, CLAY: 1.0, BOARDS: 1.5, STONE: 2.0, BRICKS: 2.0,
-	TARP: 1.0: 1.0,
+	TARP: 1.0,
 }
 
 

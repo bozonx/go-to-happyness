@@ -16,19 +16,34 @@ signal changed()
 
 var _undo_stack: Array[MapEditorCommand] = []
 var _redo_stack: Array[MapEditorCommand] = []
+var _merge_key: StringName = &""
+var _merge_msec := 0
 
 
 func clear() -> void:
 	_undo_stack.clear()
 	_redo_stack.clear()
+	_merge_key = &""
 	changed.emit()
 
 
-func push(command: MapEditorCommand) -> bool:
+## `merge_key` склеивает подряд идущие правки одного поля одного объекта в один
+## шаг отмены. Без него протянутый спин или колесо над числовым полем оставляли
+## бы столько шагов, сколько было промежуточных значений — а автор сделал одно
+## действие (`map_fill_mode.md` §7.5). Правки разных полей не сливаются никогда:
+## ключ включает в себя и объект, и поле.
+func push(command: MapEditorCommand, merge_key: StringName = &"") -> bool:
 	if command == null:
 		return false
 	if command.apply_on_push() and not command.redo():
 		return false
+	if _can_merge(merge_key) and _undo_stack.back().absorb(command):
+		_merge_msec = Time.get_ticks_msec()
+		_redo_stack.clear()
+		changed.emit()
+		return true
+	_merge_key = merge_key
+	_merge_msec = Time.get_ticks_msec()
 	_undo_stack.append(command)
 	# A new action makes the abandoned branch unreachable; keeping it would let
 	# redo replay operations that no longer fit the state they were recorded in.
@@ -39,7 +54,14 @@ func push(command: MapEditorCommand) -> bool:
 	return true
 
 
+func _can_merge(merge_key: StringName) -> bool:
+	return merge_key != &"" and merge_key == _merge_key \
+		and not _undo_stack.is_empty() \
+		and Time.get_ticks_msec() - _merge_msec <= EditorFillConventions.HISTORY_MERGE_MSEC
+
+
 func undo() -> bool:
+	_merge_key = &""
 	if _undo_stack.is_empty():
 		return false
 	var command: MapEditorCommand = _undo_stack.pop_back()
@@ -55,6 +77,7 @@ func undo() -> bool:
 
 
 func redo() -> bool:
+	_merge_key = &""
 	if _redo_stack.is_empty():
 		return false
 	var command: MapEditorCommand = _redo_stack.pop_back()
