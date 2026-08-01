@@ -12,7 +12,7 @@ const BuildingMaterialCatalogScript = preload("res://game/features/buildings/dom
 var _mesh_cache: Dictionary = {}
 var _material_cache: Dictionary = {}
 var _texture_library: BlockTextureLibrary = null
-var _textures_enabled: bool = false
+var _textures_enabled: bool = true
 
 
 ## World offset from the cell's minimum corner to the mesh origin.

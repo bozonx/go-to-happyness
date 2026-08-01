@@ -18,9 +18,9 @@ const ASSET_DIR := "res://game/features/buildings/presentation/editor/materials/
 ## Authored albedo textures keyed by material id. An empty string means the
 ## texture is not authored yet and the material uses its catalog colour instead.
 const AUTHORED_TEXTURE_PATHS: Dictionary = {
-	&"branches": "",
-	&"tarp": "",
-	&"thatch": "",
+	&"branches": "branches",
+	&"tarp": "tarp",
+	&"thatch": "thatch",
 	&"earth_stone": "",
 	&"earth": "",
 	&"adobe": "",
@@ -53,10 +53,8 @@ func has_texture(material_id: StringName) -> bool:
 
 
 func _authored_path(material_id: StringName) -> String:
-	if not AUTHORED_TEXTURE_PATHS.has(material_id):
-		return ""
-	var base_name: String = AUTHORED_TEXTURE_PATHS[material_id]
+	var base_name: String = AUTHORED_TEXTURE_PATHS.get(material_id, "")
 	if base_name == "":
-		return ""
+		base_name = String(material_id)
 	var path := ASSET_DIR + base_name + ".png"
 	return path if ResourceLoader.exists(path) else ""

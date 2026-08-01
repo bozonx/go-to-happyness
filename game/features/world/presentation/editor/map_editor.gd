@@ -88,7 +88,7 @@ var _test_run_service := MapTestRunService.new()
 var _context := MapEditorContext.new()
 var _modes: Array[MapEditorMode] = []
 var _active: MapEditorMode = null
-var _message := "готово"
+var _message := ""
 var dev_mode := false
 ## True while the history is replaying a command, so the commits that replay emits
 ## are not recorded as new commands.

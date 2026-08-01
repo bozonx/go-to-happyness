@@ -25,7 +25,6 @@ const OPTION_LAKE := &"type_lake"
 const OPTION_RIVER := &"type_river"
 const OPTION_SEA := &"type_sea"
 
-const ROW_BODY_TOOLS := &"row_body_tools"
 const ROW_BODY_ACTIONS := &"row_body_actions"
 const ROW_LIQUID_CAT := &"row_liquid_cat"
 const ROW_WATER_TYPE := &"row_water_type"
@@ -243,7 +242,13 @@ func _handle_key(event: InputEventKey) -> bool:
 			return false
 	notify_ui_changed()
 	_update_highlight()
+	_propagate_brush_message()
 	return true
+
+
+func _propagate_brush_message() -> void:
+	if context != null and context.water_brush != null and context.water_brush.last_message != "":
+		context.set_status_message(context.water_brush.last_message)
 
 
 func _stroke() -> void:
@@ -252,6 +257,7 @@ func _stroke() -> void:
 	brush.update_hover(context.camera, context.space_state(), context.mouse_position())
 	brush.apply()
 	_update_highlight()
+	_propagate_brush_message()
 
 
 func pick_from_cell() -> bool:
@@ -262,6 +268,7 @@ func pick_from_cell() -> bool:
 		context.water_brush.pick_from_cell()
 		notify_ui_changed()
 		_update_highlight()
+		_propagate_brush_message()
 		return true
 	return false
 

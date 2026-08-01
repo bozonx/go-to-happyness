@@ -105,12 +105,12 @@ func configure(terrain: TerrainGrid, water: WaterGrid, service: WaterService, bo
 
 func cycle_tool() -> void:
 	tool = TOOLS[(TOOLS.find(tool) + 1) % TOOLS.size()]
-	last_message = "tool: %s" % tool
+	last_message = "инструмент: %s" % _tool_label()
 
 
 func adjust_level(delta: int) -> void:
 	level = clampi(level + delta, WaterGrid.MIN_HEIGHT, WaterGrid.MAX_HEIGHT)
-	last_message = "level %d (%.1f m)" % [level, float(level) * TerrainGrid.HEIGHT_STEP]
+	last_message = "уровень %d (%.1f м)" % [level, float(level) * TerrainGrid.HEIGHT_STEP]
 	if body_id != WaterBody.NO_BODY and _service != null:
 		_service.set_body_level(body_id, level)
 
@@ -121,7 +121,7 @@ func pick_level_from_ground() -> void:
 	if not has_hover or _terrain == null:
 		return
 	level = _terrain.height_of(hovered_cell) + 1
-	last_message = "level from ground: %d" % level
+	last_message = "уровень по рельефу: %d" % level
 
 
 signal body_selected(body_id: int)
@@ -136,7 +136,7 @@ func select_body(next_body_id: int) -> void:
 	if body != null:
 		if changed:
 			level = body.surface_height
-		last_message = "body: %s" % body.name
+		last_message = "водоём: %s" % body.name
 	body_selected.emit(body_id)
 
 
@@ -147,7 +147,7 @@ func create_body(body_type: WaterBody.Type) -> WaterBody:
 		return null
 	var body := _service.create_body(body_type, level)
 	if body == null:
-		last_message = "no room for more bodies (max %d)" % WaterBody.MAX_ID
+		last_message = "нет места для водоёмов (макс. %d)" % WaterBody.MAX_ID
 		return null
 	body_id = body.id
 	if body_type == WaterBody.Type.LAVA:
@@ -155,7 +155,7 @@ func create_body(body_type: WaterBody.Type) -> WaterBody:
 	else:
 		liquid_category = &"water"
 		water_type = body_type
-	last_message = "created body: %s" % body.name
+	last_message = "создан водоём: %s" % body.name
 	return body
 
 
@@ -189,7 +189,7 @@ func pick_from_cell() -> void:
 		if _terrain != null:
 			level = _terrain.height_of(hovered_cell) + 1
 		tool = TOOL_FLOOD
-		last_message = "пипетка: рельеф -> уровень %d" % level
+		last_message = "пипетка: рельеф → уровень %d" % level
 
 
 # --- Strokes ------------------------------------------------------------------
@@ -235,7 +235,7 @@ func _apply_flow() -> void:
 	if _service.set_flow(cells, target_body, flow_direction, flow_strength):
 		last_message = "течение: %d клеток" % _service.last_delta_size()
 		return
-	last_message = "течение не изменилось (%s)" % _service.last_rejection()
+	last_message = "течение не изменилось (%s)" % _water_rejection_label(_service.last_rejection())
 
 
 func _clear_flow() -> void:
@@ -251,7 +251,7 @@ func _clear_flow() -> void:
 	if _service.clear_flow(cells, target_body):
 		last_message = "течение удалено: %d клеток" % _service.last_delta_size()
 		return
-	last_message = "течение не изменилось (%s)" % _service.last_rejection()
+	last_message = "течение не изменилось (%s)" % _water_rejection_label(_service.last_rejection())
 
 
 func _select_hovered_body() -> void:
@@ -283,10 +283,10 @@ func _flood() -> void:
 	if body_id == WaterBody.NO_BODY:
 		var body := _service.create_and_flood(hovered_cell, active_body_type(), level)
 		if body == null:
-			last_message = "basin did not flood (%s)" % _service.last_rejection()
+			last_message = "затопление не удалось (%s)" % _water_rejection_label(_service.last_rejection())
 			return
 		body_id = body.id
-		last_message = "created and flooded %s: %d cells" % [body.name, _service.last_delta_size()]
+		last_message = "создан и затоплен %s: %d клеток" % [body.name, _service.last_delta_size()]
 		return
 	if _water != null and _water.has_water(hovered_cell):
 		var cell_body_id := _water.body_id_at(hovered_cell)
@@ -295,7 +295,7 @@ func _flood() -> void:
 			last_message = "уже на этом уровне (%d)" % level
 			return
 	if _service.flood(hovered_cell, body_id, level):
-		last_message = "flooded basin: %d cells" % _service.last_delta_size()
+		last_message = "затоплено: %d клеток" % _service.last_delta_size()
 		return
 	# If the ground is at or above the level, the basin has no depth to fill.
 	# Pick the level from the ground (one step above it) and try again only if dry ground.
@@ -305,9 +305,9 @@ func _flood() -> void:
 			if level <= ground:
 				level = ground + 1
 				if _service.flood(hovered_cell, body_id, level):
-					last_message = "flooded basin (level %d): %d cells" % [level, _service.last_delta_size()]
+					last_message = "затоплено (уровень %d): %d клеток" % [level, _service.last_delta_size()]
 					return
-	last_message = "basin did not flood (%s)" % _service.last_rejection()
+	last_message = "затопление не удалось (%s)" % _water_rejection_label(_service.last_rejection())
 
 
 ## Existing liquid is its own selection target. The registry remains the storage
@@ -320,9 +320,9 @@ func _adopt_body_at_hover() -> void:
 
 func _set_frozen(frozen: bool) -> void:
 	if _service.set_frozen(brush_cells(hovered_cell), frozen, ice_thickness, true):
-		last_message = "%s: %d cells" % ["froze" if frozen else "thawed", _service.last_delta_size()]
+		last_message = "%s: %d клеток" % ["заморожено" if frozen else "оттаяло", _service.last_delta_size()]
 		return
-	last_message = "ice unchanged (%s)" % _service.last_rejection()
+	last_message = "лёд не изменился (%s)" % _water_rejection_label(_service.last_rejection())
 
 
 ## Shift+right drains the whole body under the cursor. Plain right button remains
@@ -337,30 +337,30 @@ func _drain_cells_at_hover() -> void:
 	if _border != null and _water != null:
 		var body_at := _water.body_id_at(hovered_cell)
 		if body_at != WaterBody.NO_BODY and _border.is_border_body(body_at):
-			last_message = "border body cannot be drained — raise the ground above the level"
+			last_message = "граничный водоём нельзя осушить — поднимите рельеф выше уровня"
 			return
 	var cells := brush_cells(hovered_cell)
 	if _service.drain_cells(cells):
 		if body_id != WaterBody.NO_BODY and _water != null and not _water.has_body(body_id):
 			body_id = WaterBody.NO_BODY
-		last_message = "drained %d cells" % _service.last_delta_size()
+		last_message = "осушено: %d клеток" % _service.last_delta_size()
 		return
-	last_message = "could not drain (%s)" % _service.last_rejection()
+	last_message = "не удалось осушить (%s)" % _water_rejection_label(_service.last_rejection())
 
 
 func _drain_body_at_hover() -> void:
 	var target_body := _water.body_id_at(hovered_cell) if _water != null else WaterBody.NO_BODY
 	if target_body == WaterBody.NO_BODY:
-		last_message = "no water body here"
+		last_message = "здесь нет водоёма"
 		return
 	if _border != null and _border.is_border_body(target_body):
-		last_message = "border body cannot be drained — raise the ground above the level"
+		last_message = "граничный водоём нельзя осушить — поднимите рельеф выше уровня"
 		return
 	if _service.remove_body(target_body):
 		body_id = WaterBody.NO_BODY if body_id == target_body else body_id
-		last_message = "drained whole body"
+		last_message = "водоём осушен"
 		return
-	last_message = "could not drain (%s)" % _service.last_rejection()
+	last_message = "не удалось осушить (%s)" % _water_rejection_label(_service.last_rejection())
 
 
 ## When the hovered cell belongs to a body whose type differs from the selected
@@ -377,12 +377,12 @@ func _maybe_retype_hovered_body() -> void:
 	if hovered_body == null or hovered_body.type == target_type:
 		return
 	if _border != null and _border.is_border_body(hovered_id):
-		last_message = "border body cannot be retyped"
+		last_message = "граничный водоём нельзя изменить"
 		return
 	if _service.retype_body(hovered_id, target_type):
 		body_id = hovered_id
 		level = hovered_body.surface_height
-		last_message = "retyped %s to %s" % [hovered_body.name, WaterBody.type_id_of(target_type)]
+		last_message = "тип изменён: %s → %s" % [hovered_body.name, WaterBody.type_id_of(target_type)]
 
 
 ## Freezes or thaws the whole selected body in one transaction — the seasonal
@@ -396,21 +396,42 @@ func toggle_body_ice() -> void:
 			frozen_cells += 1
 	var freeze := frozen_cells == 0
 	if _service.set_body_frozen(body_id, freeze, ice_thickness):
-		last_message = "body %s" % ("froze" if freeze else "thawed")
+		last_message = "водоём %s" % ("заморожен" if freeze else "оттаял")
 		return
-	last_message = "ice state unchanged (%s)" % _service.last_rejection()
+	last_message = "состояние льда не изменилось (%s)" % _water_rejection_label(_service.last_rejection())
 
 
 func cycle_ice_thickness() -> void:
 	ice_thickness = (ice_thickness % WaterGrid.MAX_ICE_THICKNESS) + 1
-	last_message = "ice thickness %d" % ice_thickness
+	last_message = "толщина льда: %d" % ice_thickness
 
 
 # --- History ------------------------------------------------------------------
 
 func undo() -> void:
-	last_message = "undo" if _service.undo() else "nothing to undo"
+	last_message = "отменено" if _service.undo() else "нечего отменять"
 
 
 func redo() -> void:
-	last_message = "redo" if _service.redo() else "nothing to redo"
+	last_message = "повторено" if _service.redo() else "нечего повторять"
+
+
+static func _tool_label() -> String:
+	match TOOL_FLOOD:
+		TOOL_SELECT: return "выбор"
+		TOOL_FLOOD: return "затопление"
+		TOOL_DRAIN: return "осушение"
+		TOOL_FLOW: return "течение"
+		TOOL_FREEZE: return "заморозка"
+		TOOL_THAW: return "оттайка"
+	return String(TOOL_FLOOD)
+
+
+static func _water_rejection_label(reason: StringName) -> String:
+	match reason:
+		WaterService.REASON_NO_GRID: return "нет сетки"
+		WaterService.REASON_NO_BODY: return "нет водоёма"
+		WaterService.REASON_NOTHING_TO_DO: return "нечего менять"
+		WaterService.REASON_NOT_FREEZABLE: return "нельзя заморозить"
+		WaterService.REASON_FLOW_REQUIRES_RIVER: return "течение только для рек"
+	return String(reason)

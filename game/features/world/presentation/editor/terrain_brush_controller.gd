@@ -399,7 +399,7 @@ static func direction_name(direction: int) -> String:
 	return str(direction)
 
 
-static func _mode_label() -> String:
+func _mode_label() -> String:
 	match TerrainEditOperation.mode_name(edit_mode):
 		"sculpt": return "подъём/спуск"
 		"terrace": return "терраса"

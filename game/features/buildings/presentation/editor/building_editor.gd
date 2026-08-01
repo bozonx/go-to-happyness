@@ -94,6 +94,7 @@ var _orbiting: bool = false
 @onready var _undo_btn: Button = %UndoBtn
 @onready var _redo_btn: Button = %RedoBtn
 @onready var _eyedropper_btn: Button = %EyedropperBtn
+@onready var _textures_btn: Button = %TexturesBtn
 
 var _mode_buttons: Dictionary = {}
 ## Prevent value_changed callbacks from overwriting one footprint dimension
@@ -778,6 +779,9 @@ func _setup_ui() -> void:
 	frame_mode.setup(self)
 	zones_mode.setup(self)
 	fill_mode.setup(self)
+
+	if _textures_btn != null:
+		mesh_library.set_textures_enabled(_textures_btn.button_pressed)
 
 	_back_btn.visible = not dev_mode
 	if dev_mode:

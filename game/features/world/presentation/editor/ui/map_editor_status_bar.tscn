@@ -27,7 +27,7 @@ text = "клетка —"
 [node name="MessageLabel" type="Label" parent="Margin/Row"]
 vertical_alignment = 1
 theme_override_font_sizes/font_size = 12
-text = "готово"
+text = ""
 
 [node name="ShortcutTooltip" parent="Margin/Row" instance=ExtResource("1_shortcuts")]
 layout_mode = 2

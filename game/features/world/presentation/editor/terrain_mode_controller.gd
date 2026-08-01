@@ -102,6 +102,7 @@ func pick_from_cell() -> bool:
 		if context.brush.has_hover and context.terrain != null:
 			context.brush.set_level_target_height(context.terrain.height_of(context.brush.hovered_cell))
 		notify_ui_changed()
+		_propagate_brush_message()
 		return true
 	return false
 
@@ -110,6 +111,8 @@ func process(_delta: float) -> void:
 	if context.brush != null:
 		context.brush.update_hover(context.camera, context.space_state(), context.mouse_position())
 	_update_ramp_preview()
+	if _tool != TOOL_RAMP:
+		_propagate_brush_message()
 
 
 func handle_input(event: InputEvent) -> bool:
@@ -131,9 +134,11 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 		match event.button_index:
 			MOUSE_BUTTON_WHEEL_UP:
 				context.brush.adjust_level_target(1)
+				_propagate_brush_message()
 				return true
 			MOUSE_BUTTON_WHEEL_DOWN:
 				context.brush.adjust_level_target(-1)
+				_propagate_brush_message()
 				return true
 	var direction := 0
 	match event.button_index:
@@ -168,6 +173,8 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 				context.brush.apply_hole(1 if cutting else -1)
 	_redraw_overlay()
 	notify_ui_changed()
+	if _tool != TOOL_RAMP:
+		_propagate_brush_message()
 	return true
 
 
@@ -199,7 +206,7 @@ func _handle_ramp_mouse(event: InputEventMouseButton) -> bool:
 	if event.button_index == MOUSE_BUTTON_RIGHT and event.shift_pressed and event.pressed:
 		context.set_edit_label("удаление пандуса")
 		context.brush.dissolve_ramp()
-		_set_ramp_status("Пандус удалён" if context.brush.last_message == "ramp dissolved" else "Под курсором нет пандуса")
+		_set_ramp_status("Пандус удалён" if context.brush.last_message == "пандус удалён" else "Под курсором нет пандуса")
 		_redraw_overlay()
 		notify_ui_changed()
 		return true
@@ -462,11 +469,11 @@ func _reshape_hovered_ramp(gentler: bool) -> void:
 	context.set_edit_label("пандус пологее" if gentler else "пандус круче")
 	context.brush.reshape_hovered_ramp(gentler)
 	var message := context.brush.last_message
-	if message == "no ramp under cursor":
+	if message == "под курсором нет пандуса":
 		_set_ramp_status("Пандус: наведите курсор на существующий склон")
-	elif message.begins_with("ramp reshaped"):
-		_set_ramp_status("Пандус перестроен: %s" % message.trim_prefix("ramp reshaped to "))
-	elif message.contains("already"):
+	elif message.begins_with("пандус перестроен:"):
+		_set_ramp_status("Пандус перестроен: %s" % message.trim_prefix("пандус перестроен: "))
+	elif message.contains("уже имеет"):
 		_set_ramp_status("Пандус уже имеет предельный профиль")
 	else:
 		_set_ramp_status("Пандус не перестроен: %s" % message)
@@ -519,6 +526,11 @@ func _set_ramp_status(message: String) -> void:
 		return
 	_last_ramp_status = message
 	context.set_status_message(message)
+
+
+func _propagate_brush_message() -> void:
+	if context != null and context.brush != null and context.brush.last_message != "":
+		context.set_status_message(context.brush.last_message)
 
 
 func _cancel_ramp_drag() -> void:

@@ -109,6 +109,7 @@ func pick_from_cell() -> bool:
 	else:
 		(brush as TerrainBrushController).pick_material()
 	notify_ui_changed()
+	_propagate_brush_message()
 	return true
 
 
@@ -117,6 +118,7 @@ func process(_delta: float) -> void:
 		# The coverage brush rasterises its own stroke between cursor samples, so
 		# it only needs the hover; the drag lives inside it.
 		_coverage_brush().update_hover(context.camera, context.space_state(), context.mouse_position())
+		_propagate_brush_message()
 		return
 	var was := context.brush.hovered_cell
 	var had := context.brush.has_hover
@@ -125,6 +127,7 @@ func process(_delta: float) -> void:
 	# drag belongs to the height tool, so this mode tracks its own.
 	if _painting and context.brush.has_hover and (not had or was != context.brush.hovered_cell):
 		_paint()
+	_propagate_brush_message()
 
 
 func handle_input(event: InputEvent) -> bool:
@@ -140,11 +143,13 @@ func handle_input(event: InputEvent) -> bool:
 			context.set_edit_label("покрытие")
 			_coverage_brush().set_painting(button.pressed, _erases_coverage())
 			notify_ui_changed()
+			_propagate_brush_message()
 			return true
 		_painting = button.pressed
 		if button.pressed:
 			_paint()
 		notify_ui_changed()
+		_propagate_brush_message()
 		return true
 	if event is InputEventKey and event.is_pressed() and not event.is_echo():
 		return _handle_key(event as InputEventKey)
@@ -153,6 +158,12 @@ func handle_input(event: InputEvent) -> bool:
 
 func _coverage_brush() -> CoverageBrushController:
 	return context.coverage_brush if context != null else null
+
+
+func _propagate_brush_message() -> void:
+	var brush := hover_brush()
+	if brush != null and brush.last_message != "":
+		context.set_status_message(brush.last_message)
 
 
 ## The eraser is the "no coverage" palette entry rather than a modifier key: it is
@@ -183,6 +194,7 @@ func _handle_key(event: InputEventKey) -> bool:
 		_:
 			return false
 	notify_ui_changed()
+	_propagate_brush_message()
 	return true
 
 

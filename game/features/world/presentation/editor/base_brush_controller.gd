@@ -19,7 +19,7 @@ const MAX_BRUSH_SIZE := 8
 var brush_size := 1
 var hovered_cell := Vector2i.ZERO
 var has_hover := false
-var last_message := "ready"
+var last_message := ""
 
 ## The grid used for ray picking and bounds checking. Both `TerrainGrid` and
 ## `WaterGrid` cover the same board, so either one answers `is_inside` correctly.

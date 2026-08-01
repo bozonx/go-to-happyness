@@ -1,6 +1,7 @@
 extends SceneTree
 
 const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
+const BlockTextureLibraryScript = preload("res://game/features/buildings/presentation/editor/block_texture_library.gd")
 
 
 func _init() -> void:
@@ -8,6 +9,7 @@ func _init() -> void:
 	_test_wedge_mesh_normals()
 	_test_stairs_mesh_normals()
 	_test_arch_and_railing_meshes()
+	_test_block_materials_and_textures()
 	print("--- test_block_mesh_library.gd PASSED ALL TESTS ---")
 	quit(0)
 
@@ -86,3 +88,37 @@ func _test_stairs_mesh_normals() -> void:
 	# Verify that all face normals are flat (unit vectors along cardinal axes)
 	for n in normals:
 		assert(is_equal_approx(n.length(), 1.0), "Normal must be normalized")
+
+
+func _test_block_materials_and_textures() -> void:
+	print("Testing block materials and textures (branches, tarp, thatch)...")
+	var tex_lib := BlockTextureLibraryScript.new()
+	var materials: Array[StringName] = [&"branches", &"tarp", &"thatch"]
+	for mat_id in materials:
+		assert(tex_lib.has_texture(mat_id), "Texture must exist for material '%s'" % mat_id)
+		assert(tex_lib.texture_for(mat_id) != null, "Texture for '%s' must load as Texture2D" % mat_id)
+
+	var lib := BlockMeshLibraryScript.new()
+	assert(lib.textures_enabled() == true, "Textures must be enabled by default in BlockMeshLibrary")
+
+	for mat_id in materials:
+		var mat := lib.material_for(mat_id)
+		assert(mat != null, "Material for '%s' must not be null" % mat_id)
+		assert(mat.albedo_texture != null, "Material '%s' must have albedo_texture when textures are enabled" % mat_id)
+		assert(mat.albedo_color == Color.WHITE, "Material '%s' albedo_color must be WHITE when texture is active" % mat_id)
+
+	# Disable textures
+	lib.set_textures_enabled(false)
+	assert(lib.textures_enabled() == false, "Textures must be disabled after set_textures_enabled(false)")
+
+	for mat_id in materials:
+		var mat_flat := lib.material_for(mat_id)
+		assert(mat_flat != null, "Flat material for '%s' must not be null" % mat_id)
+		assert(mat_flat.albedo_texture == null, "Flat material '%s' must not have albedo_texture" % mat_id)
+
+	# Re-enable textures
+	lib.set_textures_enabled(true)
+	assert(lib.textures_enabled() == true, "Textures must be re-enabled after set_textures_enabled(true)")
+	for mat_id in materials:
+		var mat_tex := lib.material_for(mat_id)
+		assert(mat_tex.albedo_texture != null, "Material '%s' must have albedo_texture re-applied" % mat_id)
