@@ -35,6 +35,7 @@ const ROW_FLOW_PARAMS := &"row_flow_params"
 const ROW_BRUSH_SIZE := &"row_brush_size"
 
 var _painting := false
+var _list_body_ids: Array[int] = []
 
 
 func _init() -> void:
@@ -102,6 +103,7 @@ func _brush_has_size() -> bool:
 		return false
 	return context.water_brush.tool in [
 		WaterBrushController.TOOL_FLOW,
+		WaterBrushController.TOOL_STILL,
 		WaterBrushController.TOOL_FREEZE,
 		WaterBrushController.TOOL_THAW,
 	]
@@ -229,6 +231,8 @@ func _handle_key(event: InputEventKey) -> bool:
 			brush.tool = WaterBrushController.TOOL_FREEZE if brush.tool != WaterBrushController.TOOL_FREEZE else WaterBrushController.TOOL_FLOOD
 		KEY_R:
 			brush.tool = WaterBrushController.TOOL_THAW if brush.tool != WaterBrushController.TOOL_THAW else WaterBrushController.TOOL_FLOOD
+		KEY_X:
+			brush.tool = WaterBrushController.TOOL_STILL if brush.tool != WaterBrushController.TOOL_STILL else WaterBrushController.TOOL_FLOOD
 		KEY_I:
 			brush.cycle_ice_thickness()
 		KEY_V:
@@ -268,6 +272,7 @@ func _edit_label() -> String:
 		WaterBrushController.TOOL_FLOOD: return "наполнение водоёма"
 		WaterBrushController.TOOL_DRAIN: return "осушение"
 		WaterBrushController.TOOL_FLOW: return "течение"
+		WaterBrushController.TOOL_STILL: return "удаление течения"
 		WaterBrushController.TOOL_FREEZE: return "заморозка"
 		WaterBrushController.TOOL_THAW: return "разморозка"
 	return "вода"
@@ -310,9 +315,6 @@ func tool_options() -> Array:
 	var brush := context.water_brush
 	var options: Array = []
 
-	# --- ВОДОЕМ ---
-	options.append(ToolOption.of(&"header_body", "Водоём:", &"", false, true))
-
 	options.append(ToolOption.of(OPTION_WATER, "Вода", ROW_LIQUID_CAT, brush.liquid_category == &"water", false, Color(0.2, 0.55, 0.85, 1.0)))
 	options.append(ToolOption.of(OPTION_LAVA, "Лава", ROW_LIQUID_CAT, brush.liquid_category == &"lava", false, Color(0.95, 0.3, 0.08, 1.0)))
 
@@ -344,9 +346,8 @@ func tool_options() -> Array:
 			options.append(ToolOption.of(OPTION_ACTION_ICE, freeze_label, ROW_BODY_ACTIONS, is_frozen))
 		options.append(ToolOption.of(OPTION_DELETE_BODY, "🗑 Удалить водоём", ROW_BODY_ACTIONS))
 
-	# --- КИСТЬ ---
-	options.append(ToolOption.of(&"header_brush", "Кисть:", &"", false, true))
 	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_FLOW]), "Течение", ROW_BRUSH_TOOLS, brush.tool == WaterBrushController.TOOL_FLOW))
+	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_STILL]), "Стоячая", ROW_BRUSH_TOOLS, brush.tool == WaterBrushController.TOOL_STILL))
 	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_FREEZE]), "Заморозка", ROW_BRUSH_TOOLS, brush.tool == WaterBrushController.TOOL_FREEZE))
 	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_THAW]), "Разморозка", ROW_BRUSH_TOOLS, brush.tool == WaterBrushController.TOOL_THAW))
 
@@ -422,11 +423,37 @@ func empty_list_hint() -> String:
 
 
 func list_entries() -> Array[String]:
+	_list_body_ids.clear()
 	var entries: Array[String] = []
 	for body: WaterBody in context.water.bodies():
 		if context.water.cells_of_body(body.id).size() > 0:
-			entries.append("%d · %s · %s · уровень %d" % [body.id, body.name, body.type_id(), body.surface_height])
+			entries.append("%s · уровень %d" % [_type_display_name(body.type), body.surface_height])
+			_list_body_ids.append(body.id)
 	return entries
+
+
+static func _type_display_name(body_type: WaterBody.Type) -> String:
+	match body_type:
+		WaterBody.Type.SEA: return "Море"
+		WaterBody.Type.LAKE: return "Озеро"
+		WaterBody.Type.RIVER: return "Река"
+		WaterBody.Type.LAVA: return "Лава"
+	return "Вода"
+
+
+func selected_list_index() -> int:
+	var brush := context.water_brush if context != null else null
+	if brush == null or brush.body_id == WaterBody.NO_BODY:
+		return -1
+	return _list_body_ids.find(brush.body_id)
+
+
+func select_list_entry(index: int) -> void:
+	if index < 0 or index >= _list_body_ids.size():
+		return
+	context.water_brush.select_body(_list_body_ids[index])
+	notify_ui_changed()
+	_update_highlight()
 
 
 func status_text() -> String:

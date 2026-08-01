@@ -372,7 +372,7 @@ func _update_shortcut_tooltip() -> void:
 		return
 	var text := "Общее\nЛКМ — применить · Shift+ПКМ — обратное действие\nПКМ — камера · СКМ — панорама · Колесо — зум\nWASD/QE — движение камеры · Home — показать всю карту\nCtrl+S — сохранить · Ctrl+Z / Ctrl+Shift+Z — отменить / повторить\n1–5 — режим редактора · Esc — снять выделение / в меню\n\n"
 	if _active.id == &"water":
-		text += "Вода:\n• ЛКМ по суше — затопить во впадине на выбранном уровне\n• ЛКМ по воде — выбрать водоём\n• Клик по суше вне водоёма или Esc — снять выделение\n• Клик по заблокированной/высокой клетке — снимает выделение без затопления\n• Голубые точки — предпросмотр границ затопления на текущем уровне\n• Shift+колесо или [ ] — размер кисти течения/льда\n• +/− — уровень воды · G — взятие уровня с грунта\n• F — кисть течения · V/C — направление и сила течения\n• Z/R — кисти заморозки и разморозки"
+		text += "Вода:\n• ЛКМ по суше — затопить во впадине на выбранном уровне\n• ЛКМ по воде — выбрать водоём\n• Клик по суше вне водоёма или Esc — снять выделение\n• Клик по заблокированной/высокой клетке — снимает выделение без затопления\n• Голубые точки — предпросмотр границ затопления на текущем уровне\n• Shift+колесо или [ ] — размер кисти течения/льда\n• +/− — уровень воды · G — взятие уровня с грунта\n• F — кисть течения · X — кисть стоячей воды (убрать течение) · V/C — направление и сила течения\n• Z/R — кисти заморозки и разморозки"
 	elif _active.id == &"terrain":
 		text += "Рельеф:\n• Пандус — протянуть ЛКМ между высотами · C — уклон · Shift+ПКМ — удалить\n• Подъём: V — форма откоса · Shift+ЛКМ — пипетка · F — выровнять · M — навигация · T — профиль"
 	elif _active.id == &"surface":
@@ -530,11 +530,18 @@ func _update_hover_marker() -> void:
 	# Water-state brushes operate on the water sheet, not visually on its bed.
 	# The cell still comes from the terrain ray (open water has no collider), but
 	# its cursor is drawn where the authored water surface actually is.
+	# Tools that only act on existing water (freeze/thaw/flow/still) hide the
+	# marker on dry ground — the brush has nothing to do there.
 	if brush is WaterBrushController:
-		if document.water.has_water(brush.hovered_cell):
-			centre.y = float(document.water.height_of(brush.hovered_cell)) * TerrainGrid.HEIGHT_STEP
+		var water_brush := brush as WaterBrushController
+		var has_water := document.water.has_water(water_brush.hovered_cell)
+		if water_brush.tool != WaterBrushController.TOOL_FLOOD and not has_water:
+			hover_marker.visible = false
+			return
+		if has_water:
+			centre.y = float(document.water.height_of(water_brush.hovered_cell)) * TerrainGrid.HEIGHT_STEP
 		else:
-			centre.y = float((brush as WaterBrushController).level) * TerrainGrid.HEIGHT_STEP
+			centre.y = float(water_brush.level) * TerrainGrid.HEIGHT_STEP
 	hover_marker.position = Vector3(centre.x, centre.y + 0.03, centre.z)
 	var span := float(brush.brush_size * 2 - 1)
 	hover_marker.scale = Vector3(span, 1.0, span)

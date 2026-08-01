@@ -30,7 +30,8 @@ const TOOL_DRAIN := &"drain"
 const TOOL_FLOW := &"flow"
 const TOOL_FREEZE := &"freeze"
 const TOOL_THAW := &"thaw"
-const TOOLS: Array[StringName] = [TOOL_SELECT, TOOL_FLOOD, TOOL_DRAIN, TOOL_FLOW, TOOL_FREEZE, TOOL_THAW]
+const TOOL_STILL := &"still"
+const TOOLS: Array[StringName] = [TOOL_SELECT, TOOL_FLOOD, TOOL_DRAIN, TOOL_FLOW, TOOL_STILL, TOOL_FREEZE, TOOL_THAW]
 
 var tool: StringName = TOOL_FLOOD
 ## The body strokes go into. Zero until the author makes one — a stroke with no
@@ -213,6 +214,8 @@ func apply() -> void:
 			_drain_body_at_hover()
 		TOOL_FLOW:
 			_apply_flow()
+		TOOL_STILL:
+			_clear_flow()
 		TOOL_FREEZE:
 			_set_frozen(true)
 		TOOL_THAW:
@@ -231,6 +234,22 @@ func _apply_flow() -> void:
 	var cells := brush_cells(hovered_cell)
 	if _service.set_flow(cells, target_body, flow_direction, flow_strength):
 		last_message = "течение: %d клеток" % _service.last_delta_size()
+		return
+	last_message = "течение не изменилось (%s)" % _service.last_rejection()
+
+
+func _clear_flow() -> void:
+	if _service == null or _water == null or not has_hover:
+		return
+	if not _water.has_water(hovered_cell):
+		last_message = "нет воды под курсором"
+		return
+	var target_body := _water.body_id_at(hovered_cell)
+	if target_body == WaterBody.NO_BODY:
+		return
+	var cells := brush_cells(hovered_cell)
+	if _service.clear_flow(cells, target_body):
+		last_message = "течение удалено: %d клеток" % _service.last_delta_size()
 		return
 	last_message = "течение не изменилось (%s)" % _service.last_rejection()
 

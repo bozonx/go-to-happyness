@@ -266,6 +266,12 @@ func _queue_ocean_cell(cell: Vector2i, level: int, body_id: int, seen: Dictionar
 ## Raises or lowers one whole water body.  A body cannot contain multiple water
 ## levels; lowering also removes columns whose ground is now at or above the
 ## surface.  Expanding a shoreline is explicitly Flood, from a chosen seed.
+##
+## The level change re-floods from an existing seed cell so the body's outline
+## follows the terrain at the new level — raising the level expands the
+## shoreline into newly submerged ground, lowering it retreats to higher ground
+## only.  Lifting the existing footprint unchanged would leave water standing
+## on ground that is now above the surface.
 func set_body_level(body_id: int, level: int) -> bool:
 	if grid == null:
 		return _reject(REASON_NO_GRID)
@@ -273,7 +279,12 @@ func set_body_level(body_id: int, level: int) -> bool:
 		return _reject(REASON_NOTHING_TO_DO)
 	if not grid.has_body(body_id):
 		return _reject(REASON_NO_BODY)
-	return _resurface_body(body_id, cells_of_body(body_id), level)
+	var current_cells := cells_of_body(body_id)
+	if current_cells.is_empty():
+		return _resurface_body(body_id, current_cells, level)
+	var seed := current_cells[0]
+	var cells := grid.flood_cells(terrain, seed, level, body_id)
+	return _resurface_body(body_id, cells, level)
 
 
 ## Freezes or thaws cells (§9.6). Geometry does not change at all — this only
@@ -398,6 +409,42 @@ func cells_of_body(body_id: int) -> Array[Vector2i]:
 	if grid == null:
 		return []
 	return grid.cells_of_body(body_id)
+
+
+## Removes flow from cells of a body, as one undoable transaction. The "still
+## water" brush tool: it erases authored current so the cells return to the
+## body's default still state.
+func clear_flow(cells: Array[Vector2i], body_id: int) -> bool:
+	if grid == null:
+		return _reject(REASON_NO_GRID)
+	if not grid.has_body(body_id):
+		return _reject(REASON_NO_BODY)
+	var body := grid.body(body_id)
+	if body == null:
+		return _reject(REASON_NO_BODY)
+	var edit_cells: Array[Vector2i] = []
+	var old_flows := PackedInt32Array()
+	var new_flows := PackedInt32Array()
+	for cell: Vector2i in CellUtils.sorted_unique(cells):
+		if not grid.is_inside(cell) or grid.body_id_at(cell) != body_id:
+			continue
+		var old_value := int(body.flow.get(cell, 0))
+		if old_value == 0:
+			continue
+		edit_cells.append(cell)
+		old_flows.append(old_value)
+		new_flows.append(0)
+	if edit_cells.is_empty():
+		return _reject(REASON_NOTHING_TO_DO)
+	var edit := WaterFlowEdit.create(body_id, edit_cells, old_flows, new_flows)
+	edit.apply(grid)
+	_undo_stack.push_back(edit)
+	if _undo_stack.size() > MAX_UNDO_STEPS:
+		_undo_stack.pop_front()
+	_redo_stack.clear()
+	_last_rejection = REASON_NONE
+	edit_committed.emit(edit)
+	return true
 
 
 # --- History ------------------------------------------------------------------

@@ -89,26 +89,26 @@ func apply_height_brush(delta: int) -> void:
 		operation = TerrainEditOperation.offset(cells, delta, edit_mode, terrain_slope_class)
 	if _service.apply_operation(operation):
 		if edit_mode == TerrainEditOperation.Mode.LEVEL:
-			last_message = "%s → %d — %d cells changed" % [
-				TerrainEditOperation.mode_name(edit_mode), _level_target_height,
+			last_message = "%s → %d — %d клеток изменено" % [
+				_mode_label(), _level_target_height,
 				_service.last_delta_size(),
 			]
 		else:
-			last_message = "%s %+d — %d cells changed" % [
-				TerrainEditOperation.mode_name(edit_mode), delta,
+			last_message = "%s %+d — %d клеток изменено" % [
+				_mode_label(), delta,
 				_service.last_delta_size(),
 			]
 		return
 	if edit_mode == TerrainEditOperation.Mode.LEVEL:
-		last_message = "%s → %d REFUSED (%s)" % [
-			TerrainEditOperation.mode_name(edit_mode), _level_target_height,
-			_service.last_rejection(),
-		]
+		last_message = "%s → %d ОТКЛОНЕНО (%s)" % [
+				_mode_label(), _level_target_height,
+				_rejection_label(_service.last_rejection()),
+			]
 	else:
-		last_message = "%s %+d REFUSED (%s)" % [
-			TerrainEditOperation.mode_name(edit_mode), delta,
-			_service.last_rejection(),
-		]
+		last_message = "%s %+d ОТКЛОНЕНО (%s)" % [
+				_mode_label(), delta,
+				_rejection_label(_service.last_rejection()),
+			]
 
 
 ## Changes the captured plateau height without using the current column as a
@@ -119,7 +119,7 @@ func adjust_level_target(delta: int) -> void:
 			return
 		_capture_level_target()
 	_level_target_height += delta
-	last_message = "level target %d" % _level_target_height
+	last_message = "уровень выравнивания: %d" % _level_target_height
 
 
 func level_target_height() -> int:
@@ -144,14 +144,14 @@ func apply_flatten() -> void:
 		return
 	var target := _grid.height_of(hovered_cell)
 	if _service.apply_operation(TerrainEditOperation.level(brush_cells(hovered_cell), target, terrain_slope_class)):
-		last_message = "levelled to %d" % target
+		last_message = "выравнено на %d" % target
 		return
-	last_message = "level REFUSED (%s)" % _service.last_rejection()
+	last_message = "выравнивание ОТКЛОНЕНО (%s)" % _rejection_label(_service.last_rejection())
 
 
 func cycle_edit_mode() -> void:
 	edit_mode = (edit_mode + 1) % TerrainEditOperation.Mode.size()
-	last_message = "mode %s" % TerrainEditOperation.mode_name(edit_mode)
+	last_message = "режим: %s" % _mode_label()
 
 
 func cycle_terrain_slope_class() -> void:
@@ -160,8 +160,8 @@ func cycle_terrain_slope_class() -> void:
 	var position := profiles.find(terrain_slope_class)
 	terrain_slope_class = profiles[(position + 1) % profiles.size()] if position >= 0 else profiles[0]
 	last_message = (
-		"terrain slope natural" if terrain_slope_class == RampConnectionPlan.AUTO_CLASS
-		else "terrain slope %s" % SlopeCatalog.id_of_class(terrain_slope_class)
+		"откос: естественный" if terrain_slope_class == RampConnectionPlan.AUTO_CLASS
+		else "откос: %s" % SlopeCatalog.id_of_class(terrain_slope_class)
 	)
 
 
@@ -172,7 +172,7 @@ func set_material_index(index: int) -> void:
 		return
 	material_index = index
 	variant = TerrainMaterialVariants.clamp_variant(material_index, variant)
-	last_message = "material %s" % TerrainMaterialCatalog.ids()[material_index]
+	last_message = "материал: %s" % TerrainMaterialCatalog.ids()[material_index]
 
 
 func material_id() -> StringName:
@@ -186,7 +186,7 @@ func pick_material() -> void:
 		return
 	material_index = _grid.material_index_at(hovered_cell)
 	variant = _grid.variant_at(hovered_cell)
-	last_message = "picked %s/%s" % [material_id(), TerrainMaterialVariants.variant_name(material_index, variant)]
+	last_message = "взято: %s/%s" % [material_id(), TerrainMaterialVariants.variant_name(material_index, variant)]
 
 
 func apply_material() -> void:
@@ -194,17 +194,17 @@ func apply_material() -> void:
 		return
 	var id := material_id()
 	if _service.paint_material(brush_cells(hovered_cell), id, variant):
-		last_message = "painted %s/%s" % [id, TerrainMaterialVariants.variant_name(material_index, variant)]
+		last_message = "покрашено: %s/%s" % [id, TerrainMaterialVariants.variant_name(material_index, variant)]
 		return
 	if _service.last_rejection() == TerrainService.REASON_UNSTABLE_MATERIAL:
-		last_message = "paint %s REFUSED (slope is too steep)" % id
+		last_message = "покраска %s ОТКЛОНЕНО (слишком крутой уклон)" % id
 		return
-	last_message = "paint %s changed nothing (already painted)" % id
+	last_message = "покраска %s: материал уже нанесён" % id
 
 
 func set_variant(next_variant: int) -> void:
 	variant = TerrainMaterialVariants.clamp_variant(material_index, next_variant)
-	last_message = "variant %s" % TerrainMaterialVariants.variant_name(material_index, variant)
+	last_message = "вариант: %s" % TerrainMaterialVariants.variant_name(material_index, variant)
 
 
 ## Variant selection is brush state, not a paint operation.  The next ordinary
@@ -224,9 +224,9 @@ func paint_wear(level: int) -> void:
 		return
 	var clamped := clampi(level, 0, TerrainDetailCodec.MAX_WEAR)
 	if _service.set_wear(brush_cells(hovered_cell), clamped):
-		last_message = "wear %d" % clamped
+		last_message = "износ: %d" % clamped
 		return
-	last_message = "wear unchanged"
+	last_message = "износ не изменился"
 
 
 func paint_snow(level: int) -> void:
@@ -241,9 +241,9 @@ func paint_snow(level: int) -> void:
 func paint_snow_cells(cells: Array[Vector2i], level: int) -> bool:
 	var clamped := clampi(level, 0, TerrainDetailCodec.MAX_SNOW_DEPTH)
 	if _service.set_snow_depth(cells, clamped):
-		last_message = "snow depth %d" % clamped
+		last_message = "снег: %d" % clamped
 		return true
-	last_message = "snow unchanged"
+	last_message = "снег не изменился"
 	return false
 
 
@@ -275,7 +275,7 @@ func walk_the_brush() -> void:
 			_wear_service.record_crossing(cell)
 	_wear_day += 1
 	var raised := _wear_service.flush(_wear_day)
-	last_message = "walked %d cells — %d wore down" % [cells.size(), raised.size()]
+	last_message = "проход: %d клеток — %d изношено" % [cells.size(), raised.size()]
 
 
 ## Cuts or fills a hole. direction > 0 cuts, direction < 0 fills. The author
@@ -286,9 +286,9 @@ func apply_hole(direction: int) -> void:
 		return
 	var enabled := direction > 0
 	if _service.set_hole(brush_cells(hovered_cell), enabled):
-		last_message = "hole %s" % ("cut" if enabled else "filled")
+		last_message = "вырез сделан" if enabled else "вырез засыпан"
 		return
-	last_message = "hole unchanged"
+	last_message = "вырез не изменился"
 
 
 ## Toggles the hole state of the hovered cell. Kept for the terrain lab, where
@@ -298,9 +298,9 @@ func toggle_hole() -> void:
 		return
 	var enabled := not _grid.is_hole(hovered_cell)
 	if _service.set_hole(brush_cells(hovered_cell), enabled):
-		last_message = "hole %s" % ("cut" if enabled else "filled")
+		last_message = "вырез сделан" if enabled else "вырез засыпан"
 		return
-	last_message = "hole unchanged"
+	last_message = "вырез не изменился"
 
 
 # --- Ramps ------------------------------------------------------------------
@@ -310,11 +310,11 @@ func place_ramp() -> void:
 		return
 	var slope_id := SlopeCatalog.id_of_class(ramp_class)
 	if _service.place_ramp(hovered_cell, slope_id, ramp_direction):
-		last_message = "ramp %s placed" % slope_id
+		last_message = "пандус %s установлен" % slope_id
 		return
 	# Refusal is a normal answer (grid_terrain_system.md §3.1): the run must be
 	# flat, free, and end at a column exactly `rise` steps higher.
-	last_message = "ramp %s REFUSED (needs %d free flat cells and a +%d step at the top)" % [
+	last_message = "пандус %s ОТКЛОНЕНО (нужно %d свободных клеток и перепад +%d)" % [
 		slope_id, SlopeCatalog.run_of(slope_id), SlopeCatalog.rise_of(slope_id),
 	]
 
@@ -325,27 +325,27 @@ func place_ramp() -> void:
 func connect_ramp(first_cell: Vector2i, second_cell: Vector2i, requested_class: int = RampConnectionPlan.AUTO_CLASS) -> void:
 	var plan := RampConnectionPlan.between(_grid, first_cell, second_cell, requested_class)
 	if not plan.is_valid():
-		last_message = "ramp refused: %s" % plan.reason
+		last_message = "пандус ОТКЛОНЕНО: %s" % plan.reason
 		return
 	if _service.connect_ramp(first_cell, second_cell, requested_class):
-		last_message = "ramp %s connected%s" % [
+		last_message = "пандус %s соединён%s" % [
 			SlopeCatalog.id_of_class(plan.slope_class),
-			"; %d cells reshaped" % plan.reshaped_cells if plan.reshaped_cells > 0 else "",
+			"; %d клеток перестроено" % plan.reshaped_cells if plan.reshaped_cells > 0 else "",
 		]
 		return
-	last_message = "ramp refused: %s" % _service.last_rejection()
+	last_message = "пандус ОТКЛОНЕНО: %s" % _rejection_label(_service.last_rejection())
 
 
 ## Makes the complete connected ramp under the cursor longer/gentler or
 ## shorter/steeper while keeping its true low and high levels.
 func reshape_hovered_ramp(gentler: bool) -> void:
 	if not has_hover or not _grid.is_ramp_cell(hovered_cell):
-		last_message = "no ramp under cursor"
+		last_message = "под курсором нет пандуса"
 		return
 	var current_class := _grid.slope_class_at(hovered_cell)
 	var current := RampConnectionPlan.reshape(_grid, hovered_cell, current_class)
 	if not current.is_valid():
-		last_message = "ramp chain is invalid"
+		last_message = "цепочка пандусов некорректна"
 		return
 	var target_class := RampConnectionPlan.AUTO_CLASS
 	var target_run := 2147483647 if gentler else -1
@@ -361,18 +361,18 @@ func reshape_hovered_ramp(gentler: bool) -> void:
 			target_class = candidate
 			target_run = footprint
 	if target_class == RampConnectionPlan.AUTO_CLASS:
-		last_message = "ramp is already the %s available profile" % ("gentlest" if gentler else "steepest")
+		last_message = "пандус уже имеет %s профиль" % ("самый пологий" if gentler else "самый крутой")
 		return
 	if _service.reshape_ramp(hovered_cell, target_class):
-		last_message = "ramp reshaped to %s" % SlopeCatalog.id_of_class(target_class)
+		last_message = "пандус перестроен: %s" % SlopeCatalog.id_of_class(target_class)
 		return
-	last_message = "ramp reshape refused: %s" % _service.last_rejection()
+	last_message = "перестроение ОТКЛОНЕНО: %s" % _rejection_label(_service.last_rejection())
 
 
 func dissolve_ramp() -> void:
 	if not has_hover:
 		return
-	last_message = "ramp dissolved" if _service.dissolve_ramp(hovered_cell) else "no ramp here"
+	last_message = "пандус удалён" if _service.dissolve_ramp(hovered_cell) else "здесь нет пандуса"
 
 
 func cycle_ramp_class() -> void:
@@ -381,29 +381,49 @@ func cycle_ramp_class() -> void:
 		classes.append(SlopeCatalog.slope_class_of(slope_id))
 	var position := classes.find(ramp_class)
 	ramp_class = classes[(position + 1) % classes.size()] if position >= 0 else classes[0]
-	last_message = "ramp class %d (%s)" % [ramp_class, SlopeCatalog.id_of_class(ramp_class)]
+	last_message = "класс пандуса %d (%s)" % [ramp_class, SlopeCatalog.id_of_class(ramp_class)]
 
 
 func cycle_ramp_direction() -> void:
 	var order := SlopeCatalog.ORTHOGONAL_DIRECTIONS
 	ramp_direction = order[(order.find(ramp_direction) + 1) % order.size()]
-	last_message = "ramp direction %s" % direction_name(ramp_direction)
+	last_message = "направление пандуса %s" % direction_name(ramp_direction)
 
 
 static func direction_name(direction: int) -> String:
 	match direction:
-		SlopeCatalog.DIR_N: return "N"
-		SlopeCatalog.DIR_E: return "E"
-		SlopeCatalog.DIR_S: return "S"
-		SlopeCatalog.DIR_W: return "W"
+		SlopeCatalog.DIR_N: return "С"
+		SlopeCatalog.DIR_E: return "В"
+		SlopeCatalog.DIR_S: return "Ю"
+		SlopeCatalog.DIR_W: return "З"
 	return str(direction)
+
+
+static func _mode_label() -> String:
+	match TerrainEditOperation.mode_name(edit_mode):
+		"sculpt": return "подъём/спуск"
+		"terrace": return "терраса"
+		"level": return "выравнивание"
+	return TerrainEditOperation.mode_name(edit_mode)
+
+
+static func _rejection_label(reason: StringName) -> String:
+	match reason:
+		CascadeSolver.REASON_ANCHOR: return "закреплённая клетка"
+		CascadeSolver.REASON_HEIGHT_LIMIT: return "предел высоты"
+		CascadeSolver.REASON_BUDGET: return "лимит клеток"
+		CascadeSolver.REASON_OUT_OF_BOUNDS: return "вне карты"
+		CascadeSolver.REASON_HOLE: return "вырез"
+		CascadeSolver.REASON_NOTHING_TO_DO: return "нечего менять"
+		TerrainService.REASON_UNSTABLE_MATERIAL: return "слишком крутой уклон"
+	return String(reason)
 
 
 # --- History ----------------------------------------------------------------
 
 func undo() -> void:
-	last_message = "undo" if _service.undo() else "nothing to undo"
+	last_message = "отменено" if _service.undo() else "нечего отменять"
 
 
 func redo() -> void:
-	last_message = "redo" if _service.redo() else "nothing to redo"
+	last_message = "повторено" if _service.redo() else "нечего повторять"
