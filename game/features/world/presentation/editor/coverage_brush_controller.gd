@@ -101,6 +101,10 @@ func _paint_cells(cells: Array[Vector2i]) -> void:
 	match _service.last_rejection():
 		CoverageService.REASON_UNKNOWN_COVERAGE:
 			last_message = "покрытие не установлено"
+		CoverageService.REASON_SLOPE_TOO_STEEP:
+			last_message = "слишком крутой уклон для этого покрытия"
+		CoverageService.REASON_NOT_BUILDABLE:
+			last_message = "здесь нельзя уложить покрытие"
 		CoverageService.REASON_NOTHING_TO_DO:
 			last_message = "здесь уже %s" % CoverageCatalog.title_of_index(coverage_index)
 		_:

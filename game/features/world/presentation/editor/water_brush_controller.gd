@@ -278,10 +278,10 @@ func _flood() -> void:
 	# may leave one selected); a body with a contour is not.
 	if dry_cell and body_id != WaterBody.NO_BODY and _water.cells_of_body(body_id).size() > 0:
 		body_id = WaterBody.NO_BODY
-	# Fresh water starts at the exact level shown by the phantom: one terrain
-	# step above the clicked ground. This also discards stale levels from an empty
-	# selection, which previously made the new surface appear above its preview.
-	if dry_cell and _terrain != null:
+	# With no selected body a fresh basin starts one terrain step above the click.
+	# An explicitly selected empty body retains its authored level; the preview
+	# mirrors this same choice in WaterModeController.
+	if dry_cell and body_id == WaterBody.NO_BODY and _terrain != null:
 		level = _terrain.height_of(hovered_cell) + 1
 	if body_id == WaterBody.NO_BODY:
 		var body := _service.create_and_flood(hovered_cell, active_body_type(), level)
@@ -322,7 +322,9 @@ func _adopt_body_at_hover() -> void:
 
 
 func _set_frozen(frozen: bool) -> void:
-	var changed := _service.set_frozen(brush_cells(hovered_cell), frozen, ice_thickness, true)
+	# Lava and fast current must stay open; the editor follows the same freeze
+	# rule as the simulation instead of forcing an impossible ice state.
+	var changed := _service.set_frozen(brush_cells(hovered_cell), frozen, ice_thickness)
 	if changed:
 		last_message = "%s: %d клеток" % ["заморожено" if frozen else "оттаяло", _service.last_delta_size()]
 	else:

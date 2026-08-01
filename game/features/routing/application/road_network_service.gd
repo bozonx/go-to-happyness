@@ -14,8 +14,16 @@ extends RefCounted
 ## (`stone`) and one written since (`core:stone`) name the same surface and
 ## compare equal.
 
+## Emitted after the authoritative runtime state changed. World owns the visual
+## CoverageLayer and mirrors only these cells; routing stays independent of the
+## world feature and publishes the same transaction to NavGrid first.
+signal coverage_changed(cells: Array[Vector2i])
+
+const DEFAULT_DETAIL := 0
+
 var _grid: NavGrid
 var _roads: Dictionary = {}
+var _details: Dictionary = {}
 
 
 func configure(next_grid: NavGrid) -> void:
@@ -23,34 +31,52 @@ func configure(next_grid: NavGrid) -> void:
 	_publish()
 
 
-func complete_cells(cells: Array[Vector2i], road_type: StringName, current_era := -1) -> bool:
+func complete_cells(
+	cells: Array[Vector2i],
+	road_type: StringName,
+	current_era := -1,
+	detail := DEFAULT_DETAIL,
+) -> bool:
 	var canonical := _canonical(road_type)
 	if canonical == CoverageCatalog.NONE_ID \
 			or (current_era >= 0 and current_era < CoverageCatalog.minimum_era(canonical)):
 		return false
 	var changed := false
+	var changed_cells: Array[Vector2i] = []
+	var next_detail := clampi(detail, 0, 255)
 	for cell in cells:
-		if _roads.get(cell, StringName()) == canonical:
+		if _roads.get(cell, StringName()) == canonical and int(_details.get(cell, DEFAULT_DETAIL)) == next_detail:
 			continue
 		_roads[cell] = canonical
+		_details[cell] = next_detail
+		changed_cells.append(cell)
 		changed = true
 	if changed:
 		_publish()
+		coverage_changed.emit(changed_cells)
 	return changed
 
 
 func remove_cells(cells: Array[Vector2i]) -> bool:
 	var changed := false
+	var changed_cells: Array[Vector2i] = []
 	for cell in cells:
 		if _roads.erase(cell):
+			_details.erase(cell)
+			changed_cells.append(cell)
 			changed = true
 	if changed:
 		_publish()
+		coverage_changed.emit(changed_cells)
 	return changed
 
 
 func road_type_at(cell: Vector2i) -> StringName:
 	return _roads.get(cell, StringName())
+
+
+func road_detail_at(cell: Vector2i) -> int:
+	return int(_details.get(cell, DEFAULT_DETAIL))
 
 
 func road_weight_for_profile(cell: Vector2i, profile: StringName) -> float:
@@ -66,24 +92,39 @@ func completed_roads() -> Dictionary:
 
 func export_state() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
+	var cells: Array[Vector2i] = []
 	for cell: Vector2i in _roads:
-		result.append({"x": cell.x, "y": cell.y, "type": str(_roads[cell])})
+		cells.append(cell)
+	cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		return a.y < b.y if a.y != b.y else a.x < b.x)
+	for cell: Vector2i in cells:
+		result.append({
+			"x": cell.x,
+			"y": cell.y,
+			"type": str(_roads[cell]),
+			"detail": road_detail_at(cell),
+		})
 	return result
 
 
 func restore_state(entries: Array) -> void:
 	var restored: Dictionary = {}
+	var restored_details: Dictionary = {}
 	for entry: Variant in entries:
 		if not entry is Dictionary:
 			continue
 		var type := _canonical(StringName(str(entry.get("type", ""))))
 		if type != CoverageCatalog.NONE_ID:
-			restored[Vector2i(int(entry.get("x", 0)), int(entry.get("y", 0)))] = type
-	restore_completed_roads(restored)
+			var cell := Vector2i(int(entry.get("x", 0)), int(entry.get("y", 0)))
+			restored[cell] = type
+			restored_details[cell] = clampi(int(entry.get("detail", DEFAULT_DETAIL)), 0, 255)
+	restore_completed_roads(restored, restored_details)
 
 
-func restore_completed_roads(next_roads: Dictionary) -> void:
+func restore_completed_roads(next_roads: Dictionary, next_details: Dictionary = {}) -> void:
+	var previous_cells := _roads.keys()
 	_roads.clear()
+	_details.clear()
 	for cell: Variant in next_roads:
 		var road_type: Variant = next_roads[cell]
 		if not (cell is Vector2i and road_type is StringName):
@@ -91,7 +132,20 @@ func restore_completed_roads(next_roads: Dictionary) -> void:
 		var canonical := _canonical(road_type)
 		if canonical != CoverageCatalog.NONE_ID:
 			_roads[cell] = canonical
+			_details[cell] = clampi(int(next_details.get(cell, DEFAULT_DETAIL)), 0, 255)
 	_publish()
+	var changed_set: Dictionary = {}
+	for cell: Variant in previous_cells:
+		if cell is Vector2i:
+			changed_set[cell] = true
+	for cell: Vector2i in _roads:
+		changed_set[cell] = true
+	var changed_cells: Array[Vector2i] = []
+	for cell: Vector2i in changed_set:
+		changed_cells.append(cell)
+	changed_cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		return a.y < b.y if a.y != b.y else a.x < b.x)
+	coverage_changed.emit(changed_cells)
 
 
 func _publish() -> void:

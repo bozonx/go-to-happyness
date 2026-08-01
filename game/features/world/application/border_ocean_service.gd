@@ -61,7 +61,10 @@ func apply() -> bool:
 		if border_body == null:
 			return false
 		border_id = border_body.id
-	return water_service.flood_from_edges(border_id, _level)
+	# The border is a connectivity rule, not an additive paint stroke. Rebuild its
+	# whole footprint so raising a shoreline drains the now landlocked water just
+	# as lowering it floods newly connected ground.
+	return water_service.resurface_from_edges(border_id, _level)
 
 
 ## The map's border body — its `SEA` for an ocean border, its `LAVA` for a lava

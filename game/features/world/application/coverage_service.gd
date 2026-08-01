@@ -22,6 +22,7 @@ const REASON_NO_LAYER: StringName = &"no_layer"
 const REASON_UNKNOWN_COVERAGE: StringName = &"unknown_coverage"
 const REASON_ERA_LOCKED: StringName = &"era_locked"
 const REASON_NOT_BUILDABLE: StringName = &"not_buildable"
+const REASON_SLOPE_TOO_STEEP: StringName = &"slope_too_steep"
 const REASON_NOTHING_TO_DO: StringName = &"nothing_to_do"
 
 signal edit_committed(delta: CoverageDelta)
@@ -37,6 +38,7 @@ var _undo_stack: Array[CoverageDelta] = []
 var _redo_stack: Array[CoverageDelta] = []
 var _last_rejection: StringName = REASON_NONE
 var _last_delta: CoverageDelta = null
+var _corners_scratch := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
 
 
 func configure(next_layer: CoverageLayer, next_terrain: TerrainGrid, next_water: WaterGrid = null) -> void:
@@ -93,13 +95,18 @@ func paint(cells: Array[Vector2i], index: int, detail := TerrainDetailCodec.DEFA
 
 	var delta := CoverageDelta.new()
 	var new_state := CoverageDelta.make_state(index, detail)
+	var rejected_reason := REASON_NONE
 	for cell: Vector2i in cells:
-		if not can_carry_coverage(cell):
+		var reason := coverage_placement_rejection(cell, index)
+		if reason != REASON_NONE:
+			rejected_reason = reason
 			continue
 		var old_state := CoverageDelta.state_of(layer, cell)
 		if old_state == new_state:
 			continue
 		delta.record(cell, old_state, new_state)
+	if delta.is_empty() and rejected_reason != REASON_NONE:
+		return _reject(rejected_reason)
 	return _commit_or_reject(delta)
 
 
@@ -122,14 +129,29 @@ func erase(cells: Array[Vector2i]) -> bool:
 ## open water is refused, but a ford or ice is not — a plank walk over a shallow
 ## crossing is exactly the thing coverage is for, and the water layer keeps
 ## deciding passability on its own.
-func can_carry_coverage(cell: Vector2i) -> bool:
+func can_carry_coverage(cell: Vector2i, coverage_index := CoverageCatalog.NONE_INDEX) -> bool:
+	return coverage_placement_rejection(cell, coverage_index) == REASON_NONE
+
+
+## Stable preview/query contract used by both the editor brush and the future
+## settlement construction tool. The slope is derived from the actual four
+## terrain corners, not the stored descriptor: a nominally-flat cell beside a
+## ramp may still be tilted by that ramp.
+func coverage_placement_rejection(cell: Vector2i, coverage_index: int) -> StringName:
 	if layer == null or not layer.is_inside(cell):
-		return false
+		return REASON_NOT_BUILDABLE
 	if terrain != null and (not terrain.is_inside(cell) or terrain.is_hole(cell)):
-		return false
+		return REASON_NOT_BUILDABLE
 	if water != null and terrain != null and water.is_wet(terrain, cell):
-		return water.is_ford(terrain, cell) or water.is_frozen(cell)
-	return true
+		if not water.is_ford(terrain, cell) and not water.is_frozen(cell):
+			return REASON_NOT_BUILDABLE
+	if terrain != null and coverage_index != CoverageCatalog.NONE_INDEX:
+		var corners := _corners_scratch
+		terrain.corner_heights_into(cell, corners)
+		var actual_slope := TerrainNavigationPublisher.surface_class_of(corners)
+		if actual_slope > CoverageCatalog.max_build_slope_class_of_index(coverage_index):
+			return REASON_SLOPE_TOO_STEEP
+	return REASON_NONE
 
 
 # --- History ------------------------------------------------------------------

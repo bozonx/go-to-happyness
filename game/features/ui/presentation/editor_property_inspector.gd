@@ -162,6 +162,23 @@ func _build_control(property: EntityPropertyDef, value: Variant) -> Control:
 			option.disabled = option.item_count == 0
 			option.item_selected.connect(func(index: int) -> void: property_committed.emit(property.name, option.get_item_text(index)))
 			return option
+		EntityPropertyDef.TYPE_BUTTON_GROUP:
+			var container := HBoxContainer.new()
+			container.add_theme_constant_override("separation", 4)
+			var group := ButtonGroup.new()
+			for entry: Variant in property.options:
+				var btn := Button.new()
+				btn.text = String(entry)
+				btn.toggle_mode = true
+				btn.button_group = group
+				btn.focus_mode = Control.FOCUS_NONE
+				btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				if String(entry) == String(value):
+					btn.button_pressed = true
+				var entry_str := String(entry)
+				btn.pressed.connect(func() -> void: property_committed.emit(property.name, entry_str))
+				container.add_child(btn)
+			return container
 		EntityPropertyDef.TYPE_STRING, EntityPropertyDef.TYPE_TEXT:
 			if property.type == EntityPropertyDef.TYPE_TEXT:
 				var text_edit := TextEdit.new()

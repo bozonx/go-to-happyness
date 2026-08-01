@@ -139,6 +139,13 @@ static func _test_property_schema_validity_and_visibility() -> void:
 	assert(route.to_dict()["pick_on_map"] == true)
 	assert(not EntityPropertyDef.from_dict({"name": "x", "type": "int"}).is_reference())
 
+	var btn_group_prop := EntityPropertyDef.from_dict({
+		"name": "nav_overlay", "type": "button_group", "section": "main",
+		"options": ["Нет", "Pedestrian", "Cart"],
+	})
+	assert(btn_group_prop.is_valid())
+	assert(btn_group_prop.coerce_value("Pedestrian") == "Pedestrian")
+
 	var nested := EntityPropertyDef.from_dict({
 		"name": "schedule", "type": "list", "section": "behavior",
 		"entries": [

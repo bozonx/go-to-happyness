@@ -16,6 +16,7 @@ static func run_all() -> void:
 	_test_spawn_on_lava_is_an_error()
 	_test_spawn_on_dry_ground_is_clean()
 	_test_frozen_water_is_walkable()
+	_test_coverage_made_too_steep_after_paint_is_an_error()
 	_test_settlement_map_without_spawns_is_clean()
 	_test_party_spawns_are_required_at_launch()
 	_test_warnings_skip_when_nav_grid_is_null()
@@ -81,6 +82,22 @@ static func _test_frozen_water_is_walkable() -> void:
 	var document := _document_with_spawn_at(Vector2i(7, 7))
 	var errors := MapValidator.validate(document, terrain, water, null)
 	assert(errors.is_empty(), "frozen water is walkable: %s" % "; ".join(errors))
+
+
+static func _test_coverage_made_too_steep_after_paint_is_an_error() -> void:
+	var document := MapDocument.create(&"steep_road", "Steep road", BOARD_CELLS)
+	# Direct layer setup represents the real failure sequence after terrain edit:
+	# the road was valid when painted, then the terrain beneath it changed.
+	var cell := Vector2i(3, 0)
+	document.coverage.set_cell(cell, CoverageCatalog.index_of_id(CoverageCatalog.STONE), 0)
+	for z in range(-8, 8):
+		for x in range(4, 8):
+			document.terrain.set_height(Vector2i(x, z), 1)
+	assert(document.terrain.place_ramp(Vector2i(2, 0), SlopeCatalog.MODERATE, SlopeCatalog.DIR_E))
+	var errors := MapValidator.validate(document, document.terrain, document.water, null)
+	assert(errors.any(func(message: String) -> bool:
+		return message.contains("каменная") and message.contains("крутом уклоне")
+	), "invalid road slope should be reported: %s" % "; ".join(errors))
 
 
 ## A settlement map with no spawn anchors is not a launch error on its own —

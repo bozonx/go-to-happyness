@@ -254,7 +254,36 @@ func flood_from_edges(body_id: int, level: int) -> bool:
 		return _reject(REASON_NO_BODY)
 	if level < WaterGrid.MIN_HEIGHT or level > WaterGrid.MAX_HEIGHT:
 		return _reject(REASON_NOTHING_TO_DO)
+	var cells := edge_flood_cells(body_id, level)
 	var delta := WaterDelta.new()
+	for cell: Vector2i in cells:
+		var old_state := WaterDelta.state_of(grid, cell)
+		var new_state := WaterDelta.make_state(body_id, level, _kept_flags(old_state, body_id, level))
+		if old_state != new_state:
+			delta.record(cell, old_state, new_state)
+	return _commit_or_reject(delta)
+
+
+## Recomputes the complete edge-connected footprint of a border body.  Unlike a
+## one-way fill this also drains a bay after an author raises its rim, which is
+## essential because an ocean is defined by present terrain connectivity.
+func resurface_from_edges(body_id: int, level: int) -> bool:
+	if grid == null or terrain == null:
+		return _reject(REASON_NO_GRID)
+	if not grid.has_body(body_id):
+		return _reject(REASON_NO_BODY)
+	if level < WaterGrid.MIN_HEIGHT or level > WaterGrid.MAX_HEIGHT:
+		return _reject(REASON_NOTHING_TO_DO)
+	return _resurface_body(body_id, edge_flood_cells(body_id, level), level)
+
+
+## Finds every low column connected to the map rim.  Kept separate from the
+## transaction so callers can choose whether to add to an existing footprint or
+## replace it entirely.
+func edge_flood_cells(body_id: int, level: int) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	if grid == null or terrain == null or not grid.has_body(body_id):
+		return cells
 	var seen: Dictionary = {}
 	var queue: Array[Vector2i] = []
 	var minimum := grid.min_cell()
@@ -267,13 +296,10 @@ func flood_from_edges(body_id: int, level: int) -> bool:
 		_queue_ocean_cell(Vector2i(maximum.x, z), level, body_id, seen, queue)
 	while not queue.is_empty():
 		var cell: Vector2i = queue.pop_front()
-		var old_state := WaterDelta.state_of(grid, cell)
-		var new_state := WaterDelta.make_state(body_id, level, _kept_flags(old_state, body_id, level))
-		if old_state != new_state:
-			delta.record(cell, old_state, new_state)
+		cells.append(cell)
 		for offset: Vector2i in WaterGrid.ORTHOGONAL_OFFSETS:
 			_queue_ocean_cell(cell + offset, level, body_id, seen, queue)
-	return _commit_or_reject(delta)
+	return cells
 
 
 func _queue_ocean_cell(cell: Vector2i, level: int, body_id: int, seen: Dictionary, queue: Array[Vector2i]) -> void:

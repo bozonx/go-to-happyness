@@ -36,7 +36,7 @@ const REBUILD_BUDGET_PER_FRAME := 4
 const SHORE_RANGE_CELLS := 3
 ## Lifts the surface a hair above the exact level so that water standing exactly
 ## on a terrace top does not z-fight with the ground it covers.
-const SURFACE_EPSILON := 0.01
+const SURFACE_EPSILON := 0.002
 ## How far past the board the border ocean reaches. Big enough to leave the far
 ## clip plane of an isometric camera, small enough not to lose float precision.
 const BORDER_OCEAN_REACH := 2000.0

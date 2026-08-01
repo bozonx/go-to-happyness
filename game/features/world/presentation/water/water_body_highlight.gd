@@ -6,8 +6,8 @@ extends MeshInstance3D
 ## selected body's cells.  Markers read cleanly against both water and lava and
 ## do not turn a jagged bank into a second, misleading contour.
 
-const SURFACE_OFFSET := 0.04
-const OUTLINE_OFFSET := 0.05
+const SURFACE_OFFSET := 0.014
+const OUTLINE_OFFSET := 0.02
 const MARKER_RADIUS_RATIO := 0.11
 const MARKER_SEGMENTS := 12
 
@@ -41,7 +41,13 @@ func refresh() -> void:
 	if _water == null or _terrain == null or _body_id == WaterBody.NO_BODY or not _water.has_body(_body_id):
 		visible = false
 		return
-	var cells := _water.cells_of_body(_body_id)
+	var cells: Array[Vector2i] = []
+	for cell: Vector2i in _water.cells_of_body(_body_id):
+		# A stored water cell whose terrain reached its surface is dry.  The
+		# selection must obey the same rule as the renderer, so ground always wins
+		# instead of leaving a false, paper-thin blue sheet on top of it.
+		if _water.is_wet(_terrain, cell):
+			cells.append(cell)
 	if cells.is_empty():
 		visible = false
 		return
@@ -75,8 +81,6 @@ func refresh() -> void:
 	marker_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	marker_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	marker_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	marker_mat.no_depth_test = true
-	marker_mat.render_priority = 127
 	marker_mat.albedo_color = marker_color
 
 	immediate.surface_begin(Mesh.PRIMITIVE_TRIANGLES, marker_mat)

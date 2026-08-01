@@ -358,7 +358,7 @@ func inspector_properties() -> Array[EntityPropertyDef]:
 	var prop := EntityPropertyDef.new()
 	prop.name = INSPECTOR_NAV_OVERLAY
 	prop.label = "Зоны навигации"
-	prop.type = EntityPropertyDef.TYPE_ENUM
+	prop.type = EntityPropertyDef.TYPE_BUTTON_GROUP
 	prop.section = EntityPropertyDef.SECTION_MAIN
 	prop.options = ["Нет", "Pedestrian", "Cart"]
 	prop.default = "Нет"

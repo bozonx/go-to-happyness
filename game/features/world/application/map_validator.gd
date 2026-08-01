@@ -26,9 +26,49 @@ static func validate(document: MapDocument, terrain: TerrainGrid, water: WaterGr
 	var errors: Array[String] = []
 	for anchor in document.zones.anchors:
 		_validate_anchor_place(anchor, terrain, water, errors)
+	_validate_coverage(document, terrain, water, errors)
 	_validate_entities(document, terrain, errors)
 	_validate_scenario(document, errors)
 	return errors
+
+
+## A valid stroke can become invalid after the author reshapes the terrain under
+## it. The brush rejects new bad cells, while this cross-layer validation guards
+## the saved result without silently deleting authored coverage from a terrain
+## command's undo entry.
+static func _validate_coverage(
+	document: MapDocument,
+	terrain: TerrainGrid,
+	water: WaterGrid,
+	errors: Array[String],
+) -> void:
+	if document == null or document.coverage == null:
+		return
+	var service := CoverageService.new()
+	service.configure(document.coverage, terrain, water)
+	var findings: Dictionary = {}
+	for cell: Vector2i in document.coverage.covered_cells():
+		var index := document.coverage.index_at(cell)
+		var reason := service.coverage_placement_rejection(cell, index)
+		if reason == CoverageService.REASON_NONE:
+			continue
+		var key := "%d:%s" % [index, reason]
+		var finding: Dictionary = findings.get(key, {
+			"index": index,
+			"reason": reason,
+			"count": 0,
+			"example": cell,
+		})
+		finding["count"] = int(finding["count"]) + 1
+		findings[key] = finding
+	for finding: Dictionary in findings.values():
+		var title := CoverageCatalog.title_of_index(int(finding["index"]))
+		var reason: StringName = finding["reason"]
+		var explanation := "на слишком крутом уклоне" \
+			if reason == CoverageService.REASON_SLOPE_TOO_STEEP else "на неподходящей поверхности"
+		errors.append("покрытие %s: %d клеток %s (например %s)" % [
+			title, int(finding["count"]), explanation, finding["example"],
+		])
 
 
 ## Launch-time party validation. `validate` stays reusable by the editor, where

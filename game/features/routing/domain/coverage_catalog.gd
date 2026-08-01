@@ -63,6 +63,17 @@ const FIELD_WEIGHT := "weight"
 const FIELD_PROFILES := "profiles"
 const FIELD_MIN_ERA := "min_era"
 const FIELD_FLAGS := "flags"
+## Steepest actual terrain-surface class on which this coverage may be built.
+## The value uses the stable 0..7 class contract shared by SlopeCatalog and
+## NavTerrainField, but routing deliberately does not depend on the world
+## feature just to name those numbers. Existing pack entries which omit the
+## field keep the pre-policy behaviour up to a non-cellular cliff.
+const FIELD_MAX_BUILD_SLOPE_CLASS := "max_build_slope_class"
+
+const BUILD_SLOPE_GENTLE := 2
+const BUILD_SLOPE_MODERATE := 3
+const BUILD_SLOPE_VERY_STEEP := 5
+const BUILD_SLOPE_UNRESTRICTED := 6
 
 ## Legacy profile names kept from `RoadType` until vehicles get real profile
 ## records of their own (`navigation_and_roads.md`, «Дороги и транспорт»).
@@ -80,6 +91,7 @@ const ENTRIES: Array[Dictionary] = [
 		FIELD_ID: TRAIL, FIELD_TITLE: "тропинка", FIELD_WEIGHT: 1.4,
 		FIELD_PROFILES: [TravelerProfile.PEDESTRIAN, TravelerProfile.BIPEDAL_ROBOT],
 		FIELD_MIN_ERA: ERA_TENT, FIELD_FLAGS: FLAG_ORGANIC,
+		FIELD_MAX_BUILD_SLOPE_CLASS: BUILD_SLOPE_VERY_STEEP,
 	},
 	{
 		FIELD_ID: DIRT, FIELD_TITLE: "грунтовая", FIELD_WEIGHT: 1.0,
@@ -88,6 +100,7 @@ const ENTRIES: Array[Dictionary] = [
 			CART, BICYCLE, TravelerProfile.WHEELED_ROBOT,
 		],
 		FIELD_MIN_ERA: ERA_EARTH, FIELD_FLAGS: 0,
+		FIELD_MAX_BUILD_SLOPE_CLASS: BUILD_SLOPE_MODERATE,
 	},
 	{
 		FIELD_ID: CLAY, FIELD_TITLE: "глинобитная", FIELD_WEIGHT: 0.9,
@@ -96,6 +109,7 @@ const ENTRIES: Array[Dictionary] = [
 			BICYCLE, TravelerProfile.WHEELED_ROBOT,
 		],
 		FIELD_MIN_ERA: ERA_CLAY, FIELD_FLAGS: 0,
+		FIELD_MAX_BUILD_SLOPE_CLASS: BUILD_SLOPE_MODERATE,
 	},
 	{
 		FIELD_ID: WOOD, FIELD_TITLE: "деревянная", FIELD_WEIGHT: 0.85,
@@ -104,6 +118,7 @@ const ENTRIES: Array[Dictionary] = [
 			BICYCLE, MOTOR, TravelerProfile.WHEELED_ROBOT,
 		],
 		FIELD_MIN_ERA: ERA_WOOD, FIELD_FLAGS: FLAG_NO_REGROWTH,
+		FIELD_MAX_BUILD_SLOPE_CLASS: BUILD_SLOPE_MODERATE,
 	},
 	{
 		FIELD_ID: STONE, FIELD_TITLE: "каменная", FIELD_WEIGHT: 0.8,
@@ -113,6 +128,7 @@ const ENTRIES: Array[Dictionary] = [
 			TravelerProfile.WHEELED_ROBOT, TravelerProfile.LIGHT_VEHICLE, TravelerProfile.HEAVY_VEHICLE,
 		],
 		FIELD_MIN_ERA: ERA_STONE, FIELD_FLAGS: FLAG_NO_WEAR | FLAG_NO_REGROWTH,
+		FIELD_MAX_BUILD_SLOPE_CLASS: BUILD_SLOPE_GENTLE,
 	},
 	{
 		FIELD_ID: ASPHALT, FIELD_TITLE: "асфальтовая", FIELD_WEIGHT: 0.7,
@@ -122,6 +138,7 @@ const ENTRIES: Array[Dictionary] = [
 			TravelerProfile.WHEELED_ROBOT, TravelerProfile.LIGHT_VEHICLE, TravelerProfile.HEAVY_VEHICLE,
 		],
 		FIELD_MIN_ERA: ERA_BRICK, FIELD_FLAGS: FLAG_NO_REGROWTH,
+		FIELD_MAX_BUILD_SLOPE_CLASS: BUILD_SLOPE_GENTLE,
 	},
 ]
 
@@ -220,6 +237,16 @@ static func minimum_era_of_index(index: int) -> int:
 static func minimum_era(id: StringName) -> int:
 	var index := index_of_id(id)
 	return minimum_era_of_index(index) if index != NONE_INDEX else 999
+
+
+static func max_build_slope_class_of_index(index: int) -> int:
+	var entry := entry_of_index(index)
+	return int(entry.get(FIELD_MAX_BUILD_SLOPE_CLASS, BUILD_SLOPE_UNRESTRICTED)) \
+		if not entry.is_empty() else -1
+
+
+static func max_build_slope_class(id: StringName) -> int:
+	return max_build_slope_class_of_index(index_of_id(id))
 
 
 static func flags_of_index(index: int) -> int:

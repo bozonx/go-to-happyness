@@ -19,6 +19,7 @@ static func run_all() -> void:
 	_test_set_flow_nothing_to_do()
 	_test_set_flow_emits_committed()
 	_test_flow_blocks_ford_after_set()
+	_test_retype_keeps_authored_flow()
 	print("    [PASS] Water Flow Tests")
 
 
@@ -161,3 +162,21 @@ static func _test_flow_blocks_ford_after_set() -> void:
 	# With strong flow, the ford is blocked.
 	service.set_flow([Vector2i(0, 0)], body_id, SlopeCatalog.DIR_E, WaterBody.FLOW_STRENGTH_BLOCKS_FORD)
 	assert(not water.is_ford(terrain, Vector2i(0, 0)))
+
+
+## Current belongs to the painted cells, not the liquid appearance.  An author
+## may turn a river into lava and back while tuning a map without repainting all
+## its directions and strengths.
+static func _test_retype_keeps_authored_flow() -> void:
+	var world := _make()
+	var water: WaterGrid = world["water"]
+	var service: WaterService = world["service"]
+	var body_id := _make_river(world)
+	var cell := Vector2i(0, 0)
+	assert(service.set_flow([cell], body_id, SlopeCatalog.DIR_S, 2))
+	assert(service.retype_body(body_id, WaterBody.Type.LAVA))
+	assert(water.body(body_id).flow_direction_at(cell) == SlopeCatalog.DIR_S)
+	assert(water.body(body_id).flow_strength_at(cell) == 2)
+	assert(service.retype_body(body_id, WaterBody.Type.RIVER))
+	assert(water.body(body_id).flow_direction_at(cell) == SlopeCatalog.DIR_S)
+	assert(water.body(body_id).flow_strength_at(cell) == 2)

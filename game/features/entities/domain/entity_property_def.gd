@@ -19,6 +19,7 @@ const TYPE_STRING := &"string"
 const TYPE_TEXT := &"text"
 const TYPE_COLOR := &"color"
 const TYPE_ENUM := &"enum"
+const TYPE_BUTTON_GROUP := &"button_group"
 const TYPE_FLAGS := &"flags"
 const TYPE_VECTOR2 := &"vector2"
 const TYPE_VECTOR3 := &"vector3"
@@ -49,7 +50,7 @@ const REFERENCE_TYPES: Array[StringName] = [
 
 const VALUE_TYPES: Array[StringName] = [
 	TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING, TYPE_TEXT, TYPE_COLOR,
-	TYPE_ENUM, TYPE_FLAGS, TYPE_VECTOR2, TYPE_VECTOR3, TYPE_CURVE_TIME, TYPE_LIST,
+	TYPE_ENUM, TYPE_BUTTON_GROUP, TYPE_FLAGS, TYPE_VECTOR2, TYPE_VECTOR3, TYPE_CURVE_TIME, TYPE_LIST,
 ]
 
 ## Fixed sections, so the inspector of a tree and of a merchant read the same way
@@ -138,7 +139,7 @@ func coerce_value(value: Variant) -> Variant:
 			return int(value)
 		TYPE_FLOAT:
 			return float(value)
-		TYPE_STRING, TYPE_TEXT:
+		TYPE_STRING, TYPE_TEXT, TYPE_BUTTON_GROUP:
 			return String(value)
 		TYPE_COLOR:
 			if value is Color:

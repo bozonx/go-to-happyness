@@ -90,15 +90,24 @@ void fragment() {
 		float direction_angle = flow_direction_index * 0.78539816339;
 		vec2 flow_direction = vec2(sin(direction_angle), -cos(direction_angle));
 		vec2 lateral_direction = vec2(-flow_direction.y, flow_direction.x);
-		// Level 1 is a visibly slow current; stronger values move faster without
-		// cycling the current indication completely out of view.
-		float along = dot(world_position.xz, flow_direction) - TIME * (0.12 + flow_strength * 0.28);
+		float current_level = flow_strength * 3.0;
+		// Deliberately separated speeds: strength 1 is slow, 2 is a clear middle,
+		// and 3 is a fast current rather than a tiny linear increment.
+		float speed = 0.12;
+		if (current_level > 2.1) {
+			speed = 1.60;
+		} else if (current_level > 1.1) {
+			speed = 0.65;
+		}
+		float along = dot(world_position.xz, flow_direction) - TIME * speed;
 		float crest = smoothstep(0.76, 0.96, sin(along * 8.0) * 0.5 + 0.5);
 		float taper = 1.0 - smoothstep(0.08, 0.30, abs(fract(along * 1.25) - 0.5));
 		float across = abs(fract(dot(world_position.xz, lateral_direction) * 1.2) - 0.5);
 		float width = 1.0 - smoothstep(0.10, 0.31, across);
-		float continuous_ripple = (0.16 + 0.12 * (0.5 + 0.5 * sin(along * 5.0))) * flow_strength;
-		float whitecap = continuous_ripple + crest * taper * width * (0.16 + flow_strength * 0.45);
+		// This never drops to zero: every flowing cell always retains a readable
+		// downstream pattern, with brighter animated crests travelling over it.
+		float continuous_ripple = (0.18 + 0.10 * (0.5 + 0.5 * sin(along * 5.0))) * flow_strength;
+		float whitecap = continuous_ripple + taper * width * 0.12 * flow_strength + crest * taper * width * (0.16 + flow_strength * 0.45);
 		liquid = mix(liquid, foam_colour, whitecap * (1.0 - frozen));
 	}
 

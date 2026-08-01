@@ -20,14 +20,18 @@ static func run_all() -> void:
 	_test_stamp_is_idempotent_over_its_own_path()
 	_test_stroke_is_continuous_between_samples()
 	print("    [PASS] Coverage Rasterizer Tests")
+	_test_topology_classifies_diagonals_junctions_and_rings()
+	print("    [PASS] Coverage Topology Tests")
 	_test_erase_reveals_the_ground()
 	_test_service_undo_restores_index_and_detail()
 	_test_unknown_coverage_is_refused()
+	_test_coverage_respects_its_build_slope()
 	print("    [PASS] Coverage Service Tests")
 	_test_layer_round_trips_through_the_package()
 	_test_map_without_coverage_writes_no_layer()
 	print("    [PASS] Coverage Codec Tests")
 	_test_map_seeds_the_road_network()
+	_test_runtime_network_updates_the_visible_layer_and_detail()
 	_test_road_over_trail_leaves_the_trail_underneath()
 	print("    [PASS] Coverage Navigation Tests")
 	_cleanup()
@@ -100,6 +104,34 @@ static func _test_stroke_is_continuous_between_samples() -> void:
 	assert(not wide.has(Vector2i(2, 0)))
 
 
+static func _test_topology_classifies_diagonals_junctions_and_rings() -> void:
+	var layer := _layer()
+	var stone := CoverageCatalog.index_of_id(CoverageCatalog.STONE)
+	for cell: Vector2i in [Vector2i(-2, -2), Vector2i(-1, -1), Vector2i.ZERO]:
+		layer.set_cell(cell, stone, 0)
+	assert(CoverageTopology.shape_at(layer, Vector2i(-1, -1)) == CoverageTopology.Shape.STRAIGHT)
+	assert((CoverageTopology.connection_mask(layer, Vector2i(-1, -1)) & CoverageTopology.NORTH_WEST) != 0)
+
+	# An orthogonal shoulder turns a diagonal adjacency into a normal corner, so
+	# an L does not accidentally become a three-way junction.
+	var junction := _layer()
+	for cell: Vector2i in [Vector2i.ZERO, Vector2i(0, -1), Vector2i(1, -1)]:
+		junction.set_cell(cell, stone, 0)
+	assert(CoverageTopology.shape_at(junction, Vector2i.ZERO) == CoverageTopology.Shape.END)
+	junction.set_cell(Vector2i(1, 0), stone, 0)
+	assert(CoverageTopology.shape_at(junction, Vector2i.ZERO) == CoverageTopology.Shape.CORNER)
+	junction.set_cell(Vector2i(0, 1), stone, 0)
+	assert(CoverageTopology.shape_at(junction, Vector2i.ZERO) == CoverageTopology.Shape.JUNCTION)
+
+	var ring := _layer()
+	for cell: Vector2i in [
+		Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(2, 1),
+		Vector2i(2, 2), Vector2i(1, 2), Vector2i(0, 2), Vector2i(0, 1),
+	]:
+		ring.set_cell(cell, stone, 0)
+	assert(CoverageTopology.is_closed_component(ring, Vector2i.ZERO))
+
+
 # --- Service ------------------------------------------------------------------
 
 ## Erasing coverage reveals the ground that was under it. It must not touch the
@@ -146,6 +178,38 @@ static func _test_unknown_coverage_is_refused() -> void:
 	assert(not service.paint([Vector2i.ZERO] as Array[Vector2i], CoverageCatalog.index_of_id(CoverageCatalog.STONE), 0, CoverageCatalog.ERA_TENT))
 	assert(service.last_rejection() == CoverageService.REASON_ERA_LOCKED)
 	assert(service.paint([Vector2i.ZERO] as Array[Vector2i], CoverageCatalog.index_of_id(CoverageCatalog.STONE)))
+
+
+static func _test_coverage_respects_its_build_slope() -> void:
+	var terrain := TerrainGrid.new()
+	terrain.configure(1.0, BOARD_CELLS)
+	for z in range(-8, 8):
+		for x in range(4, 8):
+			terrain.set_height(Vector2i(x, z), 2)
+	assert(terrain.place_ramp(Vector2i(3, 0), SlopeCatalog.VERY_STEEP, SlopeCatalog.DIR_E))
+	var layer := _layer()
+	var service := CoverageService.new()
+	service.configure(layer, terrain)
+	var ramp_cell: Array[Vector2i] = [Vector2i(3, 0)]
+	assert(service.paint(ramp_cell, CoverageCatalog.index_of_id(CoverageCatalog.TRAIL)))
+	assert(not service.paint(ramp_cell, CoverageCatalog.index_of_id(CoverageCatalog.DIRT)))
+	assert(service.last_rejection() == CoverageService.REASON_SLOPE_TOO_STEEP)
+	assert(layer.id_at(Vector2i(3, 0)) == CoverageCatalog.TRAIL)
+
+	# A moderate road ramp is accepted; stone and asphalt deliberately require a
+	# gentler grade suitable for their heavy-vehicle profiles.
+	var moderate := TerrainGrid.new()
+	moderate.configure(1.0, BOARD_CELLS)
+	for z in range(-8, 8):
+		for x in range(4, 8):
+			moderate.set_height(Vector2i(x, z), 1)
+	assert(moderate.place_ramp(Vector2i(2, 0), SlopeCatalog.MODERATE, SlopeCatalog.DIR_E))
+	var moderate_layer := _layer()
+	var moderate_service := CoverageService.new()
+	moderate_service.configure(moderate_layer, moderate)
+	assert(moderate_service.paint([Vector2i(2, 0)] as Array[Vector2i], CoverageCatalog.index_of_id(CoverageCatalog.DIRT)))
+	assert(not moderate_service.paint([Vector2i(3, 0)] as Array[Vector2i], CoverageCatalog.index_of_id(CoverageCatalog.STONE)))
+	assert(moderate_service.last_rejection() == CoverageService.REASON_SLOPE_TOO_STEEP)
 
 
 # --- Package ------------------------------------------------------------------
@@ -238,6 +302,38 @@ static func _test_map_seeds_the_road_network() -> void:
 	assert(service.erase(cells))
 	assert(roads.road_type_at(Vector2i.ZERO).is_empty())
 	assert(grid.get_cell_weight(Vector2i.ZERO) > paved)
+
+
+static func _test_runtime_network_updates_the_visible_layer_and_detail() -> void:
+	var document := MapDocument.create(&"runtime_paving", "Runtime paving", BOARD_CELLS)
+	var grid := NavGrid.new()
+	grid.configure(1.0, BOARD_CELLS)
+	var roads := RoadNetworkService.new()
+	roads.configure(grid)
+	var publisher := CoverageNavigationPublisher.new()
+	publisher.configure(document.coverage, roads)
+
+	var cell := Vector2i(2, 1)
+	var detail := TerrainDetailCodec.pack(2, 1, 3)
+	assert(roads.complete_cells([cell] as Array[Vector2i], CoverageCatalog.ASPHALT, -1, detail))
+	assert(document.coverage.id_at(cell) == CoverageCatalog.ASPHALT)
+	assert(document.coverage.detail_at(cell) == detail)
+	assert(document.coverage.has_dirty_cells(), "runtime paving wakes the coverage texture")
+
+	var saved := roads.export_state()
+	var restored_grid := NavGrid.new()
+	restored_grid.configure(1.0, BOARD_CELLS)
+	var restored := RoadNetworkService.new()
+	restored.configure(restored_grid)
+	var restored_layer := _layer()
+	var restored_publisher := CoverageNavigationPublisher.new()
+	restored_publisher.configure(restored_layer, restored)
+	restored.restore_state(saved)
+	assert(restored_layer.id_at(cell) == CoverageCatalog.ASPHALT)
+	assert(restored_layer.detail_at(cell) == detail)
+
+	assert(roads.remove_cells([cell] as Array[Vector2i]))
+	assert(not document.coverage.has_coverage(cell), "runtime demolition reveals the ground visually")
 
 
 ## Coverage and the desire-line layer are independent: a road laid over an unfaded

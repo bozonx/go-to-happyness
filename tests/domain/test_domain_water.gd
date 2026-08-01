@@ -37,6 +37,7 @@ static func run_all() -> void:
 	_test_remove_body_takes_water_away_and_undo_brings_it_back()
 	_test_creating_a_body_publishes_nothing()
 	_test_border_ocean_floods_only_what_touches_the_rim()
+	_test_border_ocean_retracts_when_the_rim_closes()
 	_test_border_nothing_never_floods()
 	_test_border_lava_floods_edge_with_lava()
 	_test_access_service_finds_banks_not_water()
@@ -516,6 +517,25 @@ static func _test_border_ocean_floods_only_what_touches_the_rim() -> void:
 	assert(water.is_wet(terrain, Vector2i(rim, 0)))
 	assert(water.is_wet(terrain, Vector2i(0, 0)), "the pit is connected now, so it fills")
 	assert(not water.is_wet(terrain, Vector2i(0, 5)), "and untouched ground does not")
+
+
+## The border rule is re-evaluated from current connectivity after every terrain
+## stroke. Closing its only mouth must drain the old footprint rather than leave
+## a stale inland sea behind.
+static func _test_border_ocean_retracts_when_the_rim_closes() -> void:
+	var world := _bordered(MapMeta.BORDER_OCEAN, 0)
+	var terrain: TerrainGrid = world["terrain"]
+	var water: WaterGrid = world["water"]
+	var border: BorderOceanService = world["border"]
+	var rim := terrain.min_cell().x
+	for x in range(rim, 1):
+		assert(terrain.set_height(Vector2i(x, 0), -1))
+	assert(border.apply())
+	assert(water.is_wet(terrain, Vector2i(0, 0)), "the open channel flooded")
+
+	assert(terrain.set_height(Vector2i(rim, 0), 0))
+	assert(border.apply())
+	assert(not water.is_wet(terrain, Vector2i(0, 0)), "closing the rim drained the disconnected channel")
 
 
 static func _test_border_nothing_never_floods() -> void:

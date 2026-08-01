@@ -57,6 +57,10 @@ static func retype(grid: WaterGrid, body: WaterBody, new_type: WaterBody.Type) -
 	var replacement := WaterBody.of_type(body.id, new_type)
 	replacement.surface_height = body.surface_height
 	replacement.name = body.name
+	# Changing liquid type changes material and gameplay flags, not the authored
+	# current. Lava may flow too, and switching a river to lava and back must not
+	# silently erase its per-cell direction/strength map.
+	replacement.flow = body.flow.duplicate(true)
 	edit._new_body = replacement
 	if grid != null:
 		for cell: Vector2i in grid.cells_of_body(body.id):
@@ -91,7 +95,14 @@ static func resurface(grid: WaterGrid, terrain: TerrainGrid, body: WaterBody, ce
 	for cell: Vector2i in ordered:
 		var old_state := WaterDelta.state_of(grid, cell)
 		var becomes_wet := next_cells.has(cell) and (terrain == null or terrain.height_of(cell) < level)
-		var next_state := WaterDelta.make_state(body.id, level, 0) if becomes_wet else WaterDelta.dry_state()
+		# Re-evaluating an unchanged shoreline must not thaw it.  A border ocean
+		# runs this after every terrain stroke, while a changed body or water level
+		# still deliberately clears ice because that sheet described the old surface.
+		var kept_flags := old_state[WaterDelta.STATE_FLAGS] if (
+			old_state[WaterDelta.STATE_BODY] == body.id
+			and old_state[WaterDelta.STATE_HEIGHT] == level
+		) else 0
+		var next_state := WaterDelta.make_state(body.id, level, kept_flags) if becomes_wet else WaterDelta.dry_state()
 		if old_state != next_state:
 			edit.record(cell, old_state, next_state)
 	return edit

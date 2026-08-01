@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://game/features/buildings/presentation/editor/building_editor.gd" id="1_editor"]
 [ext_resource type="Theme" path="res://game/features/ui/presentation/theme/ui_theme.tres" id="2_theme"]
@@ -6,15 +6,29 @@
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/camera_controller.tscn" id="3_camera"]
 [ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor_shortcut_tooltip.tscn" id="4_shortcuts"]
 [ext_resource type="Script" path="res://game/features/ui/presentation/editor_property_inspector.gd" id="5_property_inspector"]
+
 [sub_resource type="PlaneMesh" id="mesh_ground"]
 size = Vector2(64, 64)
 
+[sub_resource type="ProceduralSkyMaterial" id="sky_mat_editor"]
+sky_top_color = Color(0.45, 0.52, 0.62, 1)
+sky_horizon_color = Color(0.6, 0.65, 0.72, 1)
+ground_bottom_color = Color(0.38, 0.34, 0.3, 1)
+ground_horizon_color = Color(0.55, 0.52, 0.48, 1)
+
+[sub_resource type="Sky" id="sky_editor"]
+sky_material = SubResource("sky_mat_editor")
+
 [sub_resource type="Environment" id="env_editor"]
 background_mode = 1
-background_color = Color(0.1, 0.12, 0.16, 1)
-ambient_light_source = 1
-ambient_light_color = Color(0.55, 0.58, 0.62, 1)
-ambient_light_energy = 0.5
+background_color = Color(0.12, 0.14, 0.18, 1)
+sky = SubResource("sky_editor")
+ambient_light_source = 2
+ambient_light_sky_contribution = 0.85
+ambient_light_energy = 0.95
+ssao_enabled = true
+ssao_radius = 1.0
+ssao_intensity = 1.8
 
 [node name="BuildingEditor" type="Node3D"]
 script = ExtResource("1_editor")

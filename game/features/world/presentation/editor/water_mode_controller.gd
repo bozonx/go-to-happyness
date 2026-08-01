@@ -131,7 +131,11 @@ func _update_flood_preview() -> void:
 		context.water_flood_preview.hide_preview()
 		return
 
-	var preview_level := context.terrain.height_of(cell) + 1
+	# Match WaterBrushController._flood exactly.  A visible selected body is
+	# dropped before a dry click, so that click starts at ground + 1; an empty
+	# body intentionally keeps its explicitly authored level.
+	var selected_has_contour := brush.body_id != WaterBody.NO_BODY and not context.water.cells_of_body(brush.body_id).is_empty()
+	var preview_level := brush.level if brush.body_id != WaterBody.NO_BODY and not selected_has_contour else context.terrain.height_of(cell) + 1
 
 	if context.terrain.height_of(cell) >= preview_level:
 		context.water_flood_preview.hide_preview()
