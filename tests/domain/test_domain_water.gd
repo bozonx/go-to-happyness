@@ -38,6 +38,7 @@ static func run_all() -> void:
 	_test_creating_a_body_publishes_nothing()
 	_test_border_ocean_floods_only_what_touches_the_rim()
 	_test_border_ocean_retracts_when_the_rim_closes()
+	_test_terrain_reflow_updates_and_removes_an_inland_body()
 	_test_border_nothing_never_floods()
 	_test_border_lava_floods_edge_with_lava()
 	_test_access_service_finds_banks_not_water()
@@ -536,6 +537,30 @@ static func _test_border_ocean_retracts_when_the_rim_closes() -> void:
 	assert(terrain.set_height(Vector2i(rim, 0), 0))
 	assert(border.apply())
 	assert(not water.is_wet(terrain, Vector2i(0, 0)), "closing the rim drained the disconnected channel")
+
+
+## Terrain mode applies the same shoreline refresh to author-created bodies, not
+## only the special ocean at the map edge.
+static func _test_terrain_reflow_updates_and_removes_an_inland_body() -> void:
+	var terrain := _terrain()
+	var water := _water_over(terrain)
+	var service := WaterService.new()
+	service.configure(water, terrain)
+	var core := Vector2i.ZERO
+	var bank := Vector2i(1, 0)
+	assert(terrain.set_height(core, -1))
+	var lake := service.create_body(WaterBody.Type.LAKE, 0)
+	assert(lake != null and service.flood(core, lake.id, 0))
+	assert(water.is_wet(terrain, core))
+
+	assert(terrain.set_height(bank, -1))
+	var expanded := service.reflow_bodies_after_terrain([bank])
+	assert(not expanded.is_empty() and water.is_wet(terrain, bank), "lowering a shore extended the lake")
+
+	assert(terrain.set_height(core, 0))
+	assert(terrain.set_height(bank, 0))
+	var removed := service.reflow_bodies_after_terrain([core, bank])
+	assert(not removed.is_empty() and not water.has_body(lake.id), "burying every wet cell removed the lake")
 
 
 static func _test_border_nothing_never_floods() -> void:

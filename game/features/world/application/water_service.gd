@@ -168,6 +168,61 @@ func remove_bodies_buried_by_terrain(changed_cells: Array[Vector2i]) -> Array[Wa
 	return removed
 
 
+## Rebuilds the footprint of every ordinary body whose shoreline a terrain
+## transaction touched. A body's level stays authored, but its wet outline is
+## derived again from the changed ground: lowering a bank extends the basin and
+## raising it retracts the basin. If no wet seed remains, the body is removed as
+## one normal registry edit so undo restores both its metadata and its cells.
+##
+## The map editor calls this while recording the terrain gesture, therefore every
+## resulting water delta joins that same single undo entry.
+func reflow_bodies_after_terrain(changed_cells: Array[Vector2i]) -> Array[WaterDelta]:
+	var edits: Array[WaterDelta] = []
+	if grid == null or terrain == null:
+		return edits
+	var candidates: Dictionary = {}
+	for changed: Vector2i in changed_cells:
+		_collect_body_candidate(changed, candidates)
+		for offset: Vector2i in WaterGrid.ORTHOGONAL_OFFSETS:
+			_collect_body_candidate(changed + offset, candidates)
+	var ordered_ids: Array[int] = []
+	for body_id: int in candidates:
+		ordered_ids.append(body_id)
+	ordered_ids.sort()
+	for body_id: int in ordered_ids:
+		var body := grid.body(body_id)
+		if body == null:
+			continue
+		var footprint := _wet_footprint_after_terrain(body_id, body.surface_height)
+		if footprint.is_empty():
+			if remove_body(body_id):
+				edits.append(_last_delta)
+		elif _resurface_body(body_id, footprint, body.surface_height):
+			edits.append(_last_delta)
+	return edits
+
+
+func _collect_body_candidate(cell: Vector2i, candidates: Dictionary) -> void:
+	if grid.is_inside(cell) and grid.has_water(cell):
+		candidates[grid.body_id_at(cell)] = true
+
+
+func _wet_footprint_after_terrain(body_id: int, level: int) -> Array[Vector2i]:
+	var footprint: Dictionary = {}
+	for cell: Vector2i in grid.cells_of_body(body_id):
+		if not grid.is_wet(terrain, cell) or footprint.has(cell):
+			continue
+		for flooded: Vector2i in grid.flood_cells(terrain, cell, level, body_id):
+			footprint[flooded] = true
+	var ordered: Array[Vector2i] = []
+	for cell: Vector2i in footprint:
+		ordered.append(cell)
+	ordered.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		return a.y < b.y if a.y != b.y else a.x < b.x
+	)
+	return ordered
+
+
 ## Changes a body's type in place: the id and cells stay, the metadata changes.
 ## One undoable operation that emits registry_changed so the presentation drops
 ## its cached per-body material.
