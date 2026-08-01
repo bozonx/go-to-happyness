@@ -172,11 +172,7 @@ func handle_input(event: InputEvent) -> bool:
 		if button.button_index != MOUSE_BUTTON_LEFT:
 			return false
 		if button.pressed and button.shift_pressed:
-			brush.update_hover(context.camera, context.space_state(), context.mouse_position())
-			brush.pick_from_cell()
-			notify_ui_changed()
-			_update_highlight()
-			return true
+			return pick_from_cell()
 		_painting = button.pressed
 		if button.pressed:
 			_handle_left_click()
@@ -254,12 +250,16 @@ func _stroke() -> void:
 	_update_highlight()
 
 
-func pick_from_cell() -> void:
+func pick_from_cell() -> bool:
 	if context != null and context.water_brush != null:
 		context.water_brush.update_hover(context.camera, context.space_state(), context.mouse_position())
+		if not context.water_brush.has_hover:
+			return false
 		context.water_brush.pick_from_cell()
 		notify_ui_changed()
 		_update_highlight()
+		return true
+	return false
 
 
 func _edit_label() -> String:

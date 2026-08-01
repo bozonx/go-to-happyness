@@ -26,6 +26,7 @@ var current_snap_step: float = 1.0
 var current_yaw_deg: float = 0.0
 var current_pitch_deg: float = 0.0
 var current_roll_deg: float = 0.0
+var _brush_appearance: Dictionary = {}
 ## Primary selection: the object the inspector describes and drags follow.
 var selected_object_id: String = ""
 ## Everything else selected alongside it. Transform edits apply to all of them;
@@ -244,21 +245,23 @@ func erase_at_cursor() -> void:
 
 
 ## Shift+LMB: use the object below the cursor as the next placement brush.
-func pick_asset_at_cursor() -> void:
+func pick_asset_at_cursor() -> bool:
 	if not _editor.cursor_valid:
-		return
+		return false
 	var object_id := pick_object_at(_editor.cursor_hit_pos)
 	var record := find_record(object_id)
 	if record == null:
 		_editor.set_status("Под курсором нет объекта для пипетки.")
-		return
+		return false
 	_catalog_panel.select_asset(record.asset_id)
 	current_pitch_deg = record.rot.x
 	current_yaw_deg = record.rot.y
 	current_roll_deg = record.rot.z
+	_brush_appearance = record.appearance.duplicate(true)
 	select_object("")
 	_editor.set_status("Пипетка: выбран «%s»." % WorldAssetCatalog.get_asset(record.asset_id).name)
 	refresh_ghost()
+	return true
 
 
 func _select_for_drag(object_id: String, hit: Vector3) -> void:
@@ -413,7 +416,7 @@ func _place_at(position: Vector3) -> void:
 	# all three, and dropping pitch/roll here made the placed object differ from
 	# what the author saw.
 	record.rot = Vector3(current_pitch_deg, current_yaw_deg, current_roll_deg)
-	record.appearance = asset.default_appearance()
+	record.appearance = _brush_appearance.duplicate(true) if not _brush_appearance.is_empty() else asset.default_appearance()
 	_editor.blueprint.objects.append(record)
 	_spawn_node(record)
 	_catalog_panel.add_recent_asset(asset.id)

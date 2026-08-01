@@ -95,18 +95,21 @@ func adjust_brush_size(delta: int) -> void:
 		brush.adjust_brush_size(delta)
 
 
-func pick_from_cell() -> void:
+func pick_from_cell() -> bool:
 	if context == null:
-		return
+		return false
 	var brush := hover_brush()
 	if brush == null:
-		return
+		return false
 	brush.update_hover(context.camera, context.space_state(), context.mouse_position())
+	if not brush.has_hover:
+		return false
 	if _coverage_selected:
 		(brush as CoverageBrushController).pick_coverage()
 	else:
 		(brush as TerrainBrushController).pick_material()
 	notify_ui_changed()
+	return true
 
 
 func process(_delta: float) -> void:
@@ -131,6 +134,8 @@ func handle_input(event: InputEvent) -> bool:
 			return true
 		if button.button_index != MOUSE_BUTTON_LEFT:
 			return false
+		if button.pressed and button.shift_pressed:
+			return pick_from_cell()
 		if _coverage_selected and _coverage_brush() != null:
 			context.set_edit_label("покрытие")
 			_coverage_brush().set_painting(button.pressed, _erases_coverage())

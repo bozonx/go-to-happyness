@@ -171,22 +171,23 @@ func _get_material(color: Color) -> StandardMaterial3D:
 	return material
 
 
-func pick_from_cell() -> void:
+func pick_from_cell() -> bool:
 	if context == null or context.brush == null or not context.brush.has_hover:
-		return
+		return false
 	var cell := context.brush.hovered_cell
 	var anchor := _anchor_at(cell)
 	if anchor != null:
 		_tool = TOOL_POINT
 		_anchor_role = anchor.role
 		notify_ui_changed()
-		return
+		return true
 	for area: ZoneAreaRecord in context.document.zones.areas:
 		if area.bounds.has_point(cell):
 			_tool = TOOL_AREA
 			_area_role = area.role
 			notify_ui_changed()
-			return
+			return true
+	return false
 
 
 func process(_delta: float) -> void:
@@ -208,6 +209,8 @@ func handle_input(event: InputEvent) -> bool:
 
 
 func _handle_mouse(event: InputEventMouseButton) -> bool:
+	if event.button_index == MOUSE_BUTTON_LEFT and event.pressed and event.shift_pressed:
+		return pick_from_cell()
 	if event.button_index != MOUSE_BUTTON_LEFT or not context.brush.has_hover:
 		return false
 	if _tool == TOOL_AREA:

@@ -93,13 +93,17 @@ func adjust_brush_size(delta: int) -> void:
 		context.brush.adjust_brush_size(delta)
 
 
-func pick_from_cell() -> void:
+func pick_from_cell() -> bool:
 	if context != null and context.brush != null:
 		context.brush.update_hover(context.camera, context.space_state(), context.mouse_position())
+		if not context.brush.has_hover:
+			return false
 		context.brush.pick_material()
 		if context.brush.has_hover and context.terrain != null:
 			context.brush.target_level = context.terrain.height_of(context.brush.hovered_cell)
 		notify_ui_changed()
+		return true
+	return false
 
 
 func process(_delta: float) -> void:
@@ -117,13 +121,11 @@ func handle_input(event: InputEvent) -> bool:
 
 
 func _handle_mouse(event: InputEventMouseButton) -> bool:
+	if event.button_index == MOUSE_BUTTON_LEFT and event.shift_pressed and event.pressed:
+		return pick_from_cell()
 	if _tool == TOOL_RAMP:
 		return _handle_ramp_mouse(event)
 	if _handle_common_mouse(event):
-		return true
-	if event.button_index == MOUSE_BUTTON_LEFT and event.shift_pressed and event.pressed:
-		context.brush.pick_material()
-		notify_ui_changed()
 		return true
 	if event.ctrl_pressed and event.pressed:
 		match event.button_index:

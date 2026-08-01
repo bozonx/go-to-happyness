@@ -116,8 +116,8 @@ func adjust_brush_size(_delta: int) -> void:
 
 
 ## Samples properties from the hovered cell under the cursor.
-func pick_from_cell() -> void:
-	pass
+func pick_from_cell() -> bool:
+	return false
 
 
 ## Input the camera did not claim. Return true to consume it.

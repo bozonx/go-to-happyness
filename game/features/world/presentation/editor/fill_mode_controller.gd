@@ -18,6 +18,9 @@ const INSPECTOR_SCALE := &"editor_scale"
 const TRANSFORM_PROPERTIES: Array[StringName] = [INSPECTOR_POSITION, INSPECTOR_YAW, INSPECTOR_SCALE]
 
 var _archetype_id: StringName = &""
+var _brush_props: Dictionary = {}
+var _brush_yaw_degrees := 0.0
+var _brush_scale := 1.0
 var _selected_id: StringName = &""
 var _additional_selected: Array[StringName] = []
 var _root: Node3D = null
@@ -100,10 +103,13 @@ func handle_input(event: InputEvent) -> bool:
 
 
 ## Пипетка (Shift+ЛКМ и кнопка на панели): берёт архетип из-под курсора в кисть.
-func pick_from_cell() -> void:
+func pick_from_cell() -> bool:
 	if context != null and context.brush != null and context.brush.has_hover:
-		_pick_archetype(context.brush.hovered_cell)
+		if not _pick_archetype(context.brush.hovered_cell):
+			return false
 		notify_ui_changed()
+		return true
+	return false
 
 
 func _handle_mouse(event: InputEventMouseButton) -> bool:
@@ -119,8 +125,7 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 	if event.button_index != MOUSE_BUTTON_LEFT:
 		return false
 	if event.shift_pressed:
-		_pick_archetype(cell)
-		return true
+		return pick_from_cell()
 	var found := _entity_at(cell)
 	if found != &"":
 		_select(found, event.ctrl_pressed)
@@ -203,6 +208,9 @@ func _place(cell: Vector2i) -> void:
 	record.position = _surface_position(cell, archetype)
 	record.initial_state = archetype.states.default_state
 	record.activity = archetype.activity
+	record.props = _brush_props.duplicate(true)
+	record.yaw_degrees = _brush_yaw_degrees
+	record.scale = _brush_scale
 	_warnings_by_entity[record.id] = _placement_warnings(cell, archetype)
 	context.document.entities.entities.append(record)
 	_select(record.id, false)
@@ -284,16 +292,20 @@ func _drop_stale_warnings() -> void:
 			_warnings_by_entity.erase(entity_id)
 
 
-func _pick_archetype(cell: Vector2i) -> void:
+func _pick_archetype(cell: Vector2i) -> bool:
 	var entity_id := _entity_at(cell)
 	var record := context.document.entities.by_id(entity_id)
 	if record == null:
 		context.set_status_message("Под курсором нет объекта для пипетки.")
-		return
+		return false
 	_archetype_id = record.archetype_id
+	_brush_props = record.props.duplicate(true)
+	_brush_yaw_degrees = record.yaw_degrees
+	_brush_scale = record.scale
 	var archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
 	context.set_status_message("Пипетка: выбран «%s»." % (archetype.name if archetype != null else String(_archetype_id)))
 	notify_ui_changed()
+	return true
 
 
 func _entity_at(cell: Vector2i) -> StringName:

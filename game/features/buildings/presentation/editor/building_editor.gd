@@ -45,6 +45,7 @@ var cursor_valid: bool = false
 var cursor_hit_pos: Vector3 = Vector3.ZERO
 
 var current_mode: int = EditMode.FRAME
+var _eyedropper_active := false
 
 ## Frame mode lives in its own controller; see frame_mode_controller.gd.
 var frame_mode: FrameModeController = null
@@ -223,11 +224,21 @@ func _unhandled_input(event: InputEvent) -> void:
 				frame_mode.last_paint_cell = cursor_cell
 	elif event is InputEventKey and event.pressed and not event.echo:
 		if not _text_input_has_focus():
+			if event.keycode == KEY_P:
+				_set_eyedropper_active(not _eyedropper_active)
+				return
+			if event.keycode == KEY_ESCAPE and _eyedropper_active:
+				_set_eyedropper_active(false)
+				return
 			_handle_key(event)
 
 
 func _handle_mouse_button(event: InputEventMouseButton) -> void:
 	if event.pressed and _pointer_over_ui():
+		return
+	if _eyedropper_active and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if _pick_from_cursor():
+			_set_eyedropper_active(false)
 		return
 	match event.button_index:
 		MOUSE_BUTTON_RIGHT:
@@ -276,6 +287,9 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 					if current_mode == EditMode.FILL:
 						fill_mode.pick_asset_at_cursor()
 						return
+					if current_mode == EditMode.ZONES:
+						zones_mode.pick_at_cursor()
+						return
 				if current_mode == EditMode.ZONES:
 					if zones_mode.handle_mouse_button(event):
 						frame_mode.painting = zones_mode.is_painting()
@@ -320,7 +334,7 @@ func _handle_key(event: InputEventKey) -> void:
 		return
 	match event.keycode:
 		KEY_P:
-			_on_eyedropper_pressed()
+			_set_eyedropper_active(not _eyedropper_active)
 		KEY_Z:
 			frame_mode.cycle_rotation_z(-1 if event.shift_pressed else 1)
 		KEY_X:
@@ -732,16 +746,27 @@ func _on_textures_toggled(enabled: bool) -> void:
 
 
 func _on_eyedropper_pressed() -> void:
+	_set_eyedropper_active(_eyedropper_btn.button_pressed)
+
+
+func _set_eyedropper_active(active: bool) -> void:
+	_eyedropper_active = active and current_mode != EditMode.FINISHES
+	_eyedropper_btn.button_pressed = _eyedropper_active
+	_update_status("Пипетка: выберите элемент." if _eyedropper_active else "Пипетка выключена.")
+
+
+func _pick_from_cursor() -> bool:
 	_update_cursor()
 	match current_mode:
 		EditMode.FRAME:
-			frame_mode.pick_single_block()
+			return frame_mode.pick_single_block()
 		EditMode.FILL:
-			fill_mode.pick_asset_at_cursor()
+			return fill_mode.pick_asset_at_cursor()
 		EditMode.ZONES:
-			zones_mode.pick_at_cursor()
+			return zones_mode.pick_at_cursor()
 		_:
 			_update_status("Пипетка недоступна в этом режиме.")
+			return false
 
 
 # ---------------------------------------------------------------------------

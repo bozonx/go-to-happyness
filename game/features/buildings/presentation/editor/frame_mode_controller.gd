@@ -600,11 +600,11 @@ func _ray_aabb_entry_distance(origin: Vector3, direction: Vector3, aabb: AABB) -
 	return maxf(0.0, t_min)
 
 
-func pick_single_block(retain_stamp: bool = false) -> void:
+func pick_single_block(retain_stamp: bool = false) -> bool:
 	var block := _block_under_mouse()
 	if block == null:
 		_editor.set_status("Под Shift нет блока для выбора.")
-		return
+		return false
 	_editor._set_layer(block.pos.y)
 	select_block(block.block_id, block.variant, retain_stamp)
 	_editor.current_material_id = block.material_id
@@ -617,6 +617,7 @@ func pick_single_block(retain_stamp: bool = false) -> void:
 	_update_rotation_label()
 	refresh_ghost()
 	_editor.set_status("Выбран элемент %s." % block.block_id)
+	return true
 
 
 func pick_stamp_brush() -> void:

@@ -93,6 +93,7 @@ var dev_mode := false
 ## True while the history is replaying a command, so the commits that replay emits
 ## are not recorded as new commands.
 var _replaying := false
+var _eyedropper_active := false
 ## True while `BorderOceanService` is filling as part of a terrain stroke, so the
 ## water commits it produces are folded into that stroke's command instead of
 ## becoming commands of their own.
@@ -356,6 +357,9 @@ func _select_mode(mode_id: StringName) -> void:
 	if _active != null:
 		_active.deactivate()
 	_active = next
+	_eyedropper_active = false
+	_eyedropper_button.button_pressed = false
+	_eyedropper_button.disabled = _active is ScenarioModeController
 	_active.activate()
 	_mode_bar.set_active(_active.id)
 	_rebuild_palette()
@@ -566,6 +570,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		# 3D viewport.
 		if not _is_pointer_over_view():
 			return
+		if _eyedropper_active and button.pressed and button.button_index == MOUSE_BUTTON_LEFT:
+			if _active != null and _active.pick_from_cell():
+				_set_eyedropper_active(false)
+			_refresh_panels()
+			return
 		if camera.handle_mouse_button(button):
 			return
 		if _active != null and _active.handle_input(event):
@@ -600,7 +609,7 @@ func _handle_key(event: InputEventKey) -> void:
 			_cycle_render_mode()
 			return
 		KEY_P:
-			_on_eyedropper_pressed()
+			_set_eyedropper_active(not _eyedropper_active)
 			return
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7:
 			var slot := event.keycode - KEY_1
@@ -611,6 +620,9 @@ func _handle_key(event: InputEventKey) -> void:
 			camera.frame_board()
 			return
 		KEY_ESCAPE:
+			if _eyedropper_active:
+				_set_eyedropper_active(false)
+				return
 			# Esc сначала принадлежит режиму: сбросить выделение или кисть — то,
 			# чего автор ждёт от него в первую очередь, и ровно то, что делает
 			# редактор зданий. Выход из редактора остаётся за ним только тогда,
@@ -625,9 +637,14 @@ func _handle_key(event: InputEventKey) -> void:
 
 
 func _on_eyedropper_pressed() -> void:
-	if _active != null:
-		_active.pick_from_cell()
-		_refresh_panels()
+	_set_eyedropper_active(_eyedropper_button.button_pressed)
+
+
+func _set_eyedropper_active(active: bool) -> void:
+	_eyedropper_active = active and _active != null and not (_active is ScenarioModeController)
+	_eyedropper_button.button_pressed = _eyedropper_active
+	_message = "пипетка: выберите объект" if _eyedropper_active else "пипетка выключена"
+	_refresh_panels()
 
 
 func _validate_map() -> Dictionary:

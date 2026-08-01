@@ -138,8 +138,9 @@ tooltip_text = "Повторить (Ctrl+Shift+Z)"
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(38, 0)
+toggle_mode = true
 text = "🧪"
-tooltip_text = "Пипетка: считать элемент под курсором (P)"
+tooltip_text = "Пипетка: включить выбор элемента под курсором (P)"
 
 
 [node name="ModeFrameBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
