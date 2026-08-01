@@ -528,9 +528,15 @@ runtime key установленной игры, по умолчанию `core:w
 | `flags` | `organic`, `no_wear`, `no_regrowth`, … |
 | `texture`, `variants[]` | внешний вид |
 
-Существующий `RoadType` со статическим `match` по весам, эрам и профилям — временная
-форма этого каталога; после переноса он остаётся только набором compatibility-алиасов
-для старых сейвов.
+Каталог живёт в `routing/domain/coverage_catalog.gd`, а не рядом со слоем: это
+контракт проходимости, и `RoadNetworkService` обязан читать его, не завися от фичи
+мира. Внешний вид по той же причине лежит отдельно — `CoverageLibrary` в
+`world/presentation/terrain`, ровно как `TerrainMaterialLibrary` рисует материал,
+который доменный каталог только называет. `RoadType` остался набором
+compatibility-алиасов для старых сейвов.
+
+Индекс записи — сохранённая форма (`surface.bin`), поэтому после релиза каталог
+только дополняется в конец; перенумерация сдвинула бы все дороги на всех картах.
 
 **Тропинка — запись каталога с флагом `organic`.** Тогда автор может нарисовать
 заброшенную деревню с уже протоптанными тропами: кисть задаёт начальную `path_strength`,
@@ -1075,10 +1081,12 @@ game/features/world/
   domain/water/        water_body.gd            # water.md §2
   application/         border_ocean_service.gd  # §6.1, залив края по заголовку
                        water_access_service.gd  # берега, с которых набирают воду
-  domain/coverage/     coverage_catalog.gd      # §5.2.2, записи вместо match в коде
-                       coverage_layer.gd        # surface.bin: coverage_index + detail
-                       coverage_rasterizer.gd   # мазок и сплайн-штрих → клетки,
+  domain/coverage/     coverage_layer.gd        # surface.bin: coverage_index + detail
+                       coverage_delta.gd        # undo-запись мазка
+  application/         coverage_service.gd      # транзакция и история покрытия
+                       coverage_rasterizer.gd   # мазок и штрих → клетки,
                                                 #   общий с постройкой дороги игроком
+                       coverage_navigation_publisher.gd  # §5.2.3, сев RoadNetworkService
   application/         map_document_service.gd    # загрузка, валидация, атомная запись
                        map_placement_service.gd   # Placement Merge
                        map_validator.gd           # §11
@@ -1148,7 +1156,7 @@ user://content/projects/<author>.<pack>/maps/  карты выбранного �
 | --- | --- | --- |
 | 1b | Ленивая/чанковая публикация навигации: по чанкам вместо всей доски, затем подгрузка вокруг камеры. Открывает не только 512×512 (29 с), но и сам целевой пресет 256×256 (7,2 с при загрузке, §6.2). *Подготовлено:* рельеф уже хранится и мешится чанками, бинарные слои пакета читаются по смещению, `NavGrid` разделяет `topology_revision` и `weights_revision` | стандартный пресет 256×256 становится дефолтом и загружается быстро |
 | 2 | Placement Merge, режим «Наполнение» ([map_fill_mode.md](map_fill_mode.md), там же разбивка фазы на шаги) | полноценная авторская территория |
-| 3 | Слой покрытий (§5.2.1–5.2.3): `CoverageCatalog` вместо статического `RoadType`, `surface.bin`, группа «Покрытие» в палитре режима «Поверхность», растеризатор мазка и сплайн-штриха, сев `RoadNetworkService` из карты. Тем же срезом — постройка дороги игроком и `kind: "prefab"` | дорожки, площади, переиспользуемые комплексы; игрок наконец может строить дороги |
+| 3 ~ | Слой покрытий (§5.2.1–5.2.3): `CoverageCatalog` вместо статического `RoadType`, `surface.bin`, группа «Покрытие» в палитре режима «Поверхность», растеризатор мазка и штриха, сев `RoadNetworkService` из карты. **Сделано.** Осталось: постройка дороги игроком тем же растеризатором, сев тропинок в `TrailFieldService`, текстуры покрытий вместо цвета, `kind: "prefab"` | дорожки, площади, переиспользуемые комплексы |
 | 4b ~ | **Runtime зон.** Сделано: `overlay`→`NavGrid` `cost` и спавн-операция (герой стартует с `function: "core:hero_start"`, каждый компаньон — со своей `core:companion_start`; точки поднимаются на terrain). Осталось: шина событий (§14), `RoutePlan`, теги | оверлеи влияют на движение; расставил стартовые точки → вся партия появилась на авторских местах |
 | 5 ~ | **Сценарий.** Сделано: `MapScenario` как типизированный слой, режим «Сценарий», `MapScenarioRuntime` в `WorldSession` с триггерами `session_started`/`area_entered`/`area_exited`/`flag_changed`/`elapsed`, действия `set_flag`/`add_flag`/`message`, `ScenarioBanner`. Осталось: действия над миром (спавн, маршруты), селекторы зон по функции, теги действующего, игровые триггеры модулей ([ideas.md](../ideas.md) §5) | испытания и зачистки, выраженные флагами |
 | 6 ~ | **Валидатор и тест-запуск.** Сделано: `✔` даёт blocking errors и navigation warnings, `F5` запускает текущую несохранённую карту через выбранную definition, `Esc` возвращает в редактор. Осталось: полный набор правил фазы 5 | автор проверяет карту, не выходя из редактора |

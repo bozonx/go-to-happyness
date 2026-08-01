@@ -1,6 +1,9 @@
 # Go To Happyness
 
-Godot 4.7 settlement simulation prototype.
+Godot 4.7 host application: one runtime that launches installed game packs. It ships
+with **Settlement**, the main game, plus the content editors — maps, buildings and
+game definitions. See [design_docs/engine/multi_purpose_engine.md](design_docs/engine/multi_purpose_engine.md)
+for the product boundary.
 
 ## Run
 

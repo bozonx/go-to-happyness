@@ -7,16 +7,17 @@ disagree, the design doc is the target and this file is the fact.
 
 ## First-person controls
 
-Press `R` to switch between the hero overview and first-person view.
+Movement, jump, sprint and look use the usual bindings; the rest of the mode runs on
+two context actions and a few mode switches:
 
-- `WASD` / arrows — move.
-- `Space` — jump, `Shift` — sprint.
-- `Mouse` — look around.
-- `F` — perform one context action.
-- `Shift+F` — perform the "all" version of the action (deliver everything, gather until pocket is full, etc.).
-- `B` — open construction menu (works in overview and first-person; first-person requires the hero).
-- `T` — drop all pocket contents at your feet as a ground pile (first-person).
-- `RMB` — dig terrain (hero only); for other citizens it returns to overview.
+- switch between the hero overview and first-person view;
+- context action — perform one applicable action at the crosshair;
+- full context action — the "all" version (deliver everything, gather until the pocket is full);
+- open the construction menu (first-person requires the hero);
+- drop all pocket contents at your feet as a ground pile;
+- dig terrain (hero only).
+
+Actual key bindings live in the input map, not in this document.
 
 The hero has an 8-slot pocket that can hold any mix of resources. Gathered items go
 into the pocket first and can be delivered to the sawmill or warehouse. After the
@@ -28,7 +29,7 @@ Design: [design_docs/citizens/first_person_hero_control.md](../design_docs/citiz
 
 ## Storage & logistics
 
-- **Backpack**: Before the first warehouse is built, resources live in a virtual starter backpack shown separately in the HUD. The backpack never decays, cannot receive new resources after the start, and its consumables (food, water, construction gloves) are used directly by the settlement.
+- **Backpack**: Before the first warehouse is built, resources live in a virtual starter backpack shown separately in the HUD. The backpack never decays, cannot receive new resources after the start, and its consumables (food, water) are used directly by the settlement.
 - **Migration**: Building the first warehouse automatically moves backpack contents into the new warehouse.
 - **Ground piles**: Dropped resources form piles on the ground. They decay daily based on type and weather:
   - Biological (food, grass, branches, logs, wood, hides): 5% per day, 10% while raining.
@@ -54,7 +55,7 @@ The Tent Era ships with these systems:
 
 - New `tarp` resource with a straw/tarp building branch (tents, forager tents, materials yards, craft tents, trade tents, warehouses, toilets).
 - Research tree: `straw_tents` -> `tarp_tents` -> `trade` -> `tarp_trade_tent`, with `earth_buildings` and campfire upgrades alongside.
-- Entrance sign trading: buy food, water, construction gloves, and buckets.
+- Entrance sign trading: buy food, water, and buckets.
 - Bucket-based water gathering from the bank of any fresh water on the map.
 - Nightly campfire stories with three themes: optimistic wellbeing boost, teaching skill gain, and a focused work plan.
 - Data-driven random event system with 12 tent-era events: conditions, cooldowns, event chains (forest ranger -> wild boars), delayed consequences (smoky firewood), and random chance outcomes.
