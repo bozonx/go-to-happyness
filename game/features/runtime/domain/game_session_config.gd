@@ -12,6 +12,12 @@ var definition: GameDefinition = null
 var map_ref: StringName = &""
 var map_document: MapDocument = null
 var seed := 0
+## Editor test run only: where the starting party appears, in world space,
+## overriding the map's authored spawn points (`map_editor.md` §12). It is a
+## property of **this launch**, never of the map — an author checking a far
+## corner must not have to drag `core:hero_start` there and remember to drag it
+## back, and nothing about the document changes when they do it.
+var spawn_override := Vector3.INF
 var module_parameters: Dictionary = {}
 var progression: SessionProgression = SessionProgression.new()
 
@@ -38,6 +44,10 @@ static func create(
 		p_selected_era,
 	)
 	return session
+
+
+func has_spawn_override() -> bool:
+	return spawn_override != Vector3.INF
 
 
 ## The map's progression policy, or the neutral default when there is no map.

@@ -35,6 +35,8 @@ func _run() -> void:
 	_test_mode_switching(editor)
 	_test_scenario_workspace_replaces_the_map(editor)
 	_test_entities_mode_renders_anchor_markers(editor)
+	_test_zones_mode_authoring(editor)
+	_test_zones_mode_cascade_and_rename(editor)
 	await _test_terrain_editing_and_shared_undo(editor)
 	_test_ramp_connection_and_shared_undo(editor)
 	_test_fill_placement_and_shared_undo(editor)
@@ -162,9 +164,9 @@ func _test_mode_switching(editor: Node) -> void:
 	assert(editor._active.selected_palette_entry() == &"liquid_lava", "lava is selected directly")
 	editor._active.select_palette_entry(&"liquid_water")
 
-	editor._select_mode(&"entities")
-	assert(editor._active.id == &"entities", "switched to zones")
-	assert(editor._active.palette_entries().size() == 3, "area, point and route tools")
+	editor._select_mode(&"zones")
+	assert(editor._active.id == &"zones", "switched to zones")
+	assert(editor._active.palette_entries().size() == 4, "area, point, route and select tools")
 
 	editor._select_mode(&"fill")
 	assert(editor._active.id == &"fill", "switched to fill")
@@ -232,12 +234,12 @@ func _test_entities_mode_renders_anchor_markers(editor: Node) -> void:
 	companion.pos = Vector3(3.5, 0.0, 3.5)
 	zones.anchors.append(companion)
 
-	editor._select_mode(&"entities")
-	var controller: EntitiesModeController = editor._active
+	editor._select_mode(&"zones")
+	var controller: MapZonesModeController = editor._active
 	# The visual root holds one MeshInstance3D per anchor; the Label3D is a child
 	# of that mesh, so the root's direct children equal the authored anchor count.
 	var marker_root: Node3D = controller._root
-	assert(marker_root != null, "entities mode owns a marker root")
+	assert(marker_root != null, "zones mode owns a marker root")
 	assert(marker_root.get_child_count() == 2, "each anchor renders a marker: %d" % marker_root.get_child_count())
 	for marker in marker_root.get_children():
 		assert(marker is MeshInstance3D, "anchor marker is a mesh")
@@ -255,6 +257,124 @@ func _test_entities_mode_renders_anchor_markers(editor: Node) -> void:
 	zones.anchors.resize(prior_count)
 	editor._select_mode(&"terrain")
 	print("  anchor markers ok")
+
+
+## The zones mode driven the way the mouse drives it. Markers alone used to be
+## the whole coverage here, and under them the mode could not author an area the
+## author had actually dragged: a drag up or left collapsed to a single cell, and
+## nothing on the map drew the area at all.
+func _test_zones_mode_authoring(editor: Node) -> void:
+	editor._select_mode(&"zones")
+	var mode: MapZonesModeController = editor._active
+	var zones: MapZoneLayer = editor.document.zones
+	var prior_areas := zones.areas.size()
+	var depth: int = editor.history.undo_depth()
+
+	# A drag from (2,2) *back* to (-1,-1): the direction of a drag must not change
+	# the rectangle, and negative cells are ordinary board cells.
+	mode.select_palette_entry(&"area")
+	editor._brush.has_hover = true
+	editor._brush.hovered_cell = Vector2i(2, 2)
+	mode.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	editor._brush.hovered_cell = Vector2i(-1, -1)
+	mode.handle_input(_click(MOUSE_BUTTON_LEFT, false))
+	assert(zones.areas.size() == prior_areas + 1, "the drag created one area")
+	var area: ZoneAreaRecord = zones.areas[zones.areas.size() - 1]
+	assert(area.rects.size() == 1 and area.rects[0] == Rect2i(-1, -1, 4, 4),
+		"a reversed drag yields the rectangle the author dragged, got %s" % area.rects)
+	assert(area.contains_cell(Vector2i(-1, -1)) and area.contains_cell(Vector2i(2, 2)),
+		"both ends of the drag are inside the area")
+
+	# It is visible: an area nobody can see is an area nobody can place.
+	assert(mode._root.get_child_count() > 0, "the area draws in the 3D view")
+
+	# The typed inspector edits the record — role and, for an overlay, the effects
+	# that carry the landscape on a map (§18). Every commit rebuilds the layer from
+	# its snapshot, so records are re-read by id rather than held across edits —
+	# the same discipline the controller itself keeps.
+	var area_id := area.id
+	assert(mode._selected_area() != null, "the new area is selected")
+	assert(mode.apply_inspector_value(MapZonesModeController.P_ROLE, "Оверлей"), "role is editable")
+	assert(mode.apply_inspector_value(MapZonesModeController.P_COST, 2.5), "cost is editable")
+	assert(is_equal_approx(float(zones.area_by_id(area_id).effects[ZoneEffects.KEY_COST]), 2.5),
+		"the effect landed on the record")
+	assert(mode.apply_inspector_value(MapZonesModeController.P_DENY, ["builder"]), "rights are editable")
+	var denied: Array[StringName] = zones.area_by_id(area_id).deny
+	assert(denied.size() == 1 and denied[0] == &"builder", "the denial landed on the record")
+
+	# An overlay in negative cells has to reach the runtime; that was the bug that
+	# made three quarters of every map's zones inert.
+	var overlay_index := ZoneOverlayIndex.new()
+	overlay_index.rebuild(zones, editor.document.board_cells())
+	assert(is_equal_approx(overlay_index.cost_at(Vector2i(-1, -1)), 2.5),
+		"an overlay drawn west of the origin still costs what it says")
+
+	# Everything above is one undo stack with the rest of the editor.
+	while editor.history.undo_depth() > depth:
+		editor._undo()
+	assert(zones.areas.size() == prior_areas, "undo removed the authored area")
+	editor._select_mode(&"terrain")
+	print("  zones authoring ok")
+
+
+## Deleting an area takes what it owns with it (§7.7), and renaming one follows
+## every reference — a rule pointing at the old id is a rule that silently never
+## fires again.
+func _test_zones_mode_cascade_and_rename(editor: Node) -> void:
+	editor._select_mode(&"zones")
+	var mode: MapZonesModeController = editor._active
+	var zones: MapZoneLayer = editor.document.zones
+	var prior_areas := zones.areas.size()
+	var prior_anchors := zones.anchors.size()
+	var depth: int = editor.history.undo_depth()
+
+	mode.select_palette_entry(&"area")
+	editor._brush.has_hover = true
+	editor._brush.hovered_cell = Vector2i(5, 5)
+	mode.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	editor._brush.hovered_cell = Vector2i(7, 7)
+	mode.handle_input(_click(MOUSE_BUTTON_LEFT, false))
+	var area_id: StringName = zones.areas[zones.areas.size() - 1].id
+
+	# A point placed inside the region is adopted by it.
+	mode.select_palette_entry(&"point")
+	mode.activate_option(&"anchor_waypoint")
+	editor._brush.hovered_cell = Vector2i(6, 6)
+	mode.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	var anchor_id: StringName = zones.anchors[zones.anchors.size() - 1].id
+	var anchor := zones.anchor_by_id(anchor_id)
+	assert(anchor.owner_id == area_id, "the point under a region is owned by it")
+	# Cells, not metres: `pos.y` is the level the author placed it on (§6).
+	assert(is_equal_approx(anchor.pos.x, 6.5) and is_equal_approx(anchor.pos.z, 6.5),
+		"the point sits at the centre of its cell, in board coordinates")
+	assert(is_equal_approx(anchor.pos.y, float(editor.document.terrain.height_of(Vector2i(6, 6)))),
+		"the point carries a terrain level, not a height in metres")
+
+	# A rule addressing the region follows the rename.
+	var rule := MapRule.new()
+	rule.id = &"zone_rule"
+	rule.trigger.kind = MapRuleTrigger.AREA_ENTERED
+	rule.trigger.zone = area_id
+	editor.document.scenario.rules.append(rule)
+	mode._select_area(area_id)
+	assert(mode.apply_inspector_value(MapZonesModeController.P_ID, "gate_yard"), "the area was renamed")
+	assert(zones.area_by_id(&"gate_yard") != null, "the record carries the new id")
+	assert(zones.anchor_by_id(anchor_id).owner_id == &"gate_yard", "the point it owns followed the rename")
+	assert(rule.trigger.zone == &"gate_yard", "the rule addressing it followed the rename")
+
+	# Deleting the area cascades to the point it owned.
+	mode._select_area(&"gate_yard")
+	assert(mode._delete_selection(), "the selected area was deleted")
+	assert(zones.area_by_id(&"gate_yard") == null, "the area is gone")
+	assert(zones.anchor_by_id(anchor_id) == null, "the point it owned went with it, not orphaned")
+
+	editor.document.scenario.rules.clear()
+	while editor.history.undo_depth() > depth:
+		editor._undo()
+	assert(zones.areas.size() == prior_areas and zones.anchors.size() == prior_anchors,
+		"undo walked the whole gesture back")
+	editor._select_mode(&"terrain")
+	print("  zones cascade and rename ok")
 
 
 func _test_terrain_editing_and_shared_undo(editor: Node) -> void:

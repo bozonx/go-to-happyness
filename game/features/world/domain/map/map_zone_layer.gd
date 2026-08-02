@@ -41,6 +41,18 @@ func has_id(id: StringName) -> bool:
 	return area_by_id(id) != null or anchor_by_id(id) != null or route_by_id(id) != null
 
 
+## The board is centred on the world origin, exactly like `TerrainGrid` and
+## `NavGrid`: a board of N cells runs `-N/2 … N-N/2-1` on both axes. Every reader
+## of zone geometry asks this one question, and it is here rather than inlined so
+## a `0 … N` check can never creep back in — that check silently dropped every
+## zone in the western three quarters of a map from the cost and presence
+## indexes while the editor happily drew them.
+static func is_board_cell(cell: Vector2i, board_cells: int) -> bool:
+	var half := board_cells / 2
+	return cell.x >= -half and cell.y >= -half \
+		and cell.x < board_cells - half and cell.y < board_cells - half
+
+
 func to_json() -> Dictionary:
 	return {
 		"areas": areas.map(func(area: ZoneAreaRecord) -> Dictionary: return area.to_dict()),
@@ -67,9 +79,6 @@ func from_json(source: Dictionary) -> void:
 func validate(board_cells: int) -> Array[String]:
 	var errors: Array[String] = []
 	var ids: Dictionary = {}
-	var half_cells := board_cells / 2
-	var min_cell := -half_cells
-	var max_edge := board_cells - half_cells
 	for area in areas:
 		_validate_id(area.id, ids, errors)
 		if area.role not in [ZoneAreaRecord.ROLE_REGION, ZoneAreaRecord.ROLE_OVERLAY]:
@@ -77,15 +86,22 @@ func validate(board_cells: int) -> Array[String]:
 		if area.rects.is_empty():
 			errors.append("область %s не содержит прямоугольников" % area.id)
 		for rect in area.rects:
-			if rect.position.x < min_cell or rect.position.y < min_cell or rect.end.x > max_edge or rect.end.y > max_edge:
+			# `end` is exclusive, so the last cell it covers is `end - (1,1)`.
+			if not is_board_cell(rect.position, board_cells) \
+					or not is_board_cell(rect.end - Vector2i.ONE, board_cells):
 				errors.append("область %s выходит за доску" % area.id)
 	for anchor in anchors:
 		_validate_id(anchor.id, ids, errors)
 		if anchor.role not in ZoneAnchorRecord.ROLES:
 			errors.append("точка %s: неизвестная роль %s" % [anchor.id, anchor.role])
 		var cell := anchor.cell()
-		if cell.x < min_cell or cell.y < min_cell or cell.x >= max_edge or cell.y >= max_edge:
+		if not is_board_cell(cell, board_cells):
 			errors.append("точка %s выходит за доску" % anchor.id)
+		# §5.2: a queue leads to a slot and a place in line. Authored without a
+		# target it is a point the engine can do nothing with, and the map editor
+		# used to be able to create exactly that.
+		if anchor.is_queue() and (anchor.target_id == &"" or anchor_by_id(anchor.target_id) == null):
+			errors.append("очередь %s не ссылается на существующее место" % anchor.id)
 		if anchor.owner_id != &"":
 			var owner := area_by_id(anchor.owner_id)
 			if owner == null:

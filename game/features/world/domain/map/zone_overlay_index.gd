@@ -35,7 +35,8 @@ func rebuild(zones: MapZoneLayer, board_cells: int) -> void:
 		var denies := ZoneAccess.permits(area.allow, area.deny, ZoneAccess.AUDIENCE_VISITOR) == false
 		var effect_cost := float(area.effects.get(ZoneEffects.KEY_COST, ZoneEffects.default_of(ZoneEffects.KEY_COST)))
 		for cell in area.footprint_cells():
-			if cell.x < 0 or cell.y < 0 or cell.x >= board_cells or cell.y >= board_cells:
+			# Board cells are centred on the origin (`MapZoneLayer.is_board_cell`).
+			if not MapZoneLayer.is_board_cell(cell, board_cells):
 				continue
 			# Cost multiplies across overlapping overlays (§4.2); a neutral 1.0
 			# from one of them changes nothing, which is why an overlay that only

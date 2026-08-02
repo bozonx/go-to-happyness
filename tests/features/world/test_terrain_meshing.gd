@@ -25,6 +25,8 @@ static func run_all() -> void:
 	_test_border_chunk_gets_a_skirt()
 	_test_collision_faces_match_the_mesh()
 	_test_top_only_lod_drops_the_walls()
+	_test_top_only_lod_keeps_the_skirt()
+	_test_delta_rebuild_matches_a_full_one()
 	_test_empty_chunk_builds_nothing()
 	print("    [PASS] Terrain Meshing Tests")
 
@@ -338,3 +340,69 @@ static func _test_top_only_lod_drops_the_walls() -> void:
 		var c := faces[triangle * 3 + 2]
 		assert(is_equal_approx(a.y, b.y) and is_equal_approx(b.y, c.y))
 	assert(_triangles_covering_cell(distant, Vector2i(4, 4)) > 0)
+
+
+## The distant LOD drops the faces BETWEEN columns, which the isometric camera
+## cannot see anyway. It must not drop the skirt: that is the wall where the
+## ground simply ends, and without it the edge of the board and every carved hole
+## read as a window into nothing as soon as the camera pulls back.
+static func _test_top_only_lod_keeps_the_skirt() -> void:
+	var border := _make_grid()
+	var border_chunk := border.chunk_of(border.min_cell())
+	var distant_border := _build(border, border_chunk, TerrainChunkMesher.Lod.TOP_ONLY)
+	var lowest := 0.0
+	for vertex: Vector3 in (distant_border["faces"] as PackedVector3Array):
+		lowest = minf(lowest, vertex.y)
+	assert(is_equal_approx(lowest, -TerrainChunkMesher.SKIRT_STEPS * TerrainGrid.HEIGHT_STEP),
+		"the board edge still falls away at range")
+
+	var carved := _make_grid()
+	carved.set_hole(Vector2i(4, 4), true)
+	var distant_hole := _build(carved, INNER_CHUNK, TerrainChunkMesher.Lod.TOP_ONLY)
+	assert(_triangles_covering_cell(distant_hole, Vector2i(4, 4)) == 0, "the hole is still open")
+	var walls := 0
+	for triangle in (distant_hole["faces"] as PackedVector3Array).size() / 3:
+		var faces: PackedVector3Array = distant_hole["faces"]
+		var a := faces[triangle * 3]
+		var b := faces[triangle * 3 + 1]
+		var c := faces[triangle * 3 + 2]
+		if not (is_equal_approx(a.y, b.y) and is_equal_approx(b.y, c.y)):
+			walls += 1
+	assert(walls > 0, "and its rim still has a wall around it")
+
+
+## A retained mesher re-emits only the bands an edit reached (§11). Whatever it
+## produces has to be the same surface a mesher that knew nothing would have
+## produced — otherwise the ground drifts away from the data one brush stroke at
+## a time, and nothing would ever say so.
+static func _test_delta_rebuild_matches_a_full_one() -> void:
+	var grid := _make_grid()
+	for z in 16:
+		for x in 16:
+			grid.set_height(Vector2i(x, z), (x * 7 + z * 3) % 4)
+	grid.take_dirty_chunks()
+
+	var mesher := TerrainChunkMesher.new()
+	mesher.configure(grid, INNER_CHUNK)
+	mesher.build(TerrainChunkMesher.Lod.FULL, TerrainChunkMesher.FULL_BOUNDS)
+
+	# A scatter of edits, each committed through the delta path only.
+	for edit: Vector2i in [Vector2i(3, 2), Vector2i(9, 9), Vector2i(1, 14), Vector2i(15, 0), Vector2i(7, 7)]:
+		grid.set_height(edit, grid.height_of(edit) + 2)
+		var bounds: Dictionary = {}
+		grid.take_dirty_chunks(bounds)
+		mesher.build(TerrainChunkMesher.Lod.FULL, bounds[INNER_CHUNK])
+	var incremental := mesher.build(TerrainChunkMesher.Lod.FULL, Vector4i(7, 7, 7, 7))
+	var reference := TerrainChunkMesher.build_chunk(grid, INNER_CHUNK, TerrainChunkMesher.Lod.FULL)
+
+	# Band-limited merging can split a quad the full pass keeps whole, so triangle
+	# counts may differ; the SURFACE may not. Every column has to be covered, at
+	# the height the grid says, by both.
+	for local_z in 16:
+		for local_x in 16:
+			var centre := Vector2(float(local_x) + 0.5, float(local_z) + 0.5)
+			var from_delta := _surface_over(incremental, centre)
+			var from_full := _surface_over(reference, centre)
+			assert(not is_inf(from_delta), "the delta path leaves no hole in the ground")
+			assert(absf(from_delta - from_full) < 0.001, "and puts the surface where a full rebuild does")
+			assert(absf(from_delta - grid.height_at(Vector3(centre.x, 0.0, centre.y))) < 0.001)

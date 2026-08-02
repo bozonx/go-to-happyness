@@ -29,7 +29,9 @@ func _measure_board(board: int) -> void:
 	var vertices := 0
 	var faces := 0
 	for chunk: Vector2i in chunks:
-		var result := TerrainChunkMesher.build_chunk(grid, chunk, TerrainChunkMesher.Lod.FULL)
+		# As the game and the map editor actually configure it: every smoothing
+		# treatment off, so the mesh carries no data the shader will not read.
+		var result := TerrainChunkMesher.build_chunk(grid, chunk, TerrainChunkMesher.Lod.FULL, false)
 		var mesh: ArrayMesh = result["mesh"]
 		if mesh != null:
 			for surface in mesh.get_surface_count():
@@ -45,7 +47,7 @@ func _measure_board(board: int) -> void:
 	flat.configure(1.0, board, 0, TerrainMaterialCatalog.DEFAULT_MATERIAL)
 	start = Time.get_ticks_usec()
 	for chunk: Vector2i in flat.chunk_coords():
-		TerrainChunkMesher.build_chunk(flat, chunk, TerrainChunkMesher.Lod.FULL)
+		TerrainChunkMesher.build_chunk(flat, chunk, TerrainChunkMesher.Lod.FULL, false)
 	print("board %d flat: mesh %.1f ms total" % [board, (Time.get_ticks_usec() - start) / 1000.0])
 
 	# Grass on the hilly board.

@@ -19,6 +19,10 @@ var pending_editor_map: StringName = &""
 ## In-memory hand-off for F5 from the map editor. It is intentionally not a
 ## save: a test run must see unsaved edits and must not mutate the document.
 var pending_editor_document: MapDocument = null
+## Opaque editor state handed back on return from a test run (§12: the editor
+## comes back the way it left). The launcher never reads it; the editor that set
+## it is the only thing that knows what is in there.
+var pending_editor_state: Dictionary = {}
 ## Where `Esc` returns when the session was started as a test run. Empty means
 ## the session came from the library, and `Esc` goes back to the main menu.
 var editor_return_scene := ""
@@ -38,6 +42,7 @@ func launch_game_definition(
 	pending_save_path = ""
 	editor_return_scene = ""
 	pending_editor_document = null
+	pending_editor_state = {}
 	var definition := GameModuleRegistry.resolve_definition(definition_key)
 	if definition == null:
 		push_error("[launch] game definition is unavailable: %s" % definition_key)
@@ -54,11 +59,22 @@ func launch_game_definition(
 ## Test run from an editor. The session is identical to a library launch; the
 ## only difference is that `Esc` returns the author to the editor they came from
 ## instead of dropping them into the main menu.
+##
+## `spawn_override` is the "test from here" variant: the party starts at the
+## given world position instead of the map's authored spawn points, and the
+## document is not touched by it. `Vector3.INF` means the map decides, which is
+## the plain `F5`.
+##
+## `editor_state` is whatever the editor needs to find itself again on return
+## (its file path, for one). It is opaque here on purpose: the launcher has no
+## business knowing what a map editor keeps.
 func launch_editor_test(
 	definition_key: StringName,
 	document: MapDocument,
 	return_scene: String,
 	map_ref: StringName = &"editor:preview",
+	spawn_override := Vector3.INF,
+	editor_state: Dictionary = {},
 ) -> void:
 	if document == null:
 		push_warning("[launch] тест-запуск отменён: карта отсутствует")
@@ -69,8 +85,10 @@ func launch_editor_test(
 		return
 	pending_save_path = ""
 	pending_editor_document = document
+	pending_editor_state = editor_state.duplicate(true)
 	editor_return_scene = return_scene
 	active_session = GameSessionConfig.create(definition, map_ref, document)
+	active_session.spawn_override = spawn_override
 	get_tree().change_scene_to_file(GAME_RUNTIME_SCENE)
 
 

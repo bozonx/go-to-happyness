@@ -59,6 +59,7 @@ const PLANNED_MODES: Array = []
 @onready var _render_mode_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/RenderModeButton
 @onready var _validate_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/ValidateButton
 @onready var _test_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/TestButton
+@onready var _test_here_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/TestHereButton
 @onready var _dialogs: MapEditorDialogs = $UI/Dialogs
 
 var document: MapDocument
@@ -145,7 +146,12 @@ func _open_requested_map() -> void:
 	if launch_manager.get("pending_editor_document") is MapDocument:
 		document = launch_manager.get("pending_editor_document") as MapDocument
 		launch_manager.set("pending_editor_document", null)
-		current_path = ""
+		# The document comes back attached to the file it came from. Dropping the
+		# path here made `Ctrl+S` after a test run open Save As and offer to write
+		# a second copy of a map that already had one.
+		var state: Dictionary = launch_manager.get("pending_editor_state")
+		current_path = String(state.get("current_path", ""))
+		launch_manager.set("pending_editor_state", {})
 		_message = "возврат из тест-запуска · несохранённые правки сохранены"
 		return
 	var requested: StringName = launch_manager.get("pending_editor_map")
@@ -336,7 +342,7 @@ func _replace_document(next: MapDocument, path: String) -> void:
 func _build_modes() -> void:
 	_modes = [
 		TerrainModeController.new(), SurfaceModeController.new(), WaterModeController.new(),
-		EntitiesModeController.new(), FillModeController.new(), ScenarioModeController.new(),
+		MapZonesModeController.new(), FillModeController.new(), ScenarioModeController.new(),
 	]
 	for mode: MapEditorMode in _modes:
 		mode.configure(_context)
@@ -387,8 +393,8 @@ func _update_shortcut_tooltip() -> void:
 		text += "Поверхность:\n• B — вариант · U/J — износ / снег · Shift+ЛКМ — пипетка"
 	elif _active.id == &"fill":
 		text += "Наполнение:\n• ЛКМ — разместить или выбрать объект\n• Ctrl+ЛКМ — добавить к выделению\n• Shift+ЛКМ — пипетка со всеми свойствами\n• R / Shift+R — повернуть вправо / влево\n• Delete / Shift+ПКМ — удалить\n• Список справа поддерживает Ctrl-выделение и фокусирует камеру"
-	elif _active.id == &"entities":
-		text += "Зоны и спавн:\n• ЛКМ — создать зону или спавн · Del — удалить"
+	elif _active.id == &"zones":
+		text += "Зоны и точки:\n• Q / W / E — область, точка, маршрут · Tab — роль\n• ЛКМ — создать или выбрать · Shift+ПКМ — стереть\n• F — повернуть точку · Del — удалить выделенное\n• Esc — снять выделение, затем режим выбора\n• Shift+F5 — тест-запуск из клетки под курсором"
 	_shortcut_tooltip.shortcuts_text = text
 	var label: Label = _shortcut_tooltip.get_node_or_null("Popup/Margin/Label")
 	if label != null:
@@ -421,8 +427,10 @@ func _connect_ui() -> void:
 	_render_mode_button.pressed.connect(_cycle_render_mode)
 	_validate_button.pressed.connect(_validate_map)
 	_test_button.pressed.connect(_test_run)
+	_test_here_button.pressed.connect(_test_run_from_cursor)
 	_validate_button.disabled = false
 	_test_button.disabled = false
+	_test_here_button.disabled = false
 	_dialogs.create_requested.connect(_on_create_requested)
 	_dialogs.open_requested.connect(_on_open_requested)
 	_dialogs.save_as_requested.connect(_on_save_as_requested)
@@ -664,7 +672,7 @@ func _handle_key(event: InputEventKey) -> void:
 		return
 	match event.keycode:
 		KEY_F5:
-			_test_run()
+			_test_run_from_cursor() if event.shift_pressed else _test_run()
 			return
 		KEY_G:
 			_cycle_render_mode()
@@ -725,6 +733,26 @@ func _validate_map() -> Dictionary:
 ## F5 runs the definition selected in the map header. New and legacy maps default
 ## to World Showcase, so authoring terrain never silently creates Settlement.
 func _test_run() -> void:
+	_launch_test_run(Vector3.INF)
+
+
+## Shift+F5 — the same run, started at the cell under the cursor (§12). The map's
+## `core:hero_start` is left exactly where the author drew it: checking a far
+## corner used to mean dragging the party start there and remembering to drag it
+## back, and the map came out of the check edited.
+func _test_run_from_cursor() -> void:
+	var brush := _active.hover_brush() if _active != null else null
+	if brush == null or not brush.has_hover:
+		_message = "тест-запуск отсюда: наведите курсор на клетку карты"
+		_message_is_error = true
+		_refresh_panels()
+		return
+	var cell := brush.hovered_cell
+	_launch_test_run(MapSpawnService.cell_to_world(
+		cell, float(document.terrain.height_of(cell)), document.meta.cell_size))
+
+
+func _launch_test_run(spawn_override: Vector3) -> void:
 	var result := _validate_map()
 	if not (result["errors"] as Array).is_empty():
 		return
@@ -735,15 +763,22 @@ func _test_run() -> void:
 	# `core:companion_start` for the starting party; that gate lives in the
 	# module and used to fail silently after launch_editor_test changed scenes.
 	# Run it here so the author sees the problem in the status bar instead of a
-	# black screen.
-	var session_errors := _test_run_service.validate_session(document, definition_key)
+	# black screen. A "from here" run supplies the party start itself and is
+	# therefore exempt — that is the whole point of it.
+	var session_errors := _test_run_service.validate_session(
+		document, definition_key, spawn_override != Vector3.INF)
 	if not session_errors.is_empty():
 		_message = "тест-запуск невозможен: %s" % "; ".join(session_errors)
+		_message_is_error = true
 		_refresh_panels()
 		return
 	if launch_manager.has_method("launch_editor_test"):
+		# The editor's own file binding travels with the launch: without it the
+		# document came back detached and the next Ctrl+S silently turned into
+		# Save As (§12: the editor returns as it left).
 		launch_manager.call("launch_editor_test", definition_key, document,
-			RuntimeLaunchManager.MAP_EDITOR_SCENE)
+			RuntimeLaunchManager.MAP_EDITOR_SCENE, &"editor:preview", spawn_override,
+			{"current_path": current_path})
 
 
 ## Every committed ground edit becomes exactly one command, recorded here rather

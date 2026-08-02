@@ -27,6 +27,10 @@ var map_ref: StringName = &"core:green_valley"
 ## The loaded package. `RuntimeLaunchManager` fills it from `map_ref` before the
 ## scene changes, so the bootstrap never waits on disk mid-startup.
 var map_document: MapDocument = null
+## Editor test run only, copied from `GameSessionConfig`: the party starts here
+## instead of at the map's authored spawn points. `Vector3.INF` means "use the
+## map", which is every launch that is not a test run.
+var spawn_override := Vector3.INF
 var starting_money: int = 500
 var starting_wellbeing: int = 75
 var starting_population: int = 4
@@ -45,6 +49,10 @@ static func for_tent_era() -> GameLaunchConfig:
 	config.starting_wellbeing = 75
 	config.starting_population = 4
 	return config
+
+
+func has_spawn_override() -> bool:
+	return spawn_override != Vector3.INF
 
 
 ## Board size of this session. It is authored by the selected map.

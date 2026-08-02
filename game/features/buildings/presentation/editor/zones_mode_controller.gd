@@ -18,24 +18,13 @@ const TOOL_AREA := &"area"
 const TOOL_POINT := &"point"
 const TOOL_NONE := &"none"
 
-const AREA_COLORS: Array[Color] = [
-	Color(0.35, 0.75, 1.0), Color(1.0, 0.7, 0.3), Color(0.6, 1.0, 0.5),
-	Color(1.0, 0.5, 0.8), Color(0.8, 0.8, 0.4), Color(0.5, 0.9, 0.9),
-]
-const OVERLAY_COLOR := Color(1.0, 0.35, 0.35)
-const SELECTION_COLOR := Color(1.0, 1.0, 1.0)
-
-## Marker size and colour per anchor role, so a glance at the 3D view tells the
-## author what is where without selecting anything.
-const ANCHOR_STYLE: Dictionary = {
-	&"door": {"color": Color(1.0, 0.55, 0.2), "size": Vector3(0.5, 1.8, 0.5)},
-	&"slot": {"color": Color(0.4, 1.0, 0.4), "size": Vector3(0.45, 1.2, 0.45)},
-	&"queue": {"color": Color(0.9, 0.9, 0.4), "size": Vector3(0.35, 0.6, 0.35)},
-	&"storage": {"color": Color(0.4, 0.8, 1.0), "size": Vector3(0.7, 0.3, 0.7)},
-	&"spawn": {"color": Color(0.8, 0.5, 1.0), "size": Vector3(0.5, 0.9, 0.5)},
-	&"waypoint": {"color": Color(0.7, 0.7, 0.7), "size": Vector3(0.3, 0.5, 0.3)},
-	&"poi": {"color": Color(1.0, 0.8, 0.6), "size": Vector3(0.4, 0.9, 0.4)},
-}
+## Colours and marker sizes are shared with the map editor's zones mode
+## (`ZoneMarkerStyle`): the model is one for both editors, and a waypoint that
+## looks different in each costs the author exactly what the shared model bought.
+const AREA_COLORS := ZoneMarkerStyle.AREA_COLORS
+const OVERLAY_COLOR := ZoneMarkerStyle.OVERLAY_COLOR
+const SELECTION_COLOR := ZoneMarkerStyle.SELECTION_COLOR
+const ANCHOR_STYLE := ZoneMarkerStyle.ANCHOR_STYLE
 
 var _editor: Node = null
 var _zones_visual_root: Node3D = null
@@ -457,11 +446,10 @@ func _update_drag_preview() -> void:
 	var to_cell := _cursor_cell_2d()
 	# Clamp to building footprint so the preview stays inside the bounds.
 	var fp: Vector2i = _editor.blueprint.footprint
-	from_cell.x = clampi(from_cell.x, 0, fp.x - 1)
-	from_cell.y = clampi(from_cell.y, 0, fp.y - 1)
-	to_cell.x = clampi(to_cell.x, 0, fp.x - 1)
-	to_cell.y = clampi(to_cell.y, 0, fp.y - 1)
-	var rect := Rect2i(from_cell, Vector2i.ONE).merge(Rect2i(to_cell, Vector2i.ONE))
+	# One helper for the preview and for the commit, so what the author sees under
+	# the cursor is exactly the rectangle that lands in the document.
+	var rect := ZoneAuthoring.rect_from_drag(
+		from_cell, to_cell, Vector2i.ZERO, fp - Vector2i.ONE)
 	var w := float(rect.size.x)
 	var d := float(rect.size.y)
 	var mesh := BoxMesh.new()
@@ -650,11 +638,10 @@ func _commit_area_rect(from_cell: Vector2i, to_cell: Vector2i) -> void:
 	if not _editor.cursor_valid:
 		return
 	var fp: Vector2i = _editor.blueprint.footprint
-	from_cell.x = clampi(from_cell.x, 0, fp.x - 1)
-	from_cell.y = clampi(from_cell.y, 0, fp.y - 1)
-	to_cell.x = clampi(to_cell.x, 0, fp.x - 1)
-	to_cell.y = clampi(to_cell.y, 0, fp.y - 1)
-	var rect := Rect2i(from_cell, Vector2i.ONE).merge(Rect2i(to_cell, Vector2i.ONE))
+	# One helper for the preview and for the commit, so what the author sees under
+	# the cursor is exactly the rectangle that lands in the document.
+	var rect := ZoneAuthoring.rect_from_drag(
+		from_cell, to_cell, Vector2i.ZERO, fp - Vector2i.ONE)
 	var area := _selected_area() if _append_area_check.button_pressed else null
 	if area == null or area.role != _area_role:
 		area = _create_area()
@@ -831,11 +818,7 @@ func _anchor_cursor_in_bounds(role: StringName) -> bool:
 
 
 func _next_queue_index(target_id: StringName) -> int:
-	var index := 0
-	for anchor in _editor.blueprint.anchors:
-		if anchor.is_queue() and anchor.target_id == target_id:
-			index = maxi(index, anchor.index + 1)
-	return index
+	return ZoneAuthoring.next_queue_index(_editor.blueprint.anchors, target_id)
 
 
 func _erase_once_at_cursor() -> void:
@@ -1045,58 +1028,31 @@ func _delete_selection() -> void:
 ## Deleting an area cascades to everything it owns — orphaned anchors and
 ## fixtures are the invariant this rule exists to protect (active_zones.md §7.7).
 func _remove_area(area: ZoneAreaRecord) -> void:
-	var removed_anchor_ids: Array[StringName] = []
-	var kept_anchors: Array[ZoneAnchorRecord] = []
-	for anchor in _editor.blueprint.anchors:
-		if anchor.owner_id != area.id:
-			kept_anchors.append(anchor)
-		else:
-			removed_anchor_ids.append(anchor.id)
-	_editor.blueprint.anchors = kept_anchors
+	# Anchors, queues and route stops are the shared half of the cascade; fixtures
+	# and fill objects are the building's own and stay here.
 	for fixture in _editor.blueprint.fixtures:
 		if fixture.owner_zone_id == area.id:
 			fixture.owner_zone_id = &""
 	for fill_object in _editor.blueprint.objects:
 		if fill_object.owner_zone_id == area.id:
 			fill_object.owner_zone_id = &""
-	_editor.blueprint.areas.erase(area)
-	_remove_route_stops(removed_anchor_ids)
+	ZoneAuthoring.remove_area_cascade(
+		_editor.blueprint.areas, _editor.blueprint.anchors, _editor.blueprint.routes, area.id)
 	_clear_selection()
 	_editor.mark_dirty()
 	_refresh_all()
 
 
 func _remove_anchor(anchor: ZoneAnchorRecord) -> void:
-	# A queue pointing at a deleted slot would be a dangling reference.
-	if anchor.is_slot():
-		var kept: Array[ZoneAnchorRecord] = []
-		for other in _editor.blueprint.anchors:
-			if not (other.is_queue() and other.target_id == anchor.id):
-				kept.append(other)
-		_editor.blueprint.anchors = kept
-	_editor.blueprint.anchors.erase(anchor)
-	_remove_route_stops([anchor.id])
+	ZoneAuthoring.remove_anchor_cascade(
+		_editor.blueprint.anchors, _editor.blueprint.routes, anchor.id)
 	_clear_selection()
 	_editor.mark_dirty()
 	_refresh_all()
 
 
-func _remove_route_stops(anchor_ids: Array[StringName]) -> void:
-	var kept_routes: Array[ZoneRouteRecord] = []
-	for route in _editor.blueprint.routes:
-		for anchor_id in anchor_ids:
-			while anchor_id in route.stops:
-				route.stops.erase(anchor_id)
-		if route.stops.size() >= 2:
-			kept_routes.append(route)
-	_editor.blueprint.routes = kept_routes
-
-
 func _unique_id(prefix: String, taken: Callable) -> StringName:
-	var index := 1
-	while taken.call(StringName("%s_%d" % [prefix, index])):
-		index += 1
-	return StringName("%s_%d" % [prefix, index])
+	return ZoneAuthoring.unique_id(prefix, taken)
 
 
 # ---------------------------------------------------------------------------
@@ -1674,7 +1630,7 @@ func _on_inspector_role_selected(index: int) -> void:
 					_editor.blueprint.anchors.erase(other)
 			if role not in [ZoneAnchorRecord.ROLE_WAYPOINT,
 					ZoneAnchorRecord.ROLE_SLOT, ZoneAnchorRecord.ROLE_DOOR]:
-				_remove_route_stops([anchor.id])
+				ZoneAuthoring.remove_route_stops(_editor.blueprint.routes, [anchor.id])
 			anchor.role = role
 			if not anchor.is_slot():
 				anchor.activity = &""

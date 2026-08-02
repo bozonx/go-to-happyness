@@ -96,3 +96,8 @@ tooltip_text = "Проверить карту"
 custom_minimum_size = Vector2(38, 0)
 text = "▶"
 tooltip_text = "Тест-запуск World Showcase (F5)"
+
+[node name="TestHereButton" type="Button" parent="Margin/Scroll/Row"]
+custom_minimum_size = Vector2(38, 0)
+text = "▶⌖"
+tooltip_text = "Тест-запуск из клетки под курсором (Shift+F5). Старт героя на карте не меняется"

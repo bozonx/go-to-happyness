@@ -30,8 +30,7 @@ const INSPECTOR_NAV_OVERLAY := &"nav_overlay"
 ## What a map has to be checked against: what a citizen can climb, and what a
 ## loaded cart can. A ramp only a walker can use is a supply route that silently
 ## is not one.
-# Keep in sync with terrain_lab.gd — GDScript const cannot reference another
-# class's const array.
+## The terrain laboratory reads this list rather than restating it.
 const NAV_PROFILES: Array[StringName] = [&"pedestrian", &"cart"]
 
 ## Sub-tools of the mode, cycled with `Tab`.

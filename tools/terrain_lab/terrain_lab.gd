@@ -80,9 +80,10 @@ var _replaying_history := false
 ## Profiles worth checking a map against: what a citizen can climb, and what a
 ## loaded cart can. A ramp that only a walker can use is a supply route that
 ## silently is not one.
-# Keep in sync with terrain_mode_controller.gd — GDScript const cannot reference
-# another class's const array.
-const NAV_PROFILES: Array[StringName] = [&"pedestrian", &"cart"]
+## Read from the map editor's mode rather than restated: two copies of the list a
+## map is validated against drift, and the one that drifts is the one nobody runs.
+## A `var` because a `const` cannot initialise from another class.
+var NAV_PROFILES: Array[StringName] = TerrainModeController.NAV_PROFILES
 var _nav_profile_index := 0
 
 var _camera_target := Vector3(0.0, 0.0, 0.0)
@@ -235,6 +236,12 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 
 func _handle_key(event: InputEventKey) -> void:
 	match event.keycode:
+		KEY_MINUS:
+			brush.cycle_brush_shape()
+			brush.last_message = "форма кисти: %s" % brush.brush_shape_name()
+		KEY_EQUAL:
+			brush.cycle_brush_falloff()
+			brush.last_message = "спад кисти: %s" % brush.brush_falloff_name()
 		KEY_F:
 			brush.apply_flatten()
 		KEY_P:
@@ -458,16 +465,18 @@ func _update_hud() -> void:
 	else:
 		lines.append("cell —")
 		lines.append("surface —")
-	lines.append("mode %s  brush %d  paint %s/%s (page %d)  ramp %s → %s" % [
+	lines.append("mode %s  brush %d %s/%s  paint %s/%s (page %d)  ramp %s → %s" % [
 		TerrainEditOperation.mode_name(brush.edit_mode).to_upper(), brush.brush_size,
+		brush.brush_shape_name(), brush.brush_falloff_name(),
 		brush.material_id(),
 		TerrainMaterialVariants.variant_name(brush.material_index, brush.variant),
 		_material_page + 1,
 		SlopeCatalog.id_of_class(brush.ramp_class), TerrainBrushController.direction_name(brush.ramp_direction),
 	])
 	lines.append(_palette_line())
-	lines.append("undo %d  redo %d  |  pending chunks: %d" % [
+	lines.append("undo %d  redo %d  |  pending chunks: %d  grass: %d" % [
 		service.undo_depth(), service.redo_depth(), terrain.pending_chunk_count(),
+		terrain.pending_grass_count(),
 	])
 	lines.append(_water_line())
 	lines.append(_nav_line())
@@ -520,9 +529,11 @@ func _process_capture() -> void:
 				_setup_grass_scene()
 			&"medium_grass":
 				_setup_medium_grass_scene()
-		# A capture has three frames to settle, and the chunk budget rebuilds two
-		# per frame — a fresh board would be photographed half-meshed.
-		terrain.rebuild_pending_now()
+		# A capture has three frames to settle and both queues are budgeted, so a
+		# fresh board would be photographed half-meshed and bald. Grass is deferred
+		# out of the load path on purpose; a screenshot is the one caller that has
+		# to wait for it.
+		terrain.rebuild_everything_now()
 		var nav_profile: StringName = view.get("nav", &"")
 		nav_overlay.visible = not nav_profile.is_empty()
 		if nav_overlay.visible:

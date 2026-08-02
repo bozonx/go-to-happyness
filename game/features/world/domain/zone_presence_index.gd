@@ -32,7 +32,8 @@ func rebuild(zones: MapZoneLayer, board_cells: int) -> void:
 		if area.is_overlay():
 			continue
 		for cell in area.footprint_cells():
-			if cell.x < 0 or cell.y < 0 or cell.x >= board_cells or cell.y >= board_cells:
+			# Board cells are centred on the origin (`MapZoneLayer.is_board_cell`).
+			if not MapZoneLayer.is_board_cell(cell, board_cells):
 				continue
 			var ids: Array = _areas_at_cell.get(cell, [])
 			ids.append(area.id)

@@ -21,22 +21,57 @@ func create_citizens() -> void:
 		push_error("[spawn] SettlementGame requires map-authored party spawn points")
 		return
 	var spawns := MapSpawnService.new()
-	var hero_spawn := spawns.hero_spawn_position(map_document.zones)
-	var companion_spawns := spawns.companion_spawn_positions(map_document.zones)
-	if hero_spawn == Vector3.INF or companion_spawns.size() < game.POPULATION - 1:
-		push_error("[spawn] Map needs one core:hero_start and %d core:companion_start anchors" % (game.POPULATION - 1))
-		return
+	var cell_size := map_document.meta.cell_size
+	var starts: Array[Vector3] = []
+	var facing := 0.0
+	if game.launch_config.has_spawn_override():
+		# Editor test run "from here" (map_editor.md §12): the author asked to
+		# start at a cell without moving the map's authored `core:hero_start`, so
+		# the party is laid out around that cell and the document is not touched.
+		starts = _party_ring(game.launch_config.spawn_override, cell_size, game.POPULATION)
+	else:
+		var hero_spawn := spawns.hero_spawn_position(map_document.zones, cell_size)
+		var companion_spawns := spawns.companion_spawn_positions(map_document.zones, cell_size)
+		if hero_spawn == Vector3.INF or companion_spawns.size() < game.POPULATION - 1:
+			push_error("[spawn] Map needs one core:hero_start and %d core:companion_start anchors" % (game.POPULATION - 1))
+			return
+		facing = spawns.hero_spawn_facing(map_document.zones)
+		starts.append(hero_spawn)
+		starts.append_array(companion_spawns.slice(0, game.POPULATION - 1))
 	for index in range(game.POPULATION):
-		var spawn_position: Vector3 = hero_spawn if index == 0 else companion_spawns[index - 1]
+		var spawn_position: Vector3 = starts[index]
 		var terrain_height := game.terrain_height_at(spawn_position.x, spawn_position.z, 0.0)
 		if not is_nan(terrain_height):
 			spawn_position.y = terrain_height + 0.08
 		add_citizen(spawn_position, "unassigned")
+	# The hero looks the way the author drew the spawn point; the rest of the
+	# party takes the same bearing so a party start reads as one group.
+	if not is_zero_approx(facing):
+		for citizen in game.citizens:
+			citizen.rotation.y = deg_to_rad(facing)
 	if not game.citizens.is_empty():
 		game.citizens[game.random.randi_range(0, game.citizens.size() - 1)].is_jack_of_all_trades = true
 	if game.hero_citizen != null:
 		for citizen in game.citizens:
 			citizen.set_squad(&"hero_squad", game.hero_citizen.ai_id, true)
+
+
+## Party layout for a spawn override: the hero on the requested cell, everyone
+## else on the ring of cells around it. Deliberately trivial — a test run is a
+## look at the map, not a scenario, and an authored map still places every member
+## by hand.
+func _party_ring(centre: Vector3, cell_size: float, population: int) -> Array[Vector3]:
+	const RING: Array[Vector2i] = [
+		Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1),
+		Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(-1, -1),
+	]
+	var starts: Array[Vector3] = []
+	for index in range(population):
+		var offset := RING[index % RING.size()]
+		var lap := index / RING.size() + 1
+		starts.append(centre + Vector3(
+			float(offset.x) * cell_size * lap, 0.0, float(offset.y) * cell_size * lap))
+	return starts
 
 
 func bind_hero_squad_to_settlement(squad_settlement_id: StringName) -> void:

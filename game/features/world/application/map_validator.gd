@@ -74,10 +74,16 @@ static func _validate_coverage(
 ## Launch-time party validation. `validate` stays reusable by the editor, where
 ## the intended population is not necessarily known; the game supplies its
 ## actual party size immediately before bootstrapping a session.
-static func validate_party_spawns(document: MapDocument, population: int) -> Array[String]:
+## `spawn_override` is the editor's "test from here" launch (`map_editor.md` §12).
+## It supplies the party start itself, so demanding authored anchors on top of it
+## would make the one feature that exists to skip authoring impossible to use on
+## a half-drawn map.
+static func validate_party_spawns(document: MapDocument, population: int, spawn_override := false) -> Array[String]:
 	var errors: Array[String] = []
 	if document == null:
 		errors.append("для запуска нужна карта")
+		return errors
+	if spawn_override:
 		return errors
 	var spawns := MapSpawnService.new()
 	if spawns.hero_spawn_position(document.zones) == Vector3.INF:

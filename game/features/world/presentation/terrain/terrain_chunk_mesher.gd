@@ -178,10 +178,10 @@ var _wall_far_bottom := 0.0
 ## "cliff_surface": int }`; `mesh` is null for a chunk that produced no geometry
 ## (fully carved out, or entirely outside the board), and a surface index is -1
 ## when that surface is empty.
-static func build_chunk(grid: TerrainGrid, chunk: Vector2i, lod: int = Lod.FULL) -> Dictionary:
+static func build_chunk(grid: TerrainGrid, chunk: Vector2i, lod: int = Lod.FULL, encode_shading: bool = true) -> Dictionary:
 	var mesher := TerrainChunkMesher.new()
 	mesher.configure(grid, chunk)
-	return mesher.build(lod, FULL_BOUNDS)
+	return mesher.build(lod, FULL_BOUNDS, encode_shading)
 
 
 func configure(grid: TerrainGrid, chunk: Vector2i) -> void:

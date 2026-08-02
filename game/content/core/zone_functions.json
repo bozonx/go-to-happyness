@@ -124,6 +124,16 @@
 		{"id": "rest", "label": "Отдых", "scope": "activity"},
 		{"id": "main_entrance", "label": "Главный вход", "scope": "anchor", "roles": ["door"]},
 		{"id": "hero_start", "label": "Старт героя", "scope": "anchor", "roles": ["spawn"]},
+		{"id": "companion_start", "label": "Старт жителя", "scope": "anchor", "roles": ["spawn"]},
+		{
+			"id": "spawn_area",
+			"label": "Зона появления",
+			"scope": "area",
+			"roles": ["region"],
+			"properties": [
+				{"key": "tag", "label": "Метка", "type": "string", "default": ""}
+			]
+		},
 		{
 			"id": "interaction_point",
 			"label": "Точка взаимодействия",

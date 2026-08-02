@@ -83,6 +83,19 @@ func referenced_flags() -> Array[StringName]:
 	return names
 
 
+## Follows a zone through a rename in the zones mode. An id is what a rule
+## addresses a zone by (`active_zones.md` §6), so renaming an area without this
+## turns every rule pointing at it into a rule that never fires — the one failure
+## an author cannot see from inside the game. Returns how many rules moved.
+func rename_zone(from_id: StringName, to_id: StringName) -> int:
+	var moved := 0
+	for rule: MapRule in rules:
+		if rule.trigger.addresses_zone() and rule.trigger.zone == from_id:
+			rule.trigger.zone = to_id
+			moved += 1
+	return moved
+
+
 ## Zone ids the rule table addresses, so the validator can check they still
 ## exist after an author deletes an area.
 func referenced_zones() -> Array[StringName]:

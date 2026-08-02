@@ -35,7 +35,8 @@ func validate_session(session: GameSessionConfig) -> Array[String]:
 	if not raw is Dictionary:
 		return ["start parameters должны быть объектом"]
 	var launch := _launch_config(session)
-	errors.append_array(MapValidator.validate_party_spawns(launch.map_document, launch.starting_population))
+	errors.append_array(MapValidator.validate_party_spawns(
+		launch.map_document, launch.starting_population, launch.has_spawn_override()))
 	return errors
 
 
@@ -71,6 +72,7 @@ func _launch_config(session: GameSessionConfig) -> GameLaunchConfig:
 	var launch := GameLaunchConfig.for_tent_era()
 	launch.map_ref = session.map_ref
 	launch.map_document = session.map_document
+	launch.spawn_override = session.spawn_override
 	# World style is map-owned. Starting resources and equipment are map-owned too:
 	# they live on the backpack entity. Everything else arrives through the
 	# recursively merged game/map/session parameters.
