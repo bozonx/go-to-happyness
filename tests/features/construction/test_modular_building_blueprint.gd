@@ -72,6 +72,7 @@ func _init() -> void:
 	assert(is_equal_approx(slab_body.rotation_degrees.x, 180.0))
 	slab_body.free()
 	_test_procedural_opening_keeps_its_open_collision()
+	_test_decor_uses_scene_owned_collision()
 	assert(game_blueprint.get("zones", []).size() == 1)
 	assert(game_blueprint.get("blueprint_ref", {}).get("source") == String(TEST_SOURCE))
 	assert(game_blueprint.get("blueprint_ref", {}).get("role") == String(TEST_ID))
@@ -102,6 +103,22 @@ func _test_procedural_opening_keeps_its_open_collision() -> void:
 	var collision := body.get_node("CollisionShape3D") as CollisionShape3D
 	assert(collision.shape is ConcavePolygonShape3D,
 		"an arch must use its mesh collision instead of a box that seals the opening")
+	body.free()
+
+
+func _test_decor_uses_scene_owned_collision() -> void:
+	var body := BuildingBlueprintsScript.create_module({
+		"position": Vector3.ZERO,
+		"asset_id": &"flag",
+		"kind": "decor",
+	})
+	assert(body != null)
+	var wrapper_shape := body.get_node("CollisionShape3D") as CollisionShape3D
+	assert(wrapper_shape.shape == null, "building wrapper must not invent decor collision")
+	var authored := body.find_children("*", "CollisionShape3D", true, false)
+	assert(authored.any(func(node: Node) -> bool:
+		return node != wrapper_shape and node is CollisionShape3D and (node as CollisionShape3D).shape != null),
+		"decor asset scene owns the physical collision")
 	body.free()
 
 

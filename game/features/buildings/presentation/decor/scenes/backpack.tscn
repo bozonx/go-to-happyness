@@ -39,9 +39,18 @@ roughness = 0.3
 material = SubResource("Mat_buckle")
 size = Vector3(0.06, 0.08, 0.03)
 
+[sub_resource type="BoxShape3D" id="Shape_asset_collision"]
+size = Vector3(0.42, 0.48, 0.3)
+
 [node name="Backpack" type="Node3D"]
 script = ExtResource("1_script")
 asset_id = &"backpack"
+
+[node name="AssetCollision" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="AssetCollision"]
+position = Vector3(0, 0.24, 0)
+shape = SubResource("Shape_asset_collision")
 
 [node name="Body" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.22, 0)

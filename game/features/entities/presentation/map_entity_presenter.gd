@@ -8,12 +8,16 @@ var _views: Dictionary = {}
 ## Firefly placements published to the weather controller. Keyed by entity id so
 ## `clear()` can drop them in lockstep with the views they come from.
 var _firefly_views: Dictionary = {}
+var _runtime: MapEntityRuntime = null
 
 
 func present(runtime: MapEntityRuntime, territory: TerritoryBase) -> void:
 	clear()
 	if runtime == null or territory == null:
 		return
+	_runtime = runtime
+	if not _runtime.entity_changed.is_connected(_on_entity_changed):
+		_runtime.entity_changed.connect(_on_entity_changed)
 	for entity: MapEntityRuntime.RuntimeEntity in runtime.all():
 		if not entity.active:
 			continue
@@ -48,11 +52,34 @@ func firefly_views() -> Array[FirefliesEffect]:
 
 
 func clear() -> void:
+	if _runtime != null and _runtime.entity_changed.is_connected(_on_entity_changed):
+		_runtime.entity_changed.disconnect(_on_entity_changed)
+	_runtime = null
 	for view: Node3D in _views.values():
 		if is_instance_valid(view):
 			view.queue_free()
 	_views.clear()
 	_firefly_views.clear()
+
+
+func _on_entity_changed(entity_id: StringName, change: StringName) -> void:
+	var entity := _runtime.by_id(entity_id) if _runtime != null else null
+	var view := view_for(entity_id)
+	if entity == null or view == null:
+		return
+	if change == &"active":
+		view.visible = entity.active
+		return
+	if change == &"props" and view.has_method("apply_entity_props"):
+		view.call("apply_entity_props", entity.props)
+	if change == &"state":
+		view.set_meta("map_entity_state", entity.state)
+		_apply_state_appearance(view, entity, EntityArchetypeCatalog.asset_of(entity.archetype.id))
+	if change == &"appearance" and view.has_method("apply_decor_properties"):
+		var asset := EntityArchetypeCatalog.asset_of(entity.archetype.id)
+		var values := asset.default_appearance() if asset != null else {}
+		values.merge(entity.appearance, true)
+		view.call("apply_decor_properties", values)
 
 
 func _make_view(entity: MapEntityRuntime.RuntimeEntity) -> Node3D:

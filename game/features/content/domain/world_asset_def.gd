@@ -74,7 +74,11 @@ const SCOPES: Array[StringName] = [SCOPE_BUILDING, SCOPE_MAP, SCOPE_BOTH]
 @export var scale_mode: String = SCALE_LOCKED
 ## Allowed scale values for uniform_steps mode.
 @export var allowed_scales: Array[float] = [1.0]
-## Collision policy (design §4.2): none, box, scene, footprint.
+## Physical collision ownership. Current authored assets use `none` or `scene`:
+## every CollisionShape3D is part of the PackedScene. `box` and `footprint` are
+## accepted only while older content is migrated; runtime never synthesises a
+## physical shape from them. Navigation remains the independent
+## `blocking_navigation` + placement footprint contract.
 @export var collision_policy: String = COLLISION_NONE
 ## Whether this asset blocks navigation routing (separate from physical collision).
 @export var blocking_navigation: bool = false

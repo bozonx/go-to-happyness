@@ -185,7 +185,10 @@ func _setup_ai_and_navigation() -> void:
 	# weights in the same grid (map_editor.md §5.2.3).
 	game.road_network_service = game.world_session.road_network
 	game.navigation_obstacle_publisher = NavigationObstaclePublisher.new()
-	game.navigation_obstacle_publisher.configure(game.nav_grid)
+	game.navigation_obstacle_publisher.configure(
+		game.nav_grid,
+		game.world_session.entity_navigation_blocked_cells,
+	)
 	game.trail_field = TrailFieldService.new()
 	game.trail_field.configure(game.board_cells * SettlementConstants.CELL_SIZE, SettlementConstants.CELL_SIZE, game.nav_grid)
 	game.trail_texture_renderer = TrailTextureRenderer.new()

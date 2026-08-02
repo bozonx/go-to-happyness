@@ -19,6 +19,8 @@ func _init(p_navigation_runtime: WorldNavigationRuntimePort, p_presentation_runt
 	navigation_runtime = p_navigation_runtime
 	presentation_runtime = p_presentation_runtime
 	world_session = p_world_session
+	if world_session != null:
+		world_session.obstacle_refresh_callback = refresh_navigation_grid
 
 
 func create_world() -> void:

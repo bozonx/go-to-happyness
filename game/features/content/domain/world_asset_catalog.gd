@@ -4,13 +4,11 @@ extends RefCounted
 ## Catalog of world asset definitions and their category taxonomy
 ## (design_docs/engine/map_fill_mode.md §3, design_docs/engine/building_furnishing.md §5).
 ##
-## Assets come from three sources, merged by id (later sources win):
-##   1. the built-in definitions below;
-##   2. `WorldAssetDef` resources under `res://game/features/buildings/data/decor`;
-## Player-authored asset definitions will be loaded from project packs when their
-## JSON format and editor are introduced; there is no second loose-file source.
+## The current vertical slice contains the built-in definitions below. Pack-owned
+## asset definitions intentionally wait for their JSON format and first external
+## consumer; there is no dead Resource-directory fallback or second loose-file
+## source for editors to interpret differently.
 
-const BUILTIN_ASSET_DIR := "res://game/features/buildings/data/decor"
 const SCENE_DIR := "res://game/features/buildings/presentation/decor/scenes"
 
 const GROUPS: Dictionary = {
@@ -206,32 +204,6 @@ static func _ensure_catalog() -> void:
 	if not _assets.is_empty():
 		return
 	_register_builtin_assets()
-	_scan_directory(BUILTIN_ASSET_DIR)
-
-
-static func _scan_directory(dir_path: String) -> void:
-	if not DirAccess.dir_exists_absolute(dir_path):
-		return
-	var dir := DirAccess.open(dir_path)
-	if dir == null:
-		return
-	for file_name in dir.get_files():
-		# Exported projects append `.remap` to imported resources; accept both.
-		var clean_name := file_name.trim_suffix(".remap")
-		if not (clean_name.ends_with(".tres") or clean_name.ends_with(".res")):
-			continue
-		var asset := load(dir_path.path_join(clean_name)) as WorldAssetDef
-		if asset == null or asset.id == &"":
-			push_warning("WorldAssetCatalog: skipped invalid asset %s" % clean_name)
-			continue
-		if not CATEGORIES.has(asset.category):
-			push_warning("WorldAssetCatalog: asset %s has unknown category %s" % [asset.id, asset.category])
-			continue
-		if not ResourceLoader.exists(asset.scene_path):
-			push_warning("WorldAssetCatalog: asset %s points at a missing scene %s" % [asset.id, asset.scene_path])
-			continue
-		asset.group = group_of_category(asset.category)
-		_assets[asset.id] = asset
 
 
 static func _register_builtin_assets() -> void:
@@ -278,7 +250,7 @@ static func _register_builtin_assets() -> void:
 	var campfire := _assets[&"campfire"] as WorldAssetDef
 	campfire.tags = [&"fire", &"light", &"cooking", &"outdoor"]
 	campfire.scale_mode = WorldAssetDef.SCALE_LOCKED
-	campfire.collision_policy = WorldAssetDef.COLLISION_FOOTPRINT
+	campfire.collision_policy = WorldAssetDef.COLLISION_SCENE
 	campfire.blocking_navigation = true
 	campfire.supported_capabilities = [&"fire_source", &"cooking_station", &"light_source"]
 	campfire.state_variants = {
@@ -327,7 +299,7 @@ static func _register_builtin_assets() -> void:
 	var cooking := _assets[&"cooking_campfire"] as WorldAssetDef
 	cooking.tags = [&"fire", &"light", &"cooking", &"outdoor"]
 	cooking.scale_mode = WorldAssetDef.SCALE_LOCKED
-	cooking.collision_policy = WorldAssetDef.COLLISION_FOOTPRINT
+	cooking.collision_policy = WorldAssetDef.COLLISION_SCENE
 	cooking.blocking_navigation = true
 	cooking.supported_capabilities = [&"fire_source", &"cooking_station", &"light_source"]
 	cooking.placement = AssetPlacementPolicy.of_surfaces(
@@ -370,7 +342,7 @@ static func _register_builtin_assets() -> void:
 	var sign := _assets[&"entrance_sign"] as WorldAssetDef
 	sign.tags = [&"sign", &"town", &"light"]
 	sign.scale_mode = WorldAssetDef.SCALE_LOCKED
-	sign.collision_policy = WorldAssetDef.COLLISION_BOX
+	sign.collision_policy = WorldAssetDef.COLLISION_SCENE
 	sign.blocking_navigation = true
 	sign.supported_capabilities = [&"light_source"]
 	sign.placement = AssetPlacementPolicy.of_surfaces(
@@ -420,7 +392,7 @@ static func _register_builtin_assets() -> void:
 	flag.tags = [&"town", &"sign"]
 	flag.scale_mode = WorldAssetDef.SCALE_UNIFORM_STEPS
 	flag.allowed_scales = [0.5, 1.0, 2.0]
-	flag.collision_policy = WorldAssetDef.COLLISION_BOX
+	flag.collision_policy = WorldAssetDef.COLLISION_SCENE
 	flag.blocking_navigation = true
 	flag.placement = AssetPlacementPolicy.of_surfaces(
 		[AssetPlacementPolicy.SURFACE_GROUND, AssetPlacementPolicy.SURFACE_ICE],
@@ -453,7 +425,7 @@ static func _register_builtin_assets() -> void:
 	backpack.tags = [&"storage", &"equipment", &"outdoor", &"camping"]
 	backpack.scale_mode = WorldAssetDef.SCALE_UNIFORM_STEPS
 	backpack.allowed_scales = [0.8, 1.0, 1.2, 1.5]
-	backpack.collision_policy = WorldAssetDef.COLLISION_BOX
+	backpack.collision_policy = WorldAssetDef.COLLISION_SCENE
 	backpack.scope = WorldAssetDef.SCOPE_BOTH
 	backpack.placement = AssetPlacementPolicy.of_surfaces(
 		[AssetPlacementPolicy.SURFACE_GROUND, AssetPlacementPolicy.SURFACE_ICE],
@@ -477,7 +449,10 @@ static func _register_natural_assets() -> void:
 		var asset := WorldAssetDef.new(data[0], data[1], data[2], &"world", data[3], Vector3i.ONE, 1.0, [], data[4])
 		asset.scope = WorldAssetDef.SCOPE_MAP if data[0] in [&"rabbit", &"fireflies"] else WorldAssetDef.SCOPE_BOTH
 		asset.rotation_axes = ["y"]
-		asset.collision_policy = WorldAssetDef.COLLISION_SCENE if data[0] != &"fireflies" else WorldAssetDef.COLLISION_NONE
+		# Only a scene that actually authors a physical body may claim scene
+		# collision. Grass/forage interaction selectors are Area3D concerns added by
+		# their owning module, and the current rabbit visual is not a physics actor.
+		asset.collision_policy = WorldAssetDef.COLLISION_SCENE if data[0] == &"tree" else WorldAssetDef.COLLISION_NONE
 		asset.blocking_navigation = bool(data[5])
 		asset.placement = AssetPlacementPolicy.of_surfaces([AssetPlacementPolicy.SURFACE_GROUND, AssetPlacementPolicy.SURFACE_ICE], SlopeCatalog.CLASS_MODERATE)
 		_register(asset)

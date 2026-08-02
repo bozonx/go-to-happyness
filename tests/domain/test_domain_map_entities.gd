@@ -7,6 +7,8 @@ extends RefCounted
 static func run_all() -> void:
 	_test_runtime_resolves_authored_differences()
 	_test_runtime_offsets_entity_from_terrain()
+	_test_runtime_publishes_navigation_footprint()
+	_test_runtime_changes_update_projection()
 	_test_presenter_applies_state_variant()
 	_test_validator_rejects_structural_entity_errors()
 	print("    [PASS] Map Entity Runtime Tests")
@@ -45,6 +47,39 @@ static func _test_runtime_offsets_entity_from_terrain() -> void:
 	var entity := runtime.by_id(&"camp_1")
 	assert(entity != null)
 	assert(is_equal_approx(entity.position.y, 2.25), "entity Y is terrain height plus authored offset")
+
+
+static func _test_runtime_publishes_navigation_footprint() -> void:
+	var document := _document()
+	var runtime := MapEntityRuntime.new()
+	runtime.load_map(document, document.terrain)
+	var cell := document.terrain.cell_from_position(document.entities.entities[0].position)
+	assert(runtime.navigation_blocked_cells(document.terrain).has(cell),
+		"blocking_navigation must reach the generic world obstacle layer")
+
+
+static func _test_runtime_changes_update_projection() -> void:
+	var runtime := MapEntityRuntime.new()
+	runtime.load_map(_document())
+	var territory := TerritoryBase.new()
+	var presenter := MapEntityPresenter.new()
+	presenter.present(runtime, territory)
+	assert(runtime.set_state(&"camp_1", &"cold"))
+	var view := presenter.view_for(&"camp_1")
+	assert(view.get_meta("map_entity_state") == &"cold")
+	assert(not (view.get_node("Fire") as Node3D).visible, "runtime state change updates its view")
+	assert(runtime.set_property(&"camp_1", &"fuel_units", 999))
+	assert(runtime.by_id(&"camp_1").props[&"fuel_units"] == 6, "runtime property writes use schema clamping")
+	assert(runtime.deactivate(&"camp_1") and not view.visible)
+	var snapshot := runtime.lifecycle_snapshot()
+	var restored := MapEntityRuntime.new()
+	restored.load_map(_document())
+	restored.restore_lifecycle(snapshot)
+	assert(restored.by_id(&"camp_1").state == &"cold")
+	assert(not restored.by_id(&"camp_1").active, "entity state survives the core.world save section")
+	presenter.clear()
+	presenter.free()
+	territory.free()
 
 
 static func _test_validator_rejects_structural_entity_errors() -> void:

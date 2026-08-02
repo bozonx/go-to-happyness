@@ -71,7 +71,7 @@ static func _test_area_delete_cascades() -> void:
 	assert(areas.is_empty(), "the area is gone")
 	assert(anchors.size() == 1 and anchors[0].id == &"far_post",
 		"the point it owned and the queue leading to that point went with it")
-	assert(&"post" in removed and &"line_1" in removed, "the cascade reports what it took: %s" % removed)
+	assert(&"post" in removed and &"line_1" in removed, "the cascade reports what it took: %s" % [removed])
 	assert(routes.is_empty(), "a route left with one stop is not a route")
 
 

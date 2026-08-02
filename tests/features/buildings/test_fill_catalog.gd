@@ -44,7 +44,7 @@ func _test_catalog_assets() -> void:
 	# New metadata fields
 	assert(flag.tags.has(&"town"), "Flag must have town tag")
 	assert(flag.scale_mode == WorldAssetDef.SCALE_UNIFORM_STEPS, "Flag must use uniform_steps scale mode")
-	assert(flag.collision_policy == WorldAssetDef.COLLISION_BOX, "Flag must use box collision")
+	assert(flag.collision_policy == WorldAssetDef.COLLISION_SCENE, "Flag collision must be owned by its scene")
 	assert(flag.blocking_navigation == true, "Flag must block navigation")
 	# Campfire capabilities stub
 	assert(campfire.supported_capabilities.has(&"fire_source"), "Campfire must support fire_source capability")
@@ -90,6 +90,13 @@ func _test_asset_scenes_exist() -> void:
 	for asset in WorldAssetCatalog.get_all_assets():
 		assert(ResourceLoader.exists(asset.scene_path), "Missing fill scene: %s" % asset.scene_path)
 		assert(load(asset.scene_path) is PackedScene, "Fill scene failed to load: %s" % asset.scene_path)
+		if asset.collision_policy == WorldAssetDef.COLLISION_SCENE:
+			var instance := (load(asset.scene_path) as PackedScene).instantiate()
+			var shapes := instance.find_children("*", "CollisionShape3D", true, false)
+			assert(shapes.any(func(node: Node) -> bool:
+				return node is CollisionShape3D and (node as CollisionShape3D).shape != null),
+				"Scene-collision asset %s must contain an authored shape" % asset.id)
+			instance.free()
 
 
 ## Every declared binding must point at a node that actually exists, otherwise

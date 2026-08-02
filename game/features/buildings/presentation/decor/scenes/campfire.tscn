@@ -2,6 +2,10 @@
 
 [ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/buildings/presentation/decor/decor_object_controller.gd" id="1_script"]
 
+[sub_resource type="CylinderShape3D" id="Shape_asset_collision"]
+radius = 0.62
+height = 0.44
+
 [sub_resource type="StandardMaterial3D" id="Mat_stone"]
 albedo_color = Color(0.435, 0.455, 0.478, 1)
 roughness = 0.95
@@ -95,6 +99,12 @@ color = Color(1, 0.6, 0.235, 1)
 [node name="Campfire" type="Node3D"]
 script = ExtResource("1_script")
 asset_id = &"campfire"
+
+[node name="AssetCollision" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="AssetCollision"]
+position = Vector3(0, 0.22, 0)
+shape = SubResource("Shape_asset_collision")
 
 [node name="AshBed" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.03, 0)

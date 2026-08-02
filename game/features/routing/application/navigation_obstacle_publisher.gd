@@ -5,14 +5,22 @@ extends RefCounted
 ## NavGrid. Bootstrap supplies facts; it no longer owns grid geometry policy.
 
 var _grid: NavGrid
+var _base_obstacles: Callable
 
 
-func configure(next_grid: NavGrid) -> void:
+func configure(next_grid: NavGrid, base_obstacles := Callable()) -> void:
 	_grid = next_grid
+	_base_obstacles = base_obstacles
 
 
 func publish(terrain_blocked: Dictionary, building_records: Array, service_pockets: Array, clearance_margin: float) -> Dictionary:
-	var blocked := terrain_blocked.duplicate()
+	var blocked: Dictionary[Vector2i, bool] = {}
+	if _base_obstacles.is_valid():
+		var base: Dictionary = _base_obstacles.call()
+		for cell: Vector2i in base:
+			blocked[cell] = true
+	for cell: Vector2i in terrain_blocked:
+		blocked[cell] = true
 	for record in building_records:
 		var center: Vector3 = record.center
 		var footprint: Vector2i = record.footprint

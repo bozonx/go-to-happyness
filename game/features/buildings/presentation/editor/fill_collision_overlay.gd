@@ -2,9 +2,8 @@ class_name FillCollisionOverlay
 extends Node3D
 
 ## Wireframe collision overlay for fill objects (design §4.2 — authoring preview,
-## not runtime). When toggled on, draws translucent boxes for each object whose
-## collision_policy is not "none", and blocking-navigation objects get an
-## additional coloured sphere marker.
+## not runtime). Physical shapes are read from the same asset PackedScene used by
+## the game. The editor never authors or approximates a second collision shape.
 ##
 ## Extracted from BuildingFillModeController to isolate the visual overlay lifecycle.
 
@@ -47,25 +46,8 @@ func _build_for(record: FillObjectRecordScript) -> void:
 	if policy == WorldAssetDef.COLLISION_NONE and not asset.blocking_navigation:
 		return
 	var meshes: Array[MeshInstance3D] = []
-	var size := asset.footprint_m()
-	# Scale the collision box by the object's uniform scale.
-	var scaled_size := size * record.scale.x
-	# Collision box (box or footprint policy).
-	if policy == WorldAssetDef.COLLISION_BOX or policy == WorldAssetDef.COLLISION_FOOTPRINT:
-		var box := MeshInstance3D.new()
-		var mesh := BoxMesh.new()
-		mesh.size = scaled_size
-		box.mesh = mesh
-		var mat := StandardMaterial3D.new()
-		mat.albedo_color = Color(1.0, 0.4, 0.2, 0.3)
-		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-		box.material_override = mat
-		box.position = record.pos
-		box.rotation_degrees = record.rot
-		add_child(box)
-		meshes.append(box)
+	if policy == WorldAssetDef.COLLISION_SCENE:
+		meshes.append_array(_scene_collision_meshes(asset, record))
 	# Blocking-navigation marker: a small red sphere on top.
 	if asset.blocking_navigation:
 		var marker := MeshInstance3D.new()
@@ -78,10 +60,35 @@ func _build_for(record: FillObjectRecordScript) -> void:
 		mat2.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		mat2.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		marker.material_override = mat2
-		marker.position = record.pos + Vector3(0.0, scaled_size.y * 0.5 + 0.15, 0.0)
+		marker.position = record.pos + Vector3(0.0, asset.footprint_m().y * record.scale.x + 0.15, 0.0)
 		add_child(marker)
 		meshes.append(marker)
 	_overlays[record.id] = meshes
+
+
+func _scene_collision_meshes(asset: WorldAssetDef, record: FillObjectRecordScript) -> Array[MeshInstance3D]:
+	var result: Array[MeshInstance3D] = []
+	var packed := load(asset.scene_path) as PackedScene
+	var instance := packed.instantiate() as Node3D if packed != null else null
+	if instance == null:
+		return result
+	for shape_node: Node in instance.find_children("*", "CollisionShape3D", true, false):
+		var collision := shape_node as CollisionShape3D
+		if collision == null or collision.disabled or collision.shape == null:
+			continue
+		var preview := MeshInstance3D.new()
+		preview.mesh = collision.shape.get_debug_mesh()
+		preview.transform = Transform3D(Basis.from_euler(record.rot * PI / 180.0).scaled(record.scale), record.pos) * collision.transform
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color(1.0, 0.4, 0.2, 0.3)
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.cull_mode = BaseMaterial3D.CULL_DISABLED
+		preview.material_override = material
+		add_child(preview)
+		result.append(preview)
+	instance.free()
+	return result
 
 
 func is_empty() -> bool:

@@ -55,9 +55,18 @@ size = Vector3(0.16, 0.2, 0.16)
 material = SubResource("Mat_iron")
 size = Vector3(0.22, 0.05, 0.22)
 
+[sub_resource type="BoxShape3D" id="Shape_asset_collision"]
+size = Vector3(1.45, 1.85, 0.28)
+
 [node name="EntranceSign" type="Node3D"]
 script = ExtResource("1_script")
 asset_id = &"entrance_sign"
+
+[node name="AssetCollision" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="AssetCollision"]
+position = Vector3(0, 0.925, 0)
+shape = SubResource("Shape_asset_collision")
 
 [node name="PostLeft" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.62, 0.78, 0)

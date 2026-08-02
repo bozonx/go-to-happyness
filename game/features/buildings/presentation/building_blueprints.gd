@@ -55,11 +55,10 @@ static func _create_decor_module(module: Dictionary) -> StaticBody3D:
 		mesh_instance.mesh = null
 	var collision := body.get_node("CollisionShape3D") as CollisionShape3D
 	if collision != null:
-		var shape := BoxShape3D.new()
-		var extent := asset.footprint_m()
-		shape.size = extent
-		collision.shape = shape
-		collision.position.y = extent.y * 0.5
+		# Physical geometry belongs to the asset scene.  The module wrapper is only
+		# a transform/ownership adapter; synthesising another box here made `none`,
+		# `scene` and navigation-only footprints behave identically at runtime.
+		collision.shape = null
 	body.add_child(instance)
 	if instance.has_method("apply_decor_properties"):
 		instance.call("apply_decor_properties", module.get("appearance", module.get("properties", {})))

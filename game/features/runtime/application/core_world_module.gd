@@ -42,6 +42,25 @@ func stop(runtime: GameRuntime) -> void:
 		runtime.world_session = null
 
 
+func save_state(runtime: GameRuntime) -> Dictionary:
+	if runtime == null or runtime.world_session == null:
+		return {}
+	return {"entities": runtime.world_session.entity_runtime.lifecycle_snapshot()}
+
+
+func restore_state(runtime: GameRuntime, state: Dictionary) -> bool:
+	if runtime == null or runtime.world_session == null:
+		return false
+	var entities: Variant = state.get("entities", {})
+	if not (entities is Dictionary):
+		return false
+	runtime.world_session.entity_runtime.restore_lifecycle(entities as Dictionary)
+	if runtime.world_session.world_setup != null:
+		runtime.world_session.nav_grid.set_blocked_cells(runtime.world_session.entity_navigation_blocked_cells())
+		runtime.world_session.nav_grid.refresh_connectivity()
+	return true
+
+
 ## A map lists the blueprints, archetypes and assets it embeds
 ## (`content_packaging.md` §13). Starting without them produces a world with
 ## holes in it, which reads as a broken game rather than as missing content, so
