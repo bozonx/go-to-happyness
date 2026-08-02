@@ -29,7 +29,7 @@ Design: [design_docs/citizens/first_person_hero_control.md](../design_docs/citiz
 
 ## Storage & logistics
 
-- **Backpack**: Before the first warehouse is built, resources live in a virtual starter backpack shown separately in the HUD. The backpack never decays, cannot receive new resources after the start, and its consumables (food, water) are used directly by the settlement.
+- **Backpack**: Before the first warehouse is built, resources live in a starter backpack shown separately in the HUD. It never decays, cannot receive new resources after the start, and its consumables (food, water) are used directly by the settlement. Today this is a virtual dictionary seeded from a `core:starter_backpack` entity on the map; the target model replaces both with an ordinary container entity tagged `core:party_stash`, so a chest or a cart works the same way (`design_docs/engine/map_start.md` §6.5).
 - **Migration**: Building the first warehouse automatically moves backpack contents into the new warehouse.
 - **Ground piles**: Dropped resources form piles on the ground. They decay daily based on type and weather:
   - Biological (food, grass, branches, logs, wood, hides): 5% per day, 10% while raining.

@@ -26,6 +26,7 @@
 | Документ | О чём |
 | --- | --- |
 | [map_editor.md](engine/map_editor.md) | Формат `.gdmap`, редактор территорий, режимы, границы карты, правила и undo. |
+| [map_start.md](engine/map_start.md) | Старт сессии: варианты старта, spawn-группы, отряд, стартовое имущество, порядок разрешения параметров, экран запуска. |
 | [map_fill_mode.md](engine/map_fill_mode.md) | Режим наполнения карты: библиотека ассетов, архетипы сущностей, состояния, спавнеры, генерируемый инспектор свойств. |
 | [modular_building_editor.md](engine/modular_building_editor.md) | Формат `.gdbuilding.json`, каркас, отделка, режимы редактора. |
 | [building_furnishing.md](engine/building_furnishing.md) | Наполнение здания: предметы, fixtures, capabilities. |
