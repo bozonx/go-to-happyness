@@ -4,16 +4,10 @@ extends RefCounted
 ## Full data model of a modular building, matching the open `.gdbuilding.json`
 ## format (see design_docs/engine/modular_building_editor.md).
 ##
-## Frame-construction level only populates `blocks` and `construction_cost`;
-## the fill / active-zone sections are preserved verbatim on load/save so the
-## format stays forward-compatible with later editor modes.
-
-const BlueprintBlockScript = preload("res://game/features/buildings/domain/editor/blueprint_block.gd")
-const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
-const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
-const FillObjectRecordScript = preload("res://game/features/buildings/domain/editor/fill_object_record.gd")
-const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
-const ContentIdScript = preload("res://game/features/content/domain/content_id.gd")
+## The frame level owns blocks and a manually authored construction cost. Block
+## counts by material are only an estimating hint; they never derive the cost.
+## Fill and active-zone data share the same document. Finishes and underground
+## editing are reserved format space and are not implemented editor modes yet.
 
 const FORMAT_VERSION := 7
 const FILE_EXTENSION := "gdbuilding.json"
@@ -60,9 +54,8 @@ var fixtures: Array[FixtureDefinition] = []
 var surface_finishes: Array = []
 var decor_trims: Array = []
 var construction_cost: Dictionary = {}
-var cost_mode: StringName = &"auto"
-var extra_costs: Dictionary = {}
-var custom_material_costs: Dictionary = {}
+## Authored resource quantities. Geometry never invents an economic conversion:
+## the editor only shows block counts by construction material as a hint.
 var manual_costs: Dictionary = {}
 
 
@@ -211,9 +204,6 @@ func to_dict() -> Dictionary:
 		"routes": routes.map(func(route: ZoneRouteRecord) -> Dictionary: return route.to_dict()),
 		"objects": object_dicts,
 		"fixtures": fixtures.map(func(f: FixtureDefinition) -> Dictionary: return f.to_dict()),
-		"cost_mode": String(cost_mode),
-		"extra_costs": extra_costs,
-		"custom_material_costs": custom_material_costs,
 		"manual_costs": manual_costs,
 		"construction_cost": construction_cost,
 	}
@@ -243,7 +233,7 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 	if raw_blocks is Array:
 		for entry in raw_blocks:
 			if entry is Dictionary:
-				bp.blocks.append(BlueprintBlockScript.from_dict(entry))
+				bp.blocks.append(BlueprintBlock.from_dict(entry))
 
 	var raw_areas: Variant = data.get("areas", [])
 	if raw_areas is Array:
@@ -268,23 +258,25 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 		var pivot := bp.pivot_offset()  # `footprint` is already parsed above.
 		for raw_object in raw_objects:
 			if raw_object is Dictionary:
-				var record: FillObjectRecord = FillObjectRecordScript.from_dict(raw_object)
+				var record: FillObjectRecord = FillObjectRecord.from_dict(raw_object)
 				record.pos += Vector3(pivot.x, 0.0, pivot.z)
 				bp.objects.append(record)
 
 	bp.surface_finishes = data.get("surface_finishes", [])
 	bp.decor_trims = data.get("decor_trims", [])
-	bp.cost_mode = StringName(data.get("cost_mode", "auto"))
-	bp.extra_costs = data.get("extra_costs", {})
-	bp.custom_material_costs = data.get("custom_material_costs", {})
 	bp.manual_costs = data.get("manual_costs", {})
 	bp.construction_cost = data.get("construction_cost", {})
+	# Older v7 files stored an automatically derived construction_cost and often
+	# had no manual_costs. Preserve their gameplay cost as the initial authored
+	# value; the next save writes only the current manual model.
+	if bp.manual_costs.is_empty() and not bp.construction_cost.is_empty():
+		bp.manual_costs = bp.construction_cost.duplicate(true)
 	var raw_fixtures: Variant = data.get("fixtures", [])
 	bp.fixtures.clear()
 	if raw_fixtures is Array:
 		for fd_data in raw_fixtures:
 			if fd_data is Dictionary:
-				bp.fixtures.append(FixtureDefinitionScript.from_dict(fd_data))
+				bp.fixtures.append(FixtureDefinition.from_dict(fd_data))
 	# Preserve the authored version so validation_errors() can reject
 	# unsupported ones; from_json() gates on validation_errors().is_empty().
 	bp.recalculate_construction_cost()
@@ -300,36 +292,18 @@ static func from_json(text: String) -> BuildingBlueprint:
 
 
 func recalculate_construction_cost() -> void:
-	if cost_mode == &"manual":
-		construction_cost = manual_costs.duplicate()
-		return
+	construction_cost.clear()
+	for resource_id in manual_costs:
+		var amount := maxi(0, int(manual_costs[resource_id]))
+		if amount > 0:
+			construction_cost[String(resource_id)] = amount
 
-	var raw_totals: Dictionary = {}
+
+func block_counts_by_material() -> Dictionary:
+	var counts: Dictionary = {}
 	for block in blocks:
-		var comp: Dictionary = {}
-		if custom_material_costs.has(block.material_id) and custom_material_costs[block.material_id] is Dictionary:
-			comp = custom_material_costs[block.material_id]
-		else:
-			comp = BuildingMaterialCatalogScript.resource_composition(block.material_id)
-		
-		for res in comp.keys():
-			var res_name := str(res)
-			var amount := float(comp[res])
-			raw_totals[res_name] = float(raw_totals.get(res_name, 0.0)) + amount
-
-	var rounded_costs: Dictionary = {}
-	for res in raw_totals.keys():
-		var int_val := ceili(raw_totals[res])
-		if int_val > 0:
-			rounded_costs[res] = int_val
-
-	for res in extra_costs.keys():
-		var res_name := str(res)
-		var extra_val := int(extra_costs[res])
-		if extra_val > 0:
-			rounded_costs[res_name] = int(rounded_costs.get(res_name, 0)) + extra_val
-
-	construction_cost = rounded_costs
+		counts[block.material_id] = int(counts.get(block.material_id, 0)) + 1
+	return counts
 
 
 ## Identity of this exact file version. Maps answer the same question with a
@@ -368,13 +342,20 @@ func validation_errors() -> Array[String]:
 		errors.append("footprint must be positive")
 	var placement_keys: Dictionary = {}
 	for block in blocks:
-		if not BuildingBlockCatalogScript.has_block(block.block_id):
+		if not BuildingBlockCatalog.has_block(block.block_id):
 			errors.append("Unknown block id: %s" % block.block_id)
-		if not BuildingMaterialCatalogScript.has_material(block.material_id):
+		if not BuildingMaterialCatalog.has_material(block.material_id):
 			errors.append("Unknown material id: %s" % block.material_id)
-		var normalized_variant := BuildingBlockCatalogScript.normalize_variant(block.block_id, block.variant)
+		var normalized_variant := BuildingBlockCatalog.normalize_variant(block.block_id, block.variant)
 		if block.variant != &"" and normalized_variant != block.variant:
 			errors.append("Unknown size %s for block %s" % [block.variant, block.block_id])
+		if not BuildingBlockCatalog.is_valid_anchor(block.block_id, normalized_variant, block.anchor):
+			errors.append("Invalid sub-cell offset for block at %s" % block.pos)
+		var occupied := BuildingBlockCatalog.occupied_aabb(block.pos, block.block_id,
+			normalized_variant, block.rot, block.anchor, block.rot_x, block.rot_z)
+		var allowed := AABB(Vector3.ZERO, Vector3(grid_bounds))
+		if not _aabb_contains(allowed, occupied):
+			errors.append("Block volume outside grid_bounds at %s" % block.pos)
 		var placement_key := "%s|%s|%s|%d|%d|%d|%d" % [
 			block.pos, block.block_id, normalized_variant, block.anchor, block.rot, block.rot_x, block.rot_z]
 		if placement_keys.has(placement_key):
@@ -382,20 +363,21 @@ func validation_errors() -> Array[String]:
 		placement_keys[placement_key] = true
 	for i in range(blocks.size()):
 		var left: BlueprintBlock = blocks[i]
-		if not BuildingBlockCatalogScript.has_block(left.block_id):
+		if not BuildingBlockCatalog.has_block(left.block_id):
 			continue
-		var left_aabb := BuildingBlockCatalogScript.occupied_aabb(left.pos, left.block_id,
-			BuildingBlockCatalogScript.normalize_variant(left.block_id, left.variant), left.rot,
+		var left_aabb := BuildingBlockCatalog.occupied_aabb(left.pos, left.block_id,
+			BuildingBlockCatalog.normalize_variant(left.block_id, left.variant), left.rot,
 			left.anchor, left.rot_x, left.rot_z)
 		for j in range(i + 1, blocks.size()):
 			var right: BlueprintBlock = blocks[j]
-			if not BuildingBlockCatalogScript.has_block(right.block_id):
+			if not BuildingBlockCatalog.has_block(right.block_id):
 				continue
-			var right_aabb := BuildingBlockCatalogScript.occupied_aabb(right.pos, right.block_id,
-				BuildingBlockCatalogScript.normalize_variant(right.block_id, right.variant), right.rot,
+			var right_aabb := BuildingBlockCatalog.occupied_aabb(right.pos, right.block_id,
+				BuildingBlockCatalog.normalize_variant(right.block_id, right.variant), right.rot,
 				right.anchor, right.rot_x, right.rot_z)
-			if _interiors_intersect(left_aabb, right_aabb) and not _allows_structural_joint(left, right):
-				errors.append("Overlapping block volumes: %s and %s" % [left.pos, right.pos])
+			if _interiors_intersect(left_aabb, right_aabb):
+				if not _allows_structural_joint(left, right) or _same_volume(left_aabb, right_aabb):
+					errors.append("Overlapping block volumes: %s and %s" % [left.pos, right.pos])
 	errors.append_array(_zone_errors())
 	errors.append_array(_fill_errors())
 	errors.append_array(_fixture_errors())
@@ -735,8 +717,21 @@ static func _interiors_intersect(a: AABB, b: AABB) -> bool:
 
 
 static func _allows_structural_joint(left: BlueprintBlock, right: BlueprintBlock) -> bool:
-	return BuildingBlockCatalogScript.allows_structural_joint(left.block_id) \
-		and BuildingBlockCatalogScript.allows_structural_joint(right.block_id)
+	return BuildingBlockCatalog.are_compatible_columns(left.block_id, right.block_id)
+
+
+static func _same_volume(a: AABB, b: AABB) -> bool:
+	return a.position.is_equal_approx(b.position) and a.size.is_equal_approx(b.size)
+
+
+static func _aabb_contains(outer: AABB, inner: AABB) -> bool:
+	const EPSILON := 0.0001
+	return inner.position.x >= outer.position.x - EPSILON \
+		and inner.position.y >= outer.position.y - EPSILON \
+		and inner.position.z >= outer.position.z - EPSILON \
+		and inner.end.x <= outer.end.x + EPSILON \
+		and inner.end.y <= outer.end.y + EPSILON \
+		and inner.end.z <= outer.end.z + EPSILON
 
 
 ## Requirement checklist for the editor inspector: one entry per capability a
@@ -844,7 +839,7 @@ static func _vec3_to_array(v: Vector3) -> Array:
 ## The alphabet is owned by `ContentId` (content_packaging.md §3.3): maps answer the
 ## same question, and two copies of one rule drift.
 static func _valid_id(value: String) -> bool:
-	return ContentIdScript.is_valid_id(value)
+	return ContentId.is_valid_id(value)
 
 
 static func _vec3i_from(data: Variant, fallback: Vector3i) -> Vector3i:

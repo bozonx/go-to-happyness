@@ -231,8 +231,10 @@ static func _test_material_catalog_and_costs() -> void:
 	assert(grid.get_block_at(Vector3i(2, 0, 0)).variant == &"0.5")
 	assert(grid.get_block_at(Vector3i(2, 0, 0)).anchor == BuildingBlockCatalogScript.ANCHOR_CORNER)
 	grid.write_to_blueprint(bp)
+	bp.manual_costs = {"soil": 3, "stone": 5}
 	bp.recalculate_construction_cost()
-	assert(bp.construction_cost == {"soil": 1, "stone": 2})
+	assert(bp.construction_cost == {"soil": 3, "stone": 5})
+	assert(bp.block_counts_by_material() == {&"earth": 1, &"stone": 2})
 	var restored := BuildingBlueprintScript.from_json(bp.to_json())
 	assert(restored != null)
 	assert(restored.blocks[0].material_id == &"earth")
@@ -242,11 +244,11 @@ static func _test_material_catalog_and_costs() -> void:
 	assert(restored.blocks[0].anchor == BuildingBlockCatalogScript.ANCHOR_CENTER)
 	var col := restored.blocks[2] if restored.blocks[2].block_id == &"column_round" else restored.blocks[1]
 	assert(col.variant == &"0.5")
-	assert(col.anchor == BuildingBlockCatalogScript.ANCHOR_CORNER)
+	assert(BuildingBlockCatalogScript.anchor_base_offset_3d(&"column_round", &"0.5", col.anchor) \
+		.is_equal_approx(Vector3(-0.25, 0.0, -0.25)))
 
-	# Packed three-dimensional anchors must survive serialization.  Otherwise
-	# loading or undo/redo turns every subcube into the legacy CORNER anchor and
-	# the grid model keeps only one duplicate placement.
+	# Readable three-dimensional offsets must survive serialization and replace
+	# the implementation-specific packed integer in newly written JSON.
 	var sub_bp := BuildingBlueprintScript.new()
 	var sub_grid := BuildingGridModelScript.new()
 	var sub_cell := Vector3i(1, 0, 1)
@@ -255,6 +257,8 @@ static func _test_material_catalog_and_costs() -> void:
 		assert(sub_grid.place(sub_cell, &"cube", 0, &"stone", &"0.25", anchor))
 	sub_grid.write_to_blueprint(sub_bp)
 	var sub_restored := BuildingBlueprintScript.from_json(sub_bp.to_json())
+	assert(sub_bp.to_json().contains("\"offset\""))
+	assert(not sub_bp.to_json().contains("\"anchor\""))
 	assert(sub_restored != null and sub_restored.blocks.size() == 4, "all packed subgrid anchors survive JSON")
 	var reloaded_grid := BuildingGridModelScript.new()
 	reloaded_grid.load_from_blueprint(sub_restored)
@@ -314,8 +318,11 @@ static func _test_grid_shared_cell() -> void:
 	assert(grid.place(Vector3i.ZERO, &"cube", 0, &"branches", &"1"))
 	assert(not grid.place(Vector3i.ZERO, &"column_square", 0, &"branches", &"0.25"))
 	assert(grid.erase(Vector3i.ZERO))
-	# Compatible structural elements may share the anchor cell and form a joint.
+	# Only columns of the same type may intersect to form a joint.
 	assert(grid.place(Vector3i.ZERO, &"column_square", 0, &"branches", &"0.5"))
+	assert(not grid.place(Vector3i.ZERO, &"column_half", 1, &"branches", &"0.5"))
+	assert(grid.erase(Vector3i.ZERO))
+	assert(grid.place(Vector3i.ZERO, &"column_half", 0, &"branches", &"0.5"))
 	assert(grid.place(Vector3i.ZERO, &"column_half", 1, &"branches", &"0.5"))
 	assert(grid.count() == 2)
 	assert(grid.has_block_at(Vector3i.ZERO))
@@ -541,8 +548,8 @@ static func _test_grid_blueprint_sync() -> void:
 	grid.place(Vector3i(0, 0, 0), &"cube")
 	grid.place(Vector3i(0, 1, 0), &"cube")
 	grid.write_to_blueprint(bp)
-	# grid_bounds reflects the placed extent.
-	assert(bp.grid_bounds == Vector3i(1, 2, 1))
+	# grid_bounds is authored board capacity and is not shrunk to occupied extent.
+	assert(bp.grid_bounds == Vector3i(8, 4, 8))
 	# Blocks are written in a deterministic (y, x, z) order.
 	assert(bp.blocks[0].pos == Vector3i(0, 0, 0))
 	assert(bp.blocks[1].pos == Vector3i(0, 1, 0))
@@ -686,3 +693,20 @@ static func _test_invalid_blueprints_are_rejected() -> void:
 	invalid_material.id = &"invalid_material"
 	invalid_material.blocks.append(BlueprintBlockScript.new(Vector3i.ZERO, &"cube", 0, &"unobtainium"))
 	assert(BuildingBlueprintScript.from_json(invalid_material.to_json()) == null)
+
+	var outside := BuildingBlueprintScript.new()
+	outside.id = &"outside"
+	outside.grid_bounds = Vector3i(2, 2, 2)
+	outside.footprint = Vector2i(2, 2)
+	outside.blocks.append(BlueprintBlockScript.new(Vector3i(-1, 0, 0), &"cube"))
+	assert(_has_error(outside.validation_errors(), "outside grid_bounds"))
+	outside.blocks[0].pos = Vector3i(0, 2, 0)
+	assert(_has_error(outside.validation_errors(), "outside grid_bounds"))
+
+	var mixed_columns := BuildingBlueprintScript.new()
+	mixed_columns.id = &"mixed_columns"
+	mixed_columns.blocks = [
+		BlueprintBlockScript.new(Vector3i.ZERO, &"column_square", 0, &"branches", &"0.5"),
+		BlueprintBlockScript.new(Vector3i.ZERO, &"column_half", 1, &"branches", &"0.5"),
+	]
+	assert(_has_error(mixed_columns.validation_errors(), "Overlapping block volumes"))

@@ -5,19 +5,14 @@ extends RefCounted
 ## access anchors and zones all originate in BuildingBlueprintLibrary.
 
 const BuildingModuleScene = preload("res://game/features/buildings/presentation/building_module.tscn")
-const BuildingBlueprintLibraryScript = preload("res://game/features/buildings/presentation/building_blueprint_library.gd")
-const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
-const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
-const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
-
 const BLOCK_SIZE := 1.0
 const FOUNDATION_SKIRT := 3.0
 
-static var _block_meshes: BlockMeshLibraryScript = null
+static var _block_meshes: BlockMeshLibrary = null
 
 
 static func get_blueprint(building_type: String) -> Dictionary:
-	var blueprint := BuildingBlueprintLibraryScript.get_blueprint(building_type)
+	var blueprint := BuildingBlueprintLibrary.get_blueprint(building_type)
 	if blueprint == null:
 		push_error("No authored blueprint for building type '%s'." % building_type)
 		return {}
@@ -73,30 +68,42 @@ static func _create_decor_module(module: Dictionary) -> StaticBody3D:
 
 static func _create_block_module(module: Dictionary) -> StaticBody3D:
 	if _block_meshes == null:
-		_block_meshes = BlockMeshLibraryScript.new()
+		_block_meshes = BlockMeshLibrary.new()
 	var block_id: StringName = module["block_id"]
 	var material_id: StringName = module.get("material_id", &"branches")
 	var variant: StringName = StringName(module.get("variant", ""))
 	var body: StaticBody3D = BuildingModuleScene.instantiate()
 	body.position = module["position"]
-	body.rotation_degrees = Vector3(0.0, 90.0 * float(int(module.get("rot", 0)) % 4), 0.0)
+	body.rotation_degrees = Vector3(
+		90.0 * float(int(module.get("rot_x", 0)) % 4),
+		90.0 * float(int(module.get("rot", 0)) % 4),
+		90.0 * float(int(module.get("rot_z", 0)) % 4))
 	body.set_meta("building_module", true)
 	body.set_meta("module_kind", module.get("kind", "block"))
 	var mesh_instance := body.get_node("MeshInstance3D") as MeshInstance3D
-	var size := BuildingBlockCatalogScript.size_of(block_id, variant)
+	var size := BuildingBlockCatalog.size_of(block_id, variant)
 	var collision := body.get_node("CollisionShape3D") as CollisionShape3D
-	var shape := BoxShape3D.new()
-	if BuildingBlockCatalogScript.extends_down(block_id):
+	var shape: Shape3D
+	if BuildingBlockCatalog.extends_down(block_id):
 		var skirted := Vector3(size.x, size.y + FOUNDATION_SKIRT, size.z)
 		var box := BoxMesh.new()
 		box.size = skirted
 		mesh_instance.mesh = box
 		mesh_instance.position.y = -FOUNDATION_SKIRT * 0.5
-		shape.size = skirted
+		var foundation_shape := BoxShape3D.new()
+		foundation_shape.size = skirted
+		shape = foundation_shape
 		collision.position.y = -FOUNDATION_SKIRT * 0.5
 	else:
 		mesh_instance.mesh = _block_meshes.mesh_for(block_id, variant)
-		shape.size = size
+		if BuildingBlockCatalog.mesh_shape_of(block_id, variant) == BuildingBlockCatalog.SHAPE_BOX:
+			var box_shape := BoxShape3D.new()
+			box_shape.size = size
+			shape = box_shape
+		elif mesh_instance.mesh != null:
+			# Authored buildings are static, so a trimesh preserves stairs, slopes and
+			# openings instead of sealing every procedural shape with a full box.
+			shape = mesh_instance.mesh.create_trimesh_shape()
 	mesh_instance.material_override = _block_meshes.material_for(material_id)
 	collision.shape = shape
 	return body
@@ -105,13 +112,13 @@ static func _create_block_module(module: Dictionary) -> StaticBody3D:
 static func _blueprint_from_library(building_type: String, blueprint: BuildingBlueprint) -> Dictionary:
 	return {
 		"type": building_type,
-		"footprint": BuildingBlueprintLibraryScript.footprint(building_type),
-		"modules": BuildingBlueprintLibraryScript.ordered_modules(building_type),
-		"blueprint_ref": BuildingBlueprintLibraryScript.blueprint_ref(building_type),
+		"footprint": BuildingBlueprintLibrary.footprint(building_type),
+		"modules": BuildingBlueprintLibrary.ordered_modules(building_type),
+		"blueprint_ref": BuildingBlueprintLibrary.blueprint_ref(building_type),
 		"zones": blueprint.runtime_zone_definitions(),
 		"routing_anchors": blueprint.routing_anchor_definitions(),
 		"routes": blueprint.route_definitions(),
 		"overlays": blueprint.overlay_definitions(),
 		"construction_cost": blueprint.construction_cost.duplicate(true),
-		"fixtures": blueprint.fixtures.map(func(fixture: FixtureDefinitionScript) -> Dictionary: return fixture.to_dict()),
+		"fixtures": blueprint.fixtures.map(func(fixture: FixtureDefinition) -> Dictionary: return fixture.to_dict()),
 	}

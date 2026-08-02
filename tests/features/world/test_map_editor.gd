@@ -485,10 +485,21 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 	# as in the building editor.
 	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true))
 	assert(editor._side_panel.get_node("Margin/Scroll/Rows/InspectorFields").get_child_count() > 0, "schema generated inspector controls")
-	assert(not editor._active.apply_inspector_value(&"editor_scale", 1.5),
-		"locked asset refuses an unsupported scale")
-	assert(is_equal_approx(editor.document.entities.entities[0].scale, 1.0),
-		"scale policy reaches the map record")
+	assert(editor._active.apply_inspector_value(&"editor_scale", 1.5),
+		"asset metadata does not lock authoring scale")
+	assert(is_equal_approx(editor.document.entities.entities[0].scale, 1.5),
+		"free authoring scale reaches the map record")
+	assert(editor._active.apply_inspector_value(FillModeController.INSPECTOR_PITCH, 30.0))
+	assert(editor._active.apply_inspector_value(FillModeController.INSPECTOR_ROLL, 345.0))
+	assert(editor._active.apply_inspector_value(FillModeController.INSPECTOR_ELEVATION, 2.4))
+	entity = editor.document.entities.entities[0]
+	assert(is_equal_approx(entity.pitch_degrees, 30.0) and is_equal_approx(entity.roll_degrees, 345.0),
+		"map record authors all three rotation axes")
+	assert(entity.elevation_blocks == 2, "map Y level is stored in whole blocks")
+	assert(editor._active.reset_inspector_value(FillModeController.INSPECTOR_PITCH))
+	assert(editor._active.reset_inspector_value(FillModeController.INSPECTOR_ROLL))
+	assert(editor._active.reset_inspector_value(FillModeController.INSPECTOR_ELEVATION))
+	assert(editor._active.reset_inspector_value(FillModeController.INSPECTOR_SCALE))
 	assert(editor._active.apply_inspector_value(&"fuel_units", 5), "inspector applied authored property")
 	assert(editor.document.entities.entities[0].props == {&"fuel_units": 5}, "only authored difference is stored")
 	assert(editor._active.reset_inspector_value(&"fuel_units"), "inspector reset restores archetype default")
@@ -549,6 +560,22 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 	fill_ctrl.rebuild_views()
 	fill_ctrl._refresh_ghost()
 	assert(is_instance_valid(fill_ctrl._ghost), "призрак выжил пересборку видов")
+	# Удерживание ЛКМ рисует объектами по всем пройденным клеткам; быстрый
+	# motion sample не оставляет пунктир, а весь жест остаётся одним undo.
+	fill_ctrl._archetype_id = &"core:campfire"
+	fill_ctrl._select(&"", false)
+	var stroke_count_before: int = editor.document.entities.entities.size()
+	var stroke_depth_before: int = editor.history.undo_depth()
+	editor._brush.hovered_cell = Vector2i(30, 30)
+	fill_ctrl.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	editor._brush.hovered_cell = Vector2i(33, 30)
+	fill_ctrl.handle_input(InputEventMouseMotion.new())
+	fill_ctrl.handle_input(_click(MOUSE_BUTTON_LEFT, false))
+	assert(editor.document.entities.entities.size() == stroke_count_before + 4,
+		"долгое ЛКМ заполняет каждую клетку пути")
+	assert(editor.history.undo_depth() == stroke_depth_before + 1,
+		"непрерывная постановка является одним действием undo")
+	editor._undo()
 	# Picking follows the whole authored footprint, not only its anchor cell.
 	fill_ctrl._archetype_id = &"core:cooking_campfire"
 	fill_ctrl._place(Vector2i(24, 24))
@@ -621,7 +648,8 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 	assert(is_equal_approx(editor.document.entities.entities[0].position.y, 0.0), "undo preserved the entity's local offset")
 	view = fill_mode._views.get(entity.id) as Node3D
 	assert(view != null and is_equal_approx(view.position.y, 0.0), "undo reprojected the entity onto the restored terrain")
-	editor._undo()
+	while editor.history.undo_depth() > 0:
+		editor._undo()
 	assert(editor.history.undo_depth() == 0, "fill left the next mode a clean stack")
 	print("  fill placement + shared undo ok")
 

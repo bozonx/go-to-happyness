@@ -6,9 +6,6 @@ extends RefCounted
 ## them at `Vector3(cell) + local_offset(block_id, vertical_offset)` so every block
 ## sits at the designated elevation of its anchor cell.
 
-const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
-const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
-
 var _mesh_cache: Dictionary = {}
 var _material_cache: Dictionary = {}
 var _texture_library: BlockTextureLibrary = null
@@ -31,65 +28,57 @@ static func local_offset(
 	rot_x: int = 0,
 	rot_z: int = 0
 ) -> Vector3:
-	var size := BuildingBlockCatalogScript.size_of(block_id, variant)
-	var base := BuildingBlockCatalogScript.anchor_base_offset_3d(block_id, variant, anchor)
-	# Default centre-to-centre offset: horizontal anchor + resting on the floor + Y sub-offset.
-	var d0 := Vector3(base.x, size.y * 0.5 - 0.5 + base.y, base.z)
-	var r := Basis.from_euler(Vector3(
-		deg_to_rad(90.0 * float(rot_x)),
-		deg_to_rad(90.0 * float(rot)),
-		deg_to_rad(90.0 * float(rot_z))))
-	var c := r * d0
-	return Vector3(0.5 + c.x, 0.5 + c.y + vertical_offset + BuildingBlockCatalogScript.vertical_offset_of(block_id, variant), 0.5 + c.z)
+	return BuildingBlockCatalog.local_transform(
+		block_id, variant, rot, anchor, rot_x, rot_z).origin + Vector3.UP * vertical_offset
 
 
 func mesh_for(block_id: StringName, variant: StringName = &"") -> Mesh:
 	var cache_key := "%s|%s" % [block_id, variant]
 	if _mesh_cache.has(cache_key):
 		return _mesh_cache[cache_key]
-	var def := BuildingBlockCatalogScript.get_block(block_id)
+	var def := BuildingBlockCatalog.get_block(block_id)
 	if def.is_empty():
 		return null
-	var size := BuildingBlockCatalogScript.size_of(block_id, variant)
+	var size := BuildingBlockCatalog.size_of(block_id, variant)
 	var mesh: Mesh
-	match BuildingBlockCatalogScript.mesh_shape_of(block_id, variant):
-		BuildingBlockCatalogScript.SHAPE_WEDGE:
+	match BuildingBlockCatalog.mesh_shape_of(block_id, variant):
+		BuildingBlockCatalog.SHAPE_WEDGE:
 			mesh = _build_wedge(size)
-		BuildingBlockCatalogScript.SHAPE_WEDGE_LOW:
+		BuildingBlockCatalog.SHAPE_WEDGE_LOW:
 			mesh = _build_wedge(size)
-		BuildingBlockCatalogScript.SHAPE_SLOPE_CORNER_IN:
+		BuildingBlockCatalog.SHAPE_SLOPE_CORNER_IN:
 			mesh = _build_slope_corner_in(size)
-		BuildingBlockCatalogScript.SHAPE_SLOPE_CORNER_OUT:
+		BuildingBlockCatalog.SHAPE_SLOPE_CORNER_OUT:
 			mesh = _build_slope_corner_out(size)
-		BuildingBlockCatalogScript.SHAPE_ROOF_ANGLE:
+		BuildingBlockCatalog.SHAPE_ROOF_ANGLE:
 			mesh = _build_roof_angle(size)
-		BuildingBlockCatalogScript.SHAPE_CYLINDER:
+		BuildingBlockCatalog.SHAPE_CYLINDER:
 			mesh = _build_cylinder(size)
-		BuildingBlockCatalogScript.SHAPE_HALF_CYLINDER:
+		BuildingBlockCatalog.SHAPE_HALF_CYLINDER:
 			mesh = _build_half_cylinder(size)
-		BuildingBlockCatalogScript.SHAPE_STAIRS:
+		BuildingBlockCatalog.SHAPE_STAIRS:
 			mesh = _build_stairs(size, 8)
-		BuildingBlockCatalogScript.SHAPE_STAIRS_HALF:
+		BuildingBlockCatalog.SHAPE_STAIRS_HALF:
 			mesh = _build_stairs(size, 4)
-		BuildingBlockCatalogScript.SHAPE_STAIRS_QUARTER:
+		BuildingBlockCatalog.SHAPE_STAIRS_QUARTER:
 			mesh = _build_stairs(size, 2)
-		BuildingBlockCatalogScript.SHAPE_STAIRS_CORNER_45:
+		BuildingBlockCatalog.SHAPE_STAIRS_CORNER_45:
 			mesh = _build_stairs_corner_45(size, 8)
-		BuildingBlockCatalogScript.SHAPE_STAIRS_CORNER_HALF:
+		BuildingBlockCatalog.SHAPE_STAIRS_CORNER_HALF:
 			mesh = _build_stairs_corner_45(size, 4)
-		BuildingBlockCatalogScript.SHAPE_STAIRS_CORNER_QUARTER:
+		BuildingBlockCatalog.SHAPE_STAIRS_CORNER_QUARTER:
 			mesh = _build_stairs_corner_45(size, 2)
-		BuildingBlockCatalogScript.SHAPE_WINDOW_WALL:
+		BuildingBlockCatalog.SHAPE_WINDOW_WALL:
 			mesh = _build_window_wall(size)
-		BuildingBlockCatalogScript.SHAPE_DOOR_WALL:
+		BuildingBlockCatalog.SHAPE_DOOR_WALL:
 			mesh = _build_door_wall(size)
-		BuildingBlockCatalogScript.SHAPE_ARCH_RING:
+		BuildingBlockCatalog.SHAPE_ARCH_RING:
 			mesh = _build_arch_ring(size)
-		BuildingBlockCatalogScript.SHAPE_HALF_ARCH:
+		BuildingBlockCatalog.SHAPE_HALF_ARCH:
 			mesh = _build_half_arch(size)
-		BuildingBlockCatalogScript.SHAPE_RAILING:
+		BuildingBlockCatalog.SHAPE_RAILING:
 			mesh = _build_railing(size)
-		BuildingBlockCatalogScript.SHAPE_FENCE:
+		BuildingBlockCatalog.SHAPE_FENCE:
 			mesh = _build_fence(size)
 		_:
 			var box := BoxMesh.new()
@@ -113,9 +102,9 @@ func material_for(material_id: StringName) -> StandardMaterial3D:
 			mat.albedo_texture = texture
 			mat.albedo_color = Color.WHITE
 		else:
-			mat.albedo_color = BuildingMaterialCatalogScript.color(material_id)
+			mat.albedo_color = BuildingMaterialCatalog.color(material_id)
 	else:
-		mat.albedo_color = BuildingMaterialCatalogScript.color(material_id)
+		mat.albedo_color = BuildingMaterialCatalog.color(material_id)
 	_material_cache[cache_key] = mat
 	return mat
 

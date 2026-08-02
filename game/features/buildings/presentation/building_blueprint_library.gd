@@ -8,13 +8,6 @@ extends RefCounted
 ## editor format. A role resolves through the world's style/variant; a namespaced
 ## runtime key still addresses one immutable file for saves and map placements.
 
-const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
-const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
-const BuildingCatalogScript = preload("res://game/features/buildings/domain/building_catalog.gd")
-const ContentIndexScript = preload("res://game/features/content/application/content_index.gd")
-const ContentIdScript = preload("res://game/features/content/domain/content_id.gd")
-const StyleResolverScript = preload("res://game/features/content/application/style_resolver.gd")
-
 const SOURCE_BUILTIN := &"core"
 
 static var _index: Dictionary = {}          ## runtime key -> {path, source, id}
@@ -28,11 +21,11 @@ static func refresh() -> void:
 	_index.clear()
 	_cache.clear()
 	_index_built = true
-	BuildingCatalogScript.clear_runtime_definitions()
-	_content_index = ContentIndexScript.shared()
+	BuildingCatalog.clear_runtime_definitions()
+	_content_index = ContentIndex.shared()
 	for indexed_entry in _content_index.blueprint_entries():
 		var path: String = indexed_entry.path
-		var blueprint := BuildingBlueprintScript.from_json(FileAccess.get_file_as_string(path))
+		var blueprint := BuildingBlueprint.from_json(FileAccess.get_file_as_string(path))
 		if blueprint == null:
 			continue
 		var key := String(indexed_entry.runtime_key)
@@ -62,7 +55,7 @@ static func has(building_type: String) -> bool:
 	return not _resolved_key(building_type).is_empty()
 
 
-static func get_blueprint(building_type: String) -> BuildingBlueprintScript:
+static func get_blueprint(building_type: String) -> BuildingBlueprint:
 	_ensure_index()
 	building_type = _resolved_key(building_type)
 	if building_type.is_empty():
@@ -75,13 +68,13 @@ static func get_blueprint(building_type: String) -> BuildingBlueprintScript:
 	var text := FileAccess.get_file_as_string(entry["path"])
 	if text.is_empty():
 		return null
-	var bp := BuildingBlueprintScript.from_json(text)
+	var bp := BuildingBlueprint.from_json(text)
 	_cache[building_type] = bp
 	return bp
 
 
 static func runtime_key(source: StringName, blueprint_id: StringName) -> String:
-	return String(ContentIdScript.runtime_key(source, blueprint_id))
+	return String(ContentId.runtime_key(source, blueprint_id))
 
 
 static func blueprint_ref(building_type: String) -> Dictionary:
@@ -118,7 +111,7 @@ static func player_entries() -> Array[Dictionary]:
 	var seen_roles: Dictionary = {}
 	for key in _index:
 		var entry: Dictionary = _index[key]
-		if not String(entry["path"]).begins_with(ContentIndexScript.PROJECTS_ROOT + "/"):
+		if not String(entry["path"]).begins_with(ContentIndex.PROJECTS_ROOT + "/"):
 			continue
 		var blueprint := get_blueprint(key)
 		if blueprint != null and blueprint.kind == &"building" and not seen_roles.has(blueprint.role):
@@ -154,15 +147,15 @@ static func authored_entries() -> Array[Dictionary]:
 	return result
 
 
-static func _register_definition(role: StringName, blueprint: BuildingBlueprintScript) -> void:
+static func _register_definition(role: StringName, blueprint: BuildingBlueprint) -> void:
 	# A builtin blueprint that matches an existing catalog building_type only
 	# supplies visuals + zones: the static definition stays authoritative so its
 	# costs, housing/civic flags and upgrade chains are never silently lost
 	# (functionality is keyed by building_type, not by the blueprint — see the
 	# design doc §1). Only genuinely new types (player customs) get a runtime def.
-	if BuildingCatalogScript.has_definition(String(role)):
+	if BuildingCatalog.has_definition(String(role)):
 		return
-	BuildingCatalogScript.register_runtime_definition(String(role), {
+	BuildingCatalog.register_runtime_definition(String(role), {
 		"name": blueprint.name,
 		"category": "custom",
 		"costs": blueprint.construction_cost.duplicate(true),
@@ -180,10 +173,10 @@ static func _resolved_key(building_type: String) -> String:
 		return building_type
 	if ":" in building_type:
 		return ""
-	var resolver := StyleResolverScript.new(_content_index)
+	var resolver := StyleResolver.new(_content_index)
 	var requested_variant := &"default"
-	if BuildingCatalogScript.has_definition(building_type):
-		requested_variant = StringName(BuildingCatalogScript.definition_for(building_type).get("variant", requested_variant))
+	if BuildingCatalog.has_definition(building_type):
+		requested_variant = StringName(BuildingCatalog.definition_for(building_type).get("variant", requested_variant))
 	var entry := resolver.resolve(StringName(building_type), requested_variant, _world_style)
 	if entry != null:
 		return String(entry.runtime_key)
@@ -211,13 +204,17 @@ static func ordered_modules(building_type: String) -> Array:
 	var center := bp.pivot_offset()
 	var entries: Array = []
 	for block in bp.blocks:
-		var local := Vector3(block.pos) + _block_offset(block.block_id, block.variant, block.rot, block.anchor) - center
+		var block_transform := BuildingBlockCatalog.local_transform(block.block_id,
+			block.variant, block.rot, block.anchor, block.rot_x, block.rot_z)
+		var local := Vector3(block.pos) + block_transform.origin - center
 		entries.append({
 			"position": local,
 			"block_id": block.block_id,
 			"material_id": block.material_id,
 			"variant": block.variant,
 			"rot": block.rot,
+			"rot_x": block.rot_x,
+			"rot_z": block.rot_z,
 			"kind": "block",
 		})
 	for decor in bp.objects:
@@ -231,15 +228,6 @@ static func ordered_modules(building_type: String) -> Array:
 		})
 	entries.sort_custom(_compare_module_height)
 	return entries
-
-
-## Offset from a cell's minimum corner to the block mesh origin (floor-aligned,
-## horizontally centred). Mirrors BlockMeshLibrary.local_offset but stays in the
-## application/domain layer (catalog math only, no presentation dependency).
-static func _block_offset(block_id: StringName, variant: StringName = &"", rot: int = 0, anchor: int = 0) -> Vector3:
-	var size := BuildingBlockCatalogScript.size_of(block_id, variant)
-	var xz := BuildingBlockCatalogScript.cell_offset(block_id, variant, anchor, rot)
-	return Vector3(xz.x, size.y * 0.5, xz.y)
 
 
 static func _compare_module_height(a: Dictionary, b: Dictionary) -> bool:

@@ -40,6 +40,7 @@ func _run() -> void:
 	_test_upper_active_layer_is_not_stolen_by_a_lower_block(editor, frame)
 	_test_drag_does_not_bridge_different_subslots(editor, frame)
 	_test_subcube_stack_and_history(editor, frame)
+	_test_frame_stroke_is_one_history_action(editor, frame)
 
 	editor.queue_free()
 	print("--- test_frame_block_options.gd PASSED ---")
@@ -172,6 +173,23 @@ func _test_subcube_stack_and_history(editor: BuildingEditor, frame: FrameModeCon
 			"redo restores %d subcubes" % expected_count)
 		assert((frame.get("_block_nodes") as Dictionary).size() == expected_count,
 			"redo restores %d subcube visuals" % expected_count)
+
+
+func _test_frame_stroke_is_one_history_action(editor: BuildingEditor, frame: FrameModeController) -> void:
+	editor.grid_model.clear()
+	editor.blueprint.clear_blocks()
+	editor.reset_history()
+	frame.rebuild_all_block_nodes()
+	frame.select_block(&"cube", &"1")
+	editor.begin_history_group("test_frame_stroke")
+	frame.painting = true
+	for x in 4:
+		frame._apply_tool_at_cell(Vector3i(x, 0, 0))
+	frame.end_paint_stroke()
+	editor.end_history_group()
+	assert(editor.grid_model.count() == 4)
+	assert(editor.undo_step_count() == 1, "one drag creates one undo snapshot")
+	assert(editor.undo() and editor.grid_model.is_empty(), "one undo removes the whole stroke")
 
 
 func _assert_button_labels(frame: FrameModeController, row_name: String, expected: Array[String]) -> void:

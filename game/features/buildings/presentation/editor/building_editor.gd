@@ -302,10 +302,12 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 				else:
 					_update_cursor()
 					if cursor_valid:
+						begin_history_group("frame_stroke")
 						frame_mode.begin_paint_stroke()
 			else:
 				if current_mode == EditMode.FRAME:
 					frame_mode.end_paint_stroke()
+					end_history_group()
 				else:
 					frame_mode.painting = false
 				if current_mode == EditMode.FILL:

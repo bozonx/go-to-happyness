@@ -114,12 +114,10 @@ static func asset_claims_cells(asset: WorldAssetDef) -> bool:
 	return asset != null and asset.claims_cells()
 
 
-## Applies the asset's authored uniform-scale policy. The inspector may accept a
-## typed number, but the stored value must be one the asset actually supports.
-static func normalized_scale(asset: WorldAssetDef, requested: float) -> float:
-	if asset == null:
-		return clampf(requested, SCALE_MIN, SCALE_MAX)
-	return asset.normalized_scale(requested)
+## Authoring deliberately permits any safe uniform scale. Asset metadata remains
+## a suggested default/capability description, not a lock on the author's hand.
+static func normalized_scale(_asset: WorldAssetDef, requested: float) -> float:
+	return clampf(requested, SCALE_MIN, SCALE_MAX)
 
 
 static func make_ghost_material() -> StandardMaterial3D:

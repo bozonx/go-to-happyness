@@ -24,8 +24,10 @@ func _init() -> void:
 	blueprint.grid_bounds = Vector3i(2, 1, 1)
 	blueprint.blocks = [
 		BlueprintBlockScript.new(Vector3i(0, 0, 0), &"cube", 0, &"earth"),
-		BlueprintBlockScript.new(Vector3i(1, 0, 0), &"slab", 1, &"branches", &"0.5"),
+		BlueprintBlockScript.new(Vector3i(1, 0, 0), &"slab", 1, &"branches", &"0.5", 0, 2),
 	]
+	blueprint.manual_costs = {"soil": 6, "branches": 3}
+	blueprint.recalculate_construction_cost()
 	var room := ZoneAreaRecord.new()
 	room.id = &"craft_1"
 	room.area_name = "Craft bench"
@@ -58,11 +60,18 @@ func _init() -> void:
 	assert(LibraryScript.has(runtime_key))
 	var loaded = LibraryScript.get_blueprint(runtime_key)
 	assert(loaded != null)
-	assert(loaded.construction_cost == {"soil": 1, "branches": 1})
+	assert(loaded.construction_cost == {"soil": 6, "branches": 3})
 	assert(BuildingCatalogScript.definition_for(String(TEST_ID)).get("category") == "custom")
 
 	var game_blueprint: Dictionary = BuildingBlueprintsScript.get_blueprint(runtime_key)
 	assert(game_blueprint.get("modules", []).size() == 2)
+	var slab_module: Dictionary = (game_blueprint["modules"] as Array).filter(
+		func(module: Dictionary) -> bool: return module.get("block_id") == &"slab")[0]
+	assert(slab_module.get("rot_x") == 2, "runtime module preserves authored X rotation")
+	var slab_body := BuildingBlueprintsScript.create_module(slab_module)
+	assert(is_equal_approx(slab_body.rotation_degrees.x, 180.0))
+	slab_body.free()
+	_test_procedural_opening_keeps_its_open_collision()
 	assert(game_blueprint.get("zones", []).size() == 1)
 	assert(game_blueprint.get("blueprint_ref", {}).get("source") == String(TEST_SOURCE))
 	assert(game_blueprint.get("blueprint_ref", {}).get("role") == String(TEST_ID))
@@ -80,6 +89,20 @@ func _init() -> void:
 	_test_fill_survives_a_round_trip()
 	MapDocumentService._remove_directory(TEST_PROJECT_ROOT)
 	quit(0)
+
+
+func _test_procedural_opening_keeps_its_open_collision() -> void:
+	var body := BuildingBlueprintsScript.create_module({
+		"position": Vector3.ZERO,
+		"block_id": &"arch",
+		"variant": &"1_2",
+		"material_id": &"earth",
+	})
+	assert(body != null)
+	var collision := body.get_node("CollisionShape3D") as CollisionShape3D
+	assert(collision.shape is ConcavePolygonShape3D,
+		"an arch must use its mesh collision instead of a box that seals the opening")
+	body.free()
 
 
 func _setup_project() -> void:

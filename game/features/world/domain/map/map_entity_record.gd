@@ -16,7 +16,13 @@ var position := Vector3.ZERO
 ## соседнюю клетку и не ломает проверку занятости
 ## (`map_fill_mode.md` §9.3.1). Y — подъём над поверхностью.
 var offset := Vector3.ZERO
+## Whole authored blocks above the supporting surface. Fine vertical adjustment
+## belongs to offset.y; keeping the two separate prevents X/Z moves from turning
+## a terrain-height change into an apparent object jump.
+var elevation_blocks := 0
+var pitch_degrees := 0.0
 var yaw_degrees := 0.0
+var roll_degrees := 0.0
 var scale := 1.0
 var initial_state: StringName = EntityStateSet.FOLLOW_SEASON
 var props: Dictionary = {}
@@ -41,6 +47,8 @@ func to_dict() -> Dictionary:
 		"transform": {
 			"position": [position.x, position.y, position.z],
 			"offset": [offset.x, offset.y, offset.z],
+			"elevation": elevation_blocks,
+			"rotation": [pitch_degrees, yaw_degrees, roll_degrees],
 			"yaw": yaw_degrees,
 			"scale": scale,
 		},
@@ -68,7 +76,14 @@ static func from_dict(source: Dictionary) -> MapEntityRecord:
 		var raw_offset: Variant = (transform as Dictionary).get("offset", [])
 		if raw_offset is Array and (raw_offset as Array).size() >= 3:
 			record.offset = Vector3(float(raw_offset[0]), float(raw_offset[1]), float(raw_offset[2]))
-		record.yaw_degrees = float((transform as Dictionary).get("yaw", 0.0))
+		record.elevation_blocks = int((transform as Dictionary).get("elevation", 0))
+		var raw_rotation: Variant = (transform as Dictionary).get("rotation", [])
+		if raw_rotation is Array and (raw_rotation as Array).size() >= 3:
+			record.pitch_degrees = float(raw_rotation[0])
+			record.yaw_degrees = float(raw_rotation[1])
+			record.roll_degrees = float(raw_rotation[2])
+		else:
+			record.yaw_degrees = float((transform as Dictionary).get("yaw", 0.0))
 		record.scale = maxf(float((transform as Dictionary).get("scale", 1.0)), 0.01)
 	var state := StringName(source.get("state", EntityStateSet.FOLLOW_SEASON))
 	if state != &"":

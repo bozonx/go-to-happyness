@@ -428,6 +428,10 @@ static func allows_structural_joint(block_id: StringName) -> bool:
 	return get_block(block_id).get("overlap_policy", &"") == &"structural_joint"
 
 
+static func are_compatible_columns(left_id: StringName, right_id: StringName) -> bool:
+	return left_id == right_id and allows_structural_joint(left_id)
+
+
 ## Conservative world-space AABB occupied by a block in its anchor cell. The
 ## frame editor only permits quarter turns, so this is an exact box for boxes
 ## and a safe broad-phase volume for curved procedural meshes.
@@ -441,13 +445,9 @@ static func occupied_aabb(
 	rot_z: int = 0
 ) -> AABB:
 	var size := size_of(block_id, variant_id)
-	var base := anchor_base_offset_3d(block_id, variant_id, anchor_kind)
-	var basis := Basis.from_euler(Vector3(
-		deg_to_rad(90.0 * float(rot_x)),
-		deg_to_rad(90.0 * float(rot)),
-		deg_to_rad(90.0 * float(rot_z))))
-	var local_center := basis * Vector3(base.x, size.y * 0.5 - 0.5 + base.y, base.z)
-	var center := Vector3(cell) + Vector3(0.5, 0.5, 0.5) + local_center + Vector3.UP * vertical_offset_of(block_id, variant_id)
+	var transform := local_transform(block_id, variant_id, rot, anchor_kind, rot_x, rot_z)
+	var basis := transform.basis
+	var center := Vector3(cell) + transform.origin
 	var half := size * 0.5
 	var extent := Vector3(
 		absf(basis.x.x) * half.x + absf(basis.y.x) * half.y + absf(basis.z.x) * half.z,
@@ -507,7 +507,22 @@ static func available_anchors(block_id: StringName, variant_id: StringName) -> A
 
 
 static func normalize_anchor(_block_id: StringName, _variant_id: StringName, anchor_kind: int) -> int:
-	return anchor_kind
+	if anchor_kind == ANCHOR_CENTER or anchor_kind == ANCHOR_EDGE or anchor_kind == ANCHOR_CORNER:
+		return anchor_kind
+	if anchor_kind < 0:
+		return ANCHOR_CENTER
+	var offset := unpack_subgrid_anchor_3d(anchor_kind)
+	return pack_subgrid_anchor(offset.x, offset.z, offset.y)
+
+
+static func is_valid_anchor(block_id: StringName, variant_id: StringName, anchor_kind: int) -> bool:
+	if normalize_anchor(block_id, variant_id, anchor_kind) != anchor_kind:
+		return false
+	var offset := anchor_base_offset_3d(block_id, variant_id, anchor_kind)
+	var size := size_of(block_id, variant_id)
+	return absf(offset.x) + size.x * 0.5 <= 0.5001 \
+		and offset.y >= -0.0001 and offset.y + size.y <= 1.0001 \
+		and absf(offset.z) + size.z * 0.5 <= 0.5001
 
 
 ## Public accessor for the rot=0 in-cell anchor offset,
@@ -578,6 +593,28 @@ static func cell_offset(block_id: StringName, variant_id: StringName, anchor_kin
 	var base := anchor_base_offset(block_id, variant_id, anchor_kind)
 	var rotated := Basis(Vector3.UP, deg_to_rad(90.0 * float(rot))) * Vector3(base.x, 0.0, base.y)
 	return Vector2(0.5 + rotated.x, 0.5 + rotated.z)
+
+
+## One authoritative transform from an anchor cell to the block mesh origin.
+## Editor preview, validation and runtime must all use this function.
+static func local_transform(
+	block_id: StringName,
+	variant_id: StringName = &"",
+	rot: int = 0,
+	anchor_kind: int = 0,
+	rot_x: int = 0,
+	rot_z: int = 0
+) -> Transform3D:
+	var size := size_of(block_id, variant_id)
+	var base := anchor_base_offset_3d(block_id, variant_id, anchor_kind)
+	var basis := Basis.from_euler(Vector3(
+		deg_to_rad(90.0 * float(rot_x)),
+		deg_to_rad(90.0 * float(rot)),
+		deg_to_rad(90.0 * float(rot_z))))
+	var resting_offset := Vector3(base.x, size.y * 0.5 - 0.5 + base.y, base.z)
+	var origin := Vector3(0.5, 0.5, 0.5) + basis * resting_offset
+	origin.y += vertical_offset_of(block_id, variant_id)
+	return Transform3D(basis, origin)
 
 
 static func _resolve_variant(def: Dictionary, block_id: StringName, variant_id: StringName) -> Dictionary:

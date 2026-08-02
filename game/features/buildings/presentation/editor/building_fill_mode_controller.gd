@@ -51,6 +51,8 @@ var _dragging: bool = false
 ## Grab offset so dragging moves the object relative to where it was picked up.
 var _drag_offset: Vector3 = Vector3.ZERO
 var _drag_started: bool = false
+var _placing_stroke: bool = false
+var _last_placed_cell := Vector2i(-999999, -999999)
 ## Guards the inspector's own writes from re-entering as user edits.
 var _syncing_ui: bool = false
 
@@ -213,6 +215,7 @@ func is_active() -> bool:
 # ---------------------------------------------------------------------------
 
 func on_left_pressed(additive: bool = false) -> void:
+	_placing_stroke = false
 	if not _editor.cursor_valid:
 		return
 	var hit: Vector3 = _editor.cursor_hit_pos
@@ -229,7 +232,12 @@ func on_left_pressed(additive: bool = false) -> void:
 		select_object("")
 		_editor.set_status("Выберите ассет для размещения или объект для редактирования.")
 		return
+	var count_before: int = _editor.blueprint.objects.size()
 	_place_or_select_at(hit)
+	_placing_stroke = _editor.blueprint.objects.size() > count_before
+	if _placing_stroke:
+		selected_object_id = ""
+	_last_placed_cell = occupied_cells(snapped_position(hit), current_asset_id, current_scale, current_yaw_deg).position
 
 
 func on_left_released() -> void:
@@ -237,6 +245,7 @@ func on_left_released() -> void:
 		_editor.end_history_group()
 	_dragging = false
 	_drag_started = false
+	_placing_stroke = false
 	refresh_hover()
 
 
@@ -285,6 +294,20 @@ func _select_for_drag(object_id: String, hit: Vector3) -> void:
 
 
 func on_drag() -> void:
+	if _placing_stroke and _editor.cursor_valid:
+		var position := snapped_position(_editor.cursor_hit_pos, current_asset_id, current_scale, current_yaw_deg)
+		var cell := occupied_cells(position, current_asset_id, current_scale, current_yaw_deg).position
+		if cell != _last_placed_cell:
+			var delta := cell - _last_placed_cell
+			var steps := maxi(absi(delta.x), absi(delta.y))
+			for index in range(1, steps + 1):
+				var sample := Vector2i(roundi(lerpf(_last_placed_cell.x, cell.x, float(index) / steps)), roundi(lerpf(_last_placed_cell.y, cell.y, float(index) / steps)))
+				var sample_position := position + Vector3(sample.x - cell.x, 0.0, sample.y - cell.y)
+				if pick_object_at(sample_position).is_empty():
+					_place_at(sample_position)
+					selected_object_id = ""
+			_last_placed_cell = cell
+		return
 	if not _dragging or not _editor.cursor_valid:
 		return
 	var record := find_record(selected_object_id)
@@ -509,19 +532,11 @@ func rotate_selection(axis: String, direction: int) -> void:
 		push_warning("BuildingFillModeController: invalid rotation axis '%s'" % axis)
 		return
 	var records := selected_records()
-	var brush_asset := WorldAssetCatalog.get_asset(current_asset_id)
-	if records.is_empty() and brush_asset != null and not brush_asset.is_rotation_axis_allowed(axis):
-		_editor.set_status("Этот ассет нельзя вращать вокруг оси %s." % axis.to_upper())
-		return
 	var ignored_ids: Array = selected_object_ids()
 	var anchors: Dictionary = {}
 	var rotations: Dictionary = {}
 	var scales: Dictionary = {}
 	for record: FillObjectRecord in records:
-		var asset := WorldAssetCatalog.get_asset(record.asset_id)
-		if asset != null and not asset.is_rotation_axis_allowed(axis):
-			_editor.set_status("Поворот не применён: ассет «%s» запрещает ось %s." % [asset.name, axis.to_upper()])
-			return
 		var candidate := _rotated_vector(record.rot, axis, direction)
 		if not _is_valid_transform(
 				record.anchor_pos(), candidate, record.scale, record.asset_id, record.id, ignored_ids):
@@ -1410,12 +1425,11 @@ func _transform_spins() -> Array[SpinBox]:
 ## участвует: она заставляла бы считать доли метра в уме.
 func _sync_transform_fields(record: FillObjectRecord) -> void:
 	_syncing_ui = true
-	var asset := WorldAssetCatalog.get_asset(record.asset_id)
-	_scale_spin.editable = asset == null or asset.scale_mode != WorldAssetDef.SCALE_LOCKED
-	_scale_spin.tooltip_text = "" if _scale_spin.editable else "Масштаб зафиксирован в описании ассета."
-	_pitch_spin.editable = asset == null or asset.is_rotation_axis_allowed("x")
-	_yaw_spin.editable = asset == null or asset.is_rotation_axis_allowed("y")
-	_roll_spin.editable = asset == null or asset.is_rotation_axis_allowed("z")
+	_scale_spin.editable = true
+	_scale_spin.tooltip_text = ""
+	_pitch_spin.editable = true
+	_yaw_spin.editable = true
+	_roll_spin.editable = true
 	var cells := occupied_cells(record.anchor_pos(), record.asset_id, record.scale.x, record.rot.y)
 	_pos_x_spin.value = cells.position.x
 	_pos_z_spin.value = cells.position.y

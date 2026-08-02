@@ -15,8 +15,9 @@ var rot: int = 0        ## Y-axis quarter-turns.
 var rot_x: int = 0      ## X-axis quarter-turns.
 var rot_z: int = 0      ## Z-axis quarter-turns.
 var variant: StringName = &""
-## In-cell snap kind for sub-cell blocks: 0 = centre, 1 = edge, 2 = corner (see
-## BuildingBlockCatalog.ANCHOR_*). The concrete side/corner follows from `rot`.
+## Packed in-memory representation of the in-cell offset. New files serialize it
+## as the readable `offset: [x, y, z]`; integer values are accepted only to load
+## existing v7 content.
 var anchor: int = 0
 
 
@@ -63,9 +64,11 @@ func to_dict() -> Dictionary:
 	# block entries unchanged in the saved JSON.
 	if variant != &"":
 		out["variant"] = String(variant)
-	# Only emitted when snapped off-centre.
-	if anchor != 0:
-		out["anchor"] = anchor
+	# The open format keeps sub-cell placement readable. `anchor` used to expose
+	# this implementation-specific bit packing and remains a load-only legacy field.
+	var offset := BuildingBlockCatalog.anchor_base_offset_3d(block_id, variant, anchor)
+	if not offset.is_zero_approx():
+		out["offset"] = [offset.x, offset.y, offset.z]
 	# Only emitted when tilted off the Y axis, keeping flat entries unchanged.
 	if rot_x != 0:
 		out["rot_x"] = rot_x
@@ -82,11 +85,14 @@ static func from_dict(data: Dictionary) -> BlueprintBlock:
 	var material_id := StringName(data.get("material_id", "branches"))
 	var rot := ((int(data.get("rot", 0)) % 4) + 4) % 4
 	var variant := StringName(data.get("variant", ""))
-	# 0..2 are the legacy centre/edge/corner anchors.  Newer sub-grid anchors
-	# pack X/Y/Z offsets into the same integer and are intentionally larger; do
-	# not collapse them to `ANCHOR_CORNER` while loading a blueprint or history
-	# snapshot.
-	var anchor := maxi(0, int(data.get("anchor", 0)))
+	var anchor := 0
+	var raw_offset: Variant = data.get("offset", null)
+	if raw_offset is Array and raw_offset.size() >= 3:
+		anchor = BuildingBlockCatalog.pack_subgrid_anchor(
+			float(raw_offset[0]), float(raw_offset[2]), float(raw_offset[1]))
+	else:
+		# Compatibility with v7 files written before readable offsets were added.
+		anchor = maxi(0, int(data.get("anchor", 0)))
 	var rot_x := ((int(data.get("rot_x", 0)) % 4) + 4) % 4
 	var rot_z := ((int(data.get("rot_z", 0)) % 4) + 4) % 4
 	return BlueprintBlock.new(pos, block_id, rot, material_id, variant, anchor, rot_x, rot_z)

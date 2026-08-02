@@ -69,7 +69,7 @@ func _make_view(entity: MapEntityRuntime.RuntimeEntity) -> Node3D:
 		view.call("apply_entity_props", entity.props)
 	view.name = "MapEntity_%s" % entity.id
 	view.position = entity.position
-	view.rotation_degrees.y = entity.yaw_degrees
+	view.rotation_degrees = entity.rotation_degrees
 	view.scale = Vector3.ONE * entity.scale
 	view.set_meta("map_entity_id", entity.id)
 	view.set_meta("map_entity_state", entity.state)

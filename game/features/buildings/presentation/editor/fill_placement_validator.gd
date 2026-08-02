@@ -120,14 +120,8 @@ func is_valid_transform(
 	exclude_id: String = "",
 	ignored_ids: Array = [],
 ) -> bool:
-	var asset := WorldAssetCatalog.get_asset(asset_id)
-	if asset != null:
-		if not asset.is_scale_allowed(scale.x) or not is_equal_approx(scale.x, scale.y) or not is_equal_approx(scale.x, scale.z):
-			return false
-		for axis in ["x", "y", "z"]:
-			var value := rot.x if axis == "x" else (rot.y if axis == "y" else rot.z)
-			if not is_zero_approx(value) and not asset.is_rotation_axis_allowed(axis):
-				return false
+	if not is_equal_approx(scale.x, scale.y) or not is_equal_approx(scale.x, scale.z):
+		return false
 	return is_in_bounds(pos, blueprint, asset_id, scale, rot.y) \
 		and not is_collision_conflict(pos, blueprint, asset_id, scale, exclude_id, rot.y, ignored_ids)
 

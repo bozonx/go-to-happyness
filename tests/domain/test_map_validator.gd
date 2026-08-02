@@ -148,8 +148,8 @@ static func _test_entity_footprints_and_asset_transforms_are_validated() -> void
 	errors = MapValidator.validate(document, document.terrain, document.water, null)
 	assert(errors.any(func(message: String) -> bool: return message.contains("общие клетки")),
 		"validator catches authored overlaps: %s" % "; ".join(errors))
-	assert(errors.any(func(message: String) -> bool: return message.contains("масштаб")),
-		"validator enforces the asset scale policy: %s" % "; ".join(errors))
+	assert(not errors.any(func(message: String) -> bool: return message.contains("масштаб")),
+		"asset scale metadata does not prohibit a safe authored scale: %s" % "; ".join(errors))
 
 
 static func _entity_at_base(

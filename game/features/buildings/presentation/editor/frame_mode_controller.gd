@@ -22,6 +22,7 @@ var last_paint_cell: Vector3i = Vector3i.ZERO
 var paint_anchor: Vector3i = Vector3i.ZERO
 var shift_erasing: bool = false
 var _stamp_brush: Array[BlueprintBlock] = []
+var _stroke_changed := false
 var _shift_hover_block: BlueprintBlock = null
 
 var _block_nodes: Dictionary = {}
@@ -131,12 +132,9 @@ func setup(editor: Node) -> void:
 	_footprint_z_spin.value_changed.connect(_on_footprint_changed)
 
 	_style_option.clear()
-	for style_info in [
-		{"id": &"surface", "label": "Наземная"},
-		{"id": &"underground", "label": "Подземная"},
-	]:
-		_style_option.add_item(style_info["label"])
-		_style_option.set_item_metadata(_style_option.item_count - 1, style_info["id"])
+	_style_option.add_item("Наземная")
+	_style_option.set_item_metadata(0, &"surface")
+	_style_option.tooltip_text = "Подземные здания пока не реализованы"
 	_style_option.item_selected.connect(func(index: int):
 		_editor.blueprint.construction_style = _style_option.get_item_metadata(index)
 		_editor.mark_dirty()
@@ -152,10 +150,9 @@ func setup(editor: Node) -> void:
 	refresh_path_hint()
 
 	_cost_mode_option.clear()
-	_cost_mode_option.add_item("Авто-расчёт (по блокам)")
-	_cost_mode_option.set_item_metadata(0, &"auto")
-	_cost_mode_option.add_item("Ручной ввод сметы")
-	_cost_mode_option.set_item_metadata(1, &"manual")
+	_cost_mode_option.add_item("Ручная смета")
+	_cost_mode_option.set_item_metadata(0, &"manual")
+	_cost_mode_option.disabled = true
 
 	_cost_header_btn.text = "Стоимость здания"
 
@@ -350,6 +347,7 @@ func apply_tool_at_cursor() -> void:
 
 
 func begin_paint_stroke() -> void:
+	_stroke_changed = false
 	_paint_snap_blocks.clear()
 	for block: BlueprintBlock in _editor.grid_model.all_blocks():
 		_paint_snap_blocks.append(block)
@@ -389,6 +387,20 @@ func _continue_paint_to_target(target_cell: Vector3i, target_anchor: int) -> voi
 func end_paint_stroke() -> void:
 	painting = false
 	_paint_snap_blocks.clear()
+	if _stroke_changed:
+		_update_count()
+		_editor.mark_dirty()
+		_stroke_changed = false
+
+
+func _mark_frame_changed() -> void:
+	if painting:
+		_stroke_changed = true
+		if _count_label != null:
+			_count_label.text = "Блоков: %d" % _editor.grid_model.count()
+		return
+	_update_count()
+	_editor.mark_dirty()
 
 
 func _apply_tool_at_cell(cell: Vector3i, anchor_override: int = -1) -> void:
@@ -401,15 +413,13 @@ func _apply_tool_at_cell(cell: Vector3i, anchor_override: int = -1) -> void:
 				_apply_stamp_at_cell(cell)
 			elif is_block_in_bounds(cell, _editor.current_block_id, _editor.current_variant, _editor.current_rot) and _editor.grid_model.place(cell, _editor.current_block_id, _editor.current_rot, _editor.current_material_id, _editor.current_variant, placement_anchor, _editor.current_rot_x, _editor.current_rot_z):
 				_spawn_or_update_block_node(_editor.grid_model.get_block_at(cell))
-				_update_count()
-				_editor.mark_dirty()
+				_mark_frame_changed()
 		Tool.ERASE:
 			var target := _editor.grid_model.get_block_at(cell)
 			if _editor.grid_model.erase(cell):
 				if target != null:
 					_remove_block_node(target)
-				_update_count()
-				_editor.mark_dirty()
+				_mark_frame_changed()
 
 
 func _apply_stamp_at_cell(cell: Vector3i) -> void:
@@ -418,7 +428,8 @@ func _apply_stamp_at_cell(cell: Vector3i) -> void:
 	var origin := _stamp_brush[0].pos
 	for block in _stamp_brush:
 		var target := cell + (block.pos - origin)
-		if not is_block_in_bounds(target, block.block_id, block.variant, block.rot) or not _editor.grid_model.can_place(
+		if not is_block_in_bounds(target, block.block_id, block.variant, block.rot,
+			block.anchor, block.rot_x, block.rot_z) or not _editor.grid_model.can_place(
 			target, block.block_id, block.rot, block.material_id, block.variant,
 			block.anchor, block.rot_x, block.rot_z):
 			return
@@ -427,8 +438,7 @@ func _apply_stamp_at_cell(cell: Vector3i) -> void:
 		if _editor.grid_model.place(target, block.block_id, block.rot, block.material_id, block.variant,
 			block.anchor, block.rot_x, block.rot_z):
 			_spawn_or_update_block_node(_editor.grid_model.get_block_at(target))
-	_update_count()
-	_editor.mark_dirty()
+	_mark_frame_changed()
 
 
 func erase_hovered_block_or_cell() -> void:
@@ -438,8 +448,7 @@ func erase_hovered_block_or_cell() -> void:
 	if target != null and _editor.grid_model.erase_block(target):
 		_editor._set_layer(target.pos.y)
 		_remove_block_node(target)
-		_update_count()
-		_editor.mark_dirty()
+		_mark_frame_changed()
 		refresh_ghost()
 		return
 	_apply_erase_at_cell(_editor.cursor_cell)
@@ -449,8 +458,7 @@ func _apply_erase_at_cell(cell: Vector3i) -> void:
 	var target := _editor.grid_model.get_block_at(cell)
 	if target != null and _editor.grid_model.erase_block(target):
 		_remove_block_node(target)
-		_update_count()
-		_editor.mark_dirty()
+		_mark_frame_changed()
 
 
 func erase_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
@@ -749,11 +757,27 @@ func refresh_all_block_materials() -> void:
 # Bounds helpers
 # ---------------------------------------------------------------------------
 
-func is_block_in_bounds(cell: Vector3i, block_id: StringName, variant: StringName, rot: int) -> bool:
-	for covered: Vector3i in BuildingGridModel.occupied_cells(cell, block_id, variant, rot):
-		if not _editor.is_cell_in_bounds(covered):
-			return false
-	return true
+func is_block_in_bounds(
+	cell: Vector3i,
+	block_id: StringName,
+	variant: StringName,
+	rot: int,
+	anchor: int = -1,
+	rot_x: int = -1,
+	rot_z: int = -1
+) -> bool:
+	if anchor < 0:
+		anchor = _editor.current_anchor
+	if rot_x < 0:
+		rot_x = _editor.current_rot_x
+	if rot_z < 0:
+		rot_z = _editor.current_rot_z
+	var occupied := BuildingBlockCatalog.occupied_aabb(cell, block_id, variant, rot,
+		anchor, rot_x, rot_z)
+	var bounds := AABB(Vector3.ZERO, Vector3(_editor.blueprint.grid_bounds))
+	return occupied.position.x >= -0.0001 and occupied.position.y >= -0.0001 \
+		and occupied.position.z >= -0.0001 and occupied.end.x <= bounds.end.x + 0.0001 \
+		and occupied.end.y <= bounds.end.y + 0.0001 and occupied.end.z <= bounds.end.z + 0.0001
 
 
 # ---------------------------------------------------------------------------
@@ -1057,55 +1081,28 @@ func _refresh_cost_ui() -> void:
 
 	_cost_block_summary_label.text = "Всего блоков: %d" % _editor.blueprint.block_count()
 
-	if _editor.blueprint.cost_mode == &"manual":
-		_cost_mode_option.select(1)
-	else:
-		_cost_mode_option.select(0)
+	_cost_mode_option.select(0)
 
 	for child in _cost_breakdown_vbox.get_children():
 		child.queue_free()
 
-	if _editor.blueprint.cost_mode == &"auto":
-		var mat_counts: Dictionary = {}
-		for block in _editor.blueprint.blocks:
-			mat_counts[block.material_id] = int(mat_counts.get(block.material_id, 0)) + 1
-
-		for mat_id in mat_counts.keys():
-			var count: int = mat_counts[mat_id]
-			var mat_def := BuildingMaterialCatalog.get_material(mat_id)
-			var mat_name: String = mat_def.get("name", str(mat_id))
-			var comp: Dictionary = BuildingMaterialCatalog.resource_composition(mat_id)
-			if _editor.blueprint.custom_material_costs.has(mat_id) and _editor.blueprint.custom_material_costs[mat_id] is Dictionary:
-				comp = _editor.blueprint.custom_material_costs[mat_id]
-
-			var row := HBoxContainer.new()
-			var lbl := Label.new()
-			var comp_texts: Array[String] = []
-			for r in comp.keys():
-				comp_texts.append("%.2f %s" % [float(comp[r]), str(r)])
-			lbl.text = "%s (%d бл.) — %s/бл." % [mat_name, count, ", ".join(comp_texts)]
-			lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			row.add_child(lbl)
-			_cost_breakdown_vbox.add_child(row)
+	var mat_counts := _editor.blueprint.block_counts_by_material()
+	for mat_id in mat_counts.keys():
+		var mat_def := BuildingMaterialCatalog.get_material(mat_id)
+		var lbl := Label.new()
+		lbl.text = "%s — %d блоков" % [mat_def.get("name", str(mat_id)), int(mat_counts[mat_id])]
+		_cost_breakdown_vbox.add_child(lbl)
 
 	for child in _extra_costs_vbox.get_children():
 		child.queue_free()
 
-	if _editor.blueprint.cost_mode == &"manual":
-		var manual_title := Label.new()
-		manual_title.text = "Ручная смета (все ресурсы):"
-		manual_title.add_theme_font_size_override("font_size", 13)
-		_extra_costs_vbox.add_child(manual_title)
-
-		for res in _editor.blueprint.manual_costs.keys():
-			_extra_costs_vbox.add_child(_build_cost_row(
-				_editor.blueprint.manual_costs, str(res),
-				_editor.blueprint.manual_costs[res]))
-	else:
-		for res in _editor.blueprint.extra_costs.keys():
-			_extra_costs_vbox.add_child(_build_cost_row(
-				_editor.blueprint.extra_costs, str(res),
-				_editor.blueprint.extra_costs[res]))
+	var manual_title := Label.new()
+	manual_title.text = "Стоимость ресурсов задаётся вручную:"
+	manual_title.add_theme_font_size_override("font_size", 13)
+	_extra_costs_vbox.add_child(manual_title)
+	for res in _editor.blueprint.manual_costs.keys():
+		_extra_costs_vbox.add_child(_build_cost_row(
+			_editor.blueprint.manual_costs, str(res), _editor.blueprint.manual_costs[res]))
 
 	var costs_array: Array[String] = []
 	for res in _editor.blueprint.construction_cost.keys():
@@ -1117,17 +1114,15 @@ func _refresh_cost_ui() -> void:
 
 
 func _on_cost_mode_selected(index: int) -> void:
-	var mode: StringName = _cost_mode_option.get_item_metadata(index)
-	_editor.blueprint.cost_mode = mode
-	_editor.blueprint.recalculate_construction_cost()
-	_editor.mark_dirty()
-	_refresh_cost_ui()
+	pass
 
 
 func _on_add_extra_cost_pressed() -> void:
-	var default_res := "coins"
-	var current_qty := int(_editor.blueprint.extra_costs.get(default_res, 0))
-	_editor.blueprint.extra_costs[default_res] = current_qty + 1
+	var default_res := String(BuildingMaterialCatalog.resource_id(_editor.current_material_id))
+	if default_res.is_empty():
+		default_res = "resource"
+	var current_qty := int(_editor.blueprint.manual_costs.get(default_res, 0))
+	_editor.blueprint.manual_costs[default_res] = current_qty + 1
 	_editor.blueprint.recalculate_construction_cost()
 	_editor.mark_dirty()
 	_refresh_cost_ui()
@@ -1149,8 +1144,10 @@ func _build_cost_row(costs: Dictionary, key: String, value: int) -> HBoxContaine
 	name_edit.text_submitted.connect(func(new_text: String):
 		var val: int = costs.get(old_key, 1)
 		costs.erase(old_key)
-		if not new_text.strip_edges().is_empty():
-			costs[new_text.strip_edges()] = val
+		var normalized := new_text.strip_edges()
+		if not normalized.is_empty():
+			costs[normalized] = val
+			old_key = normalized
 		_editor.blueprint.recalculate_construction_cost()
 		_editor.mark_dirty()
 		_refresh_cost_ui()
@@ -1261,9 +1258,12 @@ func _on_footprint_changed(_value: float) -> void:
 	if _editor.blueprint == null or _editor._syncing_metadata_fields:
 		return
 	_editor.blueprint.footprint = Vector2i(int(_footprint_x_spin.value), int(_footprint_z_spin.value))
+	_editor.blueprint.grid_bounds.x = _editor.blueprint.footprint.x
+	_editor.blueprint.grid_bounds.z = _editor.blueprint.footprint.y
 	var removed := 0
 	for block in _editor.grid_model.all_blocks():
-		if not is_block_in_bounds(block.pos, block.block_id, block.variant, block.rot):
+		if not is_block_in_bounds(block.pos, block.block_id, block.variant, block.rot,
+			block.anchor, block.rot_x, block.rot_z):
 			_editor.grid_model.erase_block(block)
 			_remove_block_node(block)
 			removed += 1
@@ -1373,6 +1373,8 @@ func collect_metadata_from_ui() -> void:
 		_editor.blueprint.variant = StringName(raw_variant) if not raw_variant.is_empty() else &"default"
 	if _footprint_x_spin != null and _footprint_z_spin != null:
 		_editor.blueprint.footprint = Vector2i(int(_footprint_x_spin.value), int(_footprint_z_spin.value))
+		_editor.blueprint.grid_bounds.x = _editor.blueprint.footprint.x
+		_editor.blueprint.grid_bounds.z = _editor.blueprint.footprint.y
 	_editor.grid_model.write_to_blueprint(_editor.blueprint)
 
 

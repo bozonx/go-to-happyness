@@ -119,10 +119,8 @@ static func _validate_entities(document: MapDocument, terrain: TerrainGrid, erro
 		var asset := EntityArchetypeCatalog.asset_of(archetype.id)
 		if asset == null:
 			continue
-		if not asset.is_scale_allowed(entity.scale):
-			errors.append("сущность %s задаёт недопустимый масштаб %.3f" % [entity.id, entity.scale])
-		if not is_zero_approx(entity.yaw_degrees) and not asset.is_rotation_axis_allowed("y"):
-			errors.append("сущность %s вращается вокруг запрещённой оси Y" % entity.id)
+		if entity.scale <= 0.0:
+			errors.append("сущность %s задаёт небезопасный масштаб %.3f" % [entity.id, entity.scale])
 		for property_name: Variant in entity.props.keys():
 			if archetype.get_property(StringName(property_name)) == null:
 				errors.append("сущность %s задаёт неизвестное свойство %s" % [entity.id, property_name])

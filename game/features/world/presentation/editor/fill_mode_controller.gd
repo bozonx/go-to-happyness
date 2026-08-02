@@ -13,11 +13,14 @@ extends MapEditorMode
 ## действие то же самое (`map_fill_mode.md` §9.1).
 
 const INSPECTOR_CELL := &"editor_cell"
+const INSPECTOR_ELEVATION := &"editor_elevation"
 const INSPECTOR_OFFSET := &"editor_offset"
+const INSPECTOR_PITCH := &"editor_pitch"
 const INSPECTOR_YAW := &"editor_yaw"
+const INSPECTOR_ROLL := &"editor_roll"
 const INSPECTOR_SCALE := &"editor_scale"
 const INSPECTOR_INITIAL_STATE := &"editor_initial_state"
-const TRANSFORM_PROPERTIES: Array[StringName] = [INSPECTOR_CELL, INSPECTOR_OFFSET, INSPECTOR_YAW, INSPECTOR_SCALE]
+const TRANSFORM_PROPERTIES: Array[StringName] = [INSPECTOR_CELL, INSPECTOR_ELEVATION, INSPECTOR_OFFSET, INSPECTOR_PITCH, INSPECTOR_YAW, INSPECTOR_ROLL, INSPECTOR_SCALE]
 ## Действие «заменить выделенное на выбранный в палитре архетип».
 const OPTION_REPLACE := &"fill_replace"
 
@@ -28,6 +31,9 @@ var _archetype_id: StringName = &""
 var _brush_props: Dictionary = {}
 var _brush_initial_state: StringName = EntityStateSet.FOLLOW_SEASON
 var _brush_yaw_degrees := 0.0
+var _brush_pitch_degrees := 0.0
+var _brush_roll_degrees := 0.0
+var _brush_elevation_blocks := 0
 var _brush_scale := 1.0
 var _brush_offset := Vector3.ZERO
 var _pending_reference_property: StringName = &""
@@ -42,6 +48,10 @@ var _warnings_by_entity: Dictionary = {}
 var _ghost: Node3D = null
 var _ghost_archetype_id: StringName = &""
 var _ghost_material: StandardMaterial3D = null
+var _placing_stroke := false
+var _last_placed_cell := Vector2i(-999999, -999999)
+var _placement_stroke_serial := 0
+var _placement_merge_key: StringName = &""
 
 
 func _init() -> void:
@@ -81,7 +91,9 @@ func clear_hover() -> void:
 
 
 func hover_brush() -> BaseBrushController:
-	return context.brush if context != null else null
+	# Fill has its own asset ghost. The generic terrain brush marker would draw a
+	# second cursor-attached shape on top of it.
+	return null
 
 
 func process(_delta: float) -> void:
@@ -92,6 +104,8 @@ func process(_delta: float) -> void:
 func handle_input(event: InputEvent) -> bool:
 	if event is InputEventMouseButton:
 		return _handle_mouse(event as InputEventMouseButton)
+	if event is InputEventMouseMotion:
+		return _continue_placement_stroke()
 	if event is InputEventKey and event.is_pressed() and not event.is_echo():
 		var key := event as InputEventKey
 		if key.ctrl_pressed:
@@ -100,13 +114,11 @@ func handle_input(event: InputEvent) -> bool:
 			KEY_DELETE:
 				return _delete_selected()
 			KEY_C, KEY_R:
-				return _rotate_selection(-1 if key.shift_pressed else 1)
-			KEY_X, KEY_Z:
-				# Обе оси существуют в редакторе зданий, но запись карты хранит
-				# только рыскание: врать автору поворотом, который некуда
-				# положить, хуже, чем сказать это в статусе.
-				context.set_status_message("На карте объект поворачивается только вокруг Y: C или R.", true)
-				return true
+				return _rotate_selection("y", -1 if key.shift_pressed else 1)
+			KEY_X:
+				return _rotate_selection("x", -1 if key.shift_pressed else 1)
+			KEY_Z:
+				return _rotate_selection("z", -1 if key.shift_pressed else 1)
 			KEY_ESCAPE:
 				if _pending_reference_property != &"":
 					_pending_reference_property = &""
@@ -127,8 +139,13 @@ func pick_from_cell() -> bool:
 
 
 func _handle_mouse(event: InputEventMouseButton) -> bool:
+	if event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		var consumed := _placing_stroke
+		_placing_stroke = false
+		return consumed
 	if not event.pressed or not context.brush.has_hover:
 		return false
+	_placing_stroke = false
 	var cell := context.brush.hovered_cell
 	# Shift+ПКМ — обратное действие, как во всех режимах редактора карт
 	# (`map_editor.md` §3.3); обычная ПКМ остаётся камере.
@@ -164,7 +181,28 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 		rebuild_views()
 		notify_ui_changed()
 		return true
-	_place(cell)
+	_placement_stroke_serial += 1
+	_placement_merge_key = StringName("fill_stroke/%d" % _placement_stroke_serial)
+	_place(cell, _placement_merge_key)
+	_placing_stroke = true
+	_last_placed_cell = cell
+	return true
+
+
+func _continue_placement_stroke() -> bool:
+	if not _placing_stroke or not context.brush.has_hover or _archetype_id == &"":
+		return false
+	var cell := context.brush.hovered_cell
+	if cell == _last_placed_cell:
+		return true
+	# Fill every crossed cell so fast mouse movement cannot leave a dotted trail.
+	var delta := cell - _last_placed_cell
+	var steps := maxi(absi(delta.x), absi(delta.y))
+	for index in range(1, steps + 1):
+		var sample := Vector2i(roundi(lerpf(_last_placed_cell.x, cell.x, float(index) / steps)), roundi(lerpf(_last_placed_cell.y, cell.y, float(index) / steps)))
+		if _entity_at(sample) == &"":
+			_place(sample, _placement_merge_key)
+	_last_placed_cell = cell
 	return true
 
 
@@ -214,6 +252,9 @@ func _cancel_current_action() -> bool:
 		_archetype_id = &""
 		_brush_props.clear()
 		_brush_yaw_degrees = 0.0
+		_brush_pitch_degrees = 0.0
+		_brush_roll_degrees = 0.0
+		_brush_elevation_blocks = 0
 		_brush_scale = 1.0
 		_brush_offset = Vector3.ZERO
 		_brush_initial_state = EntityStateSet.FOLLOW_SEASON
@@ -296,7 +337,7 @@ func _anchor_position(cells: Rect2i, archetype: EntityArchetype) -> Vector3:
 	return Vector3(centre.x, probe.y, centre.y)
 
 
-func _place(cell: Vector2i) -> void:
+func _place(cell: Vector2i, merge_key: StringName = &"") -> void:
 	var archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
 	if archetype == null:
 		return
@@ -312,16 +353,19 @@ func _place(cell: Vector2i) -> void:
 	record.id = _next_id("entity")
 	record.archetype_id = archetype.id
 	record.offset = _brush_offset
-	record.position = _anchor_position(cells, archetype) + _brush_offset
+	record.elevation_blocks = _brush_elevation_blocks
+	record.position = _anchor_position(cells, archetype) + Vector3.UP * record.elevation_blocks + _brush_offset
 	record.initial_state = _brush_initial_state
 	record.activity = archetype.activity
 	record.props = _brush_props.duplicate(true)
 	record.yaw_degrees = _brush_yaw_degrees
+	record.pitch_degrees = _brush_pitch_degrees
+	record.roll_degrees = _brush_roll_degrees
 	record.scale = _brush_scale
 	_warnings_by_entity[record.id] = _placement_warnings_for_cells(cells, archetype)
 	context.document.entities.entities.append(record)
 	_select(record.id, false)
-	_commit(before, "размещение %s" % archetype.name)
+	_commit(before, "размещение %s" % archetype.name, merge_key)
 
 
 func _erase_at(cell: Vector2i) -> bool:
@@ -420,6 +464,9 @@ func _pick_archetype(cell: Vector2i) -> bool:
 	# объект. Именно это делает отдельное «дублировать» ненужным.
 	_brush_props = record.props.duplicate(true)
 	_brush_yaw_degrees = record.yaw_degrees
+	_brush_pitch_degrees = record.pitch_degrees
+	_brush_roll_degrees = record.roll_degrees
+	_brush_elevation_blocks = record.elevation_blocks
 	_brush_scale = record.scale
 	_brush_offset = record.offset
 	_brush_initial_state = record.initial_state
@@ -451,36 +498,35 @@ func _delete_selected() -> bool:
 	return true
 
 
-func _rotate_selection(direction: int) -> bool:
+func _rotate_selection(axis: String, direction: int) -> bool:
 	var selected := _selected_ids()
 	if selected.is_empty():
-		var asset := EntityArchetypeCatalog.asset_of(_archetype_id)
-		if asset == null:
+		if EntityArchetypeCatalog.asset_of(_archetype_id) == null:
 			return false
-		if not asset.is_rotation_axis_allowed("y"):
-			context.set_status_message("Этот ассет нельзя вращать вокруг Y.", true)
-			return true
-		_brush_yaw_degrees = EditorFillConventions.rotated_by(_brush_yaw_degrees, direction)
+		match axis:
+			"x": _brush_pitch_degrees = EditorFillConventions.rotated_by(_brush_pitch_degrees, direction)
+			"y": _brush_yaw_degrees = EditorFillConventions.rotated_by(_brush_yaw_degrees, direction)
+			"z": _brush_roll_degrees = EditorFillConventions.rotated_by(_brush_roll_degrees, direction)
 		notify_ui_changed()
 		_refresh_ghost()
 		return true
 	var proposed_cells: Dictionary = {}
-	var proposed_yaws: Dictionary = {}
+	var proposed_rotations: Dictionary = {}
 	for entity_id: StringName in selected:
 		var record := context.document.entities.by_id(entity_id)
 		if record == null:
 			continue
-		var yaw := EditorFillConventions.rotated_by(record.yaw_degrees, direction)
-		var asset := EntityArchetypeCatalog.asset_of(record.archetype_id)
-		if asset != null and not is_zero_approx(yaw) and not asset.is_rotation_axis_allowed("y"):
-			context.set_status_message("Поворот не применён: один из ассетов запрещает ось Y.", true)
-			return true
-		var cells := Rect2i(_base_cell(record), cell_span(record.archetype_id, record.scale, yaw))
+		var rotation := Vector3(record.pitch_degrees, record.yaw_degrees, record.roll_degrees)
+		match axis:
+			"x": rotation.x = EditorFillConventions.rotated_by(rotation.x, direction)
+			"y": rotation.y = EditorFillConventions.rotated_by(rotation.y, direction)
+			"z": rotation.z = EditorFillConventions.rotated_by(rotation.z, direction)
+		var cells := Rect2i(_base_cell(record), cell_span(record.archetype_id, record.scale, rotation.y))
 		if not _cells_placeable(cells) or not _cells_free_ignoring(cells, selected, record.archetype_id):
 			context.set_status_message("Поворот не применён: итоговые клетки заняты или вне карты.", true)
 			return true
 		proposed_cells[entity_id] = cells
-		proposed_yaws[entity_id] = yaw
+		proposed_rotations[entity_id] = rotation
 	if not _proposed_selection_is_free(proposed_cells):
 		context.set_status_message("Поворот не применён: выбранные объекты пересекутся.", true)
 		return true
@@ -490,8 +536,11 @@ func _rotate_selection(direction: int) -> bool:
 		var archetype := EntityArchetypeCatalog.get_archetype(record.archetype_id) if record != null else null
 		if record == null or archetype == null:
 			continue
-		record.yaw_degrees = proposed_yaws[entity_id]
-		record.position = _anchor_position(proposed_cells[entity_id], archetype) + record.offset
+		var rotation: Vector3 = proposed_rotations[entity_id]
+		record.pitch_degrees = rotation.x
+		record.yaw_degrees = rotation.y
+		record.roll_degrees = rotation.z
+		record.position = _anchor_position(proposed_cells[entity_id], archetype) + Vector3.UP * record.elevation_blocks + record.offset
 	_commit(before, "поворот %d объект(а)" % selected.size())
 	return true
 
@@ -568,7 +617,7 @@ func _apply_transform(view: Node3D, record: MapEntityRecord) -> void:
 	# Stored Y is the authored offset above ground. The editor must draw the same
 	# terrain-attached transform the launched map uses, otherwise objects vanish
 	# into raised terrain or float over excavations.
-	view.rotation_degrees.y = record.yaw_degrees
+	view.rotation_degrees = Vector3(record.pitch_degrees, record.yaw_degrees, record.roll_degrees)
 	view.scale = Vector3.ONE * record.scale
 
 
@@ -635,8 +684,8 @@ func _refresh_ghost() -> void:
 			_ghost.call("apply_decor_properties", appearance)
 	_ghost.visible = true
 	var cells := _brush_cells(cell)
-	_ghost.position = _world_position(_anchor_position(cells, archetype) + _brush_offset)
-	_ghost.rotation_degrees.y = _brush_yaw_degrees
+	_ghost.position = _world_position(_anchor_position(cells, archetype) + Vector3.UP * _brush_elevation_blocks + _brush_offset)
+	_ghost.rotation_degrees = Vector3(_brush_pitch_degrees, _brush_yaw_degrees, _brush_roll_degrees)
 	_ghost.scale = Vector3.ONE * _brush_scale
 	var blocked := not _cells_placeable(cells) or not _cells_free(cells)
 	var warned := not _placement_warnings_for_cells(cells, archetype).is_empty()
@@ -885,18 +934,17 @@ func inspector_properties() -> Array[EntityPropertyDef]:
 			"default": [0.0, 0.0, 0.0]})
 		var properties: Array[EntityPropertyDef] = [
 			cell_property,
+			EntityPropertyDef.from_dict({"name": INSPECTOR_ELEVATION, "label": "Уровень Y", "type": "int", "section": "transform", "unit": "блок", "step": 1.0, "default": 0}),
 			offset_property,
+			EntityPropertyDef.from_dict({"name": INSPECTOR_PITCH, "label": "Поворот X", "type": "float", "section": "transform", "unit": "°", "min": 0.0, "max": 359.0, "step": EditorFillConventions.ROTATION_STEP_DEG, "default": 0.0}),
 			EntityPropertyDef.from_dict({"name": INSPECTOR_YAW, "label": "Поворот Y", "type": "float", "section": "transform", "unit": "°", "min": 0.0, "max": 359.0, "step": EditorFillConventions.ROTATION_STEP_DEG, "default": 0.0}),
+			EntityPropertyDef.from_dict({"name": INSPECTOR_ROLL, "label": "Поворот Z", "type": "float", "section": "transform", "unit": "°", "min": 0.0, "max": 359.0, "step": EditorFillConventions.ROTATION_STEP_DEG, "default": 0.0}),
 			EntityPropertyDef.from_dict({"name": INSPECTOR_SCALE, "label": "Масштаб", "type": "float", "section": "transform", "min": EditorFillConventions.SCALE_MIN, "max": EditorFillConventions.SCALE_MAX, "step": EditorFillConventions.SCALE_STEP, "default": 1.0}),
 		]
 		if selected.size() > 1:
 			return properties
 		var primary := context.document.entities.by_id(selected[0])
 		var archetype := EntityArchetypeCatalog.get_archetype(primary.archetype_id) if primary != null else null
-		var asset := EntityArchetypeCatalog.asset_of(primary.archetype_id) if primary != null else null
-		if asset != null and asset.scale_mode == WorldAssetDef.SCALE_LOCKED:
-			properties[3].editable = false
-			properties[3].unavailable_reason = "Масштаб зафиксирован в описании ассета."
 		if archetype != null:
 			properties.append(_initial_state_property(archetype))
 			properties.append_array(archetype.property_schema)
@@ -904,12 +952,13 @@ func inspector_properties() -> Array[EntityPropertyDef]:
 
 	var active_archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
 	if active_archetype != null:
-		var active_asset := EntityArchetypeCatalog.asset_of(active_archetype.id)
-		var scale_editable := active_asset == null or active_asset.scale_mode != WorldAssetDef.SCALE_LOCKED
 		var brush_properties: Array[EntityPropertyDef] = [
+			EntityPropertyDef.from_dict({"name": INSPECTOR_ELEVATION, "label": "Уровень Y", "type": "int", "section": "transform", "unit": "блок", "step": 1.0, "default": 0}),
 			EntityPropertyDef.from_dict({"name": INSPECTOR_OFFSET, "label": "Смещение", "type": "vector3", "section": "transform", "unit": "м", "step": EditorFillConventions.OFFSET_STEP, "min": -EditorFillConventions.MAX_OFFSET_CELLS, "max": EditorFillConventions.MAX_OFFSET_CELLS, "default": [0.0, 0.0, 0.0]}),
+			EntityPropertyDef.from_dict({"name": INSPECTOR_PITCH, "label": "Поворот X", "type": "float", "section": "transform", "unit": "°", "min": 0.0, "max": 359.0, "step": EditorFillConventions.ROTATION_STEP_DEG, "default": 0.0}),
 			EntityPropertyDef.from_dict({"name": INSPECTOR_YAW, "label": "Поворот Y", "type": "float", "section": "transform", "unit": "°", "min": 0.0, "max": 359.0, "step": EditorFillConventions.ROTATION_STEP_DEG, "default": 0.0}),
-			EntityPropertyDef.from_dict({"name": INSPECTOR_SCALE, "label": "Масштаб", "type": "float", "section": "transform", "min": EditorFillConventions.SCALE_MIN, "max": EditorFillConventions.SCALE_MAX, "step": EditorFillConventions.SCALE_STEP, "default": 1.0, "editable": scale_editable, "unavailable_reason": "" if scale_editable else "Масштаб зафиксирован в описании ассета."}),
+			EntityPropertyDef.from_dict({"name": INSPECTOR_ROLL, "label": "Поворот Z", "type": "float", "section": "transform", "unit": "°", "min": 0.0, "max": 359.0, "step": EditorFillConventions.ROTATION_STEP_DEG, "default": 0.0}),
+			EntityPropertyDef.from_dict({"name": INSPECTOR_SCALE, "label": "Масштаб", "type": "float", "section": "transform", "min": EditorFillConventions.SCALE_MIN, "max": EditorFillConventions.SCALE_MAX, "step": EditorFillConventions.SCALE_STEP, "default": 1.0}),
 			_initial_state_property(active_archetype),
 		]
 		brush_properties.append_array(active_archetype.property_schema)
@@ -938,8 +987,11 @@ func inspector_values() -> Dictionary:
 		var values := archetype.resolved_properties(selected.props) if archetype != null else {}
 		var cell := _base_cell(selected)
 		values[INSPECTOR_CELL] = Vector2(cell.x, cell.y)
+		values[INSPECTOR_ELEVATION] = selected.elevation_blocks
 		values[INSPECTOR_OFFSET] = selected.offset
+		values[INSPECTOR_PITCH] = selected.pitch_degrees
 		values[INSPECTOR_YAW] = selected.yaw_degrees
+		values[INSPECTOR_ROLL] = selected.roll_degrees
 		values[INSPECTOR_SCALE] = selected.scale
 		values[INSPECTOR_INITIAL_STATE] = String(selected.initial_state)
 		return values
@@ -947,8 +999,11 @@ func inspector_values() -> Dictionary:
 	var active_archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
 	if active_archetype != null:
 		var brush_values := active_archetype.resolved_properties(_brush_props)
+		brush_values[INSPECTOR_ELEVATION] = _brush_elevation_blocks
 		brush_values[INSPECTOR_OFFSET] = _brush_offset
+		brush_values[INSPECTOR_PITCH] = _brush_pitch_degrees
 		brush_values[INSPECTOR_YAW] = _brush_yaw_degrees
+		brush_values[INSPECTOR_ROLL] = _brush_roll_degrees
 		brush_values[INSPECTOR_SCALE] = _brush_scale
 		brush_values[INSPECTOR_INITIAL_STATE] = String(_brush_initial_state)
 		return brush_values
@@ -1009,14 +1064,24 @@ func _apply_brush_value(property_name: StringName, value: Variant) -> bool:
 		_brush_offset = next_offset
 		notify_ui_changed()
 		return true
-	if property_name == INSPECTOR_YAW:
-		var asset := EntityArchetypeCatalog.asset_of(archetype.id)
-		var next_yaw := fposmod(float(value), 360.0)
-		if asset != null and not is_zero_approx(next_yaw) and not asset.is_rotation_axis_allowed("y"):
+	if property_name == INSPECTOR_ELEVATION:
+		var next_elevation := int(round(float(value)))
+		if _brush_elevation_blocks == next_elevation:
 			return false
-		if is_equal_approx(_brush_yaw_degrees, next_yaw):
+		_brush_elevation_blocks = next_elevation
+		notify_ui_changed()
+		return true
+	if property_name in [INSPECTOR_PITCH, INSPECTOR_YAW, INSPECTOR_ROLL]:
+		var next_rotation := fposmod(float(value), 360.0)
+		var current := _brush_pitch_degrees if property_name == INSPECTOR_PITCH else (_brush_yaw_degrees if property_name == INSPECTOR_YAW else _brush_roll_degrees)
+		if is_equal_approx(current, next_rotation):
 			return false
-		_brush_yaw_degrees = next_yaw
+		if property_name == INSPECTOR_PITCH:
+			_brush_pitch_degrees = next_rotation
+		elif property_name == INSPECTOR_YAW:
+			_brush_yaw_degrees = next_rotation
+		else:
+			_brush_roll_degrees = next_rotation
 		notify_ui_changed()
 		return true
 	if property_name == INSPECTOR_SCALE:
@@ -1065,14 +1130,14 @@ func reset_inspector_value(property_name: StringName) -> bool:
 			return _apply_brush_value(property_name, String(EntityStateSet.FOLLOW_SEASON))
 		if property_name == INSPECTOR_OFFSET:
 			return _apply_brush_value(property_name, [0.0, 0.0, 0.0])
-		if property_name == INSPECTOR_YAW:
+		if property_name in [INSPECTOR_ELEVATION, INSPECTOR_PITCH, INSPECTOR_YAW, INSPECTOR_ROLL]:
 			return _apply_brush_value(property_name, 0.0)
 		if property_name == INSPECTOR_SCALE:
 			return _apply_brush_value(property_name, 1.0)
 		var brush_definition := archetype.get_property(property_name)
 		return _apply_brush_value(property_name, brush_definition.default) \
 			if brush_definition != null else false
-	if property_name == INSPECTOR_YAW:
+	if property_name in [INSPECTOR_ELEVATION, INSPECTOR_PITCH, INSPECTOR_YAW, INSPECTOR_ROLL]:
 		return _apply_transform_value(primary, property_name, 0.0, false)
 	if property_name == INSPECTOR_SCALE:
 		return _apply_transform_value(primary, property_name, 1.0, false)
@@ -1108,7 +1173,8 @@ func _apply_transform_value(record: MapEntityRecord, property_name: StringName, 
 			changed = true
 	else:
 		var shift := Vector2i.ZERO
-		var requested_yaw := fposmod(float(value), 360.0) if property_name == INSPECTOR_YAW else 0.0
+		var requested_rotation := fposmod(float(value), 360.0) if property_name in [INSPECTOR_PITCH, INSPECTOR_YAW, INSPECTOR_ROLL] else 0.0
+		var requested_elevation := int(round(float(value))) if property_name == INSPECTOR_ELEVATION else 0
 		if property_name == INSPECTOR_CELL:
 			var requested := EntityPropertyDef.from_dict({"name": "cell", "type": "vector2"}).coerce_value(value) as Vector2
 			var target_cell := Vector2i(int(round(requested.x)), int(round(requested.y)))
@@ -1117,25 +1183,25 @@ func _apply_transform_value(record: MapEntityRecord, property_name: StringName, 
 			return false
 
 		var proposed_cells: Dictionary = {}
-		var proposed_yaws: Dictionary = {}
+		var proposed_rotations: Dictionary = {}
 		var proposed_scales: Dictionary = {}
+		var proposed_elevations: Dictionary = {}
 		for entity_id: StringName in selected:
 			var target := context.document.entities.by_id(entity_id)
 			if target == null:
 				continue
-			var yaw := requested_yaw if property_name == INSPECTOR_YAW else target.yaw_degrees
+			var rotation := Vector3(target.pitch_degrees, target.yaw_degrees, target.roll_degrees)
+			if property_name == INSPECTOR_PITCH: rotation.x = requested_rotation
+			if property_name == INSPECTOR_YAW: rotation.y = requested_rotation
+			if property_name == INSPECTOR_ROLL: rotation.z = requested_rotation
 			var scale := target.scale
 			var asset := EntityArchetypeCatalog.asset_of(target.archetype_id)
-			if property_name == INSPECTOR_YAW and asset != null \
-					and not is_zero_approx(yaw) and not asset.is_rotation_axis_allowed("y"):
-				context.set_status_message("Ассет запрещает поворот вокруг Y.", true)
-				return false
 			if property_name == INSPECTOR_SCALE:
 				scale = EditorFillConventions.normalized_scale(
 					asset, float(value))
 			var cells := Rect2i(
 				_base_cell(target) + shift,
-				cell_span(target.archetype_id, scale, yaw),
+				cell_span(target.archetype_id, scale, rotation.y),
 			)
 			if not _cells_placeable(cells):
 				context.set_status_message("Клетки вне карты или попадают в вырез.", true)
@@ -1144,8 +1210,9 @@ func _apply_transform_value(record: MapEntityRecord, property_name: StringName, 
 				context.set_status_message("Эти клетки уже заняты другим объектом.", true)
 				return false
 			proposed_cells[entity_id] = cells
-			proposed_yaws[entity_id] = yaw
+			proposed_rotations[entity_id] = rotation
 			proposed_scales[entity_id] = scale
+			proposed_elevations[entity_id] = requested_elevation if property_name == INSPECTOR_ELEVATION else target.elevation_blocks
 		if not _proposed_selection_is_free(proposed_cells):
 			context.set_status_message("Объекты выделения пересекутся после изменения.", true)
 			return false
@@ -1158,15 +1225,20 @@ func _apply_transform_value(record: MapEntityRecord, property_name: StringName, 
 			if archetype == null:
 				continue
 			var cells: Rect2i = proposed_cells[entity_id]
-			var yaw: float = proposed_yaws[entity_id]
+			var rotation: Vector3 = proposed_rotations[entity_id]
 			var scale: float = proposed_scales[entity_id]
+			var elevation: int = proposed_elevations[entity_id]
 			if _base_cell(target) != cells.position \
-					or not is_equal_approx(target.yaw_degrees, yaw) \
+					or not Vector3(target.pitch_degrees, target.yaw_degrees, target.roll_degrees).is_equal_approx(rotation) \
+					or target.elevation_blocks != elevation \
 					or not is_equal_approx(target.scale, scale):
 				changed = true
-			target.yaw_degrees = yaw
+			target.pitch_degrees = rotation.x
+			target.yaw_degrees = rotation.y
+			target.roll_degrees = rotation.z
+			target.elevation_blocks = elevation
 			target.scale = scale
-			target.position = _anchor_position(cells, archetype) + target.offset
+			target.position = _anchor_position(cells, archetype) + Vector3.UP * elevation + target.offset
 	if not changed:
 		return false
 	var merge_key := StringName("%s/%s" % [record.id, property_name]) if mergeable else &""

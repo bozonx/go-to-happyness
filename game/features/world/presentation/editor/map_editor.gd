@@ -650,6 +650,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_refresh_panels()
 		return
 	if event is InputEventMouseMotion:
+		if _active != null and _active.handle_input(event):
+			_refresh_panels()
+			return
 		camera.handle_mouse_motion(event as InputEventMouseMotion)
 		return
 	if event is InputEventKey and event.is_pressed() and not event.is_echo():
