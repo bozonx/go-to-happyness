@@ -842,7 +842,7 @@ func _setup_controllers_and_world() -> void:
 
 func _setup_citizens_and_ai() -> void:
 	game.citizen_factory.create_citizens()
-	game.citizen_factory.create_starter_backpack()
+	game.citizen_factory.create_party_stash()
 	game.simulation_tick_controller.refresh_living_statuses()
 	if not game.citizen_ai.configure(
 		SettlementAIWorldFacade.new(game),

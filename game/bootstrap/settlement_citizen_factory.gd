@@ -1,7 +1,7 @@
 class_name SettlementCitizenFactory
 extends RefCounted
 
-## Handles citizen spawning, wiring, AI registration, starter backpack creation,
+## Handles citizen spawning, wiring, AI registration, party stash creation,
 ## and citizen lookup by AI id. Extracted from SettlementGame to reduce monolithic
 ## file size.
 
@@ -143,7 +143,7 @@ func wire_citizen(citizen: Citizen) -> void:
 ## of object — it is a role an author gives an object — so a chest, a cart or a
 ## barrel now works with no code at all, and two marked containers are summed
 ## instead of one being silently ignored.
-func create_starter_backpack() -> void:
+func create_party_stash() -> void:
 	if game.settlement.warehouse_ever_built:
 		return
 	if game.launch_config == null or game.launch_config.map_document == null:

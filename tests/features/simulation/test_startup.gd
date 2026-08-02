@@ -188,7 +188,7 @@ func _count_natural_entities(simulation: Node) -> void:
 	assert(document != null)
 	var expected := {
 		&"tree": 0, &"grass_source": 0, &"forage_source": 0,
-		&"rabbit": 0, &"fireflies": 0, &"starter_loot": 0, &"starter_backpack": 0,
+		&"rabbit": 0, &"fireflies": 0, &"starter_loot": 0, &"backpack": 0,
 	}
 	for placed: MapEntityRecord in document.entities.entities:
 		var archetype := EntityArchetypeCatalog.get_archetype(placed.archetype_id)
@@ -201,7 +201,7 @@ func _count_natural_entities(simulation: Node) -> void:
 		var kind := StringName(archetype.component_data(&"settlement_natural").get("kind", ""))
 		if expected.has(kind):
 			expected[kind] += 1
-	# starter_loot becomes resource piles; starter_backpack is a single pile.
+	# starter_loot becomes resource piles; the party stash is a single pile.
 	assert(simulation.tree_nodes.size() == expected[&"tree"])
 	assert(simulation.grass_sources.size() == expected[&"grass_source"])
 	assert(simulation.forage_sources.size() == expected[&"forage_source"])

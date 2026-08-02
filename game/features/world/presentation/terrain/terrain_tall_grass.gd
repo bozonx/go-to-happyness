@@ -11,7 +11,12 @@ extends RefCounted
 
 const TEXTURE_PATH := "res://game/features/world/presentation/terrain/assets/grass_tall_atlas.png"
 const SHADER_PATH := "res://game/features/world/presentation/terrain/tall_grass.gdshader"
-const VARIANT_COUNT := 3
+## Columns in the atlas, one per variant of `grass_tall`. Read from the catalog:
+## a hand-written count is a second source of truth for something the catalog
+## already states, and it fails silently.
+static var VARIANT_COUNT := TerrainMaterialVariants.variant_count(
+	TerrainMaterialCatalog.index_of(TerrainMaterialCatalog.GRASS_TALL)
+)
 
 const CARD_WIDTH := 0.82
 const CARD_HEIGHT := 1.25

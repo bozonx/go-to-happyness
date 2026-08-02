@@ -20,11 +20,30 @@ extends RefCounted
 ## record) but it would put a second encoding between the author and their map.
 ## The package skips the file entirely when the layer is untouched, which is the
 ## same saving for the case that actually occurs.
+##
+## ## The material catalog travels with the file
+##
+## A material index is one byte, and which material that byte means is decided by
+## `TerrainMaterialCatalog` — a list the engine keeps and content packs will add
+## to (`content_packaging.md`). Writing the bare byte therefore only works while
+## exactly one build of the game exists. The header carries the id list the file
+## was written with, and loading remaps it onto the current catalog by NAME
+## (`terrain_materials.md` §2, §2.6). A material the current build does not know
+## degrades to the default rather than becoming whichever surface inherited its
+## number.
 
 const MAGIC := "GTHT"
-const VERSION := 1
+## v2 added the material catalog to the header. v1 files decode unchanged: they
+## were written when the engine owned every index, and their bytes still mean
+## what they meant, so they are read with an identity mapping.
+const VERSION := 2
+const LEGACY_VERSION := 1
 const HEADER_BYTES := 16
 const BYTES_PER_CELL := 5
+
+## Offset of the material catalog's byte length in the header. The field was the
+## `reserved` word of v1, which is exactly what a reserved word is for.
+const CATALOG_BYTES_OFFSET := 12
 
 ## Heights run −64..191 (`TerrainGrid.MIN_HEIGHT`/`MAX_HEIGHT`) — 256 values, so
 ## they fit one byte once biased by the minimum.
@@ -50,13 +69,16 @@ static func encode(grid: TerrainGrid, skip_if_default := true) -> PackedByteArra
 	if skip_if_default and is_default(grid):
 		return buffer
 
+	var catalog := _encode_catalog()
 	var count := grid.board_cells * grid.board_cells
-	buffer.resize(HEADER_BYTES + count * BYTES_PER_CELL)
-	_write_header(buffer, grid.board_cells)
+	buffer.resize(HEADER_BYTES + catalog.size() + count * BYTES_PER_CELL)
+	_write_header(buffer, grid.board_cells, catalog.size())
+	for index in catalog.size():
+		buffer[HEADER_BYTES + index] = catalog[index]
 
 	var minimum := grid.min_cell()
 	var maximum := grid.max_cell()
-	var offset := HEADER_BYTES
+	var offset := HEADER_BYTES + catalog.size()
 	for z in range(minimum.y, maximum.y + 1):
 		for x in range(minimum.x, maximum.x + 1):
 			var cell := Vector2i(x, z)
@@ -85,18 +107,17 @@ static func decode_into(buffer: PackedByteArray, grid: TerrainGrid) -> bool:
 	if board_cells != grid.board_cells:
 		return false
 
+	var remap := _decode_catalog_remap(buffer)
 	var minimum := grid.min_cell()
 	var maximum := grid.max_cell()
-	var offset := HEADER_BYTES
+	var offset := HEADER_BYTES + int(buffer.decode_u32(CATALOG_BYTES_OFFSET))
 	for z in range(minimum.y, maximum.y + 1):
 		for x in range(minimum.x, maximum.x + 1):
 			var slope := buffer[offset + 3]
 			var index_flags := buffer[offset + 4]
 			# One call per cell: the grid recomputes nothing and marks the chunk
 			# dirty once, instead of once per field.
-			var material_index := buffer[offset + 1]
-			if not TerrainMaterialCatalog.is_valid_index(material_index):
-				material_index = TerrainMaterialCatalog.DEFAULT_INDEX
+			var material_index := int(remap[buffer[offset + 1]])
 			var detail := TerrainDetailCodec.with_variant(
 				buffer[offset + 2],
 				TerrainMaterialVariants.clamp_variant(material_index, TerrainDetailCodec.variant_of(buffer[offset + 2])),
@@ -121,12 +142,16 @@ static func is_valid(buffer: PackedByteArray) -> bool:
 	for index in MAGIC.length():
 		if buffer[index] != MAGIC.unicode_at(index):
 			return false
-	if buffer.decode_u16(4) != VERSION:
+	var version := buffer.decode_u16(4)
+	if version != VERSION and version != LEGACY_VERSION:
 		return false
 	if buffer.decode_u16(6) != BYTES_PER_CELL:
 		return false
+	var catalog_bytes := int(buffer.decode_u32(CATALOG_BYTES_OFFSET))
+	if catalog_bytes < 0 or HEADER_BYTES + catalog_bytes > buffer.size():
+		return false
 	var board_cells := board_cells_of(buffer)
-	return buffer.size() == HEADER_BYTES + board_cells * board_cells * BYTES_PER_CELL
+	return buffer.size() == HEADER_BYTES + catalog_bytes + board_cells * board_cells * BYTES_PER_CELL
 
 
 static func board_cells_of(buffer: PackedByteArray) -> int:
@@ -156,10 +181,65 @@ static func is_default(grid: TerrainGrid) -> bool:
 	return true
 
 
-static func _write_header(buffer: PackedByteArray, board_cells: int) -> void:
+static func _write_header(buffer: PackedByteArray, board_cells: int, catalog_bytes: int) -> void:
 	for index in MAGIC.length():
 		buffer[index] = MAGIC.unicode_at(index)
 	buffer.encode_u16(4, VERSION)
 	buffer.encode_u16(6, BYTES_PER_CELL)
 	buffer.encode_u32(8, board_cells)
-	buffer.encode_u32(12, 0) # reserved: water/surface layers get their own files
+	buffer.encode_u32(CATALOG_BYTES_OFFSET, catalog_bytes)
+
+
+# --- Material catalog ---------------------------------------------------------
+
+## `u16 count`, then `u8 length + utf8` per material id, in index order. Plain
+## enough to read in a hex dump, which is the point: this is the part of the file
+## that explains the rest of it.
+static func _encode_catalog() -> PackedByteArray:
+	var blob := PackedByteArray()
+	blob.resize(2)
+	blob.encode_u16(0, TerrainMaterialCatalog.count())
+	for id: StringName in TerrainMaterialCatalog.ids_view():
+		var name := String(id).to_utf8_buffer()
+		blob.append(mini(name.size(), 255))
+		blob.append_array(name.slice(0, 255))
+	return blob
+
+
+## Maps every one of the 256 possible stored bytes onto a current catalog index.
+##
+## A file written before v2 carries no catalog, so its bytes ARE current indices.
+## A file that names a material this build does not have resolves to the default:
+## the alternative is handing a column to whichever surface happens to occupy
+## that number now, which is the exact failure §2.6 exists to prevent.
+static func _decode_catalog_remap(buffer: PackedByteArray) -> PackedByteArray:
+	var remap := PackedByteArray()
+	remap.resize(256)
+	for stored in 256:
+		remap[stored] = TerrainMaterialCatalog.DEFAULT_INDEX if not TerrainMaterialCatalog.is_valid_index(stored) else stored
+	var catalog_bytes := int(buffer.decode_u32(CATALOG_BYTES_OFFSET))
+	if catalog_bytes <= 2:
+		return remap
+	var offset := HEADER_BYTES
+	var count := int(buffer.decode_u16(offset))
+	offset += 2
+	var unknown: Array[String] = []
+	for stored in count:
+		if offset >= buffer.size():
+			break
+		var length := int(buffer[offset])
+		offset += 1
+		var id := StringName(buffer.slice(offset, offset + length).get_string_from_utf8())
+		offset += length
+		if stored > 255:
+			continue
+		var current := TerrainMaterialCatalog.index_of(id)
+		if current < 0:
+			unknown.append(String(id))
+			current = TerrainMaterialCatalog.DEFAULT_INDEX
+		remap[stored] = current
+	if not unknown.is_empty():
+		push_warning("[map] terrain.bin: неизвестные материалы %s заменены на %s" % [
+			", ".join(unknown), TerrainMaterialCatalog.DEFAULT_MATERIAL,
+		])
+	return remap

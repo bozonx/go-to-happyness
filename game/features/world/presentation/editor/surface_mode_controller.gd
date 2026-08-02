@@ -267,21 +267,20 @@ static func _is_exoplanet(material_index: int) -> bool:
 ## The catalog split into Earth and Exoplanet accordions, with only one open at a time.
 func palette_entries() -> Array:
 	var entries: Array = []
+	var ids := TerrainMaterialCatalog.ids_view()
 	var earth_open := _expanded_accordion == &"earth"
 	entries.append(PaletteEntry.header(ACCORDION_EARTH, "Земля", earth_open))
 	if earth_open:
 		for index in TerrainMaterialCatalog.count():
-			var material_id: StringName = TerrainMaterialCatalog.ids()[index]
-			if not EXOPLANET_MATERIALS.has(material_id):
-				entries.append(PaletteEntry.of(material_id, "  " + String(material_id), _swatch_of(index)))
+			if not _is_exoplanet(index):
+				entries.append(PaletteEntry.of(ids[index], "  " + String(ids[index]), _swatch_of(index)))
 
 	var exo_open := _expanded_accordion == &"exoplanet"
 	entries.append(PaletteEntry.header(ACCORDION_EXOPLANET, "Экзопланеты", exo_open))
 	if exo_open:
 		for index in TerrainMaterialCatalog.count():
-			var material_id: StringName = TerrainMaterialCatalog.ids()[index]
-			if EXOPLANET_MATERIALS.has(material_id):
-				entries.append(PaletteEntry.of(material_id, "  " + String(material_id), _swatch_of(index)))
+			if _is_exoplanet(index):
+				entries.append(PaletteEntry.of(ids[index], "  " + String(ids[index]), _swatch_of(index)))
 
 	# The second group: what is BUILT over the ground. It sits in the same palette
 	# because it is the same question and the same brush; the entry decides which
@@ -355,10 +354,7 @@ func select_palette_entry(entry_id: StringName) -> void:
 		_coverage_selected = false
 		context.brush.set_material_index(index)
 		_tool = TOOL_MATERIAL
-		if EXOPLANET_MATERIALS.has(entry_id):
-			_expanded_accordion = &"exoplanet"
-		else:
-			_expanded_accordion = &"earth"
+		_expanded_accordion = &"exoplanet" if _is_exoplanet(index) else &"earth"
 		notify_ui_changed()
 
 

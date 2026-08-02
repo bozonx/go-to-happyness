@@ -19,16 +19,15 @@ static func run_all() -> void:
 	print("    [PASS] Map Test Run Service Tests")
 
 
-## A settlement map with no spawn anchors fails the preflight: launch needs a
-## `core:hero_start` and companion starts, and the editor must surface that
-## before the scene swap.
+## A settlement map with nowhere for the party to appear fails the preflight, and
+## the editor surfaces that before the scene swap rather than after it.
 static func _test_settlement_without_party_spawns_reports_errors() -> void:
 	var document := MapDocument.create(&"settle", "Settle", BOARD_CELLS)
 	var service := MapTestRunService.new()
 	var errors := service.validate_session(document, &"core:settlement")
-	assert(not errors.is_empty(), "settlement without hero_start should not launch")
-	assert(errors.any(func(m: String) -> bool: return m.find("hero_start") > 0),
-		"missing hero_start reported: %s" % "; ".join(errors))
+	assert(not errors.is_empty(), "a settlement with no entrance should not launch")
+	assert(errors.any(func(m: String) -> bool: return m.contains("варианта старта")),
+		"the missing entrance is what is reported: %s" % "; ".join(errors))
 
 
 ## A settlement map that authors the full starting party clears the preflight.
@@ -60,7 +59,7 @@ static func _test_unknown_game_definition_reports_error() -> void:
 
 ## "Тест отсюда" (Shift+F5) brings its own party start, so the map does not need
 ## authored spawn anchors for it. This is the whole feature: checking a far corner
-## must not require dragging `core:hero_start` there and back.
+## must not require dragging the party's places there and back.
 static func _test_spawn_override_launches_a_half_drawn_map() -> void:
 	var document := MapDocument.create(&"settle", "Settle", BOARD_CELLS)
 	var service := MapTestRunService.new()
@@ -76,7 +75,7 @@ static func _test_spawn_override_launches_a_half_drawn_map() -> void:
 static func _test_preflight_runs_the_zone_layer_rules() -> void:
 	var document := _settlement_with_party(BOARD_CELLS)
 	var twin := ZoneAnchorRecord.new()
-	twin.id = &"hero_start" # already taken by the party's hero start
+	twin.id = &"leader_point" # already taken by the party's leader place
 	twin.role = ZoneAnchorRecord.ROLE_WAYPOINT
 	twin.pos = Vector3(2.5, 0.0, 2.5)
 	document.zones.anchors.append(twin)
@@ -90,18 +89,32 @@ static func _test_preflight_runs_the_zone_layer_rules() -> void:
 
 static func _settlement_with_party(board_cells: int) -> MapDocument:
 	var document := MapDocument.create(&"party", "Party", board_cells)
-	var hero := ZoneAnchorRecord.new()
-	hero.id = &"hero_start"
-	hero.role = ZoneAnchorRecord.ROLE_SPAWN
-	hero.function = MapSpawnService.HERO_START
-	hero.pos = Vector3(0.5, 0.0, 0.5)
-	document.zones.anchors.append(hero)
-	# Default starting population is 4, so three companion starts complete it.
-	for index in 3:
-		var companion := ZoneAnchorRecord.new()
-		companion.id = StringName("companion_%d" % index)
-		companion.role = ZoneAnchorRecord.ROLE_SPAWN
-		companion.function = MapSpawnService.COMPANION_START
-		companion.pos = Vector3(1.5 + index, 0.0, 0.5)
-		document.zones.anchors.append(companion)
+	var leader := ZoneAnchorRecord.new()
+	leader.id = &"leader_point"
+	leader.role = ZoneAnchorRecord.ROLE_SPAWN
+	leader.function = MapSpawnService.PARTY_LEADER
+	leader.pos = Vector3(0.5, 0.0, 0.5)
+	document.zones.anchors.append(leader)
+	# One authored place and a clearing: the party size is a launch parameter now,
+	# so the map does not carry one anchor per settler (`map_start.md` §5.3).
+	var clearing := ZoneAreaRecord.new()
+	clearing.id = &"clearing"
+	clearing.role = ZoneAreaRecord.ROLE_REGION
+	clearing.add_rect(Rect2i(-4, -4, 8, 8))
+	document.zones.areas.append(clearing)
+	var group := MapSpawnGroup.new()
+	group.id = &"camp"
+	group.area_id = &"clearing"
+	group.spacing = 1.0
+	var slot := MapSpawnGroup.Slot.new()
+	slot.id = &"leader"
+	slot.anchor_id = &"leader_point"
+	slot.tags = [MapSpawnGroup.TAG_LEADER]
+	group.slots.append(slot)
+	document.zones.spawn_groups.append(group)
+	var option := MapStartOption.new()
+	option.id = &"default"
+	option.spawn_group = &"camp"
+	document.meta.start.starts.append(option)
+	document.meta.start.default_start = &"default"
 	return document

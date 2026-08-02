@@ -64,7 +64,13 @@ static func _test_meta_round_trips_through_json() -> void:
 	document.meta.start.progression = ProgressionPolicy.from_dict({
 		"mode": "restricted", "allowed_eras": ["tent", "earth"], "default_era": "tent",
 	})
-	document.meta.start.module_settings = {&"gth.settlement": {"starting_population": 6}}
+	# A section says which of the three things it does (`map_start.md` §2.5): sets a
+	# value, narrows a range, or takes the choice away from the player.
+	var settlement := ModuleSettingsSection.new()
+	settlement.values = {"starting_money": 200}
+	settlement.restrict = {"starting_population": {"min": 2, "max": 8}}
+	settlement.lock = [&"starting_money"]
+	document.meta.start.module_settings = {&"gth.settlement": settlement}
 	document.meta.start.style = &"roman"
 	document.meta.start.day_of_year = 200
 	document.meta.start.latitude = 60.0
@@ -89,7 +95,10 @@ static func _test_meta_round_trips_through_json() -> void:
 	assert(restored.meta.start.progression.mode == ProgressionPolicy.MODE_RESTRICTED)
 	assert(restored.meta.start.progression.allowed_eras == [&"tent", &"earth"])
 	assert(restored.meta.start.progression.default_era == &"tent")
-	assert(restored.meta.start.module_settings_for(&"gth.settlement")["starting_population"] == 6)
+	var restored_section := restored.meta.start.section_for(&"gth.settlement")
+	assert(restored_section.value_of(&"starting_money") == 200)
+	assert(restored_section.restriction_for(&"starting_population")["max"] == 8)
+	assert(restored_section.locks(&"starting_money"), "a lock survives the round trip")
 	assert(restored.meta.required_content.size() == 1)
 	assert(restored.to_json()["format_version"] == MapMeta.FORMAT_VERSION)
 
@@ -122,6 +131,15 @@ static func _test_write_target_follows_the_mode() -> void:
 static func _test_start_defaults() -> void:
 	var start := MapStart.from_dict({})
 	assert(start.module_settings.is_empty())
+	assert(start.starts.is_empty(), "a start with no entrances declares none")
+
+	# The v7 flat form still reads, as `values` and nothing else (§16): an old map
+	# means exactly what it meant, and gains the ability to say the other two things.
+	var legacy := MapStart.from_dict({"module_settings": {"gth.settlement": {"starting_population": 6}}})
+	var legacy_section := legacy.section_for(&"gth.settlement")
+	assert(legacy_section.value_of(&"starting_population") == 6)
+	assert(legacy_section.restrict.is_empty() and legacy_section.lock.is_empty(),
+		"reading a v7 section must not invent a restriction the author never wrote")
 	assert(start.time_of_day == MapStart.DEFAULT_TIME_OF_DAY)
 	assert(start.game_definition == &"core:world_showcase")
 

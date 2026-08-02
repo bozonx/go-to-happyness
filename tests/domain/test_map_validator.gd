@@ -18,7 +18,8 @@ static func run_all() -> void:
 	_test_frozen_water_is_walkable()
 	_test_coverage_made_too_steep_after_paint_is_an_error()
 	_test_settlement_map_without_spawns_is_clean()
-	_test_party_spawns_are_required_at_launch()
+	_test_party_capacity_is_checked_at_launch()
+	_test_start_option_references_are_validated()
 	_test_entity_footprints_and_asset_transforms_are_validated()
 	_test_warnings_skip_when_nav_grid_is_null()
 	_test_anchor_on_blocked_cell_warns()
@@ -102,32 +103,82 @@ static func _test_coverage_made_too_steep_after_paint_is_an_error() -> void:
 
 
 ## A settlement map with no spawn anchors is not a launch error on its own —
-## `validate_party_spawns` is the gate that demands them at launch time.
+## `validate_party_capacity` is the gate that demands them at launch time.
 static func _test_settlement_map_without_spawns_is_clean() -> void:
 	var document := MapDocument.create(&"settle", "Settle", BOARD_CELLS)
 	var errors := MapValidator.validate(document, _flat_terrain(), WaterGrid.new(), null)
 	assert(errors.is_empty(), "settlement map needs no spawn at validate time: %s" % "; ".join(errors))
 
 
-static func _test_party_spawns_are_required_at_launch() -> void:
+## What the removed `population - 1` anchor rule became (`map_start.md` §4.3).
+## The question is no longer "did the author draw one point per settler" but "can
+## the entrance the session begins at hold the party the player chose" — and the
+## same map now launches with three settlers and with twelve.
+static func _test_party_capacity_is_checked_at_launch() -> void:
 	var document := MapDocument.create(&"party", "Party", BOARD_CELLS)
-	var errors := MapValidator.validate_party_spawns(document, 4)
-	assert(errors.size() == 2, "launch rejects missing hero and companions: %s" % "; ".join(errors))
-	var hero := ZoneAnchorRecord.new()
-	hero.id = &"hero_start"
-	hero.role = ZoneAnchorRecord.ROLE_SPAWN
-	hero.function = MapSpawnService.HERO_START
-	hero.pos = Vector3(0.5, 0.0, 0.5)
-	document.zones.anchors.append(hero)
-	for index in 3:
-		var companion := ZoneAnchorRecord.new()
-		companion.id = StringName("companion_%d" % index)
-		companion.role = ZoneAnchorRecord.ROLE_SPAWN
-		companion.function = MapSpawnService.COMPANION_START
-		companion.pos = Vector3(1.5 + index, 0.0, 0.5)
-		document.zones.anchors.append(companion)
-	errors = MapValidator.validate_party_spawns(document, 4)
-	assert(errors.is_empty(), "complete authored party starts launch: %s" % "; ".join(errors))
+	var errors := MapValidator.validate_party_capacity(document, &"", 4)
+	assert(errors.size() == 1 and errors[0].contains("варианта старта"),
+		"a map with no entrance cannot start: %s" % "; ".join(errors))
+
+	var leader := ZoneAnchorRecord.new()
+	leader.id = &"leader_point"
+	leader.role = ZoneAnchorRecord.ROLE_SPAWN
+	leader.function = MapSpawnService.PARTY_LEADER
+	leader.pos = Vector3(0.5, 0.0, 0.5)
+	document.zones.anchors.append(leader)
+	var clearing := ZoneAreaRecord.new()
+	clearing.id = &"clearing"
+	clearing.role = ZoneAreaRecord.ROLE_REGION
+	clearing.add_rect(Rect2i(-4, -4, 8, 8))
+	document.zones.areas.append(clearing)
+	var group := MapSpawnGroup.new()
+	group.id = &"camp"
+	group.area_id = &"clearing"
+	group.spacing = 1.0
+	var slot := MapSpawnGroup.Slot.new()
+	slot.id = &"leader"
+	slot.anchor_id = &"leader_point"
+	slot.tags = [MapSpawnGroup.TAG_LEADER]
+	group.slots.append(slot)
+	document.zones.spawn_groups.append(group)
+	var option := MapStartOption.new()
+	option.id = &"default"
+	option.spawn_group = &"camp"
+	document.meta.start.starts.append(option)
+	document.meta.start.default_start = &"default"
+
+	assert(MapValidator.validate_party_capacity(document, &"default", 3).is_empty(),
+		"three settlers fit one authored place and a clearing")
+	assert(MapValidator.validate_party_capacity(document, &"default", 12).is_empty(),
+		"and so do twelve, without a single extra anchor")
+	assert(MapValidator.validate_party_capacity(document, &"default", 40).size() == 1,
+		"a party past the group's capacity is refused with a reason")
+	assert(MapValidator.validate_party_capacity(document, &"default", 40, true).is_empty(),
+		"a test run from here brings its own party start (§4.5)")
+
+
+## Dangling references between an entrance, its group and its camera. Each one
+## produces a map that opens in the editor and dies at launch (§13).
+static func _test_start_option_references_are_validated() -> void:
+	var document := MapDocument.create(&"starts", "Starts", BOARD_CELLS)
+	var option := MapStartOption.new()
+	option.id = &"river"
+	option.spawn_group = &"missing_group"
+	option.camera = &"missing_camera"
+	document.meta.start.starts.append(option)
+	document.meta.start.default_start = &"nowhere"
+	var entity := MapEntityRecord.new()
+	entity.id = &"north_cart"
+	entity.archetype_id = &"core:tree"
+	entity.starts = [&"mountain"]
+	document.entities.entities.append(entity)
+
+	var errors := MapValidator.validate(document, null, null, null)
+	var joined := "; ".join(errors)
+	assert(joined.contains("default_start"), "a default pointing nowhere is an error: %s" % joined)
+	assert(joined.contains("missing_group"), "a dangling spawn group is an error: %s" % joined)
+	assert(joined.contains("missing_camera"), "a dangling camera is an error: %s" % joined)
+	assert(joined.contains("north_cart"), "an entity bound to no entrance is an error: %s" % joined)
 
 
 static func _test_entity_footprints_and_asset_transforms_are_validated() -> void:

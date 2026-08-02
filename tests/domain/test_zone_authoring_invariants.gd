@@ -125,7 +125,7 @@ static func _test_function_scope_and_queue_positions() -> void:
 		queue.index = 0
 		bp.anchors.append(queue)
 	assert(_has_error(bp.zone_validation_errors(), "занимают одно место"))
-	slot.function = &"core:hero_start"
+	slot.function = &"core:party_leader"
 	assert(_has_error(bp.zone_validation_errors(), "неприменима к точке slot"))
 	bp.anchors[1].activity = &"core:cook"
 	assert(_has_error(bp.zone_validation_errors(), "Действие можно назначить только месту"))

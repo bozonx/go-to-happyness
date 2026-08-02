@@ -212,8 +212,8 @@ func _test_scenario_workspace_replaces_the_map(editor: Node) -> void:
 	print("  scenario workspace ok")
 
 
-## Spawn anchors render as 3D markers in the zones mode, so an author can tell
-## the hero start from a companion start at a glance instead of reading the list.
+## Spawn anchors render as 3D markers in the zones mode, so an author can tell the
+## leader's place from a party slot at a glance instead of reading the list.
 ## This is the presentation counterpart of `MapSpawnService`'s data contract.
 func _test_entities_mode_renders_anchor_markers(editor: Node) -> void:
 	var terrain: TerrainGrid = editor.document.terrain
@@ -222,15 +222,15 @@ func _test_entities_mode_renders_anchor_markers(editor: Node) -> void:
 	# tests assert on terrain/fill state and must not see these samples.
 	var prior_count := zones.anchors.size()
 	var hero := ZoneAnchorRecord.new()
-	hero.id = &"hero_start"
+	hero.id = &"party_leader"
 	hero.role = ZoneAnchorRecord.ROLE_SPAWN
-	hero.function = MapSpawnService.HERO_START
+	hero.function = MapSpawnService.PARTY_LEADER
 	hero.pos = Vector3(2.5, 0.0, 3.5)
 	zones.anchors.append(hero)
 	var companion := ZoneAnchorRecord.new()
-	companion.id = &"companion_1"
+	companion.id = &"party_slot_1"
 	companion.role = ZoneAnchorRecord.ROLE_SPAWN
-	companion.function = MapSpawnService.COMPANION_START
+	companion.function = MapSpawnService.PARTY_SLOT
 	companion.pos = Vector3(3.5, 0.0, 3.5)
 	zones.anchors.append(companion)
 

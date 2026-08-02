@@ -95,11 +95,17 @@ static func test_progression_is_resolved_by_the_host() -> void:
 static func test_modules_declare_their_start_parameters() -> void:
 	assert(GameModuleRegistry.module_ids().has(&"gth.settlement"))
 	var declared := GameModuleRegistry.start_parameters_of(&"gth.settlement")
-	var population := StartParameterDef.find(declared, &"starting_population")
+	var population := EntityPropertyDef.find(declared, &"starting_population")
 	assert(population != null, "the launch screen builds its controls from this declaration")
-	assert(population.type == StartParameterDef.TYPE_INT)
-	assert(population.coerce(999) == population.max_value, "declared bounds clamp authored values")
-	assert(population.coerce("nonsense") == population.default_value)
+	# One schema for a start parameter and for a placed object's property
+	# (`map_start.md` §2.6): three screens now share one control builder.
+	assert(population.type == EntityPropertyDef.TYPE_INT)
+	assert(population.scope == EntityPropertyDef.SCOPE_PARTY, "party size is party-scoped")
+	assert(population.visibility == EntityPropertyDef.VISIBILITY_PLAYER,
+		"a game may surface it in the launch screen")
+	assert(population.clamp_value(999) == population.maximum, "declared bounds clamp authored values")
+	assert(population.clamp_value("nonsense") == population.minimum,
+		"a non-number coerces to zero and then clamps into the declared range")
 	assert(GameModuleRegistry.start_parameters_of(&"core.world").is_empty())
 
 	# `resolve_parameters` fills declared defaults and keeps unknown authored keys.

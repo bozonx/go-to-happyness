@@ -10,7 +10,13 @@ extends RefCounted
 
 const TEXTURE_PATH := "res://game/features/world/presentation/terrain/assets/grass_medium_atlas.png"
 const SHADER_PATH := "res://game/features/world/presentation/terrain/tall_grass.gdshader"
-const VARIANT_COUNT := 8
+## Columns in the atlas, one per variant of the material this decor belongs to.
+## Read from the catalog rather than written here: a ninth grass variant would
+## otherwise keep addressing an eight-column atlas and silently show the wrong
+## flower.
+static var VARIANT_COUNT := TerrainMaterialVariants.variant_count(
+	TerrainMaterialCatalog.index_of(TerrainMaterialCatalog.GRASS)
+)
 
 const CARD_WIDTH := 0.46
 const CARD_HEIGHT := 0.50

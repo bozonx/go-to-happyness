@@ -129,21 +129,38 @@ func _zone_map() -> MapDocument:
 	document.zones.areas.append(west_thicket)
 
 	var spawn := ZoneAnchorRecord.new()
-	spawn.id = &"hero_start"
+	spawn.id = &"party_leader"
 	spawn.role = ZoneAnchorRecord.ROLE_SPAWN
 	spawn.pos = Vector3(6.5, 0.0, 6.5)
-	spawn.function = MapSpawnService.HERO_START
+	spawn.function = MapSpawnService.PARTY_LEADER
 	document.zones.anchors.append(spawn)
-	for index in 3:
-		var companion := ZoneAnchorRecord.new()
-		companion.id = StringName("companion_%d" % index)
-		companion.role = ZoneAnchorRecord.ROLE_SPAWN
-		companion.function = MapSpawnService.COMPANION_START
-		companion.pos = Vector3(7.5 + float(index), 0.0, 6.5)
-		document.zones.anchors.append(companion)
+	# One authored place, a clearing around it and one entrance pointing at both:
+	# the party size is a launch parameter, not a count of anchors (§4.3).
+	var camp_area := ZoneAreaRecord.new()
+	camp_area.id = &"party_camp"
+	camp_area.role = ZoneAreaRecord.ROLE_REGION
+	camp_area.add_rect(Rect2i(5, 5, 6, 6))
+	document.zones.areas.append(camp_area)
+	var group := MapSpawnGroup.new()
+	group.id = &"camp"
+	group.area_id = &"party_camp"
+	group.spacing = 1.0
+	var leader_slot := MapSpawnGroup.Slot.new()
+	leader_slot.id = &"leader"
+	leader_slot.anchor_id = &"party_leader"
+	leader_slot.tags = [MapSpawnGroup.TAG_LEADER]
+	group.slots.append(leader_slot)
+	document.zones.spawn_groups.append(group)
+	var entrance := MapStartOption.new()
+	entrance.id = &"default"
+	entrance.spawn_group = &"camp"
+	document.meta.start.starts.append(entrance)
+	document.meta.start.default_start = &"default"
+
 	var backpack := MapEntityRecord.new()
-	backpack.id = &"starter_backpack"
-	backpack.archetype_id = &"core:starter_backpack"
+	backpack.id = &"party_stash"
+	backpack.archetype_id = &"core:backpack"
+	backpack.function = MapEntityFunction.PARTY_STASH
 	backpack.position = Vector3(6.5, 0.0, 7.5)
 	document.entities.entities.append(backpack)
 

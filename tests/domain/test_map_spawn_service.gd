@@ -78,7 +78,7 @@ static func _test_board_cells_become_world_space() -> void:
 	var hero := ZoneAnchorRecord.new()
 	hero.id = &"hero_start"
 	hero.role = ZoneAnchorRecord.ROLE_SPAWN
-	hero.function = MapSpawnService.HERO_START
+	hero.function = MapSpawnService.PARTY_LEADER
 	hero.facing = 90.0
 	hero.pos = Vector3(2.5, 3.0, 3.5) # cell (2,3), terrain level 3
 	zones.anchors.append(hero)

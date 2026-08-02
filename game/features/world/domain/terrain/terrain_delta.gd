@@ -25,6 +25,13 @@ const STATE_FLAGS := 5
 const STATE_DETAIL := 6
 const STATE_SIZE := 7
 
+## The fields that mean "ground moved" — everything `changes_geometry` compares.
+## Material and detail are deliberately absent: they are the surface, and the
+## surface reaches the GPU without a vertex (`terrain_materials.md` §7.5).
+const GEOMETRY_FIELDS: PackedInt32Array = PackedInt32Array([
+	STATE_HEIGHT, STATE_SLOPE_CLASS, STATE_SLOPE_DIR, STATE_SLOPE_INDEX, STATE_FLAGS,
+])
+
 var cells: Array[Vector2i] = []
 
 var _old_states := PackedInt32Array()
@@ -72,7 +79,10 @@ func is_empty() -> bool:
 func changes_geometry() -> bool:
 	for index in cells.size():
 		var offset := index * STATE_SIZE
-		for field: int in [STATE_HEIGHT, STATE_SLOPE_CLASS, STATE_SLOPE_DIR, STATE_SLOPE_INDEX, STATE_FLAGS]:
+		# The field list is a constant, not an array literal built per cell: a
+		# cascade delta runs to thousands of columns, and this used to allocate one
+		# throwaway `Array` for each of them.
+		for field: int in GEOMETRY_FIELDS:
 			if _old_states[offset + field] != _new_states[offset + field]:
 				return true
 	return false
