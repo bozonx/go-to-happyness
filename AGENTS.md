@@ -161,6 +161,33 @@ no-map fallback. See `design_docs/engine/map_editor.md`.
 - `tests/features/world/test_map_editor.gd` drives the real scene end to end. Unit tests
   over the brush and format prove the parts; only that one proves the editor.
 
+## Map generation laboratory
+
+Procedural map generation starts in `res://tools/map_gen_lab/map_gen_lab.tscn`, not in
+the map editor. It runs the real `TerrainGenerationService` over the real `TerrainGrid`,
+`WaterGrid`, mesher and `NavGrid`. The rules are in
+`design_docs/engine/procedural_map_generation.md`; read §10.1 before changing anything
+about slopes, rivers or metrics, because that is where the non-obvious constraints are.
+
+- A recipe is data (`*.gdmapgen.json`), parsed and **validated** by `MapRecipe`. A
+  contradictory request (`inland` with an ocean border, `archipelago` at 80 % land) is
+  refused with a reason before any expensive stage runs — never clamped.
+- The pure stages live in `world/domain/generation/` and are functions over
+  `Packed*Array`s: no Node, no files, no services. The three that need the real grids —
+  slopes, water, the verdict — live in `TerrainGenerationService`, which is the only
+  application entry point.
+- **Generation is not an undoable edit.** It writes the board in one bulk sweep,
+  publishes navigation once and clears both histories; it creates a document rather than
+  modifying one.
+- Judge a recipe on **neighbouring seeds**, not on one pretty map: `[` and `]` step the
+  seed and the metrics panel keeps the previous numbers beside the current ones. Press
+  `M` before believing a range is crossable and `K` to see the crest graph the recipe
+  actually produced.
+- `tests/repro/diag_map_generation_presets.gd` runs every preset over three seeds
+  without a display; `map_gen_lab.tscn -- --capture` does the same with views and a
+  `metrics.json` in `user://map_gen_lab`. A preset that stops passing §6 is a regression
+  of quality, and it is allowed to fail on a deliberate change of algorithm.
+
 ## Weather and lighting laboratory
 
 Weather, time of day, sky, stars, sun/moon, atmospherics and world lighting start in

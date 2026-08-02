@@ -1,0 +1,824 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tools/map_gen_lab/recipe_panel.gd" id="1_panel"]
+
+[node name="RecipePanel" type="PanelContainer"]
+custom_minimum_size = Vector2(400, 0)
+script = ExtResource("1_panel")
+
+[node name="Margin" type="MarginContainer" parent="."]
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="Scroll" type="ScrollContainer" parent="Margin"]
+horizontal_scroll_mode = 0
+
+[node name="Rows" type="VBoxContainer" parent="Margin/Scroll"]
+size_flags_horizontal = 3
+
+[node name="Section1" type="Label" parent="Margin/Scroll/Rows"]
+theme_override_colors/font_color = Color(0.98, 0.85, 0.42, 1)
+text = "Recipe"
+
+[node name="Row2" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row2"]
+custom_minimum_size = Vector2(170, 0)
+text = "preset"
+
+[node name="PresetPicker" type="OptionButton" parent="Margin/Scroll/Rows/Row2"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+
+[node name="Row3" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row3"]
+custom_minimum_size = Vector2(170, 0)
+text = "seed"
+
+[node name="SeedField" type="LineEdit" parent="Margin/Scroll/Rows/Row3"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+text = "0"
+
+[node name="Row4" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="SeedRandom" type="Button" parent="Margin/Scroll/Rows/Row4"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+text = "random"
+
+[node name="SeedNext" type="Button" parent="Margin/Scroll/Rows/Row4"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+text = "next"
+
+[node name="SeedPrevious" type="Button" parent="Margin/Scroll/Rows/Row4"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+text = "prev"
+
+[node name="SeedCopy" type="Button" parent="Margin/Scroll/Rows/Row4"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+text = "copy"
+
+[node name="Row5" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="GenerateButton" type="Button" parent="Margin/Scroll/Rows/Row5"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+text = "Generate"
+
+[node name="SaveButton" type="Button" parent="Margin/Scroll/Rows/Row5"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+text = "Save recipe"
+
+[node name="Section6" type="Label" parent="Margin/Scroll/Rows"]
+theme_override_colors/font_color = Color(0.98, 0.85, 0.42, 1)
+text = "Board and border"
+
+[node name="Row7" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row7"]
+custom_minimum_size = Vector2(170, 0)
+text = "board size"
+
+[node name="BoardSize" type="SpinBox" parent="Margin/Scroll/Rows/Row7"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 32.0
+max_value = 256.0
+step = 2.0
+value = 96.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row8" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row8"]
+custom_minimum_size = Vector2(170, 0)
+text = "ocean level"
+
+[node name="OceanLevel" type="SpinBox" parent="Margin/Scroll/Rows/Row8"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = -32.0
+max_value = 32.0
+step = 1.0
+value = -2.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row9" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row9"]
+custom_minimum_size = Vector2(170, 0)
+text = "north"
+
+[node name="BorderNorth" type="OptionButton" parent="Margin/Scroll/Rows/Row9"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+
+[node name="Row10" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row10"]
+custom_minimum_size = Vector2(170, 0)
+text = "east"
+
+[node name="BorderEast" type="OptionButton" parent="Margin/Scroll/Rows/Row10"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+
+[node name="Row11" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row11"]
+custom_minimum_size = Vector2(170, 0)
+text = "south"
+
+[node name="BorderSouth" type="OptionButton" parent="Margin/Scroll/Rows/Row11"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+
+[node name="Row12" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row12"]
+custom_minimum_size = Vector2(170, 0)
+text = "west"
+
+[node name="BorderWest" type="OptionButton" parent="Margin/Scroll/Rows/Row12"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+
+[node name="Row13" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row13"]
+custom_minimum_size = Vector2(170, 0)
+text = "wall height"
+
+[node name="BorderHeight" type="SpinBox" parent="Margin/Scroll/Rows/Row13"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 120.0
+step = 1.0
+value = 26.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row14" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row14"]
+custom_minimum_size = Vector2(170, 0)
+text = "wall thickness"
+
+[node name="BorderThickness" type="SpinBox" parent="Margin/Scroll/Rows/Row14"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 32.0
+step = 1.0
+value = 6.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Section15" type="Label" parent="Margin/Scroll/Rows"]
+theme_override_colors/font_color = Color(0.98, 0.85, 0.42, 1)
+text = "Landmass"
+
+[node name="Row16" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row16"]
+custom_minimum_size = Vector2(170, 0)
+text = "shape"
+
+[node name="Shape" type="OptionButton" parent="Margin/Scroll/Rows/Row16"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+
+[node name="Row17" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row17"]
+custom_minimum_size = Vector2(170, 0)
+text = "land fraction"
+
+[node name="LandFraction" type="SpinBox" parent="Margin/Scroll/Rows/Row17"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 1.0
+step = 0.01
+value = 0.62
+allow_greater = false
+allow_lesser = false
+
+[node name="Row18" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row18"]
+custom_minimum_size = Vector2(170, 0)
+text = "coast ruggedness"
+
+[node name="CoastRuggedness" type="SpinBox" parent="Margin/Scroll/Rows/Row18"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 1.0
+step = 0.05
+value = 0.45
+allow_greater = false
+allow_lesser = false
+
+[node name="Row19" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row19"]
+custom_minimum_size = Vector2(170, 0)
+text = "islands"
+
+[node name="IslandCount" type="SpinBox" parent="Margin/Scroll/Rows/Row19"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 40.0
+step = 1.0
+value = 6.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row20" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row20"]
+custom_minimum_size = Vector2(170, 0)
+text = "shelf width"
+
+[node name="ShelfWidth" type="SpinBox" parent="Margin/Scroll/Rows/Row20"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 24.0
+step = 1.0
+value = 4.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Section21" type="Label" parent="Margin/Scroll/Rows"]
+theme_override_colors/font_color = Color(0.98, 0.85, 0.42, 1)
+text = "Elevation"
+
+[node name="Row22" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row22"]
+custom_minimum_size = Vector2(170, 0)
+text = "mean height"
+
+[node name="MeanHeight" type="SpinBox" parent="Margin/Scroll/Rows/Row22"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = -20.0
+max_value = 180.0
+step = 1.0
+value = 6.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row23" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row23"]
+custom_minimum_size = Vector2(170, 0)
+text = "max height"
+
+[node name="MaxHeight" type="SpinBox" parent="Margin/Scroll/Rows/Row23"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 190.0
+step = 1.0
+value = 48.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row24" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row24"]
+custom_minimum_size = Vector2(170, 0)
+text = "hypsometry"
+
+[node name="HypsometryPicker" type="OptionButton" parent="Margin/Scroll/Rows/Row24"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+
+[node name="Row25" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row25"]
+custom_minimum_size = Vector2(170, 0)
+text = "roughness"
+
+[node name="Roughness" type="SpinBox" parent="Margin/Scroll/Rows/Row25"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 1.0
+step = 0.05
+value = 0.3
+allow_greater = false
+allow_lesser = false
+
+[node name="Row26" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row26"]
+custom_minimum_size = Vector2(170, 0)
+text = "terrace bias"
+
+[node name="TerraceBias" type="SpinBox" parent="Margin/Scroll/Rows/Row26"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 1.0
+step = 0.05
+value = 0.5
+allow_greater = false
+allow_lesser = false
+
+[node name="Row27" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row27"]
+custom_minimum_size = Vector2(170, 0)
+text = "repose material"
+
+[node name="ReposeOverride" type="OptionButton" parent="Margin/Scroll/Rows/Row27"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+
+[node name="Section28" type="Label" parent="Margin/Scroll/Rows"]
+theme_override_colors/font_color = Color(0.98, 0.85, 0.42, 1)
+text = "Mountains"
+
+[node name="Row29" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row29"]
+custom_minimum_size = Vector2(170, 0)
+text = "ranges"
+
+[node name="RangeCount" type="SpinBox" parent="Margin/Scroll/Rows/Row29"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 8.0
+step = 1.0
+value = 2.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row30" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row30"]
+custom_minimum_size = Vector2(170, 0)
+text = "length"
+
+[node name="RangeLength" type="SpinBox" parent="Margin/Scroll/Rows/Row30"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.05
+max_value = 1.5
+step = 0.05
+value = 0.7
+allow_greater = false
+allow_lesser = false
+
+[node name="Row31" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row31"]
+custom_minimum_size = Vector2(170, 0)
+text = "orientation °"
+
+[node name="Orientation" type="SpinBox" parent="Margin/Scroll/Rows/Row31"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = -180.0
+max_value = 180.0
+step = 5.0
+value = 55.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row32" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row32"]
+custom_minimum_size = Vector2(170, 0)
+text = "jitter °"
+
+[node name="OrientationJitter" type="SpinBox" parent="Margin/Scroll/Rows/Row32"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 90.0
+step = 5.0
+value = 20.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row33" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row33"]
+custom_minimum_size = Vector2(170, 0)
+text = "peaks per range"
+
+[node name="PeaksPerRange" type="SpinBox" parent="Margin/Scroll/Rows/Row33"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 12.0
+step = 1.0
+value = 4.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row34" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row34"]
+custom_minimum_size = Vector2(170, 0)
+text = "peak height min"
+
+[node name="PeakMin" type="SpinBox" parent="Margin/Scroll/Rows/Row34"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 190.0
+step = 1.0
+value = 30.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row35" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row35"]
+custom_minimum_size = Vector2(170, 0)
+text = "peak height max"
+
+[node name="PeakMax" type="SpinBox" parent="Margin/Scroll/Rows/Row35"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 190.0
+step = 1.0
+value = 48.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row36" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row36"]
+custom_minimum_size = Vector2(170, 0)
+text = "flank steepness"
+
+[node name="FlankSteepness" type="SpinBox" parent="Margin/Scroll/Rows/Row36"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 1.0
+step = 0.05
+value = 0.8
+allow_greater = false
+allow_lesser = false
+
+[node name="Row37" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row37"]
+custom_minimum_size = Vector2(170, 0)
+text = "foothills"
+
+[node name="Foothills" type="SpinBox" parent="Margin/Scroll/Rows/Row37"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 32.0
+step = 1.0
+value = 8.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row38" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row38"]
+custom_minimum_size = Vector2(170, 0)
+text = "passes"
+
+[node name="Passes" type="SpinBox" parent="Margin/Scroll/Rows/Row38"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 8.0
+step = 1.0
+value = 2.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row39" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row39"]
+custom_minimum_size = Vector2(170, 0)
+text = "solitary peaks"
+
+[node name="SolitaryCount" type="SpinBox" parent="Margin/Scroll/Rows/Row39"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 12.0
+step = 1.0
+value = 3.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Section40" type="Label" parent="Margin/Scroll/Rows"]
+theme_override_colors/font_color = Color(0.98, 0.85, 0.42, 1)
+text = "Rivers"
+
+[node name="Row41" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row41"]
+custom_minimum_size = Vector2(170, 0)
+text = "count"
+
+[node name="RiverCount" type="SpinBox" parent="Margin/Scroll/Rows/Row41"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 12.0
+step = 1.0
+value = 3.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row42" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row42"]
+custom_minimum_size = Vector2(170, 0)
+text = "width min"
+
+[node name="RiverWidthMin" type="SpinBox" parent="Margin/Scroll/Rows/Row42"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 12.0
+step = 1.0
+value = 1.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row43" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row43"]
+custom_minimum_size = Vector2(170, 0)
+text = "width max"
+
+[node name="RiverWidthMax" type="SpinBox" parent="Margin/Scroll/Rows/Row43"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 12.0
+step = 1.0
+value = 4.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row44" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row44"]
+custom_minimum_size = Vector2(170, 0)
+text = "meander"
+
+[node name="RiverMeander" type="SpinBox" parent="Margin/Scroll/Rows/Row44"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 1.0
+step = 0.05
+value = 0.5
+allow_greater = false
+allow_lesser = false
+
+[node name="Row45" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row45"]
+custom_minimum_size = Vector2(170, 0)
+text = "incision"
+
+[node name="RiverIncision" type="SpinBox" parent="Margin/Scroll/Rows/Row45"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 12.0
+step = 1.0
+value = 2.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row46" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row46"]
+custom_minimum_size = Vector2(170, 0)
+text = "source"
+
+[node name="RiverSource" type="OptionButton" parent="Margin/Scroll/Rows/Row46"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+
+[node name="Row47" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row47"]
+custom_minimum_size = Vector2(170, 0)
+text = "tributaries"
+
+[node name="RiverTributaries" type="SpinBox" parent="Margin/Scroll/Rows/Row47"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 8.0
+step = 1.0
+value = 2.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row48" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row48"]
+custom_minimum_size = Vector2(170, 0)
+text = "delta at the mouth"
+
+[node name="RiverDelta" type="CheckBox" parent="Margin/Scroll/Rows/Row48"]
+unique_name_in_owner = true
+button_pressed = true
+
+[node name="Section49" type="Label" parent="Margin/Scroll/Rows"]
+theme_override_colors/font_color = Color(0.98, 0.85, 0.42, 1)
+text = "Lakes"
+
+[node name="Row50" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row50"]
+custom_minimum_size = Vector2(170, 0)
+text = "count min"
+
+[node name="LakeCountMin" type="SpinBox" parent="Margin/Scroll/Rows/Row50"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 20.0
+step = 1.0
+value = 2.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row51" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row51"]
+custom_minimum_size = Vector2(170, 0)
+text = "count max"
+
+[node name="LakeCountMax" type="SpinBox" parent="Margin/Scroll/Rows/Row51"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 20.0
+step = 1.0
+value = 5.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row52" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row52"]
+custom_minimum_size = Vector2(170, 0)
+text = "size min"
+
+[node name="LakeSizeMin" type="SpinBox" parent="Margin/Scroll/Rows/Row52"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 4000.0
+step = 1.0
+value = 12.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row53" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row53"]
+custom_minimum_size = Vector2(170, 0)
+text = "size max"
+
+[node name="LakeSizeMax" type="SpinBox" parent="Margin/Scroll/Rows/Row53"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 4000.0
+step = 1.0
+value = 400.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row54" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row54"]
+custom_minimum_size = Vector2(170, 0)
+text = "depth min"
+
+[node name="LakeDepthMin" type="SpinBox" parent="Margin/Scroll/Rows/Row54"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 40.0
+step = 1.0
+value = 1.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row55" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row55"]
+custom_minimum_size = Vector2(170, 0)
+text = "depth max"
+
+[node name="LakeDepthMax" type="SpinBox" parent="Margin/Scroll/Rows/Row55"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 40.0
+step = 1.0
+value = 6.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row56" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row56"]
+custom_minimum_size = Vector2(170, 0)
+text = "prefer"
+
+[node name="LakePrefer" type="OptionButton" parent="Margin/Scroll/Rows/Row56"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+
+[node name="Row57" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row57"]
+custom_minimum_size = Vector2(170, 0)
+text = "outlet streams"
+
+[node name="LakeConnect" type="CheckBox" parent="Margin/Scroll/Rows/Row57"]
+unique_name_in_owner = true
+button_pressed = true
+
+[node name="Section58" type="Label" parent="Margin/Scroll/Rows"]
+theme_override_colors/font_color = Color(0.98, 0.85, 0.42, 1)
+text = "Targets"
+
+[node name="Row59" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row59"]
+custom_minimum_size = Vector2(170, 0)
+text = "flat fraction min"
+
+[node name="FlatFractionMin" type="SpinBox" parent="Margin/Scroll/Rows/Row59"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 1.0
+step = 0.05
+value = 0.35
+allow_greater = false
+allow_lesser = false
+
+[node name="Row60" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row60"]
+custom_minimum_size = Vector2(170, 0)
+text = "land component min"
+
+[node name="LandComponentMin" type="SpinBox" parent="Margin/Scroll/Rows/Row60"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 1.0
+step = 0.05
+value = 0.9
+allow_greater = false
+allow_lesser = false
+
+[node name="Row61" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row61"]
+custom_minimum_size = Vector2(170, 0)
+text = "cliff fraction max"
+
+[node name="CliffFractionMax" type="SpinBox" parent="Margin/Scroll/Rows/Row61"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 1.0
+step = 0.02
+value = 0.12
+allow_greater = false
+allow_lesser = false

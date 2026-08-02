@@ -1,0 +1,77 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://tools/map_gen_lab/map_gen_lab.gd" id="1_lab"]
+[ext_resource type="Script" path="res://game/features/world/presentation/terrain/grid_terrain_world.gd" id="2_terrain"]
+[ext_resource type="Script" path="res://game/features/routing/presentation/nav_terrain_overlay.gd" id="3_nav_overlay"]
+[ext_resource type="Script" path="res://game/features/world/presentation/water/water_world.gd" id="4_water"]
+[ext_resource type="PackedScene" path="res://tools/map_gen_lab/recipe_panel.tscn" id="5_recipe"]
+[ext_resource type="PackedScene" path="res://tools/map_gen_lab/metrics_panel.tscn" id="6_metrics"]
+
+[sub_resource type="Environment" id="Environment_lab"]
+background_mode = 1
+background_color = Color(0.42, 0.55, 0.66, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.62, 0.69, 0.78, 1)
+ambient_light_energy = 0.55
+tonemap_mode = 2
+
+[node name="MapGenLab" type="Node3D"]
+script = ExtResource("1_lab")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_lab")
+
+[node name="SunLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.766, -0.443, 0.466, 0, 0.725, 0.689, -0.643, -0.528, 0.555, 0, 24, 0)
+light_energy = 1.15
+shadow_enabled = true
+
+[node name="Terrain" type="Node3D" parent="."]
+script = ExtResource("2_terrain")
+
+[node name="Water" type="Node3D" parent="."]
+script = ExtResource("4_water")
+
+[node name="NavOverlay" type="MeshInstance3D" parent="."]
+script = ExtResource("3_nav_overlay")
+cast_shadow = 0
+visible = false
+
+[node name="StructureOverlay" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+visible = false
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 60, 60)
+far = 1200.0
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Hud" type="Label" parent="UI"]
+offset_left = 24.0
+offset_top = 18.0
+offset_right = 1100.0
+offset_bottom = 200.0
+theme_override_colors/font_color = Color(0.94, 0.96, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
+theme_override_constants/outline_size = 4
+text = "map gen lab"
+
+[node name="RecipePanel" parent="UI" instance=ExtResource("5_recipe")]
+anchors_preset = 9
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 210.0
+offset_right = 416.0
+offset_bottom = -16.0
+
+[node name="MetricsPanel" parent="UI" instance=ExtResource("6_metrics")]
+anchors_preset = 11
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -446.0
+offset_top = 210.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 0

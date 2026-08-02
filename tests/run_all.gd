@@ -32,6 +32,7 @@ const TestMapSpawnServiceScript = preload("res://tests/domain/test_map_spawn_ser
 const TestMapValidatorScript = preload("res://tests/domain/test_map_validator.gd")
 const TestMapTestRunServiceScript = preload("res://tests/domain/test_map_test_run_service.gd")
 const TestMapScenarioScript = preload("res://tests/domain/test_map_scenario.gd")
+const TestMapGenerationScript = preload("res://tests/domain/test_map_generation.gd")
 
 const TestAIFrameworkScript = preload("res://tests/ai/test_ai_framework.gd")
 const TestAINeedsScript = preload("res://tests/ai/test_ai_needs.gd")
@@ -82,6 +83,7 @@ func _init() -> void:
 	TestMapValidatorScript.run_all()
 	TestMapTestRunServiceScript.run_all()
 	TestMapScenarioScript.run_all()
+	TestMapGenerationScript.run_all()
 	TestSaveLoadScript.run_all()
 	print("  => Domain Unit Tests PASSED.")
 

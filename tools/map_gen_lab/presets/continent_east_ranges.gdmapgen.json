@@ -1,0 +1,103 @@
+{
+	"format_version": 1,
+	"kind": "map_generator",
+	"id": "continent_east_ranges",
+	"generator_version": 1,
+	"seed": 1,
+	"board": {
+		"size": 96
+	},
+	"border": {
+		"north": {
+			"kind": "ocean"
+		},
+		"west": {
+			"kind": "ocean"
+		},
+		"east": {
+			"kind": "mountain_wall",
+			"height": 28,
+			"thickness": 5
+		},
+		"south": {
+			"kind": "mountain_wall",
+			"height": 28,
+			"thickness": 5
+		},
+		"ocean_level": -2
+	},
+	"landmass": {
+		"shape": "continent",
+		"land_fraction": 0.62,
+		"coast_ruggedness": 0.45,
+		"island_count": 4,
+		"shelf_width": 4
+	},
+	"elevation": {
+		"land_mean_height": 5,
+		"land_max_height": 30,
+		"hypsometry": "plains_with_peaks",
+		"roughness": 0.3,
+		"terrace_bias": 0.5,
+		"repose_override": "stone"
+	},
+	"mountains": {
+		"ranges": [
+			{
+				"count": 1,
+				"length": 0.5,
+				"orientation": 20,
+				"orientation_jitter": 18,
+				"peak_height": [
+					22,
+					30
+				],
+				"peaks_per_range": 4,
+				"flank_steepness": 0.6,
+				"foothills": 10,
+				"passes": 2
+			}
+		],
+		"solitary_peaks": {
+			"count": 2,
+			"height": [
+				12,
+				18
+			],
+			"flank_steepness": 0.6
+		}
+	},
+	"rivers": {
+		"count": 3,
+		"width": [
+			1,
+			4
+		],
+		"meander": 0.5,
+		"incision": 2,
+		"source": "mountains",
+		"delta": true,
+		"tributaries": 2
+	},
+	"lakes": {
+		"count": [
+			2,
+			5
+		],
+		"size": [
+			12,
+			400
+		],
+		"depth": [
+			1,
+			6
+		],
+		"prefer": "basins",
+		"connect_to_rivers": true
+	},
+	"targets": {
+		"flat_fraction_min": 0.3,
+		"largest_land_component_min": 0.9,
+		"cliff_fraction_max": 0.45
+	}
+}

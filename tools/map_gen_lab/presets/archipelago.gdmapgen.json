@@ -1,0 +1,47 @@
+{
+	"format_version": 1,
+	"kind": "map_generator",
+	"id": "archipelago",
+	"generator_version": 1,
+	"seed": 1,
+	"board": { "size": 96 },
+	"border": {
+		"north": { "kind": "ocean" },
+		"east": { "kind": "ocean" },
+		"south": { "kind": "ocean" },
+		"west": { "kind": "ocean" },
+		"ocean_level": -2
+	},
+	"landmass": {
+		"shape": "archipelago",
+		"land_fraction": 0.3,
+		"coast_ruggedness": 0.7,
+		"island_count": 12,
+		"shelf_width": 5
+	},
+	"elevation": {
+		"land_mean_height": 4,
+		"land_max_height": 18,
+		"hypsometry": "rolling",
+		"roughness": 0.45,
+		"terrace_bias": 0.4,
+		"repose_override": "stone"
+	},
+	"mountains": {
+		"ranges": [],
+		"solitary_peaks": { "count": 5, "height": [10, 18], "flank_steepness": 0.8 }
+	},
+	"rivers": {
+		"count": 1, "width": [1, 2], "meander": 0.6, "incision": 1,
+		"source": "springs", "delta": false, "tributaries": 0
+	},
+	"lakes": {
+		"count": [0, 2], "size": [6, 120], "depth": [1, 4],
+		"prefer": "coast", "connect_to_rivers": false
+	},
+	"targets": {
+		"flat_fraction_min": 0.3,
+		"largest_land_component_min": 0.25,
+		"cliff_fraction_max": 0.5
+	}
+}
