@@ -28,7 +28,7 @@ func show_report(recipe: MapRecipe, report: GenerationReport, attempts: int) -> 
 	]
 	%Metrics.text = "\n".join(_paired_lines(recipe, report))
 	%Failures.text = "\n".join(report.failures)
-	%Timings.text = "  ".join(report.timing_lines())
+	%Timings.text = "\n".join(report.timing_lines())
 	%Notes.text = "\n".join(report.notes)
 	_previous = report
 
