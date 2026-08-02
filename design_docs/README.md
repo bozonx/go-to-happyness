@@ -15,6 +15,7 @@
 | Документ | О чём |
 | --- | --- |
 | [grid_terrain_system.md](engine/grid_terrain_system.md) | Сеточно-террасный ландшафт: высоты, уклоны, каскад, вырезы, мешер, навигация по форме земли. Родительский документ для всего, что касается земли. |
+| [procedural_map_generation.md](engine/procedural_map_generation.md) | Процедурная генерация по слоям. Этап 1 — форма земли в лаборатории: рецепт (утоплённость, гипсометрия, горы как граф хребтов, реки, озёра, края карты), детерминированный конвейер и метрики приёмки. Материалы, биомы, наполнение и интеграция — последующие слои. |
 | [terrain_materials.md](engine/terrain_materials.md) | Каталог материалов поверхности, варианты, износ, снег, сезоны, блендинг и текстурный бюджет. |
 | [water.md](engine/water.md) | Водоёмы, лёд, течение, волны, навигация в воде и формат водного слоя. |
 | [weather.md](engine/weather.md) | Прогноз, две оси облачности, ветер, небо и светила, лаборатория погоды. |
@@ -56,6 +57,7 @@
 | --- | --- |
 | [eras_overview.md](settlement/eras_overview.md) | Роль каждой эры и точные условия переходов (gates). |
 | [building_progression.md](settlement/building_progression.md) | Цепочки зданий, уровни и апгрейды поперёк эр. |
+| [sandbox_mode.md](settlement/sandbox_mode.md) | Свободная игра без кампании и финала: выбор карты, места старта, ресурсов и совместимого контента из паков. |
 | [tent_era_survival.md](settlement/tent_era_survival.md) | Стартовый сценарий: первые ночи, погода, выживание. |
 | [village_territory.md](settlement/village_territory.md) | Область деревни: где можно строить и как она растёт. |
 | [storage_warehouses.md](settlement/storage_warehouses.md) | Склады, рюкзак, кучи, порча, резервы под стройки. |

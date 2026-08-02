@@ -37,7 +37,10 @@ const PLANNED_MODES: Array = []
 
 @onready var _top_bar: Control = $UI/Screen/TopBar
 @onready var _mode_bar: MapEditorModeBar = $UI/Screen/TopBar/Margin/Scroll/Row/ModeBar
-@onready var _viewport_area: Control = $UI/Screen/Middle/Viewport3D
+@onready var _viewport_area: Control = $UI/Screen/Middle/Workspace/Viewport3D
+@onready var _scenario_workspace: MapScenarioWorkspace = $UI/Screen/Middle/Workspace/ScenarioWorkspace
+@onready var _scenario_map_bar: PanelContainer = $UI/Screen/Middle/Workspace/ScenarioMapBar
+@onready var _scenario_map_back: Button = $UI/Screen/Middle/Workspace/ScenarioMapBar/Margin/BackButton
 @onready var _side_panel: MapEditorSidePanel = $UI/Screen/Middle/SidePanel
 @onready var _palette: MapEditorPalette = $UI/Screen/Middle/Palette
 @onready var _status_cell: Label = $UI/Screen/StatusBar/Margin/Row/CellLabel
@@ -375,7 +378,7 @@ func _select_mode(mode_id: StringName) -> void:
 func _update_shortcut_tooltip() -> void:
 	if _shortcut_tooltip == null or _active == null:
 		return
-	var text := "Общее\nЛКМ — применить · Shift+ПКМ — обратное действие\nПКМ — камера · СКМ — панорама · Колесо — зум\nWASD/QE — движение камеры · Home — показать всю карту\nCtrl+S — сохранить · Ctrl+Z / Ctrl+Shift+Z — отменить / повторить\n1–5 — режим редактора · Esc — снять выделение / в меню\n\n"
+	var text := "Общее\nЛКМ — применить · Shift+ПКМ — обратное действие\nПКМ — камера · СКМ — панорама · Колесо — зум\nWASD/QE — движение камеры · Home — показать всю карту\nCtrl+S — сохранить · Ctrl+Z / Ctrl+Shift+Z — отменить / повторить\n1–6 — режим редактора · Esc — снять выделение / в меню\n\n"
 	if _active.id == &"water":
 		text += "Вода:\n• ЛКМ по суше — затопить во впадине на выбранном уровне\n• ЛКМ по воде — выбрать водоём\n• Клик по суше вне водоёма или Esc — снять выделение\n• Клик по заблокированной/высокой клетке — снимает выделение без затопления\n• Голубые точки — предпросмотр границ затопления на текущем уровне\n• Shift+колесо или [ ] — размер кисти течения/льда\n• +/− — уровень воды · G — взятие уровня с грунта\n• F — кисть течения · X — кисть стоячей воды (убрать течение) · V/C — направление и сила течения\n• Z/R — кисти заморозки и разморозки"
 	elif _active.id == &"terrain":
@@ -383,7 +386,7 @@ func _update_shortcut_tooltip() -> void:
 	elif _active.id == &"surface":
 		text += "Поверхность:\n• B — вариант · U/J — износ / снег · Shift+ЛКМ — пипетка"
 	elif _active.id == &"fill":
-		text += "Наполнение:\n• ЛКМ — разместить объект · R — повернуть · Ctrl+D — дублировать · Del — удалить"
+		text += "Наполнение:\n• ЛКМ — разместить или выбрать объект\n• Ctrl+ЛКМ — добавить к выделению\n• Shift+ЛКМ — пипетка со всеми свойствами\n• R / Shift+R — повернуть вправо / влево\n• Delete / Shift+ПКМ — удалить\n• Список справа поддерживает Ctrl-выделение и фокусирует камеру"
 	elif _active.id == &"entities":
 		text += "Зоны и спавн:\n• ЛКМ — создать зону или спавн · Del — удалить"
 	_shortcut_tooltip.shortcuts_text = text
@@ -426,10 +429,23 @@ func _connect_ui() -> void:
 	_dialogs.properties_applied.connect(_on_properties_applied)
 	_side_panel.property_committed.connect(_on_inspector_property_committed)
 	_side_panel.property_reset_requested.connect(_on_inspector_property_reset)
+	_side_panel.reference_pick_requested.connect(func(property_name: StringName, reference_type: StringName) -> void:
+		if _active != null and not _active.begin_reference_pick(property_name, reference_type):
+			_context.set_status_message("Эту ссылку пока нельзя указать в текущем режиме.", true))
 	_side_panel.entry_activated.connect(func(index: int) -> void:
 		if _active != null:
 			_active.select_list_entry(index)
 			_refresh_panels())
+	_side_panel.entries_selection_changed.connect(func(indices: Array[int]) -> void:
+		if _active != null:
+			_active.select_list_entries(indices)
+			_refresh_panels())
+	_scenario_workspace.entry_selected.connect(func(index: int) -> void:
+		if _active is ScenarioModeController:
+			_active.select_list_entry(index)
+			_refresh_panels())
+	_scenario_workspace.map_requested.connect(_show_scenario_map)
+	_scenario_map_back.pressed.connect(_show_scenario_workspace)
 
 
 func _open_settings() -> void:
@@ -490,15 +506,52 @@ func _refresh_panels() -> void:
 	])
 	_side_panel.set_inspector("Инспектор — %s" % _active.title, _active.inspector_lines())
 	_side_panel.set_property_fields(_active.inspector_properties(), _active.inspector_values())
-	_side_panel.set_entries(
-		_active.list_title(), _active.list_entries(), _active.empty_list_hint(), _active.selected_list_index(), _active.list_filters(),
-	)
+	var scenario_mode := _active as ScenarioModeController
+	if scenario_mode != null:
+		_side_panel.set_entries("", [], "", -1)
+		_scenario_workspace.set_content(
+			scenario_mode.workspace_summary(), scenario_mode.list_entries(),
+			scenario_mode.empty_list_hint(), scenario_mode.selected_list_index(),
+			scenario_mode.selected_zone_id())
+	else:
+		_side_panel.set_entries(
+			_active.list_title(), _active.list_entries(), _active.empty_list_hint(), _active.selected_list_index(), _active.list_filters(),
+			_active.selected_list_indices(), _active.list_allows_multiple(),
+		)
+	_update_workspace_visibility()
 	# A stack you cannot pop says so by being grey, the way the building editor's
 	# fill buttons do.
 	_undo_button.disabled = not history.can_undo()
 	_redo_button.disabled = not history.can_redo()
 	_status_message.text = _message
 	_status_message.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3) if _message_is_error else Color.WHITE)
+
+
+func _update_workspace_visibility() -> void:
+	var in_scenario := _active is ScenarioModeController
+	if not in_scenario:
+		_scenario_workspace.visible = false
+		_scenario_map_bar.visible = false
+		_viewport_area.visible = true
+	elif not _scenario_map_bar.visible:
+		_scenario_workspace.visible = true
+		_viewport_area.visible = false
+
+
+func _show_scenario_map() -> void:
+	if not (_active is ScenarioModeController):
+		return
+	_scenario_workspace.visible = false
+	_viewport_area.visible = true
+	_scenario_map_bar.visible = true
+
+
+func _show_scenario_workspace() -> void:
+	if not (_active is ScenarioModeController):
+		return
+	_scenario_map_bar.visible = false
+	_viewport_area.visible = false
+	_scenario_workspace.visible = true
 
 
 func _on_inspector_property_committed(property_name: StringName, value: Variant) -> void:
@@ -716,7 +769,11 @@ func _on_terrain_committed(delta: TerrainDelta) -> void:
 	# it joins the same command. Two entries here would mean two Ctrl+Z for one
 	# thing the author did.
 	_recording_border_fill = true
-	for water_delta: WaterDelta in _water_service.reflow_bodies_after_terrain(delta.cells):
+	var excluded_bodies: Array[int] = []
+	var border_body_id := _border_ocean.border_body_id()
+	if border_body_id != WaterBody.NO_BODY:
+		excluded_bodies.append(border_body_id)
+	for water_delta: WaterDelta in _water_service.reflow_bodies_after_terrain(delta.cells, excluded_bodies):
 		parts.append(WaterServiceCommand.of(_water_service, water_delta, label))
 	var flooded := _border_ocean.apply()
 	_recording_border_fill = false
@@ -724,7 +781,7 @@ func _on_terrain_committed(delta: TerrainDelta) -> void:
 		parts.append(WaterServiceCommand.of(_water_service, _water_service.last_delta(), label))
 	history.push(
 		parts[0] if parts.size() == 1
-		else MapEditorCompositeCommand.of(parts, "%s + океан" % label)
+		else MapEditorCompositeCommand.of(parts, "%s + вода" % label)
 	)
 	document.mark_dirty()
 	_notify_document_changed()

@@ -17,21 +17,17 @@ extends BaseBrushController
 ## walkers stand on — and the ray would stop on it, which is correct: an author
 ## clicking a frozen lake means the cell they can see.
 
-## What the left button does. Three tools, the three `map_editor.md` §5.3 names:
-## fill a basin, move the surface of water that is already there, take it away.
-##
-## Ice is NOT one of them. §9.6 makes freezing a seasonal operation over a whole
-## body — "one operation per body per season" — so a per-cell ice brush authors a
-## state the first seasonal pass overwrites wholesale. Freezing stays a button on
-## the body (`toggle_body_ice`), which is the granularity the mechanic has.
+## Fill and drain operate on complete bodies. Flow and ice tools only alter
+## attributes of cells which already belong to a body; they never create or
+## remove isolated water cells.
 const TOOL_SELECT := &"select"
 const TOOL_FLOOD := &"flood"
 const TOOL_DRAIN := &"drain"
 const TOOL_FLOW := &"flow"
 const TOOL_FREEZE := &"freeze"
 const TOOL_THAW := &"thaw"
-const TOOL_STILL := &"still"
-const TOOLS: Array[StringName] = [TOOL_SELECT, TOOL_FLOOD, TOOL_DRAIN, TOOL_FLOW, TOOL_STILL, TOOL_FREEZE, TOOL_THAW]
+const TOOL_CLEAR_FLOW := &"clear_flow"
+const TOOLS: Array[StringName] = [TOOL_SELECT, TOOL_FLOOD, TOOL_DRAIN, TOOL_FLOW, TOOL_CLEAR_FLOW, TOOL_FREEZE, TOOL_THAW]
 
 var tool: StringName = TOOL_FLOOD
 ## The body strokes go into. Zero until the author makes one — a stroke with no
@@ -214,7 +210,7 @@ func apply() -> void:
 			_drain_body_at_hover()
 		TOOL_FLOW:
 			_apply_flow()
-		TOOL_STILL:
+		TOOL_CLEAR_FLOW:
 			_clear_flow()
 		TOOL_FREEZE:
 			_set_frozen(true)
@@ -329,10 +325,6 @@ func _set_frozen(frozen: bool) -> void:
 		last_message = "%s: %d клеток" % ["заморожено" if frozen else "оттаяло", _service.last_delta_size()]
 	else:
 		last_message = "лёд не изменился (%s)" % _water_rejection_label(_service.last_rejection())
-	# Ice is a one-shot state edit.  Returning to Flood keeps the normal
-	# select/create gesture available instead of leaving the brush silently in a
-	# freeze/thaw mode — including after a harmless no-op click.
-	tool = TOOL_FLOOD
 
 
 ## Shift+right drains the whole body under the cursor. Plain right button remains
@@ -341,21 +333,6 @@ func apply_secondary() -> void:
 	if not has_hover or _service == null:
 		return
 	_drain_body_at_hover()
-
-
-func _drain_cells_at_hover() -> void:
-	if _border != null and _water != null:
-		var body_at := _water.body_id_at(hovered_cell)
-		if body_at != WaterBody.NO_BODY and _border.is_border_body(body_at):
-			last_message = "граничный водоём нельзя осушить — поднимите рельеф выше уровня"
-			return
-	var cells := brush_cells(hovered_cell)
-	if _service.drain_cells(cells):
-		if body_id != WaterBody.NO_BODY and _water != null and not _water.has_body(body_id):
-			body_id = WaterBody.NO_BODY
-		last_message = "осушено: %d клеток" % _service.last_delta_size()
-		return
-	last_message = "не удалось осушить (%s)" % _water_rejection_label(_service.last_rejection())
 
 
 func _drain_body_at_hover() -> void:
@@ -432,7 +409,7 @@ func _tool_label() -> String:
 		TOOL_FLOOD: return "затопление"
 		TOOL_DRAIN: return "осушение"
 		TOOL_FLOW: return "течение"
-		TOOL_STILL: return "штиль"
+		TOOL_CLEAR_FLOW: return "удаление течения"
 		TOOL_FREEZE: return "заморозка"
 		TOOL_THAW: return "оттайка"
 	return String(tool)
@@ -444,5 +421,4 @@ static func _water_rejection_label(reason: StringName) -> String:
 		WaterService.REASON_NO_BODY: return "нет водоёма"
 		WaterService.REASON_NOTHING_TO_DO: return "нечего менять"
 		WaterService.REASON_NOT_FREEZABLE: return "нельзя заморозить"
-		WaterService.REASON_FLOW_REQUIRES_RIVER: return "течение только для рек"
 	return String(reason)

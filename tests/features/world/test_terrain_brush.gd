@@ -26,6 +26,11 @@ static func run_all() -> void:
 	_test_paint_and_detail_reach_the_grid()
 	_test_detail_brushes_are_idempotent_under_a_drag()
 	print("    [PASS] Terrain Brush Surface Tests")
+	_test_a_sculpt_drag_lays_one_layer()
+	_test_a_stroke_ends_when_the_button_is_released()
+	_test_circle_brush_drops_the_corners()
+	_test_falloff_rounds_the_shoulder_of_a_mound()
+	print("    [PASS] Terrain Brush Stroke Tests")
 	_test_ramp_cycles_stay_inside_the_catalog()
 	_test_material_picker_copies_material_and_variant()
 	_test_undo_reports_through_the_message()
@@ -310,14 +315,124 @@ static func _test_undo_reports_through_the_message() -> void:
 	var grid: TerrainGrid = world["grid"]
 
 	brush.undo()
-	assert(brush.last_message == "nothing to undo")
+	assert(brush.last_message == "нечего отменять")
 
 	_hover(brush, Vector2i(4, 4))
 	brush.apply_height_brush(1)
 	assert(grid.height_of(Vector2i(4, 4)) == 1)
 	brush.undo()
-	assert(brush.last_message == "undo")
+	assert(brush.last_message == "отменено")
 	assert(grid.height_of(Vector2i(4, 4)) == 0)
 	brush.redo()
-	assert(brush.last_message == "redo")
+	assert(brush.last_message == "повторено")
 	assert(grid.height_of(Vector2i(4, 4)) == 1)
+
+
+# --- Strokes ------------------------------------------------------------------
+
+## A drag is a footprint being pulled across the ground, not a stamp re-applied at
+## every column the cursor enters. Since the brush square overlaps its own path,
+## re-applying meant every cell inside it got the step again for each column of
+## travel: a size-3 brush left a +5 ramp where the author asked for a +1 band, and
+## a size-8 brush left +15. The stroke remembers the columns it has moved.
+static func _test_a_sculpt_drag_lays_one_layer() -> void:
+	var world := _make()
+	var brush: TerrainBrushController = world["brush"]
+	var grid: TerrainGrid = world["grid"]
+	brush.brush_size = 3
+	brush.edit_mode = TerrainEditOperation.Mode.SCULPT
+
+	_hover(brush, Vector2i(-6, 0))
+	brush.set_paint_direction(1)
+	for x in range(-5, 7):
+		var previous := brush.hovered_cell
+		_hover(brush, Vector2i(x, 0))
+		brush._on_hover_changed(previous, true)
+	brush.set_paint_direction(0)
+
+	for x in range(-4, 5):
+		assert(grid.height_of(Vector2i(x, 0)) == 1, "the swept band is raised by exactly one step")
+
+	# The same two columns crossed back and forth cannot keep climbing either.
+	var wiggle := _make()
+	var jitter: TerrainBrushController = wiggle["brush"]
+	var jitter_grid: TerrainGrid = wiggle["grid"]
+	_hover(jitter, Vector2i(0, 0))
+	jitter.set_paint_direction(1)
+	for _pass in 8:
+		var previous := jitter.hovered_cell
+		_hover(jitter, Vector2i(1, 0))
+		jitter._on_hover_changed(previous, true)
+		previous = jitter.hovered_cell
+		_hover(jitter, Vector2i(0, 0))
+		jitter._on_hover_changed(previous, true)
+	jitter.set_paint_direction(0)
+	assert(jitter_grid.height_of(Vector2i(0, 0)) == 1)
+	assert(jitter_grid.height_of(Vector2i(1, 0)) == 1)
+
+
+## Releasing the button ends the layer: pressing again over the same ground is a
+## second, deliberate step, which is how a hill gets built.
+static func _test_a_stroke_ends_when_the_button_is_released() -> void:
+	var world := _make()
+	var brush: TerrainBrushController = world["brush"]
+	var grid: TerrainGrid = world["grid"]
+
+	_hover(brush, Vector2i(2, 2))
+	for _press in 3:
+		brush.set_paint_direction(1)
+		brush.set_paint_direction(0)
+	assert(grid.height_of(Vector2i(2, 2)) == 3)
+
+
+# --- Shape and falloff --------------------------------------------------------
+
+static func _test_circle_brush_drops_the_corners() -> void:
+	var world := _make()
+	var brush: TerrainBrushController = world["brush"]
+	brush.brush_size = 3
+
+	brush.brush_shape = BaseBrushController.Shape.SQUARE
+	assert(brush.brush_cells(Vector2i.ZERO).size() == 25)
+
+	brush.brush_shape = BaseBrushController.Shape.CIRCLE
+	var round_cells := brush.brush_cells(Vector2i.ZERO)
+	assert(round_cells.size() < 25, "a circle covers less than its bounding square")
+	assert(not round_cells.has(Vector2i(2, 2)), "and drops the corners first")
+	assert(round_cells.has(Vector2i(2, 0)), "while keeping the full radius on the axes")
+
+	brush.cycle_brush_shape()
+	assert(brush.brush_shape == BaseBrushController.Shape.SQUARE, "cycling wraps back")
+
+
+## A weighted brush still writes whole columns (§2.1): the step is scaled and
+## rounded, never stored as a fraction. What it buys is a mound with a shoulder
+## instead of a flat-topped block.
+static func _test_falloff_rounds_the_shoulder_of_a_mound() -> void:
+	var world := _make()
+	var brush: TerrainBrushController = world["brush"]
+	var grid: TerrainGrid = world["grid"]
+	brush.brush_size = 4
+	brush.brush_shape = BaseBrushController.Shape.CIRCLE
+	brush.brush_falloff = BaseBrushController.Falloff.LINEAR
+
+	var weights := brush.brush_weights(Vector2i.ZERO)
+	var cells := brush.brush_cells(Vector2i.ZERO)
+	assert(weights.size() == cells.size(), "weights stay parallel to the footprint")
+	assert(is_equal_approx(weights[cells.find(Vector2i.ZERO)], 1.0), "full strength at the centre")
+	assert(weights[cells.find(Vector2i(3, 0))] < 0.35, "and almost nothing at the rim")
+
+	_hover(brush, Vector2i.ZERO)
+	brush.apply_height_brush(4)
+	var centre := grid.height_of(Vector2i.ZERO)
+	var shoulder := grid.height_of(Vector2i(2, 0))
+	var rim := grid.height_of(Vector2i(3, 0))
+	assert(centre == 4, "the centre gets the whole step")
+	assert(shoulder > 0 and shoulder < centre, "the shoulder gets part of it")
+	assert(rim <= shoulder, "and the rim less again")
+
+	# Every height the weighted brush wrote is still a whole number of steps —
+	# there is no fractional column anywhere on the board.
+	for z in range(-4, 5):
+		for x in range(-4, 5):
+			assert(grid.height_of(Vector2i(x, z)) == int(grid.height_of(Vector2i(x, z))))

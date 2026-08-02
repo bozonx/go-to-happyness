@@ -90,6 +90,7 @@ static func validate_party_spawns(document: MapDocument, population: int) -> Arr
 
 static func _validate_entities(document: MapDocument, terrain: TerrainGrid, errors: Array[String]) -> void:
 	var ids: Dictionary = {}
+	var occupied: Array[Dictionary] = []
 	for entity: MapEntityRecord in document.entities.entities:
 		if entity.id == &"" or ids.has(entity.id):
 			errors.append("дубликат или пустой id сущности: %s" % entity.id)
@@ -97,18 +98,54 @@ static func _validate_entities(document: MapDocument, terrain: TerrainGrid, erro
 		ids[entity.id] = true
 		if terrain == null:
 			continue
-		var cell := entity.cell(terrain)
-		if not terrain.is_inside(cell):
-			errors.append("сущность %s стоит вне доски" % entity.id)
-			continue
-		if terrain.is_hole(cell):
-			errors.append("сущность %s стоит в вырезе террейна" % entity.id)
-			continue
 		# Missing packs are deliberately allowed; when an archetype is present its
 		# declared states are authoritative and a typo must not reach runtime.
 		var archetype := EntityArchetypeCatalog.get_archetype(entity.archetype_id)
-		if archetype != null and not archetype.states.allows_initial_state(entity.initial_state):
+		if archetype == null:
+			var fallback_cell := entity.cell(terrain)
+			if not terrain.is_inside(fallback_cell):
+				errors.append("сущность %s стоит вне доски" % entity.id)
+			elif terrain.is_hole(fallback_cell):
+				errors.append("сущность %s стоит в вырезе террейна" % entity.id)
+			continue
+		if not archetype.states.allows_initial_state(entity.initial_state):
 			errors.append("сущность %s задаёт неизвестное состояние %s" % [entity.id, entity.initial_state])
+		var asset := EntityArchetypeCatalog.asset_of(archetype.id)
+		if asset == null:
+			continue
+		if not asset.is_scale_allowed(entity.scale):
+			errors.append("сущность %s задаёт недопустимый масштаб %.3f" % [entity.id, entity.scale])
+		if not is_zero_approx(entity.yaw_degrees) and not asset.is_rotation_axis_allowed("y"):
+			errors.append("сущность %s вращается вокруг запрещённой оси Y" % entity.id)
+		for property_name: Variant in entity.props.keys():
+			if archetype.get_property(StringName(property_name)) == null:
+				errors.append("сущность %s задаёт неизвестное свойство %s" % [entity.id, property_name])
+		var span := asset.placement_cell_span(entity.scale, entity.yaw_degrees)
+		var anchor := entity.anchor_position()
+		var base_cell := Vector2i(
+			int(round(anchor.x / terrain.cell_size - float(span.x) * 0.5)),
+			int(round(anchor.z / terrain.cell_size - float(span.y) * 0.5)),
+		)
+		var cells := Rect2i(base_cell, span)
+		var footprint_valid := true
+		for x in range(cells.position.x, cells.end.x):
+			for z in range(cells.position.y, cells.end.y):
+				var footprint_cell := Vector2i(x, z)
+				if not terrain.is_inside(footprint_cell):
+					errors.append("сущность %s выходит footprint за пределы доски" % entity.id)
+					footprint_valid = false
+					break
+				if terrain.is_hole(footprint_cell):
+					errors.append("footprint сущности %s попадает в вырез террейна" % entity.id)
+					footprint_valid = false
+					break
+			if not footprint_valid:
+				break
+		if asset.claims_cells():
+			for previous: Dictionary in occupied:
+				if cells.intersects(previous["cells"]):
+					errors.append("сущности %s и %s занимают общие клетки" % [previous["id"], entity.id])
+			occupied.append({"id": entity.id, "cells": cells})
 
 
 ## Scenario references that need the rest of the document (map_editor.md §11).
@@ -135,11 +172,11 @@ static func _validate_anchor_place(anchor: ZoneAnchorRecord, terrain: TerrainGri
 		errors.append("точка %s стоит в вырезе террейна" % anchor.id)
 		return
 	if water != null and terrain != null:
-		if water.is_lava(cell):
+		if water.is_wet(terrain, cell) and water.is_lava(cell):
 			errors.append("точка %s стоит в лаве" % anchor.id)
 			return
 		# Frozen water is walkable (ice); open water deeper than a ford is not.
-		if water.has_water(cell) and not water.is_frozen(cell) and water.depth_steps_at(terrain, cell) > WaterGrid.FORD_MAX_DEPTH_STEPS:
+		if water.is_wet(terrain, cell) and not water.is_frozen(cell) and water.depth_steps_at(terrain, cell) > WaterGrid.FORD_MAX_DEPTH_STEPS:
 			errors.append("точка %s стоит под непроходимой водой" % anchor.id)
 
 

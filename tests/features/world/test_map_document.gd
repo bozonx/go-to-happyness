@@ -34,8 +34,18 @@ static func run_all() -> void:
 	_test_unknown_sections_survive_a_save()
 	_test_save_replaces_the_package_atomically()
 	_test_runtime_keys_namespace_player_maps()
+	_test_builtin_water_survives_sanitation()
 	print("    [PASS] Map Package Tests")
 	_cleanup()
+
+
+static func _test_builtin_water_survives_sanitation() -> void:
+	var service := MapDocumentService.new()
+	var document := service.load_package("res://game/content/core/maps/green_valley.gdmap")
+	assert(document != null, service.last_error)
+	assert(document.water.body_count() > 0, "the shipped lake is structurally valid")
+	assert(document.water.damaged_body_ids(document.terrain).is_empty())
+	assert(not document.dirty, "valid built-in water needs no repair")
 
 
 # --- Meta ---------------------------------------------------------------------

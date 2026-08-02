@@ -1124,11 +1124,12 @@ text = "ID: —"
 
 [node name="FixtureCapLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 layout_mode = 2
-text = "Функция:"
+text = "Возможности:"
 
-[node name="FixtureCapabilityOption" type="OptionButton" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
+[node name="FixtureCapabilityOption" type="MenuButton" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
+text = "—"
 
 [node name="FixtureVisualLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 layout_mode = 2

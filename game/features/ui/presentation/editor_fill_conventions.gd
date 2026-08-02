@@ -107,6 +107,21 @@ static func rotated_by(current_deg: float, direction: int) -> float:
 	return fposmod(current_deg + ROTATION_STEP_DEG * direction, 360.0)
 
 
+## Decorative, non-blocking objects may overlap. Both editors use this exact
+## predicate so `collision_policy: none` cannot mean one thing indoors and
+## another on a map.
+static func asset_claims_cells(asset: WorldAssetDef) -> bool:
+	return asset != null and asset.claims_cells()
+
+
+## Applies the asset's authored uniform-scale policy. The inspector may accept a
+## typed number, but the stored value must be one the asset actually supports.
+static func normalized_scale(asset: WorldAssetDef, requested: float) -> float:
+	if asset == null:
+		return clampf(requested, SCALE_MIN, SCALE_MAX)
+	return asset.normalized_scale(requested)
+
+
 static func make_ghost_material() -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = COLOR_GHOST_VALID

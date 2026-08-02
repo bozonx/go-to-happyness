@@ -10,6 +10,10 @@ extends Node3D
 @onready var landscape_objects: Node3D = get_node_or_null("LandscapeObjects") as Node3D
 @onready var terrain: GridTerrainWorld = get_node_or_null("Terrain") as GridTerrainWorld
 @onready var water: WaterWorld = get_node_or_null("Water") as WaterWorld
+@onready var boundary_north: CollisionShape3D = get_node_or_null("WorldBoundary/North/CollisionShape3D") as CollisionShape3D
+@onready var boundary_south: CollisionShape3D = get_node_or_null("WorldBoundary/South/CollisionShape3D") as CollisionShape3D
+@onready var boundary_east: CollisionShape3D = get_node_or_null("WorldBoundary/East/CollisionShape3D") as CollisionShape3D
+@onready var boundary_west: CollisionShape3D = get_node_or_null("WorldBoundary/West/CollisionShape3D") as CollisionShape3D
 
 var terrain_grid: TerrainGrid
 ## The built-coverage layer of the launched map, when it has one.
@@ -46,7 +50,27 @@ func configure_terrain(
 	if terrain != null:
 		terrain.configure(terrain_grid, camera, coverage_layer)
 		terrain.rebuild_pending_now()
+	_configure_world_boundary(cell_size, board_cells)
 	return terrain_grid
+
+
+func _configure_world_boundary(cell_size: float, board_cells: int) -> void:
+	var half_extent := float(board_cells) * cell_size * 0.5
+	var wall_height := 256.0
+	var wall_thickness := 1.0
+	_configure_boundary_shape(boundary_north, Vector3(0.0, 0.0, -half_extent - wall_thickness * 0.5), Vector3(half_extent * 2.0 + 2.0, wall_height, wall_thickness))
+	_configure_boundary_shape(boundary_south, Vector3(0.0, 0.0, half_extent + wall_thickness * 0.5), Vector3(half_extent * 2.0 + 2.0, wall_height, wall_thickness))
+	_configure_boundary_shape(boundary_east, Vector3(half_extent + wall_thickness * 0.5, 0.0, 0.0), Vector3(wall_thickness, wall_height, half_extent * 2.0 + 2.0))
+	_configure_boundary_shape(boundary_west, Vector3(-half_extent - wall_thickness * 0.5, 0.0, 0.0), Vector3(wall_thickness, wall_height, half_extent * 2.0 + 2.0))
+
+
+static func _configure_boundary_shape(collision: CollisionShape3D, position: Vector3, size: Vector3) -> void:
+	if collision == null:
+		return
+	collision.position = position
+	var box := BoxShape3D.new()
+	box.size = size
+	collision.shape = box
 
 
 ## The water layer of the launched map, drawn over the same ground. An empty map

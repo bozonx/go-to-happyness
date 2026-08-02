@@ -33,6 +33,7 @@ func _run() -> void:
 	_test_scene_came_up(editor)
 	_test_validation(editor)
 	_test_mode_switching(editor)
+	_test_scenario_workspace_replaces_the_map(editor)
 	_test_entities_mode_renders_anchor_markers(editor)
 	await _test_terrain_editing_and_shared_undo(editor)
 	_test_ramp_connection_and_shared_undo(editor)
@@ -176,6 +177,37 @@ func _test_mode_switching(editor: Node) -> void:
 	editor._select_mode(&"terrain")
 	assert(editor._active.id == &"terrain", "switched back")
 	print("  modes ok")
+
+
+func _test_scenario_workspace_replaces_the_map(editor: Node) -> void:
+	editor._select_mode(&"scenario")
+	assert(editor._scenario_workspace.visible, "scenario opens its central workspace")
+	assert(not editor._viewport_area.visible, "the inactive 3D map does not waste the centre")
+	assert(not editor._scenario_map_bar.visible, "map preview bar is hidden in the workspace")
+	assert(not editor._side_panel._has_list, "the scenario list is not duplicated on the right")
+
+	var mode := editor._active as ScenarioModeController
+	mode.select_palette_entry(&"flags")
+	mode.activate_option(&"add_flag_bool")
+	editor._refresh_panels()
+	assert(editor._scenario_workspace._entries.size() == 1, "the central list reads the mode list API")
+	# Leave the shared stack exactly as this UI-only check found it; the editing
+	# tests below intentionally start from depth zero.
+	editor.history.undo()
+	editor._refresh_panels()
+
+	editor._show_scenario_map()
+	assert(not editor._scenario_workspace.visible and editor._viewport_area.visible,
+		"map preview temporarily replaces the scenario workspace")
+	assert(editor._scenario_map_bar.visible, "map preview always offers an explicit return")
+	editor._show_scenario_workspace()
+	assert(editor._scenario_workspace.visible and not editor._viewport_area.visible,
+		"return restores the scenario workspace")
+
+	editor._select_mode(&"terrain")
+	assert(editor._viewport_area.visible and not editor._scenario_workspace.visible,
+		"spatial modes restore the regular map")
+	print("  scenario workspace ok")
 
 
 ## Spawn anchors render as 3D markers in the zones mode, so an author can tell
@@ -333,10 +365,10 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 	# as in the building editor.
 	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true))
 	assert(editor._side_panel.get_node("Margin/Scroll/Rows/InspectorFields").get_child_count() > 0, "schema generated inspector controls")
-	assert(editor._active.apply_inspector_value(&"editor_scale", 1.5), "shared inspector edits entity scale")
-	assert(is_equal_approx(editor.document.entities.entities[0].scale, 1.5), "scale reached the map record")
-	editor._undo()
-	assert(is_equal_approx(editor.document.entities.entities[0].scale, 1.0), "transform edit participates in shared undo")
+	assert(not editor._active.apply_inspector_value(&"editor_scale", 1.5),
+		"locked asset refuses an unsupported scale")
+	assert(is_equal_approx(editor.document.entities.entities[0].scale, 1.0),
+		"scale policy reaches the map record")
 	assert(editor._active.apply_inspector_value(&"fuel_units", 5), "inspector applied authored property")
 	assert(editor.document.entities.entities[0].props == {&"fuel_units": 5}, "only authored difference is stored")
 	assert(editor._active.reset_inspector_value(&"fuel_units"), "inspector reset restores archetype default")
@@ -356,7 +388,8 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 	editor._active.handle_input(_key(KEY_R))
 	assert(is_equal_approx(editor.document.entities.entities[1].yaw_degrees, 15.0), "R повернул поставленную копию")
 	var side_list := editor._side_panel.get_node("Margin/Scroll/Rows/List") as ItemList
-	side_list.item_selected.emit(0)
+	side_list.select(0, true)
+	side_list.multi_selected.emit(0, true)
 	assert(editor._active.selected_list_index() == 0, "side list selects the corresponding map entity")
 	var side_search := editor._side_panel.get_node("Margin/Scroll/Rows/ListSearch") as LineEdit
 	side_search.text = "entity_2"
@@ -396,6 +429,15 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 	fill_ctrl.rebuild_views()
 	fill_ctrl._refresh_ghost()
 	assert(is_instance_valid(fill_ctrl._ghost), "призрак выжил пересборку видов")
+	# Picking follows the whole authored footprint, not only its anchor cell.
+	fill_ctrl._archetype_id = &"core:cooking_campfire"
+	fill_ctrl._place(Vector2i(24, 24))
+	var wide_id: StringName = editor.document.entities.entities[-1].id
+	assert(fill_ctrl.occupied_cells(editor.document.entities.entities[-1]).position == Vector2i(24, 24),
+		"even footprint keeps the clicked cell as its authored base")
+	assert(fill_ctrl._entity_at(Vector2i(25, 25)) == wide_id,
+		"2×2 object is selectable from every claimed cell")
+	editor._undo()
 
 	# Клетки: объект занимает целое число клеток, занятую клетку второй раз не
 	# занять, а смещение подстраивает модель внутри своих клеток.
@@ -431,7 +473,8 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 	fill_ctrl._select(kept_id, false)
 	fill_ctrl._archetype_id = &"core:campfire"
 	var options: Array = editor._active.tool_options()
-	assert(not options.is_empty() and options[0].id == FillModeController.OPTION_REPLACE,
+	assert(options.any(func(option) -> bool:
+		return option.id == FillModeController.OPTION_REPLACE),
 		"действие замены появляется в опциях палитры")
 	# Возвращаем стек к тому, что было: дальше тест считает шаги отмены.
 	while editor.history.undo_depth() > depth_before_cells:
@@ -537,6 +580,14 @@ func _test_snow_paint_respects_water_and_slope(editor: Node) -> void:
 		dry_cell, terrain.height_of(dry_cell), SlopeCatalog.CLASS_FLAT,
 		0, 0, terrain.material_index_at(dry_cell), terrain.flags_of(dry_cell), terrain.detail_at(dry_cell),
 	)
+	# The border-ocean case starts without an ordinary body. Drain the complete
+	# body through the same inverse action exposed to authors.
+	editor._select_mode(&"water")
+	editor._water_brush.hovered_cell = wet_cell
+	editor._water_brush.has_hover = true
+	editor._water_brush.tool = WaterBrushController.TOOL_FLOOD
+	editor._water_brush.apply_secondary()
+	assert(not editor.document.water.is_wet(terrain, wet_cell), "snow case drained its whole test body")
 	print("  snow surface rules ok")
 
 
@@ -579,8 +630,8 @@ func _test_water_mode(editor: Node) -> void:
 	var body_id: int = editor._water_brush.body_id
 	assert(water.is_wet(terrain, cell), "the stroke filled the hollow")
 	assert(water.depth_steps_at(terrain, cell) == 1, "one step deep initially")
-	editor._water_brush.adjust_level(1)
-	assert(water.depth_steps_at(terrain, cell) == 2, "two steps deep")
+	editor._water_brush.adjust_level(3)
+	assert(water.depth_steps_at(terrain, cell) == 4, "four steps deep")
 	assert(editor.history.undo_depth() >= undo_before + 1, "the stroke is on the SHARED stack")
 	assert(editor._nav_grid.topology_revision() != topology_before, "routing heard about it")
 	assert(not editor._nav_grid.is_walkable(cell), "and refuses to walk through it")
@@ -622,6 +673,12 @@ func _test_water_mode(editor: Node) -> void:
 	assert(editor.water_highlight.visible, "water highlight visible when body selected")
 	editor._active.activate_option(WaterModeController.OPTION_RIVER)
 	assert(water.body(body_id).type == WaterBody.Type.RIVER, "retyped body to river")
+	# A surface raised above the surrounding plain correctly spreads all the way
+	# to the map edge. Lower it back into its basin so the following snow case has
+	# both open water and genuinely dry ground to exercise.
+	editor._water_brush.adjust_level(-3)
+	assert(water.has_body(body_id) and water.is_wet(terrain, cell), "lowered body remains in its basin")
+	assert(not water.is_wet(terrain, Vector2i(12, 12)), "lowered body no longer covers the plain")
 
 	print("  water fill + flow brush + highlight + shared undo ok")
 

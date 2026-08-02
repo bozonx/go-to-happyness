@@ -19,6 +19,7 @@ static func run_all() -> void:
 	_test_coverage_made_too_steep_after_paint_is_an_error()
 	_test_settlement_map_without_spawns_is_clean()
 	_test_party_spawns_are_required_at_launch()
+	_test_entity_footprints_and_asset_transforms_are_validated()
 	_test_warnings_skip_when_nav_grid_is_null()
 	_test_anchor_on_blocked_cell_warns()
 	_test_route_across_a_wall_warns()
@@ -41,10 +42,10 @@ static func _test_spawn_under_deep_water_is_an_error() -> void:
 	var terrain := _flat_terrain()
 	var water := WaterGrid.new()
 	water.configure(1.0, BOARD_CELLS)
-	var lake := water.create_body(WaterBody.Type.LAKE, 0)
-	# Ground at 0, water surface at 3 → depth 3 steps, well past the ford limit.
+	var lake := water.create_body(WaterBody.Type.LAKE, 4)
+	# Ground at 0, water surface at 4 → deeper than the 3-step ford limit.
 	terrain.set_height(Vector2i(5, 5), 0)
-	water.set_cell(Vector2i(5, 5), lake.id, 3)
+	water.set_cell(Vector2i(5, 5), lake.id, 4)
 	var document := _document_with_spawn_at(Vector2i(5, 5))
 	var errors := MapValidator.validate(document, terrain, water, null)
 	assert(errors.any(func(m: String) -> bool: return m.find("водой") > 0),
@@ -127,6 +128,45 @@ static func _test_party_spawns_are_required_at_launch() -> void:
 		document.zones.anchors.append(companion)
 	errors = MapValidator.validate_party_spawns(document, 4)
 	assert(errors.is_empty(), "complete authored party starts launch: %s" % "; ".join(errors))
+
+
+static func _test_entity_footprints_and_asset_transforms_are_validated() -> void:
+	EntityArchetypeCatalog.reload()
+	var document := MapDocument.create(&"entity_rules", "Entity rules", BOARD_CELLS)
+	var wide := _entity_at_base(&"wide", &"core:cooking_campfire", Vector2i(7, 7), Vector2i(2, 2))
+	document.entities.entities.append(wide)
+	var errors := MapValidator.validate(document, document.terrain, document.water, null)
+	assert(errors.any(func(message: String) -> bool: return message.contains("footprint")),
+		"validator checks every footprint cell: %s" % "; ".join(errors))
+
+	document.entities.entities.clear()
+	var first := _entity_at_base(&"first", &"core:campfire", Vector2i(1, 1), Vector2i.ONE)
+	var second := _entity_at_base(&"second", &"core:campfire", Vector2i(1, 1), Vector2i.ONE)
+	second.scale = 1.5
+	document.entities.entities.append(first)
+	document.entities.entities.append(second)
+	errors = MapValidator.validate(document, document.terrain, document.water, null)
+	assert(errors.any(func(message: String) -> bool: return message.contains("общие клетки")),
+		"validator catches authored overlaps: %s" % "; ".join(errors))
+	assert(errors.any(func(message: String) -> bool: return message.contains("масштаб")),
+		"validator enforces the asset scale policy: %s" % "; ".join(errors))
+
+
+static func _entity_at_base(
+	entity_id: StringName,
+	archetype_id: StringName,
+	base_cell: Vector2i,
+	span: Vector2i,
+) -> MapEntityRecord:
+	var record := MapEntityRecord.new()
+	record.id = entity_id
+	record.archetype_id = archetype_id
+	record.position = Vector3(
+		float(base_cell.x) + float(span.x) * 0.5,
+		0.0,
+		float(base_cell.y) + float(span.y) * 0.5,
+	)
+	return record
 
 
 static func _flat_terrain() -> TerrainGrid:

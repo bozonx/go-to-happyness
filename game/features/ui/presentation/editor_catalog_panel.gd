@@ -213,6 +213,11 @@ func _add_asset_buttons(assets: Array, show_category: bool = false) -> void:
 		if show_category:
 			button.text += "  ·  " + WorldAssetCatalog.category_display_name(asset.category)
 		button.tooltip_text = _asset_tooltip(asset)
+		var available := _asset_available(asset.id)
+		button.disabled = not available
+		if not available:
+			var reason := _asset_unavailable_reason(asset.id)
+			button.tooltip_text += ("\n\n" if not button.tooltip_text.is_empty() else "") + reason
 		button.clip_text = true
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.button_pressed = asset.id == active_id
@@ -323,6 +328,8 @@ func _select_asset(asset_id: StringName) -> void:
 
 
 func select_asset(asset_id: StringName) -> void:
+	if not _asset_available(asset_id):
+		return
 	_selected_asset_id = asset_id
 	if _controller != null and "current_asset_id" in _controller:
 		_controller.current_asset_id = asset_id
@@ -387,6 +394,9 @@ func _rebuild_recent_assets() -> void:
 		var button := Button.new()
 		button.text = asset.name
 		button.tooltip_text = asset.description
+		button.disabled = not _asset_available(asset_id)
+		if button.disabled:
+			button.tooltip_text += "\n\n" + _asset_unavailable_reason(asset_id)
 		button.custom_minimum_size = Vector2(80, 0)
 		button.clip_text = true
 		button.toggle_mode = true
@@ -400,3 +410,14 @@ func _get_active_asset_id() -> StringName:
 	if _controller != null and "current_asset_id" in _controller:
 		return _controller.current_asset_id
 	return _selected_asset_id
+
+
+func _asset_available(asset_id: StringName) -> bool:
+	return not (_controller != null and _controller.has_method("catalog_asset_enabled")) \
+		or bool(_controller.call("catalog_asset_enabled", asset_id))
+
+
+func _asset_unavailable_reason(asset_id: StringName) -> String:
+	if _controller != null and _controller.has_method("catalog_asset_unavailable_reason"):
+		return String(_controller.call("catalog_asset_unavailable_reason", asset_id))
+	return "Ассет недоступен в этом редакторе."

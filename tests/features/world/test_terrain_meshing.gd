@@ -89,17 +89,17 @@ static func _covers(a: Vector2, b: Vector2, c: Vector2, point: Vector2) -> bool:
 static func _test_flat_chunk_merges_into_one_quad() -> void:
 	var grid := _make_grid()
 	var result := _build(grid)
-	# 256 flat columns of the same height and material are two triangles, not 512
-	# (§11). Nothing is above or below them, so there are no walls either.
-	assert(_vertex_count(result) == 4)
-	assert(_triangle_count(result) == 2)
+	# Retained meshing keeps four horizontal bands per chunk. A flat chunk is one
+	# quad per reusable band, still far below one quad per cell.
+	assert(_vertex_count(result) == 16)
+	assert(_triangle_count(result) == 8)
 
 
 static func _test_material_no_longer_splits_the_merge() -> void:
 	var grid := _make_grid()
 	# Material reaches the GPU through the index map, not through the vertices
 	# (`terrain_materials.md` §7.3, §7.4), so half a chunk repainted is still one
-	# merged quad — and the paint itself dirties no chunk at all.
+	# merged quad per retained band — and the paint itself dirties no chunk at all.
 	for z in 16:
 		for x in range(8, 16):
 			grid.set_material(Vector2i(x, z), TerrainMaterialCatalog.SAND)
@@ -110,19 +110,18 @@ static func _test_material_no_longer_splits_the_merge() -> void:
 	assert(not grid.has_dirty_chunks())
 	assert(grid.has_dirty_surface_cells())
 	var painted := _build(grid)
-	assert(_vertex_count(painted) == 4)
-	assert(_triangle_count(painted) == 2)
+	assert(_vertex_count(painted) == 16)
+	assert(_triangle_count(painted) == 8)
 
 	var stepped := _make_grid()
 	for z in 16:
 		for x in range(8, 16):
 			stepped.set_height(Vector2i(x, z), 1)
 	var result := _build(stepped)
-	# Two merged plateaus, plus one merged wall per side of the raised half: the
-	# step inside the chunk, and the three chunk borders where the ground beyond
-	# is a step lower. Six quads for 256 columns.
-	assert(_vertex_count(result) == 24)
-	assert(_triangle_count(result) == 12)
+	# Two plateau quads per band, four internal/east wall runs per band, and one
+	# north/south end wall: 18 retained quads.
+	assert(_vertex_count(result) == 72)
+	assert(_triangle_count(result) == 36)
 
 
 # --- Seams ------------------------------------------------------------------

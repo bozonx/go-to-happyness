@@ -74,8 +74,6 @@ func configure(
 		service.edit_committed.connect(_on_edit_committed)
 	if water_service != null and not water_service.edit_committed.is_connected(_on_water_committed):
 		water_service.edit_committed.connect(_on_water_committed)
-	if water_service != null and not water_service.registry_changed.is_connected(_on_water_registry_changed):
-		water_service.registry_changed.connect(_on_water_registry_changed)
 
 
 ## Rebuilds the whole field. Cheap enough to run on load and on a board resize;
@@ -138,17 +136,6 @@ func _on_edit_committed(delta: TerrainDelta) -> void:
 ## cost-only water edit to optimise for.
 func _on_water_committed(delta: WaterDelta) -> void:
 	refresh_cells(delta.cells)
-
-
-## A registry operation republishes the cells it reaches and nothing else. Adding
-## an empty body reaches none — and that is the common case, because the editor
-## creates a body the moment an author picks "+ lake" from the palette, before a
-## single cell of it exists. Rebuilding the whole field there cost 362 ms on a
-## 96×96 board and 2.5 s on a 256×256 one, per click.
-func _on_water_registry_changed(affected_cells: Array[Vector2i]) -> void:
-	if affected_cells.is_empty():
-		return
-	refresh_cells(affected_cells)
 
 
 ## Whether a patch has grown large enough that the whole-board pass is the cheaper

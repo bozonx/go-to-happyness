@@ -10,6 +10,8 @@ var _building_registry: Variant
 var _tree_positions: Array[Vector3] = []
 var _terrain_height_at: Callable
 var _max_build_slope: float
+var _terrain_grid: TerrainGrid = null
+var _water_grid: WaterGrid = null
 
 
 func configure(port: BuildingPlacementRuntimePort) -> void:
@@ -19,6 +21,8 @@ func configure(port: BuildingPlacementRuntimePort) -> void:
 	_tree_positions = port.tree_positions
 	_terrain_height_at = port.terrain_height_at
 	_max_build_slope = port.max_build_slope
+	_terrain_grid = port.terrain_grid
+	_water_grid = port.water_grid
 
 
 func is_clear_of_dig_sites(world_position: Vector3, footprint: Vector2i) -> bool:
@@ -36,6 +40,17 @@ func footprint_overlaps_terrain_obstacle(center: Vector3, footprint: Vector2i) -
 		for z in range(footprint.y):
 			if _terrain_blocked_cells.has(Vector2i(min_x + x, min_z + z)):
 				return true
+	if _terrain_grid != null:
+		var half := Vector2(float(footprint.x), float(footprint.y)) * 0.5
+		var minimum := _terrain_grid.cell_from_position(Vector3(center.x - half.x, 0.0, center.z - half.y))
+		var maximum := _terrain_grid.cell_from_position(Vector3(center.x + half.x - 0.0001, 0.0, center.z + half.y - 0.0001))
+		for cell_z in range(minimum.y, maximum.y + 1):
+			for cell_x in range(minimum.x, maximum.x + 1):
+				var cell := Vector2i(cell_x, cell_z)
+				if not _terrain_grid.is_inside(cell) or _terrain_grid.is_hole(cell):
+					return true
+				if _water_grid != null and _water_grid.is_wet(_terrain_grid, cell):
+					return true
 	return false
 
 

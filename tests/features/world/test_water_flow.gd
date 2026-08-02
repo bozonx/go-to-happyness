@@ -40,14 +40,12 @@ static func _make_river(world: Dictionary) -> int:
 	var terrain: TerrainGrid = world["terrain"]
 	var service: WaterService = world["service"]
 
-	# Dig a channel and paint a river body into it.
+	# Dig a channel and fill one complete river body into it.
 	for x in range(-2, 3):
 		terrain.set_height(Vector2i(x, 0), -2)
 	var body := service.create_body(WaterBody.Type.RIVER, 0)
 	assert(body != null)
-	assert(service.paint(
-		[Vector2i(-2, 0), Vector2i(-1, 0), Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0)],
-		body.id, 0))
+	assert(service.flood(Vector2i.ZERO, body.id, 0))
 	return body.id
 
 
@@ -99,8 +97,10 @@ static func _test_set_flow_skips_other_bodies() -> void:
 		terrain.set_height(Vector2i(x, 0), -2)
 	var river := service.create_body(WaterBody.Type.RIVER, 0)
 	var lake := service.create_body(WaterBody.Type.LAKE, 0)
-	service.paint([Vector2i(-2, 0), Vector2i(-1, 0)], river.id, 0)
-	service.paint([Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0)], lake.id, 0)
+	for cell: Vector2i in [Vector2i(-2, 0), Vector2i(-1, 0)]:
+		water.set_cell(cell, river.id, 0)
+	for cell: Vector2i in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0)]:
+		water.set_cell(cell, lake.id, 0)
 
 	# Set flow on the river — lake cells must be untouched.
 	service.set_flow([Vector2i(-2, 0), Vector2i(0, 0)], river.id, SlopeCatalog.DIR_E, 2)
@@ -154,7 +154,6 @@ static func _test_flow_blocks_ford_after_set() -> void:
 	# But at depth 1 with flow >= FLOW_STRENGTH_BLOCKS_FORD, a ford is blocked.
 	# Make a shallow cell.
 	terrain.set_height(Vector2i(0, 0), -1)
-	service.paint([Vector2i(0, 0)], body_id, 0)
 
 	# Without flow, the shallow cell is a ford.
 	assert(water.is_ford(terrain, Vector2i(0, 0)))

@@ -48,6 +48,12 @@ func size() -> int:
 	return cells.size()
 
 
+## Registry-aware edits override this so publishers can invalidate body material
+## caches without subscribing to a second navigation-producing signal.
+func changes_registry() -> bool:
+	return false
+
+
 func record(cell: Vector2i, old_state: PackedInt32Array, new_state: PackedInt32Array) -> void:
 	cells.append(cell)
 	_old_states.append_array(old_state)

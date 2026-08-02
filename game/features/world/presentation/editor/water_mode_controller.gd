@@ -46,7 +46,6 @@ func _init() -> void:
 func activate() -> void:
 	_painting = false
 	if context != null and context.water_service != null:
-		context.water_service.prune_empty_bodies()
 		if not context.water_service.edit_committed.is_connected(_on_water_edit_committed):
 			context.water_service.edit_committed.connect(_on_water_edit_committed)
 	if context != null and context.water_brush != null:
@@ -68,7 +67,6 @@ func _on_water_edit_committed(_delta: Variant) -> void:
 func deactivate() -> void:
 	_painting = false
 	if context != null and context.water_service != null:
-		context.water_service.prune_empty_bodies()
 		if context.water_service.edit_committed.is_connected(_on_water_edit_committed):
 			context.water_service.edit_committed.disconnect(_on_water_edit_committed)
 	if context != null and context.water_brush != null:
@@ -102,7 +100,7 @@ func _brush_has_size() -> bool:
 		return false
 	return context.water_brush.tool in [
 		WaterBrushController.TOOL_FLOW,
-		WaterBrushController.TOOL_STILL,
+		WaterBrushController.TOOL_CLEAR_FLOW,
 		WaterBrushController.TOOL_FREEZE,
 		WaterBrushController.TOOL_THAW,
 	]
@@ -236,7 +234,7 @@ func _handle_key(event: InputEventKey) -> bool:
 		KEY_R:
 			brush.tool = WaterBrushController.TOOL_THAW if brush.tool != WaterBrushController.TOOL_THAW else WaterBrushController.TOOL_FLOOD
 		KEY_X:
-			brush.tool = WaterBrushController.TOOL_STILL if brush.tool != WaterBrushController.TOOL_STILL else WaterBrushController.TOOL_FLOOD
+			brush.tool = WaterBrushController.TOOL_CLEAR_FLOW if brush.tool != WaterBrushController.TOOL_CLEAR_FLOW else WaterBrushController.TOOL_FLOOD
 		KEY_I:
 			brush.cycle_ice_thickness()
 		KEY_V:
@@ -286,7 +284,7 @@ func _edit_label() -> String:
 		WaterBrushController.TOOL_FLOOD: return "наполнение водоёма"
 		WaterBrushController.TOOL_DRAIN: return "осушение"
 		WaterBrushController.TOOL_FLOW: return "течение"
-		WaterBrushController.TOOL_STILL: return "удаление течения"
+		WaterBrushController.TOOL_CLEAR_FLOW: return "удаление течения"
 		WaterBrushController.TOOL_FREEZE: return "заморозка"
 		WaterBrushController.TOOL_THAW: return "разморозка"
 	return "вода"
@@ -365,7 +363,7 @@ func tool_options() -> Array:
 	options.append(ToolOption.header(&"header_brush", "Кисть", true))
 
 	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_FLOW]), "Течение", ROW_BRUSH_TOOLS, brush.tool == WaterBrushController.TOOL_FLOW))
-	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_STILL]), "Стоячая", ROW_BRUSH_TOOLS, brush.tool == WaterBrushController.TOOL_STILL))
+	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_CLEAR_FLOW]), "Убрать течение", ROW_BRUSH_TOOLS, brush.tool == WaterBrushController.TOOL_CLEAR_FLOW))
 	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_FREEZE]), "Заморозка", ROW_BRUSH_TOOLS, brush.tool == WaterBrushController.TOOL_FREEZE))
 	options.append(ToolOption.of(StringName("%s%s" % [OPTION_TOOL_PREFIX, WaterBrushController.TOOL_THAW]), "Разморозка", ROW_BRUSH_TOOLS, brush.tool == WaterBrushController.TOOL_THAW))
 

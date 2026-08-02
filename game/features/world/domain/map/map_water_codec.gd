@@ -62,25 +62,50 @@ static func encode(grid: WaterGrid, skip_if_empty := true) -> PackedByteArray:
 
 ## Fills an already-configured grid — registry included, because a cell reference
 ## to a body that is not registered is refused by `WaterGrid.set_cell` and would
-## decode as dry. Returns false and leaves the grid untouched when the buffer is
-## not a water layer of exactly this board.
+## decode as dry. The complete buffer is validated before the first write, so a
+## damaged layer returns false without leaving a half-decoded lake behind.
 static func decode_into(buffer: PackedByteArray, grid: WaterGrid) -> bool:
 	if grid == null or not is_valid(buffer):
 		return false
 	if board_cells_of(buffer) != grid.board_cells:
 		return false
 
+	var offset := HEADER_BYTES
+	var count := grid.board_cells * grid.board_cells
+	for _index in count:
+		var level := int(buffer[offset]) - HEIGHT_BIAS
+		var body_id := int(buffer[offset + 1])
+		var flags := int(buffer[offset + 2])
+		if body_id == WaterBody.NO_BODY:
+			if level != 0 or flags != 0:
+				return false
+		else:
+			var body := grid.body(body_id)
+			if body == null or level < MIN_ENCODABLE or level > MAX_ENCODABLE:
+				return false
+			if level != body.surface_height:
+				return false
+			var allowed_flags := WaterGrid.FLAG_FROZEN | (WaterGrid.ICE_THICKNESS_MASK << WaterGrid.ICE_THICKNESS_SHIFT)
+			if (flags & ~allowed_flags) != 0:
+				return false
+			var frozen := (flags & WaterGrid.FLAG_FROZEN) != 0
+			var thickness := (flags >> WaterGrid.ICE_THICKNESS_SHIFT) & WaterGrid.ICE_THICKNESS_MASK
+			if (frozen and (thickness <= 0 or not body.freezes or body.is_lava())) or (not frozen and thickness != 0):
+				return false
+		offset += BYTES_PER_CELL
+
 	var minimum := grid.min_cell()
 	var maximum := grid.max_cell()
-	var offset := HEADER_BYTES
+	offset = HEADER_BYTES
 	for z in range(minimum.y, maximum.y + 1):
 		for x in range(minimum.x, maximum.x + 1):
-			grid.set_cell(
+			if not grid.set_cell(
 				Vector2i(x, z),
 				buffer[offset + 1],
 				buffer[offset] - HEIGHT_BIAS,
 				buffer[offset + 2],
-			)
+			):
+				return false
 			offset += BYTES_PER_CELL
 	return true
 

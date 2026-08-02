@@ -19,7 +19,6 @@ const REASON_NO_GRID: StringName = &"no_grid"
 const REASON_NO_BODY: StringName = &"no_body"
 const REASON_NOTHING_TO_DO: StringName = &"nothing_to_do"
 const REASON_NOT_FREEZABLE: StringName = &"not_freezable"
-const REASON_FLOW_REQUIRES_RIVER: StringName = &"flow_requires_river"
 
 signal edit_committed(delta: WaterDelta)
 signal edit_rejected(reason: StringName)
@@ -100,23 +99,10 @@ func create_and_flood(seed: Vector2i, body_type: WaterBody.Type, surface_height:
 	if grid == null or terrain == null:
 		_reject(REASON_NO_GRID)
 		return null
-	var cells := grid.flood_cells(terrain, seed, surface_height)
-	if cells.is_empty():
+	if grid.has_water(seed):
 		_reject(REASON_NOTHING_TO_DO)
 		return null
-
-	var bodies_to_remove: Array[int] = []
-	for cell: Vector2i in cells:
-		var occupant := grid.body_id_at(cell)
-		if occupant != WaterBody.NO_BODY and not bodies_to_remove.has(occupant):
-			var existing_body := grid.body(occupant)
-			if existing_body != null and existing_body.surface_height != surface_height:
-				bodies_to_remove.append(occupant)
-
-	for old_id in bodies_to_remove:
-		remove_body(old_id)
-
-	cells = grid.flood_cells(terrain, seed, surface_height)
+	var cells := grid.flood_cells(terrain, seed, surface_height)
 	if cells.is_empty():
 		_reject(REASON_NOTHING_TO_DO)
 		return null
@@ -129,7 +115,6 @@ func create_and_flood(seed: Vector2i, body_type: WaterBody.Type, surface_height:
 	var body := WaterBody.of_type(next_id, body_type)
 	body.surface_height = surface_height
 	_commit_registry_edit(WaterBodyEdit.creation_with_cells(grid, terrain, body, cells))
-	prune_empty_bodies()
 	return grid.body(next_id)
 
 
@@ -143,40 +128,16 @@ func remove_body(body_id: int) -> bool:
 	return _commit_registry_edit(WaterBodyEdit.removal(grid, body))
 
 
-## A terrain stroke can cover every cell of a body. Partial coverage is already
-## dry by the derived wetness rule; once none remains wet, remove its registry
-## entry through normal undoable WaterBodyEdits.
-func remove_bodies_buried_by_terrain(changed_cells: Array[Vector2i]) -> Array[WaterDelta]:
-	var removed: Array[WaterDelta] = []
-	if grid == null or terrain == null:
-		return removed
-	var candidate_ids: Dictionary = {}
-	for cell: Vector2i in changed_cells:
-		if grid.is_inside(cell) and grid.has_water(cell):
-			candidate_ids[grid.body_id_at(cell)] = true
-	for body_id: int in candidate_ids:
-		var body_cells := grid.cells_of_body(body_id)
-		if body_cells.is_empty():
-			continue
-		var still_wet := false
-		for body_cell: Vector2i in body_cells:
-			if grid.is_wet(terrain, body_cell):
-				still_wet = true
-				break
-		if not still_wet and remove_body(body_id):
-			removed.append(_last_delta)
-	return removed
-
-
-## Rebuilds the footprint of every ordinary body whose shoreline a terrain
-## transaction touched. A body's level stays authored, but its wet outline is
-## derived again from the changed ground: lowering a bank extends the basin and
-## raising it retracts the basin. If no wet seed remains, the body is removed as
-## one normal registry edit so undo restores both its metadata and its cells.
+## Rebuilds every body whose shoreline a terrain transaction touched. Lowering a
+## bank expands the basin, burying its final wet cell removes the body, and raising
+## a ridge through it splits disconnected components into separate bodies.
 ##
 ## The map editor calls this while recording the terrain gesture, therefore every
 ## resulting water delta joins that same single undo entry.
-func reflow_bodies_after_terrain(changed_cells: Array[Vector2i]) -> Array[WaterDelta]:
+func reflow_bodies_after_terrain(
+	changed_cells: Array[Vector2i],
+	excluded_body_ids: Array[int] = [],
+) -> Array[WaterDelta]:
 	var edits: Array[WaterDelta] = []
 	if grid == null or terrain == null:
 		return edits
@@ -190,22 +151,15 @@ func reflow_bodies_after_terrain(changed_cells: Array[Vector2i]) -> Array[WaterD
 		ordered_ids.append(body_id)
 	ordered_ids.sort()
 	for body_id: int in ordered_ids:
+		if excluded_body_ids.has(body_id):
+			continue
 		var body := grid.body(body_id)
 		if body == null:
 			continue
 		var components := _wet_components_after_terrain(body_id, body.surface_height)
-		if components.is_empty():
-			if remove_body(body_id):
-				edits.append(_last_delta)
-			continue
-		# Keep the first component under its old id and give every detached part a
-		# new body. Component order is spatially deterministic, so save output and
-		# undo do not depend on dictionary iteration.
-		if _resurface_body(body_id, components[0], body.surface_height):
+		var edit := _topology_edit_for_components(body, components)
+		if edit != null and _commit_registry_edit(edit):
 			edits.append(_last_delta)
-		for index in range(1, components.size()):
-			if _create_split_body(body, components[index]):
-				edits.append(_last_delta)
 	return edits
 
 
@@ -232,23 +186,47 @@ func _wet_components_after_terrain(body_id: int, level: int) -> Array[Array]:
 	return components
 
 
-func _create_split_body(source: WaterBody, cells: Array) -> bool:
-	var next_id := grid.next_free_body_id()
-	if next_id == WaterBody.NO_BODY:
-		return _reject(REASON_NOTHING_TO_DO)
-	var fragment := source.duplicate_body()
-	fragment.id = next_id
-	fragment.name = "%s (%d)" % [source.name, next_id]
-	fragment.flow = _flow_within(fragment.flow, cells)
-	return _commit_registry_edit(WaterBodyEdit.creation_with_cells(grid, terrain, fragment, cells))
+func _topology_edit_for_components(body: WaterBody, components: Array[Array]) -> WaterTopologyEdit:
+	var replacements: Array[WaterBody] = []
+	var states: Dictionary = {}
+	var reserved_ids: Dictionary = {body.id: true}
+	for component_index in components.size():
+		var component: Array = components[component_index]
+		var next_id := body.id if component_index == 0 else _next_free_body_id_excluding(reserved_ids)
+		if next_id == WaterBody.NO_BODY:
+			push_warning("[water] нет свободного id; отделившаяся часть %s удалена" % component[0])
+			continue
+		reserved_ids[next_id] = true
+		var replacement := body.duplicate_body()
+		replacement.id = next_id
+		replacement.flow.clear()
+		for cell: Vector2i in component:
+			var kept_flags := grid.flags_of(cell) if (
+				grid.body_id_at(cell) == body.id and grid.height_of(cell) == body.surface_height
+			) else 0
+			states[cell] = WaterDelta.make_state(next_id, body.surface_height, kept_flags)
+			if body.flow.has(cell):
+				replacement.flow[cell] = body.flow[cell]
+		replacements.append(replacement)
+	if replacements.size() == 1 and replacements[0].to_dict() == body.to_dict():
+		var unchanged := states.size() == grid.cells_of_body(body.id).size()
+		if unchanged:
+			for cell: Vector2i in states:
+				if WaterDelta.state_of(grid, cell) != states[cell]:
+					unchanged = false
+					break
+		if unchanged:
+			return null
+	var old_bodies: Array[WaterBody] = [body]
+	var edit := WaterTopologyEdit.replacement(grid, old_bodies, replacements, states)
+	return edit
 
 
-func _flow_within(source: Dictionary, cells: Array) -> Dictionary:
-	var kept: Dictionary = {}
-	for cell: Vector2i in cells:
-		if source.has(cell):
-			kept[cell] = source[cell]
-	return kept
+func _next_free_body_id_excluding(reserved: Dictionary) -> int:
+	for candidate in range(WaterBody.MIN_ID, WaterBody.MAX_ID + 1):
+		if not reserved.has(candidate) and not grid.has_body(candidate):
+			return candidate
+	return WaterBody.NO_BODY
 
 
 ## Changes a body's type in place: the id and cells stay, the metadata changes.
@@ -267,33 +245,6 @@ func retype_body(body_id: int, new_type: WaterBody.Type) -> bool:
 
 # --- Strokes ------------------------------------------------------------------
 
-## Paints cells into a body at a level.
-##
-## Columns already at or above the surface are skipped rather than refused: an
-## author drags a level across uneven ground constantly, and painting water that
-## stands zero deep on a bank would put a wet cell on dry land. A stroke that
-## touches only banks changes nothing and says so.
-func paint(cells: Array[Vector2i], body_id: int, level: int) -> bool:
-	if grid == null:
-		return _reject(REASON_NO_GRID)
-	if not grid.has_body(body_id):
-		return _reject(REASON_NO_BODY)
-	if level < WaterGrid.MIN_HEIGHT or level > WaterGrid.MAX_HEIGHT:
-		return _reject(REASON_NOTHING_TO_DO)
-	var delta := WaterDelta.new()
-	for cell: Vector2i in CellUtils.sorted_unique(cells):
-		if not grid.is_inside(cell) or _is_dry_ground(cell, level):
-			continue
-		var old_state := WaterDelta.state_of(grid, cell)
-		# Freezing does not survive a level change: the sheet the flags described
-		# covered a surface that is no longer there. A seasonal pass refreezes.
-		var new_state := WaterDelta.make_state(body_id, level, _kept_flags(old_state, body_id, level))
-		if old_state == new_state:
-			continue
-		delta.record(cell, old_state, new_state)
-	return _commit_or_reject(delta)
-
-
 ## Fills the basin under `seed` up to `level` in one operation (§9.1). This is the
 ## only "spreading" water ever does, and it happens here, at edit time, over a
 ## copy — never per frame.
@@ -302,28 +253,14 @@ func flood(seed: Vector2i, body_id: int, level: int) -> bool:
 		return _reject(REASON_NO_GRID)
 	if not grid.has_body(body_id):
 		return _reject(REASON_NO_BODY)
+	var seed_occupant := grid.body_id_at(seed)
+	if seed_occupant != WaterBody.NO_BODY and seed_occupant != body_id:
+		return _reject(REASON_NOTHING_TO_DO)
 	var cells := grid.flood_cells(terrain, seed, level, body_id)
 	if cells.is_empty():
 		return _reject(REASON_NOTHING_TO_DO)
 
-	var bodies_to_remove: Array[int] = []
-	for cell: Vector2i in cells:
-		var occupant := grid.body_id_at(cell)
-		if occupant != WaterBody.NO_BODY and occupant != body_id and not bodies_to_remove.has(occupant):
-			var existing_body := grid.body(occupant)
-			if existing_body != null and existing_body.surface_height != level:
-				bodies_to_remove.append(occupant)
-
-	for old_id in bodies_to_remove:
-		remove_body(old_id)
-
-	cells = grid.flood_cells(terrain, seed, level, body_id)
-	if cells.is_empty():
-		return _reject(REASON_NOTHING_TO_DO)
-
 	var ok := _resurface_body(body_id, cells, level)
-	if ok:
-		prune_empty_bodies()
 	return ok
 
 
@@ -377,8 +314,10 @@ func edge_flood_cells(body_id: int, level: int) -> Array[Vector2i]:
 	for z in range(minimum.y + 1, maximum.y):
 		_queue_ocean_cell(Vector2i(minimum.x, z), level, body_id, seen, queue)
 		_queue_ocean_cell(Vector2i(maximum.x, z), level, body_id, seen, queue)
-	while not queue.is_empty():
-		var cell: Vector2i = queue.pop_front()
+	var head := 0
+	while head < queue.size():
+		var cell: Vector2i = queue[head]
+		head += 1
 		cells.append(cell)
 		for offset: Vector2i in WaterGrid.ORTHOGONAL_OFFSETS:
 			_queue_ocean_cell(cell + offset, level, body_id, seen, queue)
@@ -460,40 +399,6 @@ func set_frozen(cells: Array[Vector2i], frozen: bool, thickness: int = WaterGrid
 	return _commit_or_reject(delta)
 
 
-## Drains water from specified cells as one undoable transaction.
-func drain_cells(cells: Array[Vector2i]) -> bool:
-	if grid == null:
-		return _reject(REASON_NO_GRID)
-	var delta := WaterDelta.new()
-	for cell: Vector2i in CellUtils.sorted_unique(cells):
-		if not grid.is_inside(cell) or not grid.has_water(cell):
-			continue
-		var old_state := WaterDelta.state_of(grid, cell)
-		var new_state := WaterDelta.make_state(WaterBody.NO_BODY, 0, 0)
-		if old_state == new_state:
-			continue
-		delta.record(cell, old_state, new_state)
-	if delta.is_empty():
-		return _reject(REASON_NOTHING_TO_DO)
-	var ok := _commit_or_reject(delta)
-	if ok:
-		prune_empty_bodies()
-	return ok
-
-
-## Removes any registered body that has 0 wet cells remaining.
-func prune_empty_bodies() -> void:
-	if grid == null:
-		return
-	var empty_ids: Array[int] = []
-	for body in grid.bodies():
-		if grid.cells_of_body(body.id).is_empty():
-			empty_ids.append(body.id)
-	for body_id in empty_ids:
-		grid.remove_body(body_id)
-
-
-
 ## Season's worth of freezing or thawing over a whole body, as ONE transaction
 ## (§9.6): freezing is the single seasonal change that moves passability, so it
 ## goes through the same commit-and-republish path as an author's stroke instead
@@ -541,6 +446,7 @@ func set_flow(cells: Array[Vector2i], body_id: int, direction: int, strength: in
 	if _undo_stack.size() > MAX_UNDO_STEPS:
 		_undo_stack.pop_front()
 	_redo_stack.clear()
+	_last_delta = edit
 	_last_rejection = REASON_NONE
 	edit_committed.emit(edit)
 	return true
@@ -552,9 +458,7 @@ func cells_of_body(body_id: int) -> Array[Vector2i]:
 	return grid.cells_of_body(body_id)
 
 
-## Removes flow from cells of a body, as one undoable transaction. The "still
-## water" brush tool: it erases authored current so the cells return to the
-## body's default still state.
+## Removes authored current from cells of a body as one undoable transaction.
 func clear_flow(cells: Array[Vector2i], body_id: int) -> bool:
 	if grid == null:
 		return _reject(REASON_NO_GRID)
@@ -583,6 +487,7 @@ func clear_flow(cells: Array[Vector2i], body_id: int) -> bool:
 	if _undo_stack.size() > MAX_UNDO_STEPS:
 		_undo_stack.pop_front()
 	_redo_stack.clear()
+	_last_delta = edit
 	_last_rejection = REASON_NONE
 	edit_committed.emit(edit)
 	return true
@@ -614,7 +519,7 @@ func undo_delta(expected: WaterDelta = null) -> bool:
 	delta.revert(grid)
 	_redo_stack.push_back(delta)
 	_last_delta = delta
-	if delta is WaterBodyEdit:
+	if delta.changes_registry():
 		registry_changed.emit(delta.cells)
 	edit_committed.emit(delta)
 	return true
@@ -635,7 +540,7 @@ func redo_delta(expected: WaterDelta = null) -> bool:
 	delta.apply(grid)
 	_undo_stack.push_back(delta)
 	_last_delta = delta
-	if delta is WaterBodyEdit:
+	if delta.changes_registry():
 		registry_changed.emit(delta.cells)
 	edit_committed.emit(delta)
 	return true
@@ -657,7 +562,7 @@ func _commit_or_reject(delta: WaterDelta) -> bool:
 	return true
 
 
-func _commit_registry_edit(edit: WaterBodyEdit) -> bool:
+func _commit_registry_edit(edit: WaterDelta) -> bool:
 	if edit == null:
 		return _reject(REASON_NOTHING_TO_DO)
 	edit.apply(grid)
@@ -691,12 +596,6 @@ func _reject(reason: StringName) -> bool:
 	_last_rejection = reason
 	edit_rejected.emit(reason)
 	return false
-
-
-## Ground standing at or above the surface the stroke would paint. Not water, so
-## not painted.
-func _is_dry_ground(cell: Vector2i, level: int) -> bool:
-	return terrain != null and terrain.height_of(cell) >= level
 
 
 ## Ice survives a stroke only when it changes neither the body nor the level. Any

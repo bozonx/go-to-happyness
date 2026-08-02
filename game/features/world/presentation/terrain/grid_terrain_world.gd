@@ -24,7 +24,16 @@ extends Node3D
 const GROUND_SHADER_PATH := "res://game/features/world/presentation/terrain/terrain_ground.gdshader"
 const CLIFF_SHADER_PATH := "res://game/features/world/presentation/terrain/terrain_cliff.gdshader"
 
-const REBUILD_BUDGET_PER_FRAME := 2
+## Rebuild budget, in microseconds of wall clock per frame. A COUNT of chunks was
+## the wrong unit: one chunk costs anywhere from a fraction of a millisecond (a
+## band of flat ground re-emitted) to a dozen (a full rebuild of hilly ground with
+## its vegetation), so "two per frame" was either idle or three frames' worth of
+## work. The queue always makes progress — at least one chunk is taken even when
+## the budget is already spent — so a single expensive chunk can never deadlock it.
+const REBUILD_BUDGET_USEC := 4000
+## Vegetation is derived decoration and never blocks the ground appearing. It gets
+## its own, smaller slice after the geometry queue has had its turn.
+const GRASS_BUDGET_USEC := 2500
 const COLLISION_LAYER := 1
 ## Hysteresis on the LOD switch, so a camera parked on the boundary does not
 ## rebuild the same chunk every frame.
@@ -57,8 +66,20 @@ var camera: Camera3D = null
 
 var _chunk_bodies: Dictionary = {}
 var _chunk_lods: Dictionary = {}
+## One retained `TerrainChunkMesher` per chunk. It owns the chunk's geometry bands
+## between builds, which is what turns a one-column edit into a one-band re-emit
+## instead of a full 256-column rescan (§11).
+var _chunk_meshers: Dictionary = {}
 var _pending_chunks: Array[Vector2i] = []
 var _queued_lookup: Dictionary = {}
+## chunk -> `Vector4i` cell range that moved since that chunk was last built. A
+## chunk queued twice before it is served accumulates both regions.
+var _pending_bounds: Dictionary = {}
+## Chunks whose vegetation is stale. Separate from the geometry queue: grass is
+## decoration, it must never delay the ground it stands on, and on load it is
+## nearly half the cost of publishing a board.
+var _pending_grass: Array[Vector2i] = []
+var _queued_grass: Dictionary = {}
 var _library := TerrainMaterialLibrary.new()
 var _coverage_library := CoverageLibrary.new()
 var _surface_maps := TerrainSurfaceMaps.new()
@@ -80,8 +101,12 @@ func configure(next_grid: TerrainGrid, next_camera: Camera3D = null, next_covera
 		child.queue_free()
 	_chunk_bodies.clear()
 	_chunk_lods.clear()
+	_chunk_meshers.clear()
 	_pending_chunks.clear()
 	_queued_lookup.clear()
+	_pending_bounds.clear()
+	_pending_grass.clear()
+	_queued_grass.clear()
 	if grid == null:
 		return
 	_surface_maps.configure(grid.board_cells)
@@ -89,7 +114,10 @@ func configure(next_grid: TerrainGrid, next_camera: Camera3D = null, next_covera
 	_surface_maps.rebuild_coverage(coverage)
 	_medium_grass.set_lod_distance(lod_distance)
 	_tall_grass.set_lod_distance(lod_distance)
-	grid.take_dirty_surface_cells()
+	# Every texel was just written, so the pending set is stale by definition.
+	# Draining it through `take_dirty_surface_cells` built and sorted one entry per
+	# column — a quarter of a million of them on the largest board — to throw away.
+	grid.clear_dirty_surface_cells()
 	if coverage != null:
 		coverage.take_dirty_cells()
 	_ground_material = null
@@ -107,19 +135,27 @@ func _process(_delta: float) -> void:
 	_sync_surface_visuals()
 	_collect_dirty()
 	_collect_lod_changes()
-	if _pending_chunks.is_empty():
-		return
-	var budget := mini(REBUILD_BUDGET_PER_FRAME, _pending_chunks.size())
-	for _index in budget:
-		var chunk: Vector2i = _pending_chunks.pop_front()
-		_queued_lookup.erase(chunk)
-		_rebuild_chunk(chunk)
-	if _pending_chunks.is_empty():
+	var had_pending := not _pending_chunks.is_empty()
+	if had_pending:
+		var deadline := Time.get_ticks_usec() + REBUILD_BUDGET_USEC
+		while not _pending_chunks.is_empty():
+			var chunk: Vector2i = _pending_chunks.pop_front()
+			_queued_lookup.erase(chunk)
+			_rebuild_chunk(chunk)
+			if Time.get_ticks_usec() >= deadline:
+				break
+	_serve_grass_queue(GRASS_BUDGET_USEC)
+	if had_pending and _pending_chunks.is_empty():
 		rebuild_finished.emit()
 
 
-## Rebuilds everything the grid still owes, ignoring the frame budget. Used on
+## Rebuilds every chunk the grid still owes, ignoring the frame budget. Used on
 ## load and by tools that need the mesh to be current before measuring it.
+##
+## Vegetation is deliberately NOT part of it. Grass carries no collision and
+## decides nothing; making the caller wait for it doubled the time a board takes
+## to appear. It streams in over the following frames instead, through the same
+## budgeted queue an edit uses.
 func rebuild_pending_now() -> void:
 	if grid == null:
 		return
@@ -133,32 +169,91 @@ func rebuild_pending_now() -> void:
 	rebuild_finished.emit()
 
 
+## Drains the vegetation queue as well. Tests and screenshot tools that want the
+## board fully dressed before measuring it call this instead.
+func rebuild_everything_now() -> void:
+	rebuild_pending_now()
+	_serve_grass_queue(0)
+
+
 func pending_chunk_count() -> int:
 	return _pending_chunks.size()
 
 
+func pending_grass_count() -> int:
+	return _pending_grass.size()
+
+
+## Serves the vegetation queue. A budget of 0 means "until it is empty".
+func _serve_grass_queue(budget_usec: int) -> void:
+	if _pending_grass.is_empty():
+		return
+	var deadline := Time.get_ticks_usec() + budget_usec
+	while not _pending_grass.is_empty():
+		var chunk: Vector2i = _pending_grass.pop_front()
+		_queued_grass.erase(chunk)
+		var body: StaticBody3D = _chunk_bodies.get(chunk)
+		if body != null:
+			var lod := lod_of_chunk(chunk)
+			_rebuild_medium_grass(body, chunk, lod)
+			_rebuild_tall_grass(body, chunk, lod)
+		if budget_usec > 0 and Time.get_ticks_usec() >= deadline:
+			return
+
+
+func _queue_grass(chunk: Vector2i) -> void:
+	if _queued_grass.has(chunk):
+		return
+	_queued_grass[chunk] = true
+	_pending_grass.append(chunk)
+
+
 ## Independent shading controls. Neither rebuilds chunks nor changes collision.
 func set_full_smoothing(enabled: bool) -> void:
+	var was_needed := _needs_shading_encoding()
 	full_smoothing = enabled
 	_sync_smoothing_parameters()
+	_sync_shading_encoding(was_needed)
 
 
 func set_edge_rounding(amount: float) -> void:
+	var was_needed := _needs_shading_encoding()
 	edge_rounding = clampf(amount, 0.0, 1.0)
 	_sync_smoothing_parameters()
+	_sync_shading_encoding(was_needed)
 
 
+## The bevel is a different SHAPE for the same band, never a different mesh: it
+## reads the data `edge_rounding` already asked for.
 func set_edge_bevel(enabled: bool) -> void:
 	edge_bevel = enabled
 	_sync_smoothing_parameters()
 
 
-## Weather, water and vegetation receive the same authored wind vector. This
-## presentation boundary accepts the resolved values without depending on the
-## simulation's WeatherState directly.
+## Vegetation receives the authored weather wind here. Water deliberately has
+## no weather coupling while waves remain a future idea.
 func set_wind(direction: Vector2, strength: float) -> void:
 	_medium_grass.set_wind(direction, strength)
 	_tall_grass.set_wind(direction, strength)
+
+
+## Whether the mesh has to carry the data the smoothing treatments read: the
+## averaged vertex normal and the roundable-edge mask with its bevel normals.
+## With every treatment off — how the game and the map editor run — the shader
+## blends none of it in, and building it was the single largest cost of a chunk
+## rebuild.
+func _needs_shading_encoding() -> bool:
+	return full_smoothing or edge_rounding > 0.001
+
+
+## Re-queues every chunk when a treatment is switched on or off, because the
+## answer to `_needs_shading_encoding` decides what the mesh carries. The retained
+## bands are untouched by it, so the requeue only re-runs assembly.
+func _sync_shading_encoding(was_needed: bool) -> void:
+	if grid == null or was_needed == _needs_shading_encoding():
+		return
+	grid.mark_all_chunks_dirty()
+	_collect_dirty()
 
 
 func _sync_smoothing_parameters() -> void:
@@ -180,8 +275,9 @@ func lod_of_chunk(chunk: Vector2i) -> int:
 func _collect_dirty() -> void:
 	if not grid.has_dirty_chunks():
 		return
-	for chunk: Vector2i in grid.take_dirty_chunks():
-		_queue(chunk)
+	var bounds: Dictionary = {}
+	for chunk: Vector2i in grid.take_dirty_chunks(bounds):
+		_queue(chunk, bounds[chunk])
 
 
 ## Surface painting never remeshes terrain, but derived decoration follows it.
@@ -200,26 +296,39 @@ func _sync_surface_visuals() -> void:
 	for cell: Vector2i in cells:
 		chunks[grid.chunk_of(cell)] = true
 	for chunk: Vector2i in chunks:
-		var body: StaticBody3D = _chunk_bodies.get(chunk)
-		if body != null:
-			_rebuild_medium_grass(body, chunk, lod_of_chunk(chunk))
-			_rebuild_tall_grass(body, chunk, lod_of_chunk(chunk))
+		_queue_grass(chunk)
 
 
 ## Re-queues chunks whose distance to the camera crossed the LOD boundary.
+## Iterates the dictionary directly: `.keys()` allocated an array of every chunk
+## on the board on every frame, and the board can be 1024 of them.
 func _collect_lod_changes() -> void:
 	if camera == null:
 		return
-	for chunk: Vector2i in _chunk_bodies.keys():
+	for chunk: Vector2i in _chunk_bodies:
 		if _target_lod(chunk) != lod_of_chunk(chunk):
-			_queue(chunk)
+			_queue(chunk, TerrainChunkMesher.FULL_BOUNDS)
 
 
-func _queue(chunk: Vector2i) -> void:
+## Queues a chunk, merging the cell range with whatever it already owed. A chunk
+## queued twice before it is served must rebuild the union of both edits, not the
+## last one.
+func _queue(chunk: Vector2i, bounds: Vector4i) -> void:
 	if _queued_lookup.has(chunk):
+		_pending_bounds[chunk] = _merged_bounds(_pending_bounds[chunk], bounds)
 		return
 	_queued_lookup[chunk] = true
+	_pending_bounds[chunk] = bounds
 	_pending_chunks.append(chunk)
+
+
+static func _merged_bounds(first: Vector4i, second: Vector4i) -> Vector4i:
+	if first == TerrainChunkMesher.FULL_BOUNDS or second == TerrainChunkMesher.FULL_BOUNDS:
+		return TerrainChunkMesher.FULL_BOUNDS
+	return Vector4i(
+		mini(first.x, second.x), mini(first.y, second.y),
+		maxi(first.z, second.z), maxi(first.w, second.w),
+	)
 
 
 func _target_lod(chunk: Vector2i) -> int:
@@ -242,7 +351,9 @@ func _chunk_centre(chunk: Vector2i) -> Vector3:
 
 func _rebuild_chunk(chunk: Vector2i) -> void:
 	var lod := _target_lod(chunk)
-	var result := TerrainChunkMesher.build_chunk(grid, chunk, lod)
+	var bounds: Vector4i = _pending_bounds.get(chunk, TerrainChunkMesher.FULL_BOUNDS)
+	_pending_bounds.erase(chunk)
+	var result := _mesher_for(chunk).build(lod, bounds, _needs_shading_encoding())
 	_chunk_lods[chunk] = lod
 	var mesh: ArrayMesh = result["mesh"]
 	var body := _chunk_body(chunk, mesh != null)
@@ -260,9 +371,18 @@ func _rebuild_chunk(chunk: Vector2i) -> void:
 	else:
 		collision.shape = null
 		collision.disabled = true
-	_rebuild_medium_grass(body, chunk, lod)
-	_rebuild_tall_grass(body, chunk, lod)
+	_queue_grass(chunk)
 	chunk_rebuilt.emit(chunk)
+
+
+func _mesher_for(chunk: Vector2i) -> TerrainChunkMesher:
+	var mesher: TerrainChunkMesher = _chunk_meshers.get(chunk)
+	if mesher != null:
+		return mesher
+	mesher = TerrainChunkMesher.new()
+	mesher.configure(grid, chunk)
+	_chunk_meshers[chunk] = mesher
+	return mesher
 
 
 ## Chunks are created on demand: an empty chunk that never gains geometry costs
@@ -407,6 +527,7 @@ func _cliff_shader_material() -> ShaderMaterial:
 	_cliff_material = ShaderMaterial.new()
 	_cliff_material.shader = load(CLIFF_SHADER_PATH)
 	_cliff_material.set_shader_parameter(&"surface_textures", _library.texture_array())
+	_cliff_material.set_shader_parameter(&"cell_size", grid.cell_size)
 	_cliff_material.set_shader_parameter(&"full_smoothing", 1.0 if full_smoothing else 0.0)
 	_cliff_material.set_shader_parameter(&"edge_rounding", edge_rounding)
 	_cliff_material.set_shader_parameter(&"edge_bevel", 1.0 if edge_bevel else 0.0)

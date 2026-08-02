@@ -1,15 +1,15 @@
 class_name ScenarioModeController
 extends MapEditorMode
 
-## The scenario mode of the territory editor (map_editor.md §5.7): declared flags,
+## The scenario mode of the territory editor (map_editor.md §5.6): declared flags,
 ## the rule table, and the conditions that win or lose the map.
 ##
 ## It is the one mode with no brush. Everything it edits is a list, so it uses the
-## panels the other modes already have — the palette picks which of the four
-## sections is open, the side list holds its rows, and the inspector edits the
-## selected row through `EntityPropertyDef`, exactly like an entity's properties.
-## Nothing here draws a control of its own, which is what keeps the scenario UI
-## from becoming a second editor inside the editor.
+## generic editor surfaces — the palette picks which of the four sections is
+## open, the central workspace displays its rows, and the side inspector edits
+## the selected row through `EntityPropertyDef`, exactly like an entity's
+## properties. This controller remains the only behaviour and write owner; the
+## workspace is only another view over its list API.
 ##
 ## **The start of a session is not edited here.** Day of year, weather, latitude
 ## and the game definition are properties of the map file with one owner already
@@ -145,6 +145,19 @@ func selected_list_index() -> int:
 	return _selected
 
 
+func workspace_summary() -> String:
+	var scenario := _scenario()
+	return "%d правил · %d флагов · победа %d · поражение %d" % [
+		scenario.rules.size(), scenario.flags.size(), scenario.victory.size(), scenario.defeat.size()]
+
+
+func selected_zone_id() -> StringName:
+	var rule := _picked_rule()
+	if rule != null and rule.trigger.addresses_zone():
+		return rule.trigger.zone
+	return &""
+
+
 func select_list_entry(index: int) -> void:
 	_selected = index if index >= 0 and index < _rows.size() else -1
 	notify_ui_changed()
@@ -216,7 +229,8 @@ func _picked_rule() -> MapRule:
 	var row := _picked()
 	if row.is_empty() or int(row.get("rule", -1)) < 0:
 		return null
-	return _scenario().rules[int(row["rule"])]
+	var index := int(row["rule"])
+	return _scenario().rules[index] if index < _scenario().rules.size() else null
 
 
 # --- Inspector ----------------------------------------------------------------
@@ -255,6 +269,8 @@ func inspector_values() -> Dictionary:
 	match String(row["pick"]):
 		PICK_RULE:
 			var rule := _picked_rule()
+			if rule == null:
+				return {}
 			return {
 				&"id": String(rule.id), &"enabled": rule.enabled, &"once": rule.once,
 				&"trigger": String(rule.trigger.kind), &"zone": String(rule.trigger.zone),
@@ -262,6 +278,8 @@ func inspector_values() -> Dictionary:
 			}
 		PICK_FLAG:
 			var flag := _picked_flag()
+			if flag == null:
+				return {}
 			return {
 				&"id": String(flag.id), &"label": flag.label, &"type": String(flag.type),
 				&"default_bool": bool(flag.default_value) if flag.type == MapFlagDef.TYPE_BOOL else false,
@@ -291,6 +309,8 @@ func inspector_values() -> Dictionary:
 
 func _rule_properties() -> Array[EntityPropertyDef]:
 	var rule := _picked_rule()
+	if rule == null:
+		return []
 	var properties: Array[EntityPropertyDef] = [
 		_property(&"id", "Идентификатор", EntityPropertyDef.TYPE_STRING),
 		_property(&"enabled", "Включено", EntityPropertyDef.TYPE_BOOL),
@@ -322,6 +342,8 @@ func _rule_properties() -> Array[EntityPropertyDef]:
 
 func _flag_properties() -> Array[EntityPropertyDef]:
 	var flag := _picked_flag()
+	if flag == null:
+		return []
 	var type_property := _property(&"type", "Тип", EntityPropertyDef.TYPE_ENUM)
 	type_property.options = ["bool", "int"]
 	var properties: Array[EntityPropertyDef] = [
@@ -401,7 +423,8 @@ func _picked_flag() -> MapFlagDef:
 	var row := _picked()
 	if row.is_empty() or String(row["pick"]) != PICK_FLAG:
 		return null
-	return _scenario().flags[int(row["child"])]
+	var index := int(row["child"])
+	return _scenario().flags[index] if index >= 0 and index < _scenario().flags.size() else null
 
 
 func _picked_condition() -> MapRuleCondition:
@@ -409,9 +432,13 @@ func _picked_condition() -> MapRuleCondition:
 	if row.is_empty():
 		return null
 	if String(row["pick"]) == PICK_OUTCOME:
-		return _outcome_conditions()[int(row["child"])]
+		var outcome_index := int(row["child"])
+		var outcomes := _outcome_conditions()
+		return outcomes[outcome_index] if outcome_index >= 0 and outcome_index < outcomes.size() else null
 	if String(row["pick"]) == PICK_CONDITION:
-		return _picked_rule().conditions[int(row["child"])]
+		var rule := _picked_rule()
+		var condition_index := int(row["child"])
+		return rule.conditions[condition_index] if rule != null and condition_index >= 0 and condition_index < rule.conditions.size() else null
 	return null
 
 
@@ -419,7 +446,9 @@ func _picked_action() -> MapRuleAction:
 	var row := _picked()
 	if row.is_empty() or String(row["pick"]) != PICK_ACTION:
 		return null
-	return _picked_rule().actions[int(row["child"])]
+	var rule := _picked_rule()
+	var index := int(row["child"])
+	return rule.actions[index] if rule != null and index >= 0 and index < rule.actions.size() else null
 
 
 # --- Edits --------------------------------------------------------------------

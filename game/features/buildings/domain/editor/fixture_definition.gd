@@ -14,8 +14,6 @@ extends RefCounted
 ## `runtime_defaults` is validated by the matching typed defaults class
 ## (e.g. FireSourceDefaults).
 
-const FireSourceDefaultsScript = preload("res://game/features/buildings/domain/editor/fire_source_defaults.gd")
-
 const CAP_FIRE_SOURCE := &"fire_source"
 const CAP_COOKING_STATION := &"cooking_station"
 const CAP_LIGHT_SOURCE := &"light_source"
@@ -93,7 +91,7 @@ func validation_errors(object_ids: Dictionary, zone_ids: Dictionary) -> Array[St
 		errors.append("Fixture %s references unknown place zone: %s" % [id, owner_zone_id])
 	# Validate runtime_defaults schema per capability.
 	if has_capability(CAP_FIRE_SOURCE):
-		var fire_errors := FireSourceDefaultsScript.validate(runtime_defaults)
+		var fire_errors := FireSourceDefaults.validate(runtime_defaults)
 		for e in fire_errors:
 			errors.append("Fixture %s: %s" % [id, e])
 	return errors

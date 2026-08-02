@@ -20,6 +20,7 @@ extends RefCounted
 ## `IndoorGraph` exists.
 
 var cell_size := 1.0
+var board_cells := 0
 var board_half_cells := 0
 var _terrain: NavTerrainField = null
 var _blocked: Dictionary = {}
@@ -66,9 +67,10 @@ const CONNECTED_DIRECTIONS: Array[Vector2i] = [
 
 func configure(next_cell_size: float, next_board_cells: int) -> void:
 	var next_half_cells := next_board_cells / 2
-	if is_equal_approx(cell_size, next_cell_size) and board_half_cells == next_half_cells:
+	if is_equal_approx(cell_size, next_cell_size) and board_cells == next_board_cells:
 		return
 	cell_size = next_cell_size
+	board_cells = maxi(next_board_cells, 0)
 	board_half_cells = next_half_cells
 	_revision += 1
 	_topology_revision += 1
@@ -351,7 +353,10 @@ func cell_center(cell: Vector2i) -> Vector3:
 
 
 func is_board_cell(cell: Vector2i) -> bool:
-	return cell.x >= -board_half_cells and cell.x < board_half_cells and cell.y >= -board_half_cells and cell.y < board_half_cells
+	return (
+		cell.x >= -board_half_cells and cell.x < board_cells - board_half_cells
+		and cell.y >= -board_half_cells and cell.y < board_cells - board_half_cells
+	)
 
 
 func is_blocked(cell: Vector2i) -> bool:
@@ -387,6 +392,8 @@ func is_walkable(cell: Vector2i, profile: StringName = PEDESTRIAN_PROFILE, profi
 ## between board cells is a plain step, which is the flat world routing had
 ## before terrain existed.
 func is_edge_passable(from: Vector2i, to: Vector2i, profile: StringName = PEDESTRIAN_PROFILE, profile_override: TravelerProfile = null) -> bool:
+	if not is_board_cell(from) or not is_board_cell(to):
+		return false
 	if _terrain == null or from == to:
 		return true
 	var resolved := profile_override if profile_override != null else TravelerProfile.get_profile(profile)
@@ -396,6 +403,8 @@ func is_edge_passable(from: Vector2i, to: Vector2i, profile: StringName = PEDEST
 ## A diagonal step also crosses both orthogonal shoulders, so both of them must
 ## be standable AND reachable — otherwise a citizen cuts the corner of a cliff.
 func is_step_passable(from: Vector2i, to: Vector2i, profile: StringName = PEDESTRIAN_PROFILE, profile_override: TravelerProfile = null) -> bool:
+	if not is_board_cell(from) or not is_board_cell(to):
+		return false
 	if _terrain == null:
 		return true
 	if not is_edge_passable(from, to, profile, profile_override):

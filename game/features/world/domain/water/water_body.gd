@@ -14,8 +14,7 @@ extends RefCounted
 ## state byte, and everything that makes water *this* water lives here.
 ##
 ## **A type earns its place in the enum only by changing a mechanic** — salinity,
-## current or damage. Anything that differs by wave height, colour and foam alone
-## is three authored numbers on a `LAKE`, not a fourth entry. This is the entry
+## current or damage. A purely visual difference is not a new type. This is the entry
 ## rule `terrain_materials.md` §1 puts on the material catalog, applied here for
 ## the same reason: every type costs a row in five tables forever.
 ##
@@ -56,15 +55,10 @@ const FLOW_STRENGTH_BLOCKS_FORD := 3
 var id := NO_BODY
 var type: Type = Type.LAKE
 var name := ""
-## Authored surface level in Δh steps. The cell layer stores its own copy per
-## cell — a river descends, so one body has many levels — and this is the value a
-## fresh stroke of the brush paints.
+## Authored surface level in Δh steps. Every cell of one body has this same level;
+## a terrain edit may change its footprint or split it, never tilt the surface.
 var surface_height := 0
-## Base wave height in metres, multiplied by the wind at render time (§9.5). The
-## sea storms for free because the global wind already exists.
-var wave_amplitude := 0.05
 var colour := Color(0.16, 0.35, 0.48, 1.0)
-var foam_strength := 0.5
 var salinity: Salinity = Salinity.FRESH
 var freezes := true
 ## cell -> packed direction and strength. Sparse on purpose (§9.3): rivers cover
@@ -83,24 +77,16 @@ static func of_type(body_id: int, body_type: Type) -> WaterBody:
 	body.name = "%s %d" % [type_id_of(body_type), body.id]
 	match body_type:
 		Type.SEA:
-			body.wave_amplitude = 0.22
 			body.colour = Color(0.09, 0.26, 0.38, 1.0)
-			body.foam_strength = 1.0
 			body.salinity = Salinity.SALT
 			# Only a polar map freezes its sea; the author turns this on there.
 			body.freezes = false
 		Type.RIVER:
-			body.wave_amplitude = 0.07
 			body.colour = Color(0.16, 0.34, 0.42, 1.0)
-			body.foam_strength = 0.6
 		Type.LAKE:
-			body.wave_amplitude = 0.04
 			body.colour = Color(0.13, 0.32, 0.45, 1.0)
-			body.foam_strength = 0.35
 		Type.LAVA:
-			body.wave_amplitude = 0.03
 			body.colour = Color(0.85, 0.26, 0.06, 1.0)
-			body.foam_strength = 0.0
 			body.freezes = false
 	return body
 
@@ -176,9 +162,7 @@ func to_dict() -> Dictionary:
 		"type": String(type_id()),
 		"name": name,
 		"surface_height": surface_height,
-		"wave_amplitude": wave_amplitude,
 		"colour": colour.to_html(false),
-		"foam_strength": foam_strength,
 		"salinity": "salt" if salinity == Salinity.SALT else "fresh",
 		"freezes": freezes,
 		"flow": flow_entries,
@@ -189,10 +173,8 @@ static func from_dict(source: Dictionary) -> WaterBody:
 	var body := of_type(int(source.get("id", MIN_ID)), type_of_id(StringName(source.get("type", "lake"))))
 	body.name = String(source.get("name", body.name))
 	body.surface_height = int(source.get("surface_height", 0))
-	body.wave_amplitude = float(source.get("wave_amplitude", body.wave_amplitude))
 	if source.has("colour"):
 		body.colour = Color(String(source["colour"]))
-	body.foam_strength = float(source.get("foam_strength", body.foam_strength))
 	body.salinity = Salinity.SALT if String(source.get("salinity", "fresh")) == "salt" else Salinity.FRESH
 	body.freezes = bool(source.get("freezes", body.freezes))
 	for entry: Variant in source.get("flow", []):

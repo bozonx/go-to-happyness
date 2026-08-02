@@ -862,7 +862,7 @@
 				"position": [
 					19.5,
 					0.0,
-					-13.5
+					-12.5
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1083,7 +1083,7 @@
 				"position": [
 					-14.5,
 					0.0,
-					13.5
+					14.5
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -2267,7 +2267,7 @@
 			"kind": "asset"
 		}
 	],
-	"revision": "6a69356b11c5",
+	"revision": "6a6e8d59a001",
 	"routes": [],
 	"rules": [],
 	"start": {
@@ -2290,14 +2290,12 @@
 		{
 			"colour": "215273",
 			"flow": [],
-			"foam_strength": 0.35,
 			"freezes": true,
 			"id": 1,
 			"name": "lake 1",
 			"salinity": "fresh",
 			"surface_height": 0,
-			"type": "lake",
-			"wave_amplitude": 0.04
+			"type": "lake"
 		}
 	]
 }

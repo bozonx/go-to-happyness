@@ -36,6 +36,8 @@ var _detail_texture: ImageTexture = null
 var _coverage_texture: ImageTexture = null
 var _board_cells := 0
 var _half_cells := 0
+var _index_dirty := false
+var _detail_dirty := false
 
 
 func configure(board_cells: int) -> void:
@@ -81,26 +83,26 @@ func rebuild(grid: TerrainGrid) -> void:
 	for z in range(minimum.y, maximum.y + 1):
 		for x in range(minimum.x, maximum.x + 1):
 			_write_cell(grid, Vector2i(x, z))
+	# A full publish uploads unconditionally: the images were just created empty,
+	# so a column that happens to match the cleared texel still has to reach the GPU.
+	_index_dirty = true
+	_detail_dirty = true
 	_upload()
 
 
-## Updates exactly the columns the grid reported dirty. The upload is the whole
-## (tiny) texture rather than a sub-rect: at 96² the transfer is cheaper than the
-## bookkeeping needed to describe the region.
+## Updates exactly the columns the grid reported dirty, then re-uploads only the
+## maps whose texels actually moved. A material stroke and a wear pass write
+## different images, and the board is up to 512² — a full `RGBA8` upload of that
+## is a megabyte, which is not something to spend on a frame that repainted
+## nothing in it.
 func update_cells(grid: TerrainGrid, cells: Array[Vector2i]) -> void:
 	if grid == null or cells.is_empty() or not is_configured():
 		return
+	_index_dirty = false
+	_detail_dirty = false
 	for cell: Vector2i in cells:
 		_write_cell(grid, cell)
 	_upload()
-
-
-## Drains whatever the grid has pending. `GridTerrainWorld` calls this every
-## frame; it costs one dictionary check when nothing was painted.
-func sync(grid: TerrainGrid) -> void:
-	if grid == null or not grid.has_dirty_surface_cells():
-		return
-	update_cells(grid, grid.take_dirty_surface_cells())
 
 
 func _write_cell(grid: TerrainGrid, cell: Vector2i) -> void:
@@ -114,14 +116,20 @@ func _write_cell(grid: TerrainGrid, cell: Vector2i) -> void:
 	# R8 stores the index as a byte; the shader multiplies by 255 and rounds. The
 	# variant travels in the detail map instead of being folded in here, so a
 	# material repaint and a variant repaint stay independent texel writes.
-	_index_image.set_pixel(x, y, Color(float(material_index) / 255.0, 0.0, 0.0, 1.0))
+	var index_texel := Color(float(material_index) / 255.0, 0.0, 0.0, 1.0)
+	if _index_image.get_pixel(x, y) != index_texel:
+		_index_image.set_pixel(x, y, index_texel)
+		_index_dirty = true
 	var detail := grid.detail_at(cell)
-	_detail_image.set_pixel(x, y, Color(
+	var detail_texel := Color(
 		float(TerrainDetailCodec.variant_of(detail)) / 15.0,
 		float(TerrainDetailCodec.wear_of(detail)) / float(TerrainDetailCodec.MAX_WEAR),
 		float(TerrainDetailCodec.snow_depth_of(detail)) / float(TerrainDetailCodec.MAX_SNOW_DEPTH),
 		0.0,
-	))
+	)
+	if _detail_image.get_pixel(x, y) != detail_texel:
+		_detail_image.set_pixel(x, y, detail_texel)
+		_detail_dirty = true
 
 
 ## Rewrites the coverage texel of every column. Separate from `rebuild` because
@@ -171,8 +179,12 @@ func _write_coverage_cell(layer: CoverageLayer, cell: Vector2i) -> void:
 
 
 func _upload() -> void:
-	_index_texture.update(_index_image)
-	_detail_texture.update(_detail_image)
+	if _index_dirty:
+		_index_texture.update(_index_image)
+		_index_dirty = false
+	if _detail_dirty:
+		_detail_texture.update(_detail_image)
+		_detail_dirty = false
 
 
 func _upload_coverage() -> void:

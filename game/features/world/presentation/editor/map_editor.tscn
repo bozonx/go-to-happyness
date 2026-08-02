@@ -14,6 +14,7 @@
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_dialogs.tscn" id="12_dialogs"]
 [ext_resource type="Script" path="res://game/features/world/presentation/water/water_body_highlight.gd" id="14_water_highlight"]
 [ext_resource type="Script" path="res://game/features/world/presentation/water/water_flood_preview.gd" id="15_water_flood_preview"]
+[ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_scenario_workspace.tscn" id="16_scenario_workspace"]
 
 [sub_resource type="Environment" id="env_map_editor"]
 background_mode = 1
@@ -90,10 +91,45 @@ theme_override_constants/separation = 0
 [node name="Palette" parent="UI/Screen/Middle" unique_id=1506814597 instance=ExtResource("9_palette")]
 layout_mode = 2
 
-[node name="Viewport3D" type="Control" parent="UI/Screen/Middle" unique_id=975798821]
+[node name="Workspace" type="Control" parent="UI/Screen/Middle"]
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
+
+[node name="Viewport3D" type="Control" parent="UI/Screen/Middle/Workspace" unique_id=975798821]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="ScenarioWorkspace" parent="UI/Screen/Middle/Workspace" instance=ExtResource("16_scenario_workspace")]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ScenarioMapBar" type="PanelContainer" parent="UI/Screen/Middle/Workspace"]
+visible = false
+layout_mode = 0
+offset_left = 12.0
+offset_top = 12.0
+offset_right = 280.0
+offset_bottom = 54.0
+
+[node name="Margin" type="MarginContainer" parent="UI/Screen/Middle/Workspace/ScenarioMapBar"]
+theme_override_constants/margin_left = 6
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 6
+theme_override_constants/margin_bottom = 4
+
+[node name="BackButton" type="Button" parent="UI/Screen/Middle/Workspace/ScenarioMapBar/Margin"]
+text = "← Вернуться к сценарию"
 
 [node name="SidePanel" parent="UI/Screen/Middle" unique_id=2074173077 instance=ExtResource("8_side_panel")]
 layout_mode = 2

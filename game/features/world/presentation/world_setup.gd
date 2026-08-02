@@ -19,8 +19,13 @@ var sky_and_weather_controller: SkyAndWeatherController
 ## published here because it is the one place that answers "how high is the
 ## ground at X" for everything else.
 var terrain_grid: TerrainGrid
+## The one owner of writes to that ground (§13, §14). The session has one even
+## though nothing in the game sculpts yet: `TerrainAnchorService` writes anchors
+## through it, and an anchor written around the transaction boundary is an anchor
+## undo and the cascade cannot see.
+var terrain_service := TerrainService.new()
 ## The board's water (§9), published beside the ground for the same reason: it is
-## what routing and the weather-driven waves both read.
+## what routing and presentation both read.
 var water_grid: WaterGrid
 ## Where a citizen can stand to draw water. Owned here because it is derived from
 ## the two grids this node publishes and from nothing else (§9.2).
@@ -48,7 +53,7 @@ var _trail_field: RefCounted
 ## The launched map. Its terrain and water grids are the session's world.
 var _map_document: MapDocument = null
 ## The territory scene that owns the ground and the water. Kept because the
-## per-frame weather push has to reach the waves without walking the tree.
+## retained as the session's territory projection.
 var _territory: TerritoryBase = null
 
 
@@ -142,11 +147,6 @@ func update_daylight(
 			precipitation_type,
 			wind_displacement
 		)
-	# Waves and foam are amplitude × wind (§9.5), and the wind is this one. That is
-	# the whole of "the sea storms in a thunderstorm": no weather state of water's
-	# own, just the value every other weather-driven system already reads.
-	if _territory != null and _territory.water != null:
-		_territory.water.set_wind(wind, clampf(wind.length(), 0.0, 1.0))
 
 
 ## The board gets a real `TerrainGrid`, meshed and collided by `GridTerrainWorld`.
@@ -167,6 +167,7 @@ func _build_terrain(parent: Node) -> void:
 	terrain_grid = territory.configure_terrain(
 		_cell_size, _board_cells, _camera, _map_document.terrain, _map_document.coverage,
 	)
+	terrain_service.configure(terrain_grid)
 	water_grid = territory.configure_water(_board_cells, _cell_size, _map_document.water)
 	territory.configure_water_border(_map_document.meta.border_kind, _map_document.meta.border_level)
 	water_access.configure(water_grid, terrain_grid)

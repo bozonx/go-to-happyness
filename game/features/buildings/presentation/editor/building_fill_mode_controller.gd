@@ -14,11 +14,6 @@ extends Node3D
 ## `Ctrl` on that click adds to the selection, `Shift` is the eyedropper and
 ## `Shift+RMB` erases — the same three gestures the map editor uses.
 
-const FillObjectRecordScript = preload("res://game/features/buildings/domain/editor/fill_object_record.gd")
-const FixtureEditorPanelScript = preload("res://game/features/buildings/presentation/editor/fixture_editor_panel.gd")
-const FillPlacementValidatorScript = preload("res://game/features/buildings/presentation/editor/fill_placement_validator.gd")
-const FillCollisionOverlayScript = preload("res://game/features/buildings/presentation/editor/fill_collision_overlay.gd")
-
 var current_group: StringName = &""  ## empty = all groups
 var current_category: StringName = &"camping"
 var current_asset_id: StringName = &""
@@ -96,7 +91,7 @@ var _fixture_panel: RefCounted = null
 
 func setup(editor: Node) -> void:
 	_editor = editor
-	_validator = FillPlacementValidatorScript.new()
+	_validator = FillPlacementValidator.new()
 	name = "FillRoot"
 
 	_panel = editor.get_node("%FillPanel")
@@ -130,7 +125,7 @@ func setup(editor: Node) -> void:
 	_scale_reset_btn = editor.get_node("%FillScaleResetBtn")
 
 	# Fixture editor — delegated to FixtureEditorPanel
-	_fixture_panel = FixtureEditorPanelScript.new()
+	_fixture_panel = FixtureEditorPanel.new()
 	_fixture_panel.setup(editor)
 
 	# Catalog panel — the shared widget, used directly: a subclass that only
@@ -144,7 +139,7 @@ func setup(editor: Node) -> void:
 	editor.get_node("%FillLayerDownBtn").pressed.connect(func(): _editor.set_layer(_editor.active_layer - 1))
 	editor.get_node("%FillLayerUpBtn").pressed.connect(func(): _editor.set_layer(_editor.active_layer + 1))
 	_collision_overlay_btn = editor.get_node("%FillCollisionOverlayBtn")
-	_collision_overlay = FillCollisionOverlayScript.new()
+	_collision_overlay = FillCollisionOverlay.new()
 	_collision_overlay.name = "CollisionOverlay"
 	add_child(_collision_overlay)
 	_collision_overlay_btn.toggled.connect(_on_collision_overlay_toggled)
@@ -310,11 +305,13 @@ func on_drag() -> void:
 	# Everything selected moves together: dragging one of five chairs must not
 	# silently leave the other four behind.
 	var records := selected_records()
-	for target: FillObjectRecordScript in records:
-		var next_pos := target.pos + shift
-		if not _is_valid_transform(next_pos, target.rot, target.scale, target.asset_id, target.id):
+	var ignored_ids: Array = selected_object_ids()
+	for target: FillObjectRecord in records:
+		var next_anchor := target.anchor_pos() + shift
+		if not _is_valid_transform(
+				next_anchor, target.rot, target.scale, target.asset_id, target.id, ignored_ids):
 			return
-	for target: FillObjectRecordScript in records:
+	for target: FillObjectRecord in records:
 		target.pos += shift
 		_apply_transform_to_node(target)
 	_editor.mark_dirty()
@@ -373,12 +370,27 @@ func _is_collision_conflict(pos: Vector3, asset_id: StringName = current_asset_i
 	return _validator.is_collision_conflict(pos, _editor.blueprint, asset_id, scale, exclude_id)
 
 
-func _is_valid_transform(pos: Vector3, rot: Vector3, scale: Vector3, asset_id: StringName, exclude_id: String = "") -> bool:
-	return _validator.is_valid_transform(pos, rot, scale, asset_id, _editor.blueprint, exclude_id)
+func _is_valid_transform(
+	pos: Vector3,
+	rot: Vector3,
+	scale: Vector3,
+	asset_id: StringName,
+	exclude_id: String = "",
+	ignored_ids: Array = [],
+) -> bool:
+	return _validator.is_valid_transform(
+		pos, rot, scale, asset_id, _editor.blueprint, exclude_id, ignored_ids)
 
 
 func _compute_ghost_state(pos: Vector3) -> int:
-	return _validator.compute_ghost_state(pos, _editor.blueprint, current_asset_id, current_yaw_deg)
+	var scale := Vector3.ONE * current_scale
+	var rotation := Vector3(current_pitch_deg, current_yaw_deg, current_roll_deg)
+	if not _validator.is_in_bounds(
+			pos, _editor.blueprint, current_asset_id, scale, current_yaw_deg):
+		return FillPlacementValidator.GhostState.OUT_OF_BOUNDS
+	if not _is_valid_transform(pos, rotation, scale, current_asset_id):
+		return FillPlacementValidator.GhostState.INTERSECTION
+	return FillPlacementValidator.GhostState.VALID
 
 
 func _pick_objects_at(world_pos: Vector3) -> Array[String]:
@@ -389,8 +401,8 @@ func pick_object_at(world_pos: Vector3) -> String:
 	return _validator.pick_object_at(world_pos, _editor.blueprint)
 
 
-func find_record(object_id: String) -> FillObjectRecordScript:
-	return FillPlacementValidatorScript.find_record_in(object_id, _editor.blueprint)
+func find_record(object_id: String) -> FillObjectRecord:
+	return FillPlacementValidator.find_record_in(object_id, _editor.blueprint)
 
 
 # ---------------------------------------------------------------------------
@@ -430,12 +442,17 @@ func _place_at(position: Vector3) -> void:
 		return
 	# Keep the invariant at the mutation boundary too: UI input is not the only
 	# caller of this method, and a red preview must never still create an overlap.
-	if _compute_ghost_state(position) != FillPlacementValidatorScript.GhostState.VALID:
+	if not _is_valid_transform(
+			position,
+			Vector3(current_pitch_deg, current_yaw_deg, current_roll_deg),
+			Vector3.ONE * current_scale,
+			asset.id,
+	):
 		_editor.set_status("Нельзя разместить наполнение поверх другого объекта.")
 		return
 	# `pos` — итог: якорь по клеткам плюс авторское смещение кисти. Клетки объекта
 	# считаются от якоря, поэтому смещение не переселяет его к соседям.
-	var record := FillObjectRecordScript.make(asset.id, position + current_offset, _next_object_suffix())
+	var record := FillObjectRecord.make(asset.id, position + current_offset, _next_object_suffix())
 	record.offset = current_offset
 	record.scale = Vector3.ONE * current_scale
 	# Every axis the brush carries, not just yaw: the ghost was previewed with
@@ -496,34 +513,41 @@ func rotate_selection(axis: String, direction: int) -> void:
 	if records.is_empty() and brush_asset != null and not brush_asset.is_rotation_axis_allowed(axis):
 		_editor.set_status("Этот ассет нельзя вращать вокруг оси %s." % axis.to_upper())
 		return
-	var rotated := 0
-	var refused := 0
-	for record: FillObjectRecordScript in records:
+	var ignored_ids: Array = selected_object_ids()
+	var anchors: Dictionary = {}
+	var rotations: Dictionary = {}
+	var scales: Dictionary = {}
+	for record: FillObjectRecord in records:
 		var asset := WorldAssetCatalog.get_asset(record.asset_id)
 		if asset != null and not asset.is_rotation_axis_allowed(axis):
-			refused += 1
-			continue
+			_editor.set_status("Поворот не применён: ассет «%s» запрещает ось %s." % [asset.name, axis.to_upper()])
+			return
 		var candidate := _rotated_vector(record.rot, axis, direction)
-		if not _is_valid_transform(record.pos, candidate, record.scale, record.asset_id, record.id):
-			refused += 1
-			continue
-		record.rot = candidate
+		if not _is_valid_transform(
+				record.anchor_pos(), candidate, record.scale, record.asset_id, record.id, ignored_ids):
+			_editor.set_status("Поворот не применён: итоговые клетки заняты или пересекают каркас.")
+			return
+		anchors[record.id] = record.anchor_pos()
+		rotations[record.id] = candidate
+		scales[record.id] = record.scale
+	if not _proposed_fill_is_free(records, anchors, rotations, scales):
+		_editor.set_status("Поворот не применён: выбранные объекты пересекутся друг с другом.")
+		return
+	for record: FillObjectRecord in records:
+		record.rot = rotations[record.id]
 		_apply_transform_to_node(record)
-		rotated += 1
 	# The brush follows only when it is not describing a rejected rotation: its
 	# angle and the object's must not drift apart.
-	if records.is_empty() or rotated > 0:
+	if records.is_empty() or not rotations.is_empty():
 		var brush := _rotated_vector(Vector3(current_pitch_deg, current_yaw_deg, current_roll_deg), axis, direction)
 		current_pitch_deg = brush.x
 		current_yaw_deg = brush.y
 		current_roll_deg = brush.z
-	if rotated > 0:
+	if not rotations.is_empty():
 		_editor.mark_dirty()
 		var primary := find_record(selected_object_id)
 		if primary != null:
 			_sync_transform_fields(primary)
-	if refused > 0:
-		_editor.set_status("Поворот не применён к %d объект(ам): ось запрещена ассетом или мешает каркас." % refused)
 	refresh_ghost()
 
 
@@ -545,9 +569,25 @@ func reset_rotation() -> void:
 	current_pitch_deg = 0.0
 	current_yaw_deg = 0.0
 	current_roll_deg = 0.0
+	var records := selected_records()
+	var ignored_ids: Array = selected_object_ids()
+	var anchors: Dictionary = {}
+	var rotations: Dictionary = {}
+	var scales: Dictionary = {}
+	for record: FillObjectRecord in records:
+		if not _is_valid_transform(
+				record.anchor_pos(), Vector3.ZERO, record.scale, record.asset_id, record.id, ignored_ids):
+			_editor.set_status("Сброс поворота не применён: итоговые клетки заняты.")
+			return
+		anchors[record.id] = record.anchor_pos()
+		rotations[record.id] = Vector3.ZERO
+		scales[record.id] = record.scale
+	if not _proposed_fill_is_free(records, anchors, rotations, scales):
+		_editor.set_status("Сброс поворота не применён: выбранные объекты пересекутся.")
+		return
 	var changed := false
-	for record: FillObjectRecordScript in selected_records():
-		if _is_valid_transform(record.pos, Vector3.ZERO, record.scale, record.asset_id, record.id):
+	for record: FillObjectRecord in records:
+		if not record.rot.is_zero_approx():
 			record.rot = Vector3.ZERO
 			_apply_transform_to_node(record)
 			changed = true
@@ -560,7 +600,7 @@ func reset_rotation() -> void:
 func reset_offset() -> void:
 	current_offset = Vector3.ZERO
 	var changed := false
-	for record: FillObjectRecordScript in selected_records():
+	for record: FillObjectRecord in selected_records():
 		if record.offset.is_zero_approx():
 			continue
 		record.pos = record.anchor_pos()
@@ -572,14 +612,29 @@ func reset_offset() -> void:
 
 
 func reset_scale() -> void:
+	var records := selected_records()
+	var ignored_ids: Array = selected_object_ids()
+	var anchors: Dictionary = {}
+	var rotations: Dictionary = {}
+	var scales: Dictionary = {}
+	for record: FillObjectRecord in records:
+		if not _is_valid_transform(
+				record.anchor_pos(), record.rot, Vector3.ONE, record.asset_id, record.id, ignored_ids):
+			_editor.set_status("Сброс масштаба не применён: итоговые клетки заняты.")
+			return
+		anchors[record.id] = record.anchor_pos()
+		rotations[record.id] = record.rot
+		scales[record.id] = Vector3.ONE
+	if not _proposed_fill_is_free(records, anchors, rotations, scales):
+		_editor.set_status("Сброс масштаба не применён: выбранные объекты пересекутся.")
+		return
 	var changed := false
-	for record: FillObjectRecordScript in selected_records():
+	for record: FillObjectRecord in records:
 		if is_equal_approx(record.scale.x, 1.0):
 			continue
-		if _is_valid_transform(record.pos, record.rot, Vector3.ONE, record.asset_id, record.id):
-			record.scale = Vector3.ONE
-			_apply_transform_to_node(record)
-			changed = true
+		record.scale = Vector3.ONE
+		_apply_transform_to_node(record)
+		changed = true
 	_commit_transform_reset(changed, "Масштаб сброшен.")
 
 
@@ -617,7 +672,7 @@ func cancel_current_action() -> void:
 func _next_object_suffix() -> int:
 	var suffix := Time.get_ticks_msec()
 	var taken: Dictionary = {}
-	for record: FillObjectRecordScript in _editor.blueprint.objects:
+	for record: FillObjectRecord in _editor.blueprint.objects:
 		taken[record.id] = true
 	while taken.has("fill_%s_%d" % [String(current_asset_id), suffix]):
 		suffix += 1
@@ -649,14 +704,14 @@ func rebuild_nodes() -> void:
 	# Selection markers are keyed by object id; the ids of the previous blueprint
 	# mean nothing here.
 	_clear_selection_markers()
-	for record: FillObjectRecordScript in _editor.blueprint.objects:
+	for record: FillObjectRecord in _editor.blueprint.objects:
 		_spawn_node(record)
 	_update_selection_marker()
 	if _collision_overlay != null:
 		_collision_overlay.rebuild(_editor.blueprint)
 
 
-func _spawn_node(record: FillObjectRecordScript) -> void:
+func _spawn_node(record: FillObjectRecord) -> void:
 	var asset := WorldAssetCatalog.get_asset(record.asset_id)
 	var instance: Node3D = null
 	if asset != null:
@@ -693,7 +748,7 @@ func _make_placeholder() -> Node3D:
 	return placeholder
 
 
-func _apply_transform_to_node(record: FillObjectRecordScript) -> void:
+func _apply_transform_to_node(record: FillObjectRecord) -> void:
 	var node: Node3D = _nodes.get(record.id, null)
 	if node == null:
 		return
@@ -775,10 +830,10 @@ func _hide_ghost() -> void:
 func _update_ghost_color(state: int) -> void:
 	var color: Color = EditorFillConventions.COLOR_GHOST_VALID
 	match state:
-		FillPlacementValidatorScript.GhostState.INTERSECTION:
+		FillPlacementValidator.GhostState.INTERSECTION:
 			color = EditorFillConventions.COLOR_GHOST_BLOCKED
-		FillPlacementValidatorScript.GhostState.OUT_OF_BOUNDS:
-			color = EditorFillConventions.COLOR_GHOST_WARNING
+		FillPlacementValidator.GhostState.OUT_OF_BOUNDS:
+			color = EditorFillConventions.COLOR_GHOST_BLOCKED
 	_get_ghost_material().albedo_color = color
 
 
@@ -796,10 +851,10 @@ func _create_torus_marker(color: Color) -> MeshInstance3D:
 
 ## Scales a ring to the object's footprint. Both markers read the same way, so
 ## they are positioned by one function.
-func _place_marker(marker: MeshInstance3D, record: FillObjectRecordScript, lift: float) -> void:
+func _place_marker(marker: MeshInstance3D, record: FillObjectRecord, lift: float) -> void:
 	var asset := WorldAssetCatalog.get_asset(record.asset_id)
 	var size := asset.footprint_m() if asset != null else Vector3.ONE
-	var radius := maxf(FillPlacementValidatorScript.MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
+	var radius := maxf(FillPlacementValidator.MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
 	marker.visible = true
 	marker.scale = Vector3.ONE * (radius / 0.5)
 	marker.position = record.pos + Vector3(0.0, lift, 0.0)
@@ -912,7 +967,7 @@ func _refresh_object_list() -> void:
 	_object_list.clear()
 	var search_text := _object_search_edit.text.strip_edges().to_lower() if _object_search_edit != null else ""
 	var zone_filter := _get_zone_filter_selection()
-	for record: FillObjectRecordScript in _editor.blueprint.objects:
+	for record: FillObjectRecord in _editor.blueprint.objects:
 		var asset := WorldAssetCatalog.get_asset(record.asset_id)
 		var label := asset.name if asset != null else "%s (нет ассета)" % record.asset_id
 		if not search_text.is_empty():
@@ -1028,7 +1083,7 @@ func _zone_name_for_id(zone_id: StringName) -> String:
 ## Clears owner_zone_id on all fill objects that referenced it.
 func on_zone_deleted(zone_id: StringName) -> void:
 	var affected := 0
-	for record: FillObjectRecordScript in _editor.blueprint.objects:
+	for record: FillObjectRecord in _editor.blueprint.objects:
 		if record.owner_zone_id == zone_id:
 			record.owner_zone_id = &""
 			affected += 1
@@ -1105,7 +1160,7 @@ func _appearance_definitions(asset: WorldAssetDef) -> Array[EntityPropertyDef]:
 
 
 func _on_appearance_property_committed(property_name: StringName, value: Variant) -> void:
-	_set_property(String(property_name), FillObjectRecordScript.json_safe_value(value))
+	_set_property(String(property_name), FillObjectRecord.json_safe_value(value))
 
 
 func _on_appearance_property_reset(property_name: StringName) -> void:
@@ -1115,7 +1170,7 @@ func _on_appearance_property_reset(property_name: StringName) -> void:
 		return
 	for definition: EntityPropertyDef in _appearance_definitions(asset):
 		if definition.name == property_name:
-			_set_property(String(property_name), FillObjectRecordScript.json_safe_value(definition.default))
+			_set_property(String(property_name), FillObjectRecord.json_safe_value(definition.default))
 			_refresh_inspector()
 			return
 
@@ -1146,14 +1201,14 @@ func _set_transform_fields_enabled(enabled: bool) -> void:
 		_replace_btn.text = "Заменить на выбранный ассет"
 
 
-func _refresh_replace_action(record: FillObjectRecordScript) -> void:
+func _refresh_replace_action(record: FillObjectRecord) -> void:
 	var replacement := WorldAssetCatalog.get_asset(current_asset_id)
 	_replace_btn.disabled = replacement == null or current_asset_id == record.asset_id
 	_replace_btn.text = "Заменить на «%s»" % replacement.name if replacement != null else "Заменить на выбранный ассет"
 
 
 ## Refresh the owner-zone dropdown from the blueprint's owning areas.
-func _refresh_zone_options(current_zone: StringName, _record: FillObjectRecordScript) -> void:
+func _refresh_zone_options(current_zone: StringName, _record: FillObjectRecord) -> void:
 	_syncing_ui = true
 	_zone_option.clear()
 	_zone_option.add_item("(без зоны)")
@@ -1182,7 +1237,7 @@ func _on_zone_selected(index: int) -> void:
 
 
 ## Show diagnostic badges for the selected object.
-func _update_badges(record: FillObjectRecordScript, asset: Variant) -> void:
+func _update_badges(record: FillObjectRecord, asset: Variant) -> void:
 	var badges: Array[String] = []
 	if asset != null and asset.scale_mode != WorldAssetDef.SCALE_LOCKED:
 		badges.append("Масштаб: %s" % String(asset.scale_mode))
@@ -1214,18 +1269,49 @@ func _replace_selected_object() -> void:
 	if new_asset == null:
 		return
 	var targets: Array = []
-	for record: FillObjectRecordScript in records:
+	for record: FillObjectRecord in records:
 		if record.asset_id != new_asset.id:
 			targets.append(record)
 	if targets.is_empty():
 		_editor.set_status("Объект уже использует этот ассет.")
 		return
+	var ignored_ids: Array = targets.map(func(target: FillObjectRecord) -> String: return target.id)
+	var anchors: Dictionary = {}
+	var rotations: Dictionary = {}
+	var scales: Dictionary = {}
+	for record: FillObjectRecord in targets:
+		var old_cells := occupied_cells(record.anchor_pos(), record.asset_id, record.scale.x, record.rot.y)
+		var next_scale := Vector3.ONE * EditorFillConventions.normalized_scale(new_asset, record.scale.x)
+		var next_span: Vector2i = _validator.cell_span(new_asset.id, next_scale.x, record.rot.y)
+		var next_xz := EditorFillConventions.anchor_of_cells(old_cells.position, next_span)
+		var next_anchor := Vector3(next_xz.x, record.anchor_pos().y, next_xz.y)
+		if not _is_valid_transform(
+				next_anchor, record.rot, next_scale, new_asset.id, record.id, ignored_ids):
+			_editor.set_status("Замена не применена: новому ассету не хватает свободных клеток или запрещён текущий поворот.")
+			return
+		anchors[record.id] = next_anchor
+		rotations[record.id] = record.rot
+		scales[record.id] = next_scale
+	if not _proposed_fill_is_free(targets, anchors, rotations, scales, new_asset.id):
+		_editor.set_status("Замена не применена: новые размеры выбранных объектов пересекутся.")
+		return
 
 	var lost_total := 0
-	for record: FillObjectRecordScript in targets:
+	for record: FillObjectRecord in targets:
 		lost_total += _lost_property_count(record, new_asset)
-	if lost_total > 0:
-		var question := "Замена на «%s» потеряет настроенных свойств: %d. Продолжить?" % [new_asset.name, lost_total]
+	var incompatible_fixture_links := 0
+	for fixture: FixtureDefinition in _editor.blueprint.fixtures:
+		if fixture.visual_object_id not in ignored_ids:
+			continue
+		for capability: StringName in fixture.capabilities:
+			if capability not in new_asset.supported_capabilities:
+				incompatible_fixture_links += 1
+				break
+	if lost_total > 0 or incompatible_fixture_links > 0:
+		var question := "Замена на «%s» потеряет настроенных свойств: %d." % [new_asset.name, lost_total]
+		if incompatible_fixture_links > 0:
+			question += " Несовместимых связей fixture будет снято: %d." % incompatible_fixture_links
+		question += " Продолжить?"
 		if not await _editor.confirm_action(question, "Замена ассета"):
 			_editor.set_status("Замена отменена.")
 			return
@@ -1233,9 +1319,16 @@ func _replace_selected_object() -> void:
 	# Замена всего выделения — одно действие, а не N шагов отмены.
 	_editor.begin_history_group("fill_replace")
 	var replaced := 0
-	for record: FillObjectRecordScript in targets:
-		_replace_one(record, new_asset)
+	for record: FillObjectRecord in targets:
+		_replace_one(record, new_asset, anchors[record.id], scales[record.id])
 		replaced += 1
+	for fixture: FixtureDefinition in _editor.blueprint.fixtures:
+		if fixture.visual_object_id not in ignored_ids:
+			continue
+		for capability: StringName in fixture.capabilities:
+			if capability not in new_asset.supported_capabilities:
+				fixture.visual_object_id = ""
+				break
 	_editor.end_history_group()
 	_refresh_object_list()
 	_refresh_inspector()
@@ -1246,7 +1339,7 @@ func _replace_selected_object() -> void:
 
 
 ## Свойства, которых у нового ассета нет и которые исчезнут при замене.
-func _lost_property_count(record: FillObjectRecordScript, new_asset: WorldAssetDef) -> int:
+func _lost_property_count(record: FillObjectRecord, new_asset: WorldAssetDef) -> int:
 	var lost := 0
 	for key: Variant in record.appearance.keys():
 		var found := false
@@ -1259,9 +1352,15 @@ func _lost_property_count(record: FillObjectRecordScript, new_asset: WorldAssetD
 	return lost
 
 
-func _replace_one(record: FillObjectRecordScript, new_asset: WorldAssetDef) -> void:
+func _replace_one(
+	record: FillObjectRecord,
+	new_asset: WorldAssetDef,
+	next_anchor: Vector3,
+	next_scale: Vector3,
+) -> void:
 	var old_appearance := record.appearance.duplicate(true)
 	record.asset_id = new_asset.id
+	record.scale = next_scale
 	record.appearance = new_asset.default_appearance()
 	# Carry over compatible properties: keys that exist in the new asset's
 	# appearance_controls with a matching type, preserving the old value.
@@ -1290,14 +1389,13 @@ func _replace_one(record: FillObjectRecordScript, new_asset: WorldAssetDef) -> v
 			record.appearance[key_str] = old_value
 	# Новый ассет может занимать другое число клеток: пересаживаем объект на его
 	# собственные клетки, чтобы занятость осталась честной.
-	var anchor := snapped_position(record.anchor_pos(), record.asset_id, record.scale.x, record.rot.y)
-	record.pos = anchor + record.offset
+	record.pos = next_anchor + record.offset
 	_spawn_node_for_existing(record)
 	_editor.mark_dirty()
 
 
 ## Re-spawn the visual node for an existing record (used by replace).
-func _spawn_node_for_existing(record: FillObjectRecordScript) -> void:
+func _spawn_node_for_existing(record: FillObjectRecord) -> void:
 	_remove_node(record.id)
 	_spawn_node(record)
 
@@ -1310,8 +1408,14 @@ func _transform_spins() -> Array[SpinBox]:
 ## Инспектор показывает то, чем автор оперирует: клетку, слой и смещение внутри
 ## своих клеток. Мировая позиция — производная (`якорь + смещение`) и в полях не
 ## участвует: она заставляла бы считать доли метра в уме.
-func _sync_transform_fields(record: FillObjectRecordScript) -> void:
+func _sync_transform_fields(record: FillObjectRecord) -> void:
 	_syncing_ui = true
+	var asset := WorldAssetCatalog.get_asset(record.asset_id)
+	_scale_spin.editable = asset == null or asset.scale_mode != WorldAssetDef.SCALE_LOCKED
+	_scale_spin.tooltip_text = "" if _scale_spin.editable else "Масштаб зафиксирован в описании ассета."
+	_pitch_spin.editable = asset == null or asset.is_rotation_axis_allowed("x")
+	_yaw_spin.editable = asset == null or asset.is_rotation_axis_allowed("y")
+	_roll_spin.editable = asset == null or asset.is_rotation_axis_allowed("z")
 	var cells := occupied_cells(record.anchor_pos(), record.asset_id, record.scale.x, record.rot.y)
 	_pos_x_spin.value = cells.position.x
 	_pos_z_spin.value = cells.position.y
@@ -1347,10 +1451,6 @@ func _on_transform_spin_changed(_value: float) -> void:
 	var anchor_xz := EditorFillConventions.anchor_of_cells(base_cell, span)
 	var candidate_anchor := Vector3(anchor_xz.x, float(int(round(_pos_y_spin.value))), anchor_xz.y)
 
-	if not _is_valid_transform(candidate_anchor, candidate_rot, candidate_scale, record.asset_id, record.id):
-		_sync_transform_fields(record)
-		_editor.set_status("Эти клетки заняты или выходят за границы здания.")
-		return
 	if old_anchor.is_equal_approx(candidate_anchor) and old_offset.is_equal_approx(candidate_offset) \
 			and old_rot.is_equal_approx(candidate_rot) and old_scale.is_equal_approx(candidate_scale):
 		return
@@ -1359,19 +1459,32 @@ func _on_transform_spin_changed(_value: float) -> void:
 	# смещение, поворот и масштаб — абсолютом: поле говорит именно это.
 	var shift := candidate_anchor - old_anchor
 	var records := selected_records()
-	for target: FillObjectRecordScript in records:
-		if target.id == record.id:
-			continue
-		if not _is_valid_transform(target.anchor_pos() + shift, candidate_rot, candidate_scale, target.asset_id, target.id):
+	var ignored_ids: Array = selected_object_ids()
+	var anchors: Dictionary = {}
+	var rotations: Dictionary = {}
+	var scales: Dictionary = {}
+	for target: FillObjectRecord in records:
+		var anchor := candidate_anchor if target.id == record.id else target.anchor_pos() + shift
+		var target_scale := Vector3.ONE * EditorFillConventions.normalized_scale(
+			WorldAssetCatalog.get_asset(target.asset_id), _scale_spin.value)
+		if not _is_valid_transform(
+				anchor, candidate_rot, target_scale, target.asset_id, target.id, ignored_ids):
 			_sync_transform_fields(record)
 			_editor.set_status("Не применено: одному из выбранных объектов не хватает свободных клеток.")
 			return
-	for target: FillObjectRecordScript in records:
-		var anchor := candidate_anchor if target.id == record.id else target.anchor_pos() + shift
+		anchors[target.id] = anchor
+		rotations[target.id] = candidate_rot
+		scales[target.id] = target_scale
+	if not _proposed_fill_is_free(records, anchors, rotations, scales):
+		_sync_transform_fields(record)
+		_editor.set_status("Не применено: выбранные объекты пересекутся друг с другом.")
+		return
+	for target: FillObjectRecord in records:
+		var anchor: Vector3 = anchors[target.id]
 		target.offset = candidate_offset
 		target.pos = anchor + candidate_offset
-		target.rot = candidate_rot
-		target.scale = candidate_scale
+		target.rot = rotations[target.id]
+		target.scale = scales[target.id]
 		_apply_transform_to_node(target)
 	current_offset = candidate_offset
 	_update_selection_marker()
@@ -1381,32 +1494,47 @@ func _on_transform_spin_changed(_value: float) -> void:
 
 
 ## Масштаб, приведённый к политике ассета.
-func _clamped_scale(record: FillObjectRecordScript, requested: float) -> float:
+func _clamped_scale(record: FillObjectRecord, requested: float) -> float:
 	var asset := WorldAssetCatalog.get_asset(record.asset_id)
-	if asset == null or asset.is_scale_allowed(requested):
-		return requested
-	var scale_val := requested
-	match asset.scale_mode:
-		WorldAssetDef.SCALE_LOCKED:
-			scale_val = 1.0
-		WorldAssetDef.SCALE_UNIFORM_STEPS:
-			var best := asset.allowed_scales[0] if not asset.allowed_scales.is_empty() else 1.0
-			var best_diff := absf(scale_val - best)
-			for allowed in asset.allowed_scales:
-				var diff := absf(scale_val - allowed)
-				if diff < best_diff:
-					best = allowed
-					best_diff = diff
-			scale_val = best
-		WorldAssetDef.SCALE_FREE_UNIFORM:
-			if asset.allowed_scales.size() >= 2:
-				scale_val = clampf(scale_val, asset.allowed_scales[0], asset.allowed_scales[-1])
-			else:
-				scale_val = maxf(0.001, scale_val)
+	var scale_val := EditorFillConventions.normalized_scale(asset, requested)
 	_syncing_ui = true
 	_scale_spin.value = scale_val
 	_syncing_ui = false
 	return scale_val
+
+
+func _proposed_fill_is_free(
+	records: Array,
+	anchors: Dictionary,
+	rotations: Dictionary,
+	scales: Dictionary,
+	asset_override: StringName = &"",
+) -> bool:
+	for left_index in records.size():
+		var left: FillObjectRecord = records[left_index]
+		var left_asset_id := asset_override if asset_override != &"" else left.asset_id
+		var left_asset := WorldAssetCatalog.get_asset(left_asset_id)
+		if not EditorFillConventions.asset_claims_cells(left_asset):
+			continue
+		var left_anchor: Vector3 = anchors[left.id]
+		for right_index in range(left_index + 1, records.size()):
+			var right: FillObjectRecord = records[right_index]
+			var right_asset_id := asset_override if asset_override != &"" else right.asset_id
+			var right_asset := WorldAssetCatalog.get_asset(right_asset_id)
+			if not EditorFillConventions.asset_claims_cells(right_asset):
+				continue
+			var right_anchor: Vector3 = anchors[right.id]
+			if not is_equal_approx(left_anchor.y, right_anchor.y):
+				continue
+			var left_rot: Vector3 = rotations[left.id]
+			var right_rot: Vector3 = rotations[right.id]
+			var left_scale: Vector3 = scales[left.id]
+			var right_scale: Vector3 = scales[right.id]
+			var left_cells := occupied_cells(left_anchor, left_asset_id, left_scale.x, left_rot.y)
+			var right_cells := occupied_cells(right_anchor, right_asset_id, right_scale.x, right_rot.y)
+			if EditorFillConventions.rects_overlap(left_cells, right_cells):
+				return false
+	return true
 
 
 # ---------------------------------------------------------------------------

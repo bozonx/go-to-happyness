@@ -27,6 +27,23 @@ func _run() -> void:
 	var fill = editor.fill_mode
 	assert(fill != null, "controller exists")
 
+	# Shared schema inspector debounces each field independently and cancels
+	# timers when selection rebuilds its controls.
+	var common_inspector := EditorPropertyInspector.new()
+	root.add_child(common_inspector)
+	var commits: Array[StringName] = []
+	common_inspector.property_committed.connect(func(property_name: StringName, _value: Variant) -> void:
+		commits.append(property_name))
+	common_inspector.queue_commit(&"first", 1)
+	common_inspector.queue_commit(&"second", 2)
+	await create_timer(EditorPropertyInspector.COMMIT_DEBOUNCE_SEC + 0.05).timeout
+	assert(commits == [&"first", &"second"], "independent inspector fields both commit")
+	common_inspector.queue_commit(&"stale", 3)
+	common_inspector.set_fields([], {})
+	await create_timer(EditorPropertyInspector.COMMIT_DEBOUNCE_SEC + 0.05).timeout
+	assert(&"stale" not in commits, "inspector rebuild cancels stale field commits")
+	common_inspector.queue_free()
+
 	# Enter fill mode the way the UI does.
 	editor.get_node("%Ghost").visible = true
 	editor._select_mode(editor.EditMode.FILL)
@@ -287,6 +304,13 @@ func _run() -> void:
 	# explicit, valid invisible fixture rather than a dangling reference.
 	fill._add_fixture()
 	assert(editor.blueprint.fixtures.size() == 1, "fixture added")
+	fill._fixture_panel._on_fixture_capability_selected(1)
+	assert(editor.blueprint.fixtures[0].capabilities.has(FixtureDefinition.CAP_FIRE_SOURCE) \
+		and editor.blueprint.fixtures[0].capabilities.has(FixtureDefinition.CAP_COOKING_STATION),
+		"fixture capability menu supports multiple services")
+	fill.undo()
+	assert(editor.blueprint.fixtures[0].capabilities == [FixtureDefinition.CAP_FIRE_SOURCE],
+		"multi-capability edit participates in fill history")
 	fill._on_fixture_visual_selected(1)
 	var fixture_id: String = editor.blueprint.fixtures[0].visual_object_id
 	assert(not fixture_id.is_empty(), "fixture visual linked")
@@ -296,9 +320,7 @@ func _run() -> void:
 	fill.undo()
 	assert(editor.blueprint.fixtures[0].visual_object_id == fixture_id, "undo restores fixture link")
 	fill.undo()
-	assert(editor.blueprint.fixtures.size() == 1, "undo restores visual deletion only")
-	fill.undo()
-	assert(editor.blueprint.fixtures.is_empty(), "undo restores fixture addition")
+	assert(editor.blueprint.fixtures.is_empty(), "fixture creation and automatic visual link undo together")
 	print("  fixture links + history ok")
 
 	# Zone bounds: an object at cell centre (x=1.5) must map to cell 1 via floor,

@@ -174,11 +174,29 @@ func update_player_control(delta: float) -> void:
 			player_citizen.velocity.y = PLAYER_JUMP_VELOCITY
 	else:
 		player_citizen.velocity.y -= PLAYER_GRAVITY * delta
+	_restrict_horizontal_movement(delta)
 	player_citizen.move_and_slide()
 	player_citizen.drive_player_animation(Input.is_key_pressed(KEY_SHIFT))
 	simulation.camera.global_position = player_citizen.global_position + Vector3(0.0, PLAYER_EYE_HEIGHT, 0.0)
 	simulation.camera.rotation = Vector3(player_pitch, player_yaw, 0.0)
 	simulation.hero_interaction_controller.refresh_interaction_hint()
+
+
+## Direct control uses the same published passability as NPC routing. This is
+## what makes a 1.5 m ford enterable, deeper water a hard stop, and the map rim
+## impassable even where no visible terrain wall happens to be rendered.
+func _restrict_horizontal_movement(delta: float) -> void:
+	if simulation == null or player_citizen == null or simulation.nav_grid == null:
+		return
+	var horizontal := Vector3(player_citizen.velocity.x, 0.0, player_citizen.velocity.z)
+	if horizontal.is_zero_approx():
+		return
+	var next_position := player_citizen.global_position + horizontal * delta
+	# Segment traversal checks every crossed cell, so a long frame cannot tunnel
+	# over a one-cell strip of deep water or across the board rim.
+	if not simulation.nav_grid.is_segment_clear(player_citizen.global_position, next_position):
+		player_citizen.velocity.x = 0.0
+		player_citizen.velocity.z = 0.0
 
 
 func update_interaction(delta: float) -> void:

@@ -197,6 +197,10 @@ func reset_inspector_value(_property_name: StringName) -> bool:
 	return false
 
 
+func begin_reference_pick(_property_name: StringName, _reference_type: StringName) -> bool:
+	return false
+
+
 ## Entities of this mode for the side list. Empty until phase 4 brings zones,
 ## points and routes.
 func list_entries() -> Array[String]:
@@ -219,8 +223,22 @@ func selected_list_index() -> int:
 	return -1
 
 
+func selected_list_indices() -> Array[int]:
+	var selected := selected_list_index()
+	return [selected] if selected >= 0 else []
+
+
+func list_allows_multiple() -> bool:
+	return false
+
+
 func select_list_entry(_index: int) -> void:
 	pass
+
+
+func select_list_entries(indices: Array[int]) -> void:
+	if not indices.is_empty():
+		select_list_entry(indices[-1])
 
 
 func empty_list_hint() -> String:

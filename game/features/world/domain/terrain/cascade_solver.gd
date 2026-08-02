@@ -90,7 +90,8 @@ func solve(grid: TerrainGrid, operation: TerrainEditOperation) -> TerrainDelta:
 # --- Brush ------------------------------------------------------------------
 
 func _apply_brush(operation: TerrainEditOperation, raised: Array[Vector2i], lowered: Array[Vector2i]) -> bool:
-	for cell: Vector2i in operation.cells:
+	for index in operation.cells.size():
+		var cell: Vector2i = operation.cells[index]
 		if not _region.is_inside(cell):
 			rejection_reason = REASON_OUT_OF_BOUNDS
 			return false
@@ -101,9 +102,16 @@ func _apply_brush(operation: TerrainEditOperation, raised: Array[Vector2i], lowe
 			rejection_reason = REASON_HOLE
 			return false
 		var current := _region.height_of(cell)
-		var target := current + operation.height_delta
+		var weight := operation.weight_at(index)
+		# Rounded, never truncated: the rim of a weighted brush should stop moving
+		# where the step it is asked for falls below half a step, not shave one off
+		# every cell that is not exactly at full strength.
+		var target := current + int(round(float(operation.height_delta) * weight))
 		if operation.mode == TerrainEditOperation.Mode.LEVEL:
-			target = operation.target_height
+			# Levelling with a falloff pulls the column PART of the way to the
+			# plateau. At full strength that is the plateau itself, so an unweighted
+			# Level brush is bit-for-bit what it always was.
+			target = current + int(round(float(operation.target_height - current) * weight))
 		if target == current:
 			# A ramp cell levelled to the height it already has still loses its
 			# slope: the brush asked for flat ground.

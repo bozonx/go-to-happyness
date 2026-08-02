@@ -7,14 +7,11 @@ extends RefCounted
 ## Extracted from BuildingFillModeController to isolate fixture concerns from fill
 ## object placement and selection.
 
-const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
-const FireSourceDefaultsScript = preload("res://game/features/buildings/domain/editor/fire_source_defaults.gd")
-
 var _editor: Node = null
 
 var _fixture_list: ItemList = null
 var _fixture_id_label: Label = null
-var _fixture_cap_option: OptionButton = null
+var _fixture_cap_option: MenuButton = null
 var _fixture_visual_option: OptionButton = null
 var _fixture_zone_option: OptionButton = null
 var _fixture_fire_defaults_lbl: Label = null
@@ -47,7 +44,7 @@ func setup(editor: Node) -> void:
 	editor.get_node("%FixtureAddBtn").pressed.connect(add_fixture)
 	editor.get_node("%FixtureDeleteBtn").pressed.connect(delete_fixture)
 	_fixture_list.item_selected.connect(_on_fixture_list_selected)
-	_fixture_cap_option.item_selected.connect(_on_fixture_capability_selected)
+	_fixture_cap_option.get_popup().id_pressed.connect(_on_fixture_capability_selected)
 	_fixture_visual_option.item_selected.connect(_on_fixture_visual_selected)
 	_fixture_zone_option.item_selected.connect(_on_fixture_zone_selected)
 	_fixture_lit_check.toggled.connect(_on_fixture_fire_param_changed)
@@ -58,10 +55,12 @@ func setup(editor: Node) -> void:
 
 
 func _build_fixture_capability_options() -> void:
-	_fixture_cap_option.clear()
-	for cap in FixtureDefinitionScript.KNOWN_CAPABILITIES:
-		_fixture_cap_option.add_item(String(cap))
-		_fixture_cap_option.set_item_metadata(_fixture_cap_option.item_count - 1, cap)
+	var popup := _fixture_cap_option.get_popup()
+	popup.clear()
+	for index in FixtureDefinition.KNOWN_CAPABILITIES.size():
+		var cap := FixtureDefinition.KNOWN_CAPABILITIES[index]
+		popup.add_check_item(String(cap), index)
+		popup.set_item_metadata(index, cap)
 
 
 func _refresh_fixture_list() -> void:
@@ -69,7 +68,7 @@ func _refresh_fixture_list() -> void:
 	_fixture_list.clear()
 	var fixtures: Array = _editor.blueprint.fixtures
 	for i in fixtures.size():
-		var fixture: FixtureDefinitionScript = fixtures[i]
+		var fixture: FixtureDefinition = fixtures[i]
 		var cap_text := "—"
 		if not fixture.capabilities.is_empty():
 			cap_text = String(fixture.capabilities[0])
@@ -94,20 +93,24 @@ func _refresh_fixture_inspector() -> void:
 	if not has_selection:
 		_fixture_id_label.text = "ID: —"
 		return
-	var fixture: FixtureDefinitionScript = fixtures[_selected_fixture_index]
+	var fixture: FixtureDefinition = fixtures[_selected_fixture_index]
 	_fixture_id_label.text = "ID: %s" % String(fixture.id)
-	# Capability dropdown — select first capability.
+	# Capabilities are independent check items: fixtures may expose more than one
+	# service through the same visual object.
 	_syncing_ui = true
-	var first_cap: Variant = fixture.capabilities[0] if not fixture.capabilities.is_empty() else ""
-	for i in _fixture_cap_option.item_count:
-		if _fixture_cap_option.get_item_metadata(i) == first_cap:
-			_fixture_cap_option.select(i)
-			break
+	var popup := _fixture_cap_option.get_popup()
+	for i in popup.item_count:
+		popup.set_item_checked(i, popup.get_item_metadata(i) in fixture.capabilities)
+	_fixture_cap_option.text = ", ".join(fixture.capabilities.map(
+		func(capability: StringName) -> String: return String(capability))) \
+		if not fixture.capabilities.is_empty() else "—"
 	# Visual object dropdown — populate from blueprint objects.
 	_fixture_visual_option.clear()
 	_fixture_visual_option.add_item("— нет —")
 	_fixture_visual_option.set_item_metadata(0, "")
 	for obj in _editor.blueprint.objects:
+		if obj.id != fixture.visual_object_id and not _object_supports_fixture(obj, fixture):
+			continue
 		_fixture_visual_option.add_item(obj.id)
 		_fixture_visual_option.set_item_metadata(_fixture_visual_option.item_count - 1, obj.id)
 	for i in _fixture_visual_option.item_count:
@@ -128,11 +131,11 @@ func _refresh_fixture_inspector() -> void:
 			_fixture_zone_option.select(i)
 			break
 	# Fire source defaults.
-	var is_fire := fixture.has_capability(FixtureDefinitionScript.CAP_FIRE_SOURCE)
+	var is_fire := fixture.has_capability(FixtureDefinition.CAP_FIRE_SOURCE)
 	_fixture_fire_defaults_lbl.visible = is_fire
 	_fixture_fire_grid.visible = is_fire
 	if is_fire:
-		var defaults := FireSourceDefaultsScript.from_dict(fixture.runtime_defaults)
+		var defaults := FireSourceDefaults.from_dict(fixture.runtime_defaults)
 		_fixture_lit_check.button_pressed = defaults.lit
 		_fixture_fuel_spin.value = defaults.fuel
 		_fixture_cap_fuel_spin.value = defaults.fuel_capacity
@@ -140,14 +143,26 @@ func _refresh_fixture_inspector() -> void:
 
 
 func add_fixture() -> void:
-	var fixture := FixtureDefinitionScript.new()
+	var fixture := FixtureDefinition.new()
 	var next_index := 1
 	var existing_ids: Array = _editor.blueprint.fixtures.map(func(f): return String(f.id))
 	while "fixture_%d" % next_index in existing_ids:
 		next_index += 1
 	fixture.id = StringName("fixture_%d" % next_index)
-	fixture.capabilities = [FixtureDefinitionScript.CAP_FIRE_SOURCE]
-	fixture.runtime_defaults = {"lit": true, "fuel": 4, "fuel_capacity": 10}
+	var selected: FillObjectRecord = _editor.fill_mode.find_record(_editor.fill_mode.selected_object_id)
+	var supported: Array[StringName] = []
+	if selected != null:
+		var asset := WorldAssetCatalog.get_asset(selected.asset_id)
+		if asset != null:
+			for capability: StringName in asset.supported_capabilities:
+				if capability in FixtureDefinition.KNOWN_CAPABILITIES:
+					supported.append(capability)
+	var initial_capability := supported[0] if not supported.is_empty() \
+		else FixtureDefinition.CAP_FIRE_SOURCE
+	fixture.capabilities = [initial_capability]
+	fixture.visual_object_id = selected.id if selected != null and not supported.is_empty() else ""
+	fixture.runtime_defaults = {"lit": true, "fuel": 4, "fuel_capacity": 10} \
+		if initial_capability == FixtureDefinition.CAP_FIRE_SOURCE else {}
 	_editor.blueprint.fixtures.append(fixture)
 	_selected_fixture_index = _editor.blueprint.fixtures.size() - 1
 	_editor.mark_dirty()
@@ -158,11 +173,13 @@ func add_fixture() -> void:
 func delete_fixture() -> void:
 	if _selected_fixture_index < 0 or _selected_fixture_index >= _editor.blueprint.fixtures.size():
 		return
-	var fixture: FixtureDefinitionScript = _editor.blueprint.fixtures[_selected_fixture_index]
+	var fixture: FixtureDefinition = _editor.blueprint.fixtures[_selected_fixture_index]
 	# Check if deleting this fixture would violate zone requirements.
 	var warning := _fixture_deletion_warning(fixture)
 	if not warning.is_empty():
-		_editor.set_status("ВНИМАНИЕ: %s" % warning)
+		if not await _editor.confirm_action("%s. Удалить fixture?" % warning, "Нарушение требований зоны"):
+			_editor.set_status("Удаление fixture отменено.")
+			return
 	_editor.blueprint.fixtures.remove_at(_selected_fixture_index)
 	_selected_fixture_index = mini(_selected_fixture_index, _editor.blueprint.fixtures.size() - 1)
 	_editor.mark_dirty()
@@ -175,7 +192,7 @@ func delete_fixture() -> void:
 
 ## Returns a warning message if removing the fixture would leave a zone
 ## without a required capability. Empty string if no violation.
-func _fixture_deletion_warning(fixture: FixtureDefinitionScript) -> String:
+func _fixture_deletion_warning(fixture: FixtureDefinition) -> String:
 	# Check only zones the fixture is relevant to: building-wide fixtures
 	# affect all zones, zone-specific ones only their own.
 	var areas_to_check: Array[ZoneAreaRecord] = []
@@ -193,7 +210,7 @@ func _fixture_deletion_warning(fixture: FixtureDefinitionScript) -> String:
 
 ## Returns true if any fixture (other than `exclude`) provides `cap` to the
 ## given zone (either zone-specific or building-wide).
-func _zone_has_capability(zone_id: StringName, cap: StringName, exclude: FixtureDefinitionScript) -> bool:
+func _zone_has_capability(zone_id: StringName, cap: StringName, exclude: FixtureDefinition) -> bool:
 	for f in _editor.blueprint.fixtures:
 		if f == exclude:
 			continue
@@ -213,12 +230,35 @@ func _on_fixture_list_selected(index: int) -> void:
 func _on_fixture_capability_selected(index: int) -> void:
 	if _syncing_ui or _selected_fixture_index < 0:
 		return
-	var fixture: FixtureDefinitionScript = _editor.blueprint.fixtures[_selected_fixture_index]
-	var cap: StringName = _fixture_cap_option.get_item_metadata(index)
-	# Replace capabilities with the single selected one (phase 2A: one cap per fixture).
-	if fixture.capabilities == [cap]:
-		return
-	fixture.capabilities = [cap]
+	var fixture: FixtureDefinition = _editor.blueprint.fixtures[_selected_fixture_index]
+	var popup := _fixture_cap_option.get_popup()
+	var cap: StringName = popup.get_item_metadata(index)
+	var next_capabilities := fixture.capabilities.duplicate()
+	if cap in next_capabilities:
+		if next_capabilities.size() == 1:
+			_editor.set_status("Fixture должен иметь хотя бы одну возможность.")
+			_refresh_fixture_inspector()
+			return
+		next_capabilities.erase(cap)
+	else:
+		next_capabilities.append(cap)
+	if not fixture.visual_object_id.is_empty():
+		var visual := FillPlacementValidator.find_record_in(fixture.visual_object_id, _editor.blueprint)
+		if visual != null:
+			var asset := WorldAssetCatalog.get_asset(visual.asset_id)
+			if asset != null:
+				for capability: StringName in next_capabilities:
+					if capability not in asset.supported_capabilities:
+						_editor.set_status("Визуальный ассет не поддерживает «%s». Сначала выберите другой объект." % capability)
+						_refresh_fixture_inspector()
+						return
+	var had_fire := fixture.has_capability(FixtureDefinition.CAP_FIRE_SOURCE)
+	fixture.capabilities = next_capabilities
+	var has_fire := fixture.has_capability(FixtureDefinition.CAP_FIRE_SOURCE)
+	if has_fire and not had_fire:
+		fixture.runtime_defaults = {"lit": true, "fuel": 4, "fuel_capacity": 10}
+	elif not has_fire:
+		fixture.runtime_defaults = {}
 	_editor.mark_dirty()
 	_refresh_fixture_inspector()
 
@@ -226,12 +266,18 @@ func _on_fixture_capability_selected(index: int) -> void:
 func _on_fixture_visual_selected(index: int) -> void:
 	if _syncing_ui or _selected_fixture_index < 0:
 		return
-	var fixture: FixtureDefinitionScript = _editor.blueprint.fixtures[_selected_fixture_index]
+	var fixture: FixtureDefinition = _editor.blueprint.fixtures[_selected_fixture_index]
 	var visual_id := String(_fixture_visual_option.get_item_metadata(index))
 	if fixture.visual_object_id == visual_id:
 		return
+	if not visual_id.is_empty():
+		var visual := FillPlacementValidator.find_record_in(visual_id, _editor.blueprint)
+		if visual == null or not _object_supports_fixture(visual, fixture):
+			_editor.set_status("Этот визуальный ассет не поддерживает возможности fixture.")
+			_refresh_fixture_inspector()
+			return
 	# A visual has one primary fixture. Reject ambiguity before saving.
-	for other: FixtureDefinitionScript in _editor.blueprint.fixtures:
+	for other: FixtureDefinition in _editor.blueprint.fixtures:
 		if other != fixture and other.visual_object_id == visual_id and not visual_id.is_empty():
 			_editor.set_status("Этот визуальный объект уже связан с fixture «%s»." % String(other.id))
 			_refresh_fixture_inspector()
@@ -243,7 +289,7 @@ func _on_fixture_visual_selected(index: int) -> void:
 func _on_fixture_zone_selected(index: int) -> void:
 	if _syncing_ui or _selected_fixture_index < 0:
 		return
-	var fixture: FixtureDefinitionScript = _editor.blueprint.fixtures[_selected_fixture_index]
+	var fixture: FixtureDefinition = _editor.blueprint.fixtures[_selected_fixture_index]
 	var zone_id: StringName = _fixture_zone_option.get_item_metadata(index)
 	if fixture.owner_zone_id == zone_id:
 		return
@@ -254,8 +300,8 @@ func _on_fixture_zone_selected(index: int) -> void:
 func _on_fixture_fire_param_changed(_value: Variant) -> void:
 	if _syncing_ui or _selected_fixture_index < 0:
 		return
-	var fixture: FixtureDefinitionScript = _editor.blueprint.fixtures[_selected_fixture_index]
-	if not fixture.has_capability(FixtureDefinitionScript.CAP_FIRE_SOURCE):
+	var fixture: FixtureDefinition = _editor.blueprint.fixtures[_selected_fixture_index]
+	if not fixture.has_capability(FixtureDefinition.CAP_FIRE_SOURCE):
 		return
 	var defaults := {
 		"lit": _fixture_lit_check.button_pressed,
@@ -275,6 +321,16 @@ func refresh_fixture_ui() -> void:
 ## Clears visual_object_id references to a deleted fill object on all fixtures.
 ## Called by BuildingFillModeController._erase_object before the object is removed.
 func clear_visual_references(object_id: String) -> void:
-	for fixture: FixtureDefinitionScript in _editor.blueprint.fixtures:
+	for fixture: FixtureDefinition in _editor.blueprint.fixtures:
 		if fixture.visual_object_id == object_id:
 			fixture.visual_object_id = ""
+
+
+func _object_supports_fixture(object: FillObjectRecord, fixture: FixtureDefinition) -> bool:
+	var asset := WorldAssetCatalog.get_asset(object.asset_id)
+	if asset == null:
+		return false
+	for capability: StringName in fixture.capabilities:
+		if capability not in asset.supported_capabilities:
+			return false
+	return true

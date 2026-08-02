@@ -5,9 +5,6 @@ extends RefCounted
 ## checks, AABB intersection, collision conflicts, picking, and record lookup.
 ## No nodes, no UI — only deterministic math over blueprint state.
 
-const FillObjectRecordScript = preload("res://game/features/buildings/domain/editor/fill_object_record.gd")
-const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
-
 ## Minimum click radius, so thin objects (a flag pole) stay pickable.
 const MIN_PICK_RADIUS := 0.35
 
@@ -74,23 +71,31 @@ func aabbs_intersect(a: AABB, b: AABB) -> bool:
 ## `offset` is deliberately not part of this: it moves the model inside the cells
 ## the object already owns, and re-checking it would mean an object could be
 ## refused for a nudge the author made on purpose (design §6.2).
-func is_collision_conflict(pos: Vector3, blueprint: RefCounted, asset_id: StringName, scale: Vector3, exclude_id: String = "", yaw_deg: float = 0.0) -> bool:
+func is_collision_conflict(
+	pos: Vector3,
+	blueprint: RefCounted,
+	asset_id: StringName,
+	scale: Vector3,
+	exclude_id: String = "",
+	yaw_deg: float = 0.0,
+	ignored_ids: Array = [],
+) -> bool:
 	var asset := WorldAssetCatalog.get_asset(asset_id)
 	if asset == null:
 		return false
 	var candidate := fill_aabb(pos, asset_id, scale)
-	var candidate_blocks := asset.collision_policy != WorldAssetDef.COLLISION_NONE or asset.blocking_navigation
+	var candidate_blocks := EditorFillConventions.asset_claims_cells(asset)
+	if not candidate_blocks:
+		return false
 	# Frame volumes and circulation are authoring obstacles. This deliberately
 	# uses the same occupied volumes as the frame editor, not a second grid.
 	for block in blueprint.blocks:
-		var block_aabb := BuildingBlockCatalogScript.occupied_aabb(block.pos, block.block_id, block.variant, block.rot, block.anchor, block.rot_x, block.rot_z)
+		var block_aabb := BuildingBlockCatalog.occupied_aabb(block.pos, block.block_id, block.variant, block.rot, block.anchor, block.rot_x, block.rot_z)
 		if aabbs_intersect(candidate, block_aabb):
 			return true
-	if not candidate_blocks:
-		return false
 	var candidate_cells := occupied_cells(pos, asset_id, scale.x, yaw_deg)
-	for record: FillObjectRecordScript in blueprint.objects:
-		if record.id == exclude_id:
+	for record: FillObjectRecord in blueprint.objects:
+		if record.id == exclude_id or record.id in ignored_ids:
 			continue
 		# Objects on other floors share cells in plan and never conflict.
 		if not is_equal_approx(record.anchor_pos().y, pos.y):
@@ -106,7 +111,15 @@ func is_collision_conflict(pos: Vector3, blueprint: RefCounted, asset_id: String
 	return false
 
 
-func is_valid_transform(pos: Vector3, rot: Vector3, scale: Vector3, asset_id: StringName, blueprint: RefCounted, exclude_id: String = "") -> bool:
+func is_valid_transform(
+	pos: Vector3,
+	rot: Vector3,
+	scale: Vector3,
+	asset_id: StringName,
+	blueprint: RefCounted,
+	exclude_id: String = "",
+	ignored_ids: Array = [],
+) -> bool:
 	var asset := WorldAssetCatalog.get_asset(asset_id)
 	if asset != null:
 		if not asset.is_scale_allowed(scale.x) or not is_equal_approx(scale.x, scale.y) or not is_equal_approx(scale.x, scale.z):
@@ -116,14 +129,15 @@ func is_valid_transform(pos: Vector3, rot: Vector3, scale: Vector3, asset_id: St
 			if not is_zero_approx(value) and not asset.is_rotation_axis_allowed(axis):
 				return false
 	return is_in_bounds(pos, blueprint, asset_id, scale, rot.y) \
-		and not is_collision_conflict(pos, blueprint, asset_id, scale, exclude_id, rot.y)
+		and not is_collision_conflict(pos, blueprint, asset_id, scale, exclude_id, rot.y, ignored_ids)
 
 
 ## Computes the current ghost state for placement feedback.
-func compute_ghost_state(pos: Vector3, blueprint: RefCounted, asset_id: StringName, yaw_deg: float = 0.0) -> int:
-	if not is_in_bounds(pos, blueprint, asset_id, Vector3.ONE, yaw_deg):
+func compute_ghost_state(pos: Vector3, blueprint: RefCounted, asset_id: StringName, scale: float = 1.0, yaw_deg: float = 0.0) -> int:
+	var uniform_scale := Vector3.ONE * scale
+	if not is_in_bounds(pos, blueprint, asset_id, uniform_scale, yaw_deg):
 		return GhostState.OUT_OF_BOUNDS
-	if is_collision_conflict(pos, blueprint, asset_id, Vector3.ONE, "", yaw_deg):
+	if is_collision_conflict(pos, blueprint, asset_id, uniform_scale, "", yaw_deg):
 		return GhostState.INTERSECTION
 	return GhostState.VALID
 
@@ -134,7 +148,7 @@ func compute_ghost_state(pos: Vector3, blueprint: RefCounted, asset_id: StringNa
 func pick_objects_at(world_pos: Vector3, blueprint: RefCounted) -> Array[String]:
 	var candidates: Array[Dictionary] = []
 	var pointer_cell := Vector2i(int(floor(world_pos.x)), int(floor(world_pos.z)))
-	for record: FillObjectRecordScript in blueprint.objects:
+	for record: FillObjectRecord in blueprint.objects:
 		var anchor := record.anchor_pos()
 		var cells := occupied_cells(anchor, record.asset_id, record.scale.x, record.rot.y)
 		var distance := Vector2(record.pos.x - world_pos.x, record.pos.z - world_pos.z).length()
@@ -172,10 +186,10 @@ func pick_object_at(world_pos: Vector3, blueprint: RefCounted) -> String:
 	return ids[idx]
 
 
-static func find_record_in(object_id: String, blueprint: RefCounted) -> FillObjectRecordScript:
+static func find_record_in(object_id: String, blueprint: RefCounted) -> FillObjectRecord:
 	if object_id.is_empty():
 		return null
-	for record: FillObjectRecordScript in blueprint.objects:
+	for record: FillObjectRecord in blueprint.objects:
 		if record.id == object_id:
 			return record
 	return null

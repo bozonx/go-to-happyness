@@ -7,6 +7,7 @@ extends VBoxContainer
 
 signal property_committed(property_name: StringName, value: Variant)
 signal property_reset_requested(property_name: StringName)
+signal reference_pick_requested(property_name: StringName, reference_type: StringName)
 
 ## Числовое поле правится непрерывно — стрелками, а позже и протягиванием
 ## мышью. Коммит по каждому промежуточному значению превратил бы одно авторское
@@ -16,24 +17,30 @@ const COMMIT_DEBOUNCE_SEC := 0.35
 
 var _collapsed_sections: Dictionary[StringName, bool] = {}
 var _pending_values: Dictionary = {}
-## Растёт на каждую правку и на каждый немедленный коммит: отложенный вызов,
-## чей токен устарел, обязан промолчать.
-var _debounce_token := 0
+## Debounce is per field. A single global token made editing field B cancel the
+## pending commit of field A and left A stranded in `_pending_values`.
+var _field_tokens: Dictionary[StringName, int] = {}
+## A rebuilt inspector belongs to another selection/tool state. Timers created by
+## the previous generation must never write their stale value into the new one.
+var _fields_generation := 0
 
 
 ## Фиксирует значение сейчас, отменяя отложенный коммит того же поля.
 func commit_now(property_name: StringName, value: Variant) -> void:
 	_pending_values.erase(property_name)
-	_debounce_token += 1
+	_field_tokens[property_name] = int(_field_tokens.get(property_name, 0)) + 1
 	property_committed.emit(property_name, value)
 
 
 func queue_commit(property_name: StringName, value: Variant) -> void:
 	_pending_values[property_name] = value
-	_debounce_token += 1
-	var token := _debounce_token
+	var token := int(_field_tokens.get(property_name, 0)) + 1
+	_field_tokens[property_name] = token
+	var generation := _fields_generation
 	await get_tree().create_timer(COMMIT_DEBOUNCE_SEC).timeout
-	if token != _debounce_token or not _pending_values.has(property_name):
+	if generation != _fields_generation \
+			or token != int(_field_tokens.get(property_name, 0)) \
+			or not _pending_values.has(property_name):
 		return
 	var pending: Variant = _pending_values[property_name]
 	_pending_values.erase(property_name)
@@ -41,6 +48,11 @@ func queue_commit(property_name: StringName, value: Variant) -> void:
 
 
 func set_fields(properties: Array[EntityPropertyDef], values: Dictionary, show_sections := true, editable := true) -> void:
+	# Selection and tool changes rebuild the controls. Cancel old timers instead
+	# of letting them target whichever record is selected after the rebuild.
+	_fields_generation += 1
+	_pending_values.clear()
+	_field_tokens.clear()
 	for child in get_children():
 		remove_child(child)
 		child.queue_free()
@@ -89,12 +101,15 @@ func _set_heading_text(heading: Button, section: StringName, collapsed: bool) ->
 
 func _build_property_row(property: EntityPropertyDef, value: Variant, editable: bool) -> Control:
 	var row := VBoxContainer.new()
+	var field_editable := editable and property.editable
+	if not property.unavailable_reason.is_empty():
+		row.tooltip_text = property.unavailable_reason
 	var heading := HBoxContainer.new()
 	var label := Label.new()
 	label.text = property.label + (" · " + property.unit if not property.unit.is_empty() else "")
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	heading.add_child(label)
-	if editable and property.default != null and not _values_equivalent(value, property.default):
+	if field_editable and property.default != null and not _values_equivalent(value, property.default):
 		var reset := Button.new()
 		reset.flat = true
 		reset.text = "↺"
@@ -103,7 +118,7 @@ func _build_property_row(property: EntityPropertyDef, value: Variant, editable: 
 		heading.add_child(reset)
 	row.add_child(heading)
 	var control := _build_control(property, value)
-	_set_editable(control, editable)
+	_set_editable(control, field_editable)
 	row.add_child(control)
 	return row
 
@@ -154,6 +169,17 @@ func _build_control(property: EntityPropertyDef, value: Variant) -> Control:
 			spin.get_line_edit().focus_exited.connect(commit)
 			return spin
 		EntityPropertyDef.TYPE_ENUM:
+			if property.options.is_empty():
+				var fallback := LineEdit.new()
+				fallback.text = String(value) if value != null else ""
+				fallback.placeholder_text = "значение из словаря «%s»" % property.options_dictionary \
+					if property.options_dictionary != &"" else "значение"
+				fallback.tooltip_text = "Словарь вариантов не загружен; идентификатор можно ввести вручную."
+				fallback.text_submitted.connect(func(text: String) -> void:
+					property_committed.emit(property.name, text))
+				fallback.focus_exited.connect(func() -> void:
+					property_committed.emit(property.name, fallback.text))
+				return fallback
 			var option := OptionButton.new()
 			for entry: Variant in property.options:
 				option.add_item(String(entry))
@@ -205,12 +231,22 @@ func _build_control(property: EntityPropertyDef, value: Variant) -> Control:
 			return _flags_control(property, value)
 		_:
 			if property.is_reference():
+				var row := HBoxContainer.new()
 				var reference := LineEdit.new()
 				reference.placeholder_text = "идентификатор"
 				reference.text = String(value)
+				reference.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 				reference.text_submitted.connect(func(text: String) -> void: property_committed.emit(property.name, text))
 				reference.focus_exited.connect(func() -> void: property_committed.emit(property.name, reference.text))
-				return reference
+				row.add_child(reference)
+				if property.pick_on_map:
+					var pick := Button.new()
+					pick.text = "◎"
+					pick.tooltip_text = "Указать ссылку кликом в редакторе"
+					pick.pressed.connect(func() -> void:
+						reference_pick_requested.emit(property.name, property.type))
+					row.add_child(pick)
+				return row
 			var unsupported := Label.new()
 			unsupported.text = "Тип «%s» пока не поддерживается" % property.type
 			unsupported.modulate = Color(0.75, 0.65, 0.35)

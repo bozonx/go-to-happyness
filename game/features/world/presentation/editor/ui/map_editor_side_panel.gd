@@ -21,8 +21,10 @@ extends PanelContainer
 ## able to make the editor taller than the window it is running in.
 
 signal entry_activated(index: int)
+signal entries_selection_changed(indices: Array[int])
 signal property_committed(property_name: StringName, value: Variant)
 signal property_reset_requested(property_name: StringName)
+signal reference_pick_requested(property_name: StringName, reference_type: StringName)
 
 @onready var _map_title: Label = $Margin/Scroll/Rows/MapTitleRow/MapTitle
 @onready var _map_info: Label = $Margin/Scroll/Rows/MapInfo
@@ -51,7 +53,10 @@ func _ready() -> void:
 		property_committed.emit(property_name, value))
 	_inspector_fields.property_reset_requested.connect(func(property_name: StringName) -> void:
 		property_reset_requested.emit(property_name))
+	_inspector_fields.reference_pick_requested.connect(func(property_name: StringName, reference_type: StringName) -> void:
+		reference_pick_requested.emit(property_name, reference_type))
 	_list.item_selected.connect(_on_list_item_selected)
+	_list.multi_selected.connect(_on_list_multi_selected)
 	_list.item_activated.connect(_on_list_item_selected)
 	_list_search.text_changed.connect(func(_text: String) -> void: _rebuild_filtered_entries())
 
@@ -76,10 +81,20 @@ func set_property_fields(properties: Array[EntityPropertyDef], values: Dictionar
 	_update_section_visibilities()
 
 
-func set_entries(title: String, entries: Array[String], empty_hint := "", selected_index := -1, filters: Array[String] = []) -> void:
+func set_entries(
+	title: String,
+	entries: Array[String],
+	empty_hint := "",
+	selected_index := -1,
+	filters: Array[String] = [],
+	selected_indices: Array = [],
+	allow_multiple := false,
+) -> void:
 	_list_title.text = title
 	_all_entries = entries.duplicate()
 	_selected_source_index = selected_index
+	_list.select_mode = ItemList.SELECT_MULTI if allow_multiple else ItemList.SELECT_SINGLE
+	_list.set_meta("selected_indices", selected_indices)
 	_filters = filters.duplicate()
 	if not _filters.has(_active_filter):
 		_active_filter = ""
@@ -103,7 +118,8 @@ func _rebuild_filtered_entries() -> void:
 			continue
 		var visible_index := _list.add_item(entry)
 		_source_indices.append(source_index)
-		if source_index == _selected_source_index:
+		var selected_indices: Array = _list.get_meta("selected_indices", [])
+		if source_index == _selected_source_index or source_index in selected_indices:
 			_list.select(visible_index)
 	if _all_entries.is_empty():
 		var hint := String(_list_search.get_meta("empty_hint", ""))
@@ -134,7 +150,18 @@ func _rebuild_filter_buttons() -> void:
 
 func _on_list_item_selected(index: int) -> void:
 	if index >= 0 and index < _source_indices.size():
-		entry_activated.emit(_source_indices[index])
+		if _list.select_mode == ItemList.SELECT_SINGLE:
+			entry_activated.emit(_source_indices[index])
+
+
+func _on_list_multi_selected(_index: int, _selected: bool) -> void:
+	if _list.select_mode != ItemList.SELECT_MULTI:
+		return
+	var indices: Array[int] = []
+	for visible_index: int in _list.get_selected_items():
+		if visible_index >= 0 and visible_index < _source_indices.size():
+			indices.append(_source_indices[visible_index])
+	entries_selection_changed.emit(indices)
 
 
 func _update_section_visibilities() -> void:

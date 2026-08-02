@@ -75,7 +75,10 @@ func publish_terrain_navigation() -> void:
 	var world_setup: WorldSetup = presentation_runtime.world_setup_getter.call()
 	if nav_grid == null or world_setup == null:
 		return
-	world_session.publish_navigation()
+	# WorldSession.build() already publishes the terrain once. Reconfiguring here
+	# doubled the most expensive startup pass and incremented topology twice.
+	if world_session.terrain_navigation_publisher.field == null:
+		world_session.publish_navigation()
 	_publish_overlay_navigation(nav_grid)
 
 

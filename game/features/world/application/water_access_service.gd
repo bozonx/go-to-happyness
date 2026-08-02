@@ -40,6 +40,7 @@ var nav_grid: NavGrid = null
 var _cached: Array[Vector3] = []
 var _cached_water_revision := -1
 var _cached_terrain_revision := -1
+var _cached_nav_revision := -1
 
 
 func configure(next_water: WaterGrid, next_terrain: TerrainGrid, next_nav_grid: NavGrid = null) -> void:
@@ -52,6 +53,7 @@ func configure(next_water: WaterGrid, next_terrain: TerrainGrid, next_nav_grid: 
 func invalidate() -> void:
 	_cached_water_revision = -1
 	_cached_terrain_revision = -1
+	_cached_nav_revision = -1
 	_cached.clear()
 
 
@@ -61,10 +63,16 @@ func invalidate() -> void:
 func source_positions() -> Array[Vector3]:
 	if water == null or terrain == null:
 		return []
-	if _cached_water_revision == water.revision() and _cached_terrain_revision == terrain.revision():
+	var nav_revision := nav_grid.revision() if nav_grid != null else -1
+	if (
+		_cached_water_revision == water.revision()
+		and _cached_terrain_revision == terrain.revision()
+		and _cached_nav_revision == nav_revision
+	):
 		return _cached
 	_cached_water_revision = water.revision()
 	_cached_terrain_revision = terrain.revision()
+	_cached_nav_revision = nav_revision
 	_cached = _collect()
 	return _cached
 
@@ -113,6 +121,8 @@ func _collect() -> Array[Vector3]:
 ## frozen cell is a floor over water they cannot reach through it.
 func _is_bank_of_drinkable_water(cell: Vector2i) -> bool:
 	if terrain.is_hole(cell) or water.is_wet(terrain, cell):
+		return false
+	if nav_grid != null and not nav_grid.is_walkable(cell):
 		return false
 	for offset: Vector2i in WaterGrid.ORTHOGONAL_OFFSETS:
 		var neighbour := cell + offset

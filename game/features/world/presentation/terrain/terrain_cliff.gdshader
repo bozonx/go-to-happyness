@@ -15,6 +15,9 @@ render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 
 uniform sampler2DArray surface_textures : source_color, filter_linear_mipmap, repeat_enable;
 uniform float tile_size = 2.0;
+// The mesher writes quad sizes in CELLS, so the four edge-mask bits always own
+// the integer part of UV2.x whatever board the map uses. This converts back.
+uniform float cell_size = 1.0;
 // Faces are the same textures seen edge-on; a touch darker reads as shadowed rock
 // without a second texture set.
 uniform float face_shade = 0.86;
@@ -49,7 +52,7 @@ void vertex() {
 
 void fragment() {
 	float edge_mask = floor(UV2.x + 0.0001);
-	vec2 dimensions = vec2(fract(UV2.x) * 100.0, UV2.y);
+	vec2 dimensions = vec2(fract(UV2.x) * 100.0, UV2.y) * cell_size;
 	vec4 edge_enabled = vec4(
 		mod(edge_mask, 2.0), mod(floor(edge_mask / 2.0), 2.0),
 		mod(floor(edge_mask / 4.0), 2.0), mod(floor(edge_mask / 8.0), 2.0)

@@ -13,4 +13,22 @@ script = ExtResource("2_terrain")
 [node name="Water" type="Node3D" parent="."]
 script = ExtResource("3_water")
 
+[node name="WorldBoundary" type="Node3D" parent="."]
+
+[node name="North" type="StaticBody3D" parent="WorldBoundary"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WorldBoundary/North"]
+
+[node name="South" type="StaticBody3D" parent="WorldBoundary"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WorldBoundary/South"]
+
+[node name="East" type="StaticBody3D" parent="WorldBoundary"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WorldBoundary/East"]
+
+[node name="West" type="StaticBody3D" parent="WorldBoundary"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WorldBoundary/West"]
+
 [node name="LandscapeObjects" type="Node3D" parent="."]

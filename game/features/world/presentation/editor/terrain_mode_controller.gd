@@ -15,6 +15,8 @@ extends MapEditorMode
 const OPTION_MODE := &"edit_mode"
 const OPTION_BRUSH_UP := &"brush_up"
 const OPTION_BRUSH_DOWN := &"brush_down"
+const OPTION_BRUSH_SHAPE := &"brush_shape"
+const OPTION_BRUSH_FALLOFF := &"brush_falloff"
 const OPTION_RAMP_CLASS := &"ramp_class"
 const OPTION_TERRAIN_SLOPE := &"terrain_slope"
 const OPTION_RAMP_GENTLER := &"ramp_gentler"
@@ -252,6 +254,16 @@ func _handle_key(event: InputEventKey) -> bool:
 				return false
 			context.brush.cycle_terrain_slope_class()
 			context.set_status_message("Откос: %s" % _terrain_slope_label())
+		KEY_B:
+			if _tool == TOOL_RAMP:
+				return false
+			context.brush.cycle_brush_shape()
+			context.set_status_message("Форма кисти: %s" % context.brush.brush_shape_name())
+		KEY_N:
+			if _tool != TOOL_SCULPT:
+				return false
+			context.brush.cycle_brush_falloff()
+			context.set_status_message("Спад кисти: %s" % context.brush.brush_falloff_name())
 		_:
 			return false
 	notify_ui_changed()
@@ -318,6 +330,9 @@ func tool_options() -> Array:
 		options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (context.brush.brush_size * 2 - 1), &"brush", false, true))
 		options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", &"brush"))
 		options.append(ToolOption.of(OPTION_BRUSH_UP, "+", &"brush"))
+		options.append(ToolOption.of(OPTION_BRUSH_SHAPE, "Форма: %s" % context.brush.brush_shape_name()))
+	if _tool == TOOL_SCULPT:
+		options.append(ToolOption.of(OPTION_BRUSH_FALLOFF, "Спад: %s" % context.brush.brush_falloff_name()))
 	if _tool == TOOL_HOLE:
 		options.append(ToolOption.of(OPTION_HOLE_MODE, "Режим: %s" % ("вырез" if _hole_cutting else "засыпка")))
 	if _tool == TOOL_RAMP:
@@ -347,6 +362,12 @@ func activate_option(option_id: StringName) -> void:
 			_reshape_hovered_ramp(false)
 		OPTION_HOLE_MODE:
 			_hole_cutting = not _hole_cutting
+		OPTION_BRUSH_SHAPE:
+			context.brush.cycle_brush_shape()
+			context.set_status_message("Форма кисти: %s" % context.brush.brush_shape_name())
+		OPTION_BRUSH_FALLOFF:
+			context.brush.cycle_brush_falloff()
+			context.set_status_message("Спад кисти: %s" % context.brush.brush_falloff_name())
 	notify_ui_changed()
 
 

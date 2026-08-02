@@ -273,6 +273,10 @@ func _setup_building_services() -> void:
 	game.building_research_service.configure(game.settlement)
 	game.village_territory_service = VillageTerritoryService.new()
 	game.village_territory_service.configure(game.building_registry, int(game.settlement.era))
+	# The ground under a footprint is pinned for as long as the registry holds it
+	# (grid_terrain_system.md §4.4). The cascade has always refused to move an
+	# anchored column; until now nothing wrote one.
+	game.terrain_anchor_service = TerrainAnchorService.new()
 	game.sawmills = SawmillService.new()
 	game.sawmills.configure(game.sawmill_stocks, game.sawmill_positions, SettlementConstants.SAWMILL_PROCESS_DURATION, game.cell_from_position)
 
@@ -583,6 +587,11 @@ func _setup_citizen_registration_and_school() -> void:
 	placement_port.tree_positions = game.tree_positions
 	placement_port.terrain_height_at = game.terrain_height_at
 	placement_port.max_build_slope = SettlementConstants.MAX_BUILD_SLOPE
+	# WorldSetup is built in phase 6, after this application service. The launch
+	# document already owns the exact same grids, so placement can enforce board
+	# and water constraints from its first call without depending on presentation.
+	placement_port.terrain_grid = game.launch_config.map_document.terrain
+	placement_port.water_grid = game.launch_config.map_document.water
 	game.building_placement_service.configure(placement_port)
 
 
@@ -818,6 +827,9 @@ func _setup_controllers_and_world() -> void:
 	game.add_child(game.survival_event_controller)
 	game.survival_event_controller.setup(game)
 	game.create_world()
+	# WorldSetup and its TerrainService only exist after create_world(). Anchors
+	# subscribe here so every subsequently registered footprint pins its ground.
+	game.terrain_anchor_service.configure(game.world_setup.terrain_service, game.building_registry)
 	if game.ui_manager != null:
 		game.ui_manager.create_interface()
 	game.ambient_spawner.create_forest()
@@ -838,5 +850,3 @@ func _setup_citizens_and_ai() -> void:
 	game.update_workers()
 	game.update_interface("Build a simple store, then gather materials for the first campfire and tents.")
 	game.player_controller.enter_first_person(game.hero_citizen, "Hero view enabled.")
-
-

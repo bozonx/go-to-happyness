@@ -16,6 +16,7 @@ const INSPECTOR_CELL := &"editor_cell"
 const INSPECTOR_OFFSET := &"editor_offset"
 const INSPECTOR_YAW := &"editor_yaw"
 const INSPECTOR_SCALE := &"editor_scale"
+const INSPECTOR_INITIAL_STATE := &"editor_initial_state"
 const TRANSFORM_PROPERTIES: Array[StringName] = [INSPECTOR_CELL, INSPECTOR_OFFSET, INSPECTOR_YAW, INSPECTOR_SCALE]
 ## Действие «заменить выделенное на выбранный в палитре архетип».
 const OPTION_REPLACE := &"fill_replace"
@@ -25,9 +26,11 @@ var _archetype_id: StringName = &""
 ## свойства, поворот, масштаб и смещение — поэтому отдельное дублирование не
 ## нужно (`map_fill_mode.md` §9.1).
 var _brush_props: Dictionary = {}
+var _brush_initial_state: StringName = EntityStateSet.FOLLOW_SEASON
 var _brush_yaw_degrees := 0.0
 var _brush_scale := 1.0
 var _brush_offset := Vector3.ZERO
+var _pending_reference_property: StringName = &""
 var _selected_id: StringName = &""
 var _additional_selected: Array[StringName] = []
 var _root: Node3D = null
@@ -105,6 +108,10 @@ func handle_input(event: InputEvent) -> bool:
 				context.set_status_message("На карте объект поворачивается только вокруг Y: C или R.", true)
 				return true
 			KEY_ESCAPE:
+				if _pending_reference_property != &"":
+					_pending_reference_property = &""
+					context.set_status_message("Выбор ссылки отменён.")
+					return true
 				return _cancel_current_action()
 	return false
 
@@ -133,6 +140,16 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 		return false
 	if event.shift_pressed:
 		return pick_from_cell()
+	if _pending_reference_property != &"":
+		var reference_target := _entity_at(cell)
+		if reference_target == &"":
+			context.set_status_message("Для ссылки щёлкните по объекту наполнения.", true)
+			return true
+		var property_name := _pending_reference_property
+		_pending_reference_property = &""
+		if _apply_value(property_name, String(reference_target), false):
+			context.set_status_message("Ссылка установлена на %s." % reference_target)
+		return true
 	var found := _entity_at(cell)
 	if found != &"":
 		_select(found, event.ctrl_pressed)
@@ -199,6 +216,7 @@ func _cancel_current_action() -> bool:
 		_brush_yaw_degrees = 0.0
 		_brush_scale = 1.0
 		_brush_offset = Vector3.ZERO
+		_brush_initial_state = EntityStateSet.FOLLOW_SEASON
 		_hide_ghost()
 		notify_ui_changed()
 		context.set_status_message("Кисть наполнения сброшена.")
@@ -209,15 +227,22 @@ func _cancel_current_action() -> bool:
 ## Сколько целых клеток занимает архетип с учётом масштаба и поворота.
 func cell_span(archetype_id: StringName, scale: float = 1.0, yaw_deg: float = 0.0) -> Vector2i:
 	var asset := EntityArchetypeCatalog.asset_of(archetype_id)
-	var size := asset.placement_policy().footprint_cells if asset != null else Vector2i.ONE
-	return EditorFillConventions.cell_span(size, scale, yaw_deg)
+	return asset.placement_cell_span(scale, yaw_deg) if asset != null else Vector2i.ONE
 
 
 ## Прямоугольник клеток, который занимает запись. Считается от якоря
 ## (`position - offset`): авторское смещение подстраивает модель внутри своих
 ## клеток и занятость не меняет.
 func occupied_cells(record: MapEntityRecord) -> Rect2i:
-	return Rect2i(record.cell(context.terrain), cell_span(record.archetype_id, record.scale, record.yaw_degrees))
+	var span := cell_span(record.archetype_id, record.scale, record.yaw_degrees)
+	return Rect2i(_base_cell(record, span), span)
+
+
+func _base_cell(record: MapEntityRecord, span: Vector2i = Vector2i.ZERO) -> Vector2i:
+	if span == Vector2i.ZERO:
+		span = cell_span(record.archetype_id, record.scale, record.yaw_degrees)
+	var anchor := record.anchor_position()
+	return EditorFillConventions.base_cell_at(anchor.x, anchor.z, span, context.terrain.cell_size)
 
 
 ## Клетки, которые займёт кисть, если поставить её от клетки `cell`.
@@ -227,9 +252,26 @@ func _brush_cells(cell: Vector2i) -> Rect2i:
 
 ## Занятость по клеткам: две записи не делят клетку. Проверяется до постановки,
 ## а не по факту — иначе «занято» ничего не значит.
-func _cells_free(cells: Rect2i, exclude_id: StringName = &"") -> bool:
+func _cells_free(
+	cells: Rect2i,
+	exclude_id: StringName = &"",
+	candidate_archetype_id: StringName = _archetype_id,
+) -> bool:
+	return _cells_free_ignoring(cells, [exclude_id] if exclude_id != &"" else [], candidate_archetype_id)
+
+
+func _cells_free_ignoring(
+	cells: Rect2i,
+	ignored_ids: Array,
+	candidate_archetype_id: StringName,
+) -> bool:
+	var candidate_asset := EntityArchetypeCatalog.asset_of(candidate_archetype_id)
+	if not EditorFillConventions.asset_claims_cells(candidate_asset):
+		return true
 	for record: MapEntityRecord in context.document.entities.entities:
-		if record.id == exclude_id:
+		if record.id in ignored_ids:
+			continue
+		if not EditorFillConventions.asset_claims_cells(EntityArchetypeCatalog.asset_of(record.archetype_id)):
 			continue
 		if EditorFillConventions.rects_overlap(cells, occupied_cells(record)):
 			return false
@@ -271,12 +313,12 @@ func _place(cell: Vector2i) -> void:
 	record.archetype_id = archetype.id
 	record.offset = _brush_offset
 	record.position = _anchor_position(cells, archetype) + _brush_offset
-	record.initial_state = archetype.states.default_state
+	record.initial_state = _brush_initial_state
 	record.activity = archetype.activity
 	record.props = _brush_props.duplicate(true)
 	record.yaw_degrees = _brush_yaw_degrees
 	record.scale = _brush_scale
-	_warnings_by_entity[record.id] = _placement_warnings(cell, archetype)
+	_warnings_by_entity[record.id] = _placement_warnings_for_cells(cells, archetype)
 	context.document.entities.entities.append(record)
 	_select(record.id, false)
 	_commit(before, "размещение %s" % archetype.name)
@@ -317,7 +359,7 @@ func _surface_position(cell: Vector2i, archetype: EntityArchetype) -> Vector3:
 
 
 func _surface_kind(cell: Vector2i) -> StringName:
-	if not context.water.has_water(cell):
+	if not context.water.is_wet(context.terrain, cell):
 		return AssetPlacementPolicy.SURFACE_GROUND
 	if context.water.is_lava(cell):
 		return AssetPlacementPolicy.SURFACE_LAVA
@@ -332,12 +374,22 @@ func _placement_warnings(cell: Vector2i, archetype: EntityArchetype) -> Array[St
 	var asset := EntityArchetypeCatalog.asset_of(archetype.id)
 	if asset == null:
 		return ["архетип не нашёл свой ассет: будет показана заглушка"]
-	var submerged := context.water.has_water(cell) and context.water.depth_steps_at(context.terrain, cell) > 0
+	var submerged := context.water.is_wet(context.terrain, cell) and context.water.depth_steps_at(context.terrain, cell) > 0
 	return asset.placement_policy().warnings_for({
 		"surface": _surface_kind(cell),
 		"slope_class": context.terrain.slope_class_at(cell),
 		"submerged": submerged,
 	})
+
+
+func _placement_warnings_for_cells(cells: Rect2i, archetype: EntityArchetype) -> Array[String]:
+	var warnings: Array[String] = []
+	for x in range(cells.position.x, cells.end.x):
+		for z in range(cells.position.y, cells.end.y):
+			for warning: String in _placement_warnings(Vector2i(x, z), archetype):
+				if warning not in warnings:
+					warnings.append(warning)
+	return warnings
 
 
 func _forget(entity_id: StringName) -> void:
@@ -370,6 +422,7 @@ func _pick_archetype(cell: Vector2i) -> bool:
 	_brush_yaw_degrees = record.yaw_degrees
 	_brush_scale = record.scale
 	_brush_offset = record.offset
+	_brush_initial_state = record.initial_state
 	var archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
 	context.set_status_message("Пипетка: «%s» со всеми свойствами. Следующий клик поставит такой же." % (archetype.name if archetype != null else String(_archetype_id)))
 	notify_ui_changed()
@@ -379,7 +432,7 @@ func _pick_archetype(cell: Vector2i) -> bool:
 func _entity_at(cell: Vector2i) -> StringName:
 	for index in range(context.document.entities.entities.size() - 1, -1, -1):
 		var record: MapEntityRecord = context.document.entities.entities[index]
-		if record.cell(context.terrain) == cell:
+		if occupied_cells(record).has_point(cell):
 			return record.id
 	return &""
 
@@ -401,13 +454,45 @@ func _delete_selected() -> bool:
 func _rotate_selection(direction: int) -> bool:
 	var selected := _selected_ids()
 	if selected.is_empty():
-		return false
+		var asset := EntityArchetypeCatalog.asset_of(_archetype_id)
+		if asset == null:
+			return false
+		if not asset.is_rotation_axis_allowed("y"):
+			context.set_status_message("Этот ассет нельзя вращать вокруг Y.", true)
+			return true
+		_brush_yaw_degrees = EditorFillConventions.rotated_by(_brush_yaw_degrees, direction)
+		notify_ui_changed()
+		_refresh_ghost()
+		return true
+	var proposed_cells: Dictionary = {}
+	var proposed_yaws: Dictionary = {}
+	for entity_id: StringName in selected:
+		var record := context.document.entities.by_id(entity_id)
+		if record == null:
+			continue
+		var yaw := EditorFillConventions.rotated_by(record.yaw_degrees, direction)
+		var asset := EntityArchetypeCatalog.asset_of(record.archetype_id)
+		if asset != null and not is_zero_approx(yaw) and not asset.is_rotation_axis_allowed("y"):
+			context.set_status_message("Поворот не применён: один из ассетов запрещает ось Y.", true)
+			return true
+		var cells := Rect2i(_base_cell(record), cell_span(record.archetype_id, record.scale, yaw))
+		if not _cells_placeable(cells) or not _cells_free_ignoring(cells, selected, record.archetype_id):
+			context.set_status_message("Поворот не применён: итоговые клетки заняты или вне карты.", true)
+			return true
+		proposed_cells[entity_id] = cells
+		proposed_yaws[entity_id] = yaw
+	if not _proposed_selection_is_free(proposed_cells):
+		context.set_status_message("Поворот не применён: выбранные объекты пересекутся.", true)
+		return true
 	var before := context.document.entities.to_json()
 	for entity_id: StringName in selected:
 		var record := context.document.entities.by_id(entity_id)
-		if record != null:
-			record.yaw_degrees = EditorFillConventions.rotated_by(record.yaw_degrees, direction)
-	_commit(before, "поворот сущности")
+		var archetype := EntityArchetypeCatalog.get_archetype(record.archetype_id) if record != null else null
+		if record == null or archetype == null:
+			continue
+		record.yaw_degrees = proposed_yaws[entity_id]
+		record.position = _anchor_position(proposed_cells[entity_id], archetype) + record.offset
+	_commit(before, "поворот %d объект(а)" % selected.size())
 	return true
 
 
@@ -439,10 +524,15 @@ func rebuild_views() -> void:
 			continue
 		child.queue_free()
 	_views.clear()
+	_warnings_by_entity.clear()
 	var selected := _selected_ids()
 	for record: MapEntityRecord in context.document.entities.entities:
+		var archetype := EntityArchetypeCatalog.get_archetype(record.archetype_id)
+		if archetype != null:
+			_warnings_by_entity[record.id] = _placement_warnings_for_cells(occupied_cells(record), archetype)
 		var view := _make_view(record.archetype_id)
 		_root.add_child(view)
+		_apply_record_appearance(view, record)
 		_apply_transform(view, record)
 		if record.id in selected:
 			_add_selection_ring(view)
@@ -482,6 +572,23 @@ func _apply_transform(view: Node3D, record: MapEntityRecord) -> void:
 	view.scale = Vector3.ONE * record.scale
 
 
+func _apply_record_appearance(view: Node3D, record: MapEntityRecord) -> void:
+	var archetype := EntityArchetypeCatalog.get_archetype(record.archetype_id)
+	var asset := EntityArchetypeCatalog.asset_of(record.archetype_id)
+	if archetype != null and view.has_method("apply_entity_props"):
+		view.call("apply_entity_props", archetype.resolved_properties(record.props))
+	if archetype == null or asset == null or not view.has_method("apply_decor_properties"):
+		return
+	var appearance := asset.default_appearance()
+	var state := archetype.states.get_state(record.initial_state)
+	if state != null and state.visual_kind == EntityStateDef.VISUAL_VARIANT:
+		appearance.merge(asset.state_appearance(state.visual_value), true)
+	view.call("apply_decor_properties", appearance)
+	# DecorObjectController applies asset defaults in `_ready`; repeat after the
+	# node enters the tree so the authored initial state remains visible.
+	view.call_deferred("apply_decor_properties", appearance)
+
+
 func _world_position(local_position: Vector3) -> Vector3:
 	var world_position := local_position
 	if context != null and context.terrain != null:
@@ -516,13 +623,23 @@ func _refresh_ghost() -> void:
 		_ghost_archetype_id = archetype.id
 		_root.add_child(_ghost)
 		EditorFillConventions.apply_preview_look(_ghost, _ghost_material_resource())
+	if _ghost.has_method("apply_entity_props"):
+		_ghost.call("apply_entity_props", archetype.resolved_properties(_brush_props))
+	if _ghost.has_method("apply_decor_properties"):
+		var asset := EntityArchetypeCatalog.asset_of(archetype.id)
+		if asset != null:
+			var appearance := asset.default_appearance()
+			var state := archetype.states.get_state(_brush_initial_state)
+			if state != null and state.visual_kind == EntityStateDef.VISUAL_VARIANT:
+				appearance.merge(asset.state_appearance(state.visual_value), true)
+			_ghost.call("apply_decor_properties", appearance)
 	_ghost.visible = true
 	var cells := _brush_cells(cell)
 	_ghost.position = _world_position(_anchor_position(cells, archetype) + _brush_offset)
 	_ghost.rotation_degrees.y = _brush_yaw_degrees
 	_ghost.scale = Vector3.ONE * _brush_scale
 	var blocked := not _cells_placeable(cells) or not _cells_free(cells)
-	var warned := not _placement_warnings(cell, archetype).is_empty()
+	var warned := not _placement_warnings_for_cells(cells, archetype).is_empty()
 	_ghost_material_resource().albedo_color = EditorFillConventions.COLOR_GHOST_BLOCKED if blocked \
 		else (EditorFillConventions.COLOR_GHOST_WARNING if warned else EditorFillConventions.COLOR_GHOST_VALID)
 
@@ -546,6 +663,14 @@ func catalog_scope() -> StringName:
 	return WorldAssetDef.SCOPE_MAP
 
 
+func catalog_asset_enabled(asset_id: StringName) -> bool:
+	return _resolve_archetype_for_asset(asset_id) != null
+
+
+func catalog_asset_unavailable_reason(_asset_id: StringName) -> String:
+	return "Для размещения на карте ассету нужен EntityArchetype."
+
+
 ## Палитра занята каталогом ассетов; записи остаются для тестов и для случая,
 ## когда каталог недоступен.  Инструментов в списке нет намеренно: жест один.
 func palette_entries() -> Array:
@@ -566,11 +691,14 @@ func selected_palette_entry() -> StringName:
 ## (`map_fill_mode.md` §8.3). Удаление рвёт их молча.
 func tool_options() -> Array:
 	var selected := _selected_ids()
-	if selected.is_empty() or _archetype_id == &"":
+	if _archetype_id == &"":
 		return []
 	var archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
 	if archetype == null:
 		return []
+	var options: Array = []
+	if selected.is_empty():
+		return options
 	var replaceable := 0
 	for entity_id: StringName in selected:
 		var record := context.document.entities.by_id(entity_id)
@@ -579,7 +707,8 @@ func tool_options() -> Array:
 	var label := "Заменить выделенное на «%s»" % archetype.name
 	if selected.size() > 1:
 		label = "Заменить %d объект(а) на «%s»" % [selected.size(), archetype.name]
-	return [ToolOption.of(OPTION_REPLACE, label, &"", false, replaceable == 0)]
+	options.append(ToolOption.of(OPTION_REPLACE, label, &"", false, replaceable == 0))
+	return options
 
 
 func activate_option(option_id: StringName) -> void:
@@ -610,6 +739,31 @@ func _replace_selection() -> void:
 		if not await context.confirm_action(question, "Замена архетипа"):
 			context.set_status_message("Замена отменена.")
 			return
+	var selected: Array[StringName] = []
+	for target: MapEntityRecord in targets:
+		selected.append(target.id)
+	var proposed_cells: Dictionary = {}
+	var proposed_scale: Dictionary = {}
+	for record: MapEntityRecord in targets:
+		var scale := EditorFillConventions.normalized_scale(
+			EntityArchetypeCatalog.asset_of(archetype.id), record.scale)
+		var cells := Rect2i(
+			_base_cell(record), cell_span(archetype.id, scale, record.yaw_degrees))
+		if not _cells_placeable(cells) or not _cells_free_ignoring(cells, selected, archetype.id):
+			context.set_status_message("Замена не применена: новому ассету не хватает свободных клеток.", true)
+			return
+		proposed_cells[record.id] = cells
+		proposed_scale[record.id] = scale
+	# `_proposed_selection_is_free` reads current archetypes, while replacement
+	# gives every target the same new one; compare the proposed rectangles here.
+	if EditorFillConventions.asset_claims_cells(EntityArchetypeCatalog.asset_of(archetype.id)):
+		var ids := proposed_cells.keys()
+		for left_index in ids.size():
+			for right_index in range(left_index + 1, ids.size()):
+				if EditorFillConventions.rects_overlap(
+						proposed_cells[ids[left_index]], proposed_cells[ids[right_index]]):
+					context.set_status_message("Замена не применена: новые размеры объектов пересекутся.", true)
+					return
 	var before := context.document.entities.to_json()
 	for record: MapEntityRecord in targets:
 		var kept: Dictionary = {}
@@ -618,13 +772,14 @@ func _replace_selection() -> void:
 				kept[key] = record.props[key]
 		record.archetype_id = archetype.id
 		record.props = kept
-		record.initial_state = archetype.states.default_state
+		record.initial_state = EntityStateSet.FOLLOW_SEASON
 		record.activity = archetype.activity
+		record.scale = proposed_scale[record.id]
 		# Новый архетип может занимать другое число клеток: пересаживаем запись на
 		# её собственные клетки, чтобы занятость осталась честной.
-		var cells := Rect2i(record.cell(context.terrain), cell_span(archetype.id, record.scale, record.yaw_degrees))
+		var cells: Rect2i = proposed_cells[record.id]
 		record.position = _anchor_position(cells, archetype) + record.offset
-		_warnings_by_entity[record.id] = _placement_warnings(cells.position, archetype)
+		_warnings_by_entity[record.id] = _placement_warnings_for_cells(cells, archetype)
 	_commit(before, "замена архетипа")
 	if lost_total > 0:
 		context.set_status_message("Заменено объектов: %d. Потеряно свойств: %d." % [targets.size(), lost_total])
@@ -641,6 +796,7 @@ func _lost_property_count(record: MapEntityRecord, archetype: EntityArchetype) -
 
 
 func select_palette_entry(entry_id: StringName) -> void:
+	var previous := _archetype_id
 	if EntityArchetypeCatalog.has_archetype(entry_id):
 		_archetype_id = entry_id
 	else:
@@ -654,6 +810,13 @@ func select_palette_entry(entry_id: StringName) -> void:
 			context.set_status_message("«%s» пока не описан архетипом и не может быть поставлен на карту." % asset_name, true)
 			return
 		_archetype_id = archetype.id
+	if _archetype_id != previous:
+		_brush_props.clear()
+		_brush_initial_state = EntityStateSet.FOLLOW_SEASON
+		_brush_yaw_degrees = 0.0
+		_brush_scale = EditorFillConventions.normalized_scale(
+			EntityArchetypeCatalog.asset_of(_archetype_id), 1.0)
+		_brush_offset = Vector3.ZERO
 	notify_ui_changed()
 
 
@@ -679,7 +842,7 @@ func inspector_lines() -> Array[String]:
 			"Свойства: %s" % (archetype.name if archetype != null else String(primary.archetype_id)),
 			"id: %s" % primary.id,
 			"архетип: %s" % primary.archetype_id,
-			"клетка: %d, %d" % [primary.cell(context.terrain).x, primary.cell(context.terrain).y],
+			"клетка: %d, %d" % [_base_cell(primary).x, _base_cell(primary).y],
 		]
 		var warnings: Array = _warnings_by_entity.get(primary.id, [])
 		for warning: Variant in warnings:
@@ -730,14 +893,42 @@ func inspector_properties() -> Array[EntityPropertyDef]:
 			return properties
 		var primary := context.document.entities.by_id(selected[0])
 		var archetype := EntityArchetypeCatalog.get_archetype(primary.archetype_id) if primary != null else null
+		var asset := EntityArchetypeCatalog.asset_of(primary.archetype_id) if primary != null else null
+		if asset != null and asset.scale_mode == WorldAssetDef.SCALE_LOCKED:
+			properties[3].editable = false
+			properties[3].unavailable_reason = "Масштаб зафиксирован в описании ассета."
 		if archetype != null:
+			properties.append(_initial_state_property(archetype))
 			properties.append_array(archetype.property_schema)
 		return properties
 
 	var active_archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
 	if active_archetype != null:
-		return active_archetype.property_schema
+		var active_asset := EntityArchetypeCatalog.asset_of(active_archetype.id)
+		var scale_editable := active_asset == null or active_asset.scale_mode != WorldAssetDef.SCALE_LOCKED
+		var brush_properties: Array[EntityPropertyDef] = [
+			EntityPropertyDef.from_dict({"name": INSPECTOR_OFFSET, "label": "Смещение", "type": "vector3", "section": "transform", "unit": "м", "step": EditorFillConventions.OFFSET_STEP, "min": -EditorFillConventions.MAX_OFFSET_CELLS, "max": EditorFillConventions.MAX_OFFSET_CELLS, "default": [0.0, 0.0, 0.0]}),
+			EntityPropertyDef.from_dict({"name": INSPECTOR_YAW, "label": "Поворот Y", "type": "float", "section": "transform", "unit": "°", "min": 0.0, "max": 359.0, "step": EditorFillConventions.ROTATION_STEP_DEG, "default": 0.0}),
+			EntityPropertyDef.from_dict({"name": INSPECTOR_SCALE, "label": "Масштаб", "type": "float", "section": "transform", "min": EditorFillConventions.SCALE_MIN, "max": EditorFillConventions.SCALE_MAX, "step": EditorFillConventions.SCALE_STEP, "default": 1.0, "editable": scale_editable, "unavailable_reason": "" if scale_editable else "Масштаб зафиксирован в описании ассета."}),
+			_initial_state_property(active_archetype),
+		]
+		brush_properties.append_array(active_archetype.property_schema)
+		return brush_properties
 	return []
+
+
+func _initial_state_property(archetype: EntityArchetype) -> EntityPropertyDef:
+	var state_options: Array = [String(EntityStateSet.FOLLOW_SEASON)]
+	for state_id: StringName in archetype.states.state_ids():
+		state_options.append(String(state_id))
+	return EntityPropertyDef.from_dict({
+		"name": INSPECTOR_INITIAL_STATE,
+		"label": "Начальное состояние",
+		"type": "enum",
+		"section": "state",
+		"options": state_options,
+		"default": String(EntityStateSet.FOLLOW_SEASON),
+	})
 
 
 func inspector_values() -> Dictionary:
@@ -745,16 +936,22 @@ func inspector_values() -> Dictionary:
 	if selected != null:
 		var archetype := EntityArchetypeCatalog.get_archetype(selected.archetype_id)
 		var values := archetype.resolved_properties(selected.props) if archetype != null else {}
-		var cell := selected.cell(context.terrain)
+		var cell := _base_cell(selected)
 		values[INSPECTOR_CELL] = Vector2(cell.x, cell.y)
 		values[INSPECTOR_OFFSET] = selected.offset
 		values[INSPECTOR_YAW] = selected.yaw_degrees
 		values[INSPECTOR_SCALE] = selected.scale
+		values[INSPECTOR_INITIAL_STATE] = String(selected.initial_state)
 		return values
 
 	var active_archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
 	if active_archetype != null:
-		return active_archetype.default_values()
+		var brush_values := active_archetype.resolved_properties(_brush_props)
+		brush_values[INSPECTOR_OFFSET] = _brush_offset
+		brush_values[INSPECTOR_YAW] = _brush_yaw_degrees
+		brush_values[INSPECTOR_SCALE] = _brush_scale
+		brush_values[INSPECTOR_INITIAL_STATE] = String(_brush_initial_state)
+		return brush_values
 	return {}
 
 
@@ -768,12 +965,21 @@ func apply_inspector_value(property_name: StringName, value: Variant) -> bool:
 func _apply_value(property_name: StringName, value: Variant, mergeable: bool) -> bool:
 	var primary := context.document.entities.by_id(_selected_id)
 	if primary == null:
-		return false
+		return _apply_brush_value(property_name, value)
 	if property_name in TRANSFORM_PROPERTIES:
 		return _apply_transform_value(primary, property_name, value, mergeable)
 	if _selected_ids().size() > 1:
 		return false
 	var archetype := EntityArchetypeCatalog.get_archetype(primary.archetype_id)
+	if property_name == INSPECTOR_INITIAL_STATE:
+		var next_state := StringName(value)
+		if archetype == null or not archetype.states.allows_initial_state(next_state) \
+				or primary.initial_state == next_state:
+			return false
+		var state_before := context.document.entities.to_json()
+		primary.initial_state = next_state
+		_commit(state_before, "начальное состояние")
+		return true
 	var definition := archetype.get_property(property_name) if archetype != null else null
 	if definition == null:
 		return false
@@ -789,10 +995,83 @@ func _apply_value(property_name: StringName, value: Variant, mergeable: bool) ->
 	return true
 
 
+func _apply_brush_value(property_name: StringName, value: Variant) -> bool:
+	var archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
+	if archetype == null:
+		return false
+	if property_name == INSPECTOR_OFFSET:
+		var next_offset := EditorFillConventions.clamp_offset(
+			EntityPropertyDef.from_dict({"name": "offset", "type": "vector3"}).coerce_value(value) as Vector3,
+			context.terrain.cell_size,
+		)
+		if _brush_offset.is_equal_approx(next_offset):
+			return false
+		_brush_offset = next_offset
+		notify_ui_changed()
+		return true
+	if property_name == INSPECTOR_YAW:
+		var asset := EntityArchetypeCatalog.asset_of(archetype.id)
+		var next_yaw := fposmod(float(value), 360.0)
+		if asset != null and not is_zero_approx(next_yaw) and not asset.is_rotation_axis_allowed("y"):
+			return false
+		if is_equal_approx(_brush_yaw_degrees, next_yaw):
+			return false
+		_brush_yaw_degrees = next_yaw
+		notify_ui_changed()
+		return true
+	if property_name == INSPECTOR_SCALE:
+		var next_scale := EditorFillConventions.normalized_scale(
+			EntityArchetypeCatalog.asset_of(archetype.id), float(value))
+		if is_equal_approx(_brush_scale, next_scale):
+			return false
+		_brush_scale = next_scale
+		notify_ui_changed()
+		return true
+	if property_name == INSPECTOR_INITIAL_STATE:
+		var next_state := StringName(value)
+		if not archetype.states.allows_initial_state(next_state) or next_state == _brush_initial_state:
+			return false
+		_brush_initial_state = next_state
+		notify_ui_changed()
+		return true
+	var definition := archetype.get_property(property_name)
+	if definition == null:
+		return false
+	var values := archetype.resolved_properties(_brush_props)
+	var next: Variant = definition.clamp_value(value)
+	if values.get(property_name, null) == next:
+		return false
+	values[property_name] = next
+	_brush_props = archetype.authored_differences(values)
+	notify_ui_changed()
+	return true
+
+
+func begin_reference_pick(property_name: StringName, reference_type: StringName) -> bool:
+	if reference_type != EntityPropertyDef.TYPE_ENTITY_REF or context.document.entities.by_id(_selected_id) == null:
+		return false
+	_pending_reference_property = property_name
+	context.set_status_message("Щёлкните по объекту, на который должна вести ссылка. Esc — отмена.")
+	return true
+
+
 func reset_inspector_value(property_name: StringName) -> bool:
 	var primary := context.document.entities.by_id(_selected_id)
 	if primary == null:
-		return false
+		var archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
+		if archetype == null:
+			return false
+		if property_name == INSPECTOR_INITIAL_STATE:
+			return _apply_brush_value(property_name, String(EntityStateSet.FOLLOW_SEASON))
+		if property_name == INSPECTOR_OFFSET:
+			return _apply_brush_value(property_name, [0.0, 0.0, 0.0])
+		if property_name == INSPECTOR_YAW:
+			return _apply_brush_value(property_name, 0.0)
+		if property_name == INSPECTOR_SCALE:
+			return _apply_brush_value(property_name, 1.0)
+		var brush_definition := archetype.get_property(property_name)
+		return _apply_brush_value(property_name, brush_definition.default) \
+			if brush_definition != null else false
 	if property_name == INSPECTOR_YAW:
 		return _apply_transform_value(primary, property_name, 0.0, false)
 	if property_name == INSPECTOR_SCALE:
@@ -803,6 +1082,8 @@ func reset_inspector_value(property_name: StringName) -> bool:
 		return _apply_transform_value(primary, property_name, [0.0, 0.0, 0.0], false)
 	if property_name == INSPECTOR_CELL:
 		return false
+	if property_name == INSPECTOR_INITIAL_STATE:
+		return _apply_value(property_name, String(EntityStateSet.FOLLOW_SEASON), false)
 	var archetype := EntityArchetypeCatalog.get_archetype(primary.archetype_id)
 	var definition := archetype.get_property(property_name) if archetype != null else null
 	return _apply_value(property_name, definition.default, false) if definition != null else false
@@ -815,36 +1096,7 @@ func _apply_transform_value(record: MapEntityRecord, property_name: StringName, 
 	var selected := _selected_ids()
 	var before := context.document.entities.to_json()
 	var changed := false
-	if property_name == INSPECTOR_CELL:
-		var requested := EntityPropertyDef.from_dict({"name": "cell", "type": "vector2"}).coerce_value(value) as Vector2
-		var target_cell := Vector2i(int(round(requested.x)), int(round(requested.y)))
-		var shift := target_cell - record.cell(context.terrain)
-		if shift == Vector2i.ZERO:
-			return false
-		# Сначала проверяем всё выделение, потом двигаем: половина переехавших
-		# объектов хуже, чем отказ.
-		for entity_id: StringName in selected:
-			var target := context.document.entities.by_id(entity_id)
-			if target == null:
-				continue
-			var cells := Rect2i(target.cell(context.terrain) + shift, occupied_cells(target).size)
-			if not _cells_placeable(cells):
-				context.set_status_message("Клетки вне карты или попадают в вырез.", true)
-				return false
-			if not _cells_free(cells, target.id) or not _selection_free_of(cells, selected, target.id, shift):
-				context.set_status_message("Эти клетки уже заняты другим объектом.", true)
-				return false
-		for entity_id: StringName in selected:
-			var target := context.document.entities.by_id(entity_id)
-			if target == null:
-				continue
-			var archetype := EntityArchetypeCatalog.get_archetype(target.archetype_id)
-			if archetype == null:
-				continue
-			var cells := Rect2i(target.cell(context.terrain) + shift, occupied_cells(target).size)
-			target.position = _anchor_position(cells, archetype) + target.offset
-			changed = true
-	elif property_name == INSPECTOR_OFFSET:
+	if property_name == INSPECTOR_OFFSET:
 		var raw := EntityPropertyDef.from_dict({"name": "offset", "type": "vector3"}).coerce_value(value) as Vector3
 		var offset := EditorFillConventions.clamp_offset(raw, context.terrain.cell_size)
 		for entity_id: StringName in selected:
@@ -854,38 +1106,89 @@ func _apply_transform_value(record: MapEntityRecord, property_name: StringName, 
 			target.position = target.anchor_position() + offset
 			target.offset = offset
 			changed = true
-	elif property_name == INSPECTOR_YAW:
-		var yaw := fposmod(float(value), 360.0)
-		for entity_id: StringName in selected:
-			var target := context.document.entities.by_id(entity_id)
-			if target != null and not is_equal_approx(target.yaw_degrees, yaw):
-				target.yaw_degrees = yaw
-				changed = true
 	else:
-		var next_scale := clampf(float(value), EditorFillConventions.SCALE_MIN, EditorFillConventions.SCALE_MAX)
+		var shift := Vector2i.ZERO
+		var requested_yaw := fposmod(float(value), 360.0) if property_name == INSPECTOR_YAW else 0.0
+		if property_name == INSPECTOR_CELL:
+			var requested := EntityPropertyDef.from_dict({"name": "cell", "type": "vector2"}).coerce_value(value) as Vector2
+			var target_cell := Vector2i(int(round(requested.x)), int(round(requested.y)))
+			shift = target_cell - _base_cell(record)
+		if property_name == INSPECTOR_CELL and shift == Vector2i.ZERO:
+			return false
+
+		var proposed_cells: Dictionary = {}
+		var proposed_yaws: Dictionary = {}
+		var proposed_scales: Dictionary = {}
 		for entity_id: StringName in selected:
 			var target := context.document.entities.by_id(entity_id)
-			if target != null and not is_equal_approx(target.scale, next_scale):
-				target.scale = next_scale
+			if target == null:
+				continue
+			var yaw := requested_yaw if property_name == INSPECTOR_YAW else target.yaw_degrees
+			var scale := target.scale
+			var asset := EntityArchetypeCatalog.asset_of(target.archetype_id)
+			if property_name == INSPECTOR_YAW and asset != null \
+					and not is_zero_approx(yaw) and not asset.is_rotation_axis_allowed("y"):
+				context.set_status_message("Ассет запрещает поворот вокруг Y.", true)
+				return false
+			if property_name == INSPECTOR_SCALE:
+				scale = EditorFillConventions.normalized_scale(
+					asset, float(value))
+			var cells := Rect2i(
+				_base_cell(target) + shift,
+				cell_span(target.archetype_id, scale, yaw),
+			)
+			if not _cells_placeable(cells):
+				context.set_status_message("Клетки вне карты или попадают в вырез.", true)
+				return false
+			if not _cells_free_ignoring(cells, selected, target.archetype_id):
+				context.set_status_message("Эти клетки уже заняты другим объектом.", true)
+				return false
+			proposed_cells[entity_id] = cells
+			proposed_yaws[entity_id] = yaw
+			proposed_scales[entity_id] = scale
+		if not _proposed_selection_is_free(proposed_cells):
+			context.set_status_message("Объекты выделения пересекутся после изменения.", true)
+			return false
+
+		for entity_id: StringName in selected:
+			var target := context.document.entities.by_id(entity_id)
+			if target == null or not proposed_cells.has(entity_id):
+				continue
+			var archetype := EntityArchetypeCatalog.get_archetype(target.archetype_id)
+			if archetype == null:
+				continue
+			var cells: Rect2i = proposed_cells[entity_id]
+			var yaw: float = proposed_yaws[entity_id]
+			var scale: float = proposed_scales[entity_id]
+			if _base_cell(target) != cells.position \
+					or not is_equal_approx(target.yaw_degrees, yaw) \
+					or not is_equal_approx(target.scale, scale):
 				changed = true
+			target.yaw_degrees = yaw
+			target.scale = scale
+			target.position = _anchor_position(cells, archetype) + target.offset
 	if not changed:
 		return false
 	var merge_key := StringName("%s/%s" % [record.id, property_name]) if mergeable else &""
 	_commit(before, "трансформ сущности", merge_key)
 	return true
 
-
-## Не наедет ли сдвинутое выделение на другого своего же участника.
-func _selection_free_of(cells: Rect2i, selected: Array[StringName], self_id: StringName, shift: Vector2i) -> bool:
-	for entity_id: StringName in selected:
-		if entity_id == self_id:
+func _proposed_selection_is_free(proposed_cells: Dictionary) -> bool:
+	var ids := proposed_cells.keys()
+	for left_index in ids.size():
+		var left_id: StringName = ids[left_index]
+		var left := context.document.entities.by_id(left_id)
+		if left == null or not EditorFillConventions.asset_claims_cells(
+				EntityArchetypeCatalog.asset_of(left.archetype_id)):
 			continue
-		var other := context.document.entities.by_id(entity_id)
-		if other == null:
-			continue
-		var moved := Rect2i(other.cell(context.terrain) + shift, occupied_cells(other).size)
-		if EditorFillConventions.rects_overlap(cells, moved):
-			return false
+		for right_index in range(left_index + 1, ids.size()):
+			var right_id: StringName = ids[right_index]
+			var right := context.document.entities.by_id(right_id)
+			if right == null or not EditorFillConventions.asset_claims_cells(
+					EntityArchetypeCatalog.asset_of(right.archetype_id)):
+				continue
+			if EditorFillConventions.rects_overlap(proposed_cells[left_id], proposed_cells[right_id]):
+				return false
 	return true
 
 
@@ -898,7 +1201,7 @@ func list_entries() -> Array[String]:
 	for record: MapEntityRecord in context.document.entities.entities:
 		var archetype := EntityArchetypeCatalog.get_archetype(record.archetype_id)
 		var label := archetype.name if archetype != null else String(record.archetype_id)
-		var cell := record.cell(context.terrain)
+		var cell := _base_cell(record)
 		entries.append("● %s  ·  %d, %d  ·  %s" % [label, cell.x, cell.y, record.id])
 	return entries
 
@@ -910,12 +1213,50 @@ func selected_list_index() -> int:
 	return -1
 
 
+func selected_list_indices() -> Array[int]:
+	var result: Array[int] = []
+	var selected := _selected_ids()
+	for index in context.document.entities.entities.size():
+		if context.document.entities.entities[index].id in selected:
+			result.append(index)
+	return result
+
+
+func list_allows_multiple() -> bool:
+	return true
+
+
 func select_list_entry(index: int) -> void:
 	if index < 0 or index >= context.document.entities.entities.size():
 		return
 	_select(context.document.entities.entities[index].id, false)
+	_focus_record(context.document.entities.entities[index])
 	rebuild_views()
 	notify_ui_changed()
+
+
+func select_list_entries(indices: Array[int]) -> void:
+	_selected_id = &""
+	_additional_selected.clear()
+	for index: int in indices:
+		if index < 0 or index >= context.document.entities.entities.size():
+			continue
+		var entity_id: StringName = context.document.entities.entities[index].id
+		if _selected_id == &"":
+			_selected_id = entity_id
+		else:
+			_additional_selected.append(entity_id)
+	if _selected_id != &"":
+		_focus_record(context.document.entities.by_id(_selected_id))
+	rebuild_views()
+	notify_ui_changed()
+
+
+func _focus_record(record: MapEntityRecord) -> void:
+	if record == null or context.camera == null:
+		return
+	var cells := occupied_cells(record)
+	context.camera.focus_on(_world_position(record.anchor_position()), float(maxi(cells.size.x, cells.size.y) + 2))
 
 
 func empty_list_hint() -> String:

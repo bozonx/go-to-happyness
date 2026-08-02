@@ -137,6 +137,12 @@ static func _test_property_schema_validity_and_visibility() -> void:
 	assert(route.is_reference())
 	assert(route.pick_on_map)
 	assert(route.to_dict()["pick_on_map"] == true)
+	var unavailable := EntityPropertyDef.from_dict({
+		"name": "scale", "type": "float", "section": "transform",
+		"editable": false, "unavailable_reason": "locked by asset",
+	})
+	assert(not unavailable.editable)
+	assert(unavailable.to_dict()["unavailable_reason"] == "locked by asset")
 	assert(not EntityPropertyDef.from_dict({"name": "x", "type": "int"}).is_reference())
 
 	var btn_group_prop := EntityPropertyDef.from_dict({

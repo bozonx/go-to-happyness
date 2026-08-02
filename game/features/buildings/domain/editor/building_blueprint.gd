@@ -566,7 +566,7 @@ func _fill_errors() -> Array[String]:
 	for area in areas:
 		zone_ids[area.id] = true
 	for obj in objects:
-		var obj_errors := obj.validation_errors()
+		var obj_errors := obj.validation_errors_with_asset(WorldAssetCatalog.get_asset(obj.asset_id))
 		for e in obj_errors:
 			errors.append(e)
 		if seen_ids.has(obj.id):
@@ -580,8 +580,10 @@ func _fill_errors() -> Array[String]:
 func _fixture_errors() -> Array[String]:
 	var errors: Array[String] = []
 	var object_ids: Dictionary = {}
+	var objects_by_id: Dictionary = {}
 	for obj in objects:
 		object_ids[obj.id] = true
+		objects_by_id[obj.id] = obj
 	var zone_ids: Dictionary = {}
 	for area in areas:
 		zone_ids[area.id] = true
@@ -595,6 +597,13 @@ func _fixture_errors() -> Array[String]:
 				errors.append("Fixture %s and %s reference the same visual object: %s" % [
 					fixture.id, visual_refs[fixture.visual_object_id], fixture.visual_object_id])
 			visual_refs[fixture.visual_object_id] = fixture.id
+			var visual: FillObjectRecord = objects_by_id.get(fixture.visual_object_id)
+			var asset := WorldAssetCatalog.get_asset(visual.asset_id) if visual != null else null
+			if asset != null:
+				for capability: StringName in fixture.capabilities:
+					if capability not in asset.supported_capabilities:
+						errors.append("Fixture %s uses visual asset %s which does not support capability %s" % [
+							fixture.id, asset.id, capability])
 	return errors
 
 

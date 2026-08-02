@@ -54,12 +54,8 @@ var _ice_bodies: Dictionary = {}
 var _pending_chunks: Array[Vector2i] = []
 var _queued_lookup: Dictionary = {}
 ## body_id -> { frozen: ShaderMaterial }. A body's entry is dropped when the
-## registry changes it, because a retyped body is a different colour, wave and
-## emission.
+## registry changes it, because a retyped body is a different colour/emission.
 var _materials: Dictionary = {}
-
-var _wind_direction := Vector2(1.0, 0.0)
-var _wind_strength := 0.4
 
 ## What lies past the last column (`map_editor.md` §6.1). `BORDER_NOTHING` draws
 ## nothing at all and makes the rim of the board a bank; `BORDER_OCEAN` and
@@ -135,18 +131,6 @@ func rebuild_pending_now() -> void:
 
 func pending_chunk_count() -> int:
 	return _pending_chunks.size()
-
-
-## The wind every wave and every band of foam scales with (§9.5). The sea storms
-## in a thunderstorm because this is the same wind the sky and the rain read, not
-## because water has a weather state of its own.
-func set_wind(direction: Vector2, strength: float) -> void:
-	_wind_direction = direction if direction.length_squared() > 0.0001 else Vector2(1.0, 0.0)
-	_wind_strength = clampf(strength, 0.0, 1.0)
-	for by_state: Dictionary in _materials.values():
-		for material: ShaderMaterial in by_state.values():
-			material.set_shader_parameter(&"wind_direction", _wind_direction)
-			material.set_shader_parameter(&"wind_strength", _wind_strength)
 
 
 ## A registry change reaches the cells it says it reaches and no others. Creating
@@ -398,9 +382,7 @@ func _rebuild_ice_body(chunk: Vector2i, triangles: PackedVector3Array) -> void:
 
 # --- Materials ----------------------------------------------------------------
 
-## One material per body per state, built from the body itself: the colour, the
-## wave and the foam of a river ARE the river's, and there is nowhere else for a
-## renderer to look them up (§9.2).
+## One material per body per state, built from the body itself.
 func _material_for(body_id: int, frozen: bool) -> ShaderMaterial:
 	var by_state: Dictionary = _materials.get(body_id, {})
 	if by_state.has(frozen):
@@ -418,8 +400,6 @@ func _material_from_body(body: WaterBody, frozen: bool) -> ShaderMaterial:
 	if body != null:
 		material.set_shader_parameter(&"water_colour", Color(body.colour.r, body.colour.g, body.colour.b))
 		material.set_shader_parameter(&"deep_colour", Color(body.colour.r * 0.35, body.colour.g * 0.4, body.colour.b * 0.5))
-		material.set_shader_parameter(&"wave_amplitude", body.wave_amplitude)
-		material.set_shader_parameter(&"foam_strength", body.foam_strength)
 		if body.is_lava():
 			# Lava lights its own banks, does not fade to a deep blue and never
 			# freezes — all three follow from the type, not from a second shader.
@@ -429,8 +409,6 @@ func _material_from_body(body: WaterBody, frozen: bool) -> ShaderMaterial:
 			material.set_shader_parameter(&"opacity", 1.0)
 			material.set_shader_parameter(&"roughness_value", 0.75)
 	material.set_shader_parameter(&"frozen", 1.0 if frozen else 0.0)
-	material.set_shader_parameter(&"wind_direction", _wind_direction)
-	material.set_shader_parameter(&"wind_strength", _wind_strength)
 	return material
 
 

@@ -346,6 +346,9 @@ var citizen_lifecycle_service: CitizenLifecycleService
 var building_availability_service: BuildingAvailabilityService
 var building_research_service: BuildingResearchService
 var village_territory_service: VillageTerritoryService
+## Writes `IS_ANCHOR` under placed footprints, so the cascade refuses to move the
+## ground a building stands on (grid_terrain_system.md §4.4).
+var terrain_anchor_service: TerrainAnchorService
 var sawmills: SawmillService
 var construction: ConstructionService
 var demolition: DemolitionService

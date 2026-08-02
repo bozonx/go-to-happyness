@@ -88,6 +88,11 @@ var options: Array = []
 var visible_if: Dictionary = {}
 ## Reference controls offer picking the target in the viewport.
 var pick_on_map: bool = false
+## Some fields are structurally present but unavailable for this particular
+## asset. Keeping them visible and explaining why is less surprising than
+## making the inspector layout jump between selections.
+var editable: bool = true
+var unavailable_reason: String = ""
 ## Nested schema of a `list` property's repeating group.
 var entries: Array[EntityPropertyDef] = []
 
@@ -210,6 +215,10 @@ func to_dict() -> Dictionary:
 		result["visible_if"] = visible_if.duplicate()
 	if pick_on_map:
 		result["pick_on_map"] = true
+	if not editable:
+		result["editable"] = false
+	if not unavailable_reason.is_empty():
+		result["unavailable_reason"] = unavailable_reason
 	if not entries.is_empty():
 		var nested: Array = []
 		for entry: EntityPropertyDef in entries:
@@ -237,6 +246,8 @@ static func from_dict(source: Dictionary) -> EntityPropertyDef:
 	if raw_visible is Dictionary:
 		property.visible_if = (raw_visible as Dictionary).duplicate()
 	property.pick_on_map = bool(source.get("pick_on_map", false))
+	property.editable = bool(source.get("editable", true))
+	property.unavailable_reason = String(source.get("unavailable_reason", ""))
 	var raw_entries: Variant = source.get("entries", null)
 	if raw_entries is Array:
 		for raw_entry: Variant in raw_entries as Array:

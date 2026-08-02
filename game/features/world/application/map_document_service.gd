@@ -200,12 +200,19 @@ func load_package(path: String) -> MapDocument:
 	# Water is read after the registry came out of `map.json`: a cell reference to
 	# a body nobody registered is refused by the layer and would decode as dry.
 	var water_path := path.path_join(WATER_BIN)
+	var water_repaired := false
 	if FileAccess.file_exists(water_path):
 		var water_buffer := FileAccess.get_file_as_bytes(water_path)
 		if not MapWaterCodec.decode_into(water_buffer, document.water):
+			document.water.clear_bodies()
+			water_repaired = true
 			push_warning("[map] water.bin не подходит к доске %d: %s" % [
 				document.meta.board_cells, water_path,
 			])
+	var damaged_water := document.water.remove_damaged_bodies(document.terrain)
+	if not damaged_water.is_empty():
+		water_repaired = true
+		push_warning("[map] удалены повреждённые водоёмы: %s" % damaged_water)
 	# Coverage is independent of both layers above: it neither moves ground nor
 	# references a registry, so it decodes last and a mismatch costs only the paths.
 	var surface_path := path.path_join(SURFACE_BIN)
@@ -215,7 +222,7 @@ func load_package(path: String) -> MapDocument:
 			push_warning("[map] surface.bin не подходит к доске %d: %s" % [
 				document.meta.board_cells, surface_path,
 			])
-	document.dirty = false
+	document.dirty = water_repaired
 	return document
 
 
@@ -254,6 +261,10 @@ func save_map_to(document: MapDocument, final_path: String, preview: Image = nul
 	if document == null:
 		last_error = "нечего сохранять"
 		return ""
+	var removed_water := document.water.remove_damaged_bodies(document.terrain)
+	if not removed_water.is_empty():
+		document.mark_dirty()
+		push_warning("[map] перед сохранением удалены повреждённые водоёмы: %s" % removed_water)
 	var zone_errors := document.zones.validate(document.board_cells())
 	if not zone_errors.is_empty():
 		last_error = "карта содержит ошибки зон: %s" % "; ".join(zone_errors)

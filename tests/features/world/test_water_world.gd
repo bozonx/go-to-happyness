@@ -8,6 +8,7 @@ extends SceneTree
 ## ocean is a mesh that has to exist only when the map header asks for it.
 
 const BOARD_CELLS := 32
+const TerritoryScene := preload("res://game/features/world/presentation/territory_base.tscn")
 
 
 func _init() -> void:
@@ -50,7 +51,14 @@ func _init() -> void:
 	world.configure_border(MapMeta.BORDER_NOTHING, 0)
 	assert(_border_node(world) == null, "and 'nothing' draws nothing at all")
 
+	var territory := TerritoryScene.instantiate() as TerritoryBase
+	root.add_child(territory)
+	await process_frame
+	territory.configure_terrain(1.0, BOARD_CELLS)
+	_assert_boundary(territory)
+
 	world.queue_free()
+	territory.queue_free()
 	print("  water world: ice collider and border ocean ok")
 	quit(0)
 
@@ -68,3 +76,14 @@ func _border_node(world: WaterWorld) -> Node:
 		if child.name == "BorderPlane":
 			return child
 	return null
+
+
+func _assert_boundary(territory: TerritoryBase) -> void:
+	var north := territory.get_node("WorldBoundary/North/CollisionShape3D") as CollisionShape3D
+	var south := territory.get_node("WorldBoundary/South/CollisionShape3D") as CollisionShape3D
+	var east := territory.get_node("WorldBoundary/East/CollisionShape3D") as CollisionShape3D
+	var west := territory.get_node("WorldBoundary/West/CollisionShape3D") as CollisionShape3D
+	for collision: CollisionShape3D in [north, south, east, west]:
+		assert(collision.shape is BoxShape3D, "every map side has a physical wall")
+	assert(north.position.z < -BOARD_CELLS * 0.5 and south.position.z > BOARD_CELLS * 0.5)
+	assert(west.position.x < -BOARD_CELLS * 0.5 and east.position.x > BOARD_CELLS * 0.5)

@@ -33,6 +33,17 @@ var _paint_direction := 0
 var _level_target_height := 0
 var _has_level_target := false
 var _wear_day := 0
+## Columns this drag has already moved. A stroke lays ONE layer: the brush is a
+## footprint being dragged, not a stamp re-applied at every column the cursor
+## crosses, and every cell inside it is overlapped by the next application as soon
+## as the cursor moves one cell.
+##
+## Without it a size-3 brush dragged across flat ground left a +5 ramp instead of
+## a +1 band (measured), a size-8 brush left +15, and jiggling the cursor between
+## two columns raised the ground indefinitely. Wear and snow solve the same
+## problem by being absolute (`paint_wear`); height cannot, because "one step up
+## from here" is what sculpting means — so the stroke remembers instead.
+var _stroke_cells: Dictionary = {}
 
 
 func configure(grid: TerrainGrid, service: TerrainService, wear_service: SurfaceWearService = null) -> void:
@@ -54,13 +65,16 @@ func _on_hover_changed(previous_cell: Vector2i, had_hover: bool) -> void:
 ## Starts or stops a painting drag. Non-zero also applies the brush at once, so a
 ## click that never moves still edits the column under it.
 func set_paint_direction(direction: int) -> void:
-	if direction != 0 and _paint_direction == 0 and edit_mode == TerrainEditOperation.Mode.LEVEL:
-		_capture_level_target()
+	if direction != 0 and _paint_direction == 0:
+		_stroke_cells.clear()
+		if edit_mode == TerrainEditOperation.Mode.LEVEL:
+			_capture_level_target()
 	_paint_direction = direction
 	if direction != 0:
 		apply_height_brush(direction)
 	else:
 		_has_level_target = false
+		_stroke_cells.clear()
 
 
 func is_painting() -> bool:
@@ -80,14 +94,25 @@ func apply_height_brush(delta: int) -> void:
 	if not has_hover:
 		return
 	var cells := brush_cells(hovered_cell)
+	var weights := brush_weights(hovered_cell)
+	if _paint_direction != 0:
+		var fresh := _cells_untouched_by_stroke(cells, weights)
+		cells = fresh[0]
+		weights = fresh[1]
+		if cells.is_empty():
+			# The whole footprint is ground this stroke already laid. Not a failure
+			# and not a message: the author is still dragging over their own work.
+			return
 	var operation: TerrainEditOperation
 	if edit_mode == TerrainEditOperation.Mode.LEVEL:
 		if not _has_level_target:
 			_capture_level_target()
-		operation = TerrainEditOperation.level(cells, _level_target_height, terrain_slope_class)
+		operation = TerrainEditOperation.level(cells, _level_target_height, terrain_slope_class, weights)
 	else:
-		operation = TerrainEditOperation.offset(cells, delta, edit_mode, terrain_slope_class)
+		operation = TerrainEditOperation.offset(cells, delta, edit_mode, terrain_slope_class, weights)
 	if _service.apply_operation(operation):
+		for cell: Vector2i in cells:
+			_stroke_cells[cell] = true
 		if edit_mode == TerrainEditOperation.Mode.LEVEL:
 			last_message = "%s → %d — %d клеток изменено" % [
 				_mode_label(), _level_target_height,
@@ -109,6 +134,21 @@ func apply_height_brush(delta: int) -> void:
 				_mode_label(), delta,
 				_rejection_label(_service.last_rejection()),
 			]
+
+
+## The part of the footprint this stroke has not moved yet, with its weights kept
+## in step. Returns `[cells, weights]`.
+func _cells_untouched_by_stroke(cells: Array[Vector2i], weights: PackedFloat32Array) -> Array:
+	var fresh_cells: Array[Vector2i] = []
+	var fresh_weights := PackedFloat32Array()
+	for index in cells.size():
+		var cell: Vector2i = cells[index]
+		if _stroke_cells.has(cell):
+			continue
+		fresh_cells.append(cell)
+		if index < weights.size():
+			fresh_weights.append(weights[index])
+	return [fresh_cells, fresh_weights]
 
 
 ## Changes the captured plateau height without using the current column as a

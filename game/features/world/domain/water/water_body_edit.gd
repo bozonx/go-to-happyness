@@ -3,7 +3,7 @@ extends WaterDelta
 
 ## An undoable registry change. Removing a body also changes every cell that
 ## references it, so both must travel through one transaction. Retyping a body
-## swaps its metadata (type, colour, wave, salinity, freezes) without touching
+## swaps its metadata (type, colour, salinity, freezes) without touching
 ## cells — the body id stays the same.
 
 enum Kind { CREATE, REMOVE, RETYPE, RESURFACE }
@@ -114,6 +114,10 @@ static func resurface(grid: WaterGrid, terrain: TerrainGrid, body: WaterBody, ce
 		if old_state != next_state:
 			edit.record(cell, old_state, next_state)
 	return edit
+
+
+func changes_registry() -> bool:
+	return kind in [Kind.CREATE, Kind.REMOVE, Kind.RETYPE]
 
 
 func apply(grid: WaterGrid) -> void:

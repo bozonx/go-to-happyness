@@ -92,7 +92,9 @@ mat3 cotangent_frame(vec3 normal_world, vec3 position_world, vec2 texture_uv) {
 
 void fragment() {
 	float edge_mask = floor(UV2.x + 0.0001);
-	vec2 dimensions = vec2(fract(UV2.x) * 100.0, UV2.y);
+	// UV2 carries the quad's size in CELLS so the four mask bits always own the
+	// integer part, whatever `cell_size` the map chose. Back to metres here.
+	vec2 dimensions = vec2(fract(UV2.x) * 100.0, UV2.y) * cell_size;
 	vec4 edge_enabled = vec4(
 		mod(edge_mask, 2.0), mod(floor(edge_mask / 2.0), 2.0),
 		mod(floor(edge_mask / 4.0), 2.0), mod(floor(edge_mask / 8.0), 2.0)

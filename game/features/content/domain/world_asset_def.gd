@@ -173,6 +173,40 @@ func is_scale_allowed(scale_value: float) -> bool:
 			return is_equal_approx(scale_value, 1.0)
 
 
+func normalized_scale(requested: float) -> float:
+	match scale_mode:
+		SCALE_LOCKED:
+			return 1.0
+		SCALE_UNIFORM_STEPS:
+			if allowed_scales.is_empty():
+				return 1.0
+			var nearest: float = allowed_scales[0]
+			for allowed: float in allowed_scales:
+				if absf(requested - allowed) < absf(requested - nearest):
+					nearest = allowed
+			return nearest
+		SCALE_FREE_UNIFORM:
+			if allowed_scales.size() >= 2:
+				return clampf(requested, allowed_scales[0], allowed_scales[-1])
+			return maxf(requested, 0.001)
+		_:
+			return 1.0
+
+
+func claims_cells() -> bool:
+	return collision_policy != COLLISION_NONE or blocking_navigation
+
+
+func placement_cell_span(scale_value: float, yaw_deg: float) -> Vector2i:
+	var size := placement_policy().footprint_cells
+	var span := Vector2i(
+		maxi(1, int(ceil(maxf(1.0, float(size.x)) * maxf(scale_value, 0.001) - 0.0001))),
+		maxi(1, int(ceil(maxf(1.0, float(size.y)) * maxf(scale_value, 0.001) - 0.0001))),
+	)
+	var normalized_yaw := fposmod(yaw_deg, 180.0)
+	return Vector2i(span.y, span.x) if absf(normalized_yaw - 90.0) < 45.0 else span
+
+
 ## Empty deliberately means all authoring axes are permitted.
 func is_rotation_axis_allowed(axis: String) -> bool:
 	if rotation_axes.is_empty():

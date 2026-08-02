@@ -206,6 +206,8 @@ static func _test_cycle_tool_rotates_the_water_tools() -> void:
 	brush.cycle_tool()
 	assert(brush.tool == WaterBrushController.TOOL_FLOW)
 	brush.cycle_tool()
+	assert(brush.tool == WaterBrushController.TOOL_CLEAR_FLOW)
+	brush.cycle_tool()
 	assert(brush.tool == WaterBrushController.TOOL_FREEZE)
 	brush.cycle_tool()
 	assert(brush.tool == WaterBrushController.TOOL_THAW)
@@ -345,8 +347,13 @@ static func _test_freeze_and_thaw_brushes_are_cell_local() -> void:
 	brush.apply()
 	assert(water.is_frozen(Vector2i.ZERO))
 	assert(not water.is_frozen(Vector2i(2, 2)))
+	assert(brush.tool == WaterBrushController.TOOL_FREEZE, "freeze stays active across a drag")
+	_hover(brush, Vector2i(1, 0))
+	brush.apply()
+	assert(water.is_frozen(Vector2i(1, 0)), "the next drag cell freezes instead of flooding")
 	assert(water.has_body(body.id))
 	brush.tool = WaterBrushController.TOOL_THAW
+	_hover(brush, Vector2i.ZERO)
 	brush.apply()
 	assert(not water.is_frozen(Vector2i.ZERO))
 

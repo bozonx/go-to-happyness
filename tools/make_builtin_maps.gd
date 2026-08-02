@@ -12,20 +12,27 @@ extends SceneTree
 
 func _init() -> void:
 	var service := MapDocumentService.new()
+	var package := MapDocumentService.package_path(
+		MapDocumentService.SOURCE_BUILTIN, &"green_valley",
+	)
 
-	var valley := MapDocument.create(&"green_valley", "Зелёная долина", 96)
+	# Preserve authored entities, anchors, rules and future opaque sections when
+	# refreshing the built-in terrain. Recreating the document here used to erase
+	# everything that was not hard-coded in this maintenance script.
+	var valley := service.load_package(package)
+	if valley == null:
+		valley = MapDocument.create(&"green_valley", "Зелёная долина", 96)
 	valley.meta.author = "Go To Happyness"
-	valley.meta.start.era = &"tent"
 	valley.meta.start.game_definition = &"core:settlement"
 	valley.meta.start.day_of_year = 120
 	valley.meta.start.latitude = 54.0
 	valley.meta.start.time_of_day = MapStart.DEFAULT_TIME_OF_DAY
 	_author_green_valley_terrain(valley.terrain)
-	_author_green_valley_water(valley.terrain, valley.water)
+	_author_green_valley_pond_basin(valley.terrain)
+	if valley.water.body_count() == 0:
+		_author_green_valley_water(valley.terrain, valley.water)
 
-	var path := service.save_map_to(valley, MapDocumentService.package_path(
-		MapDocumentService.SOURCE_BUILTIN, valley.meta.id,
-	))
+	var path := service.save_map_to(valley, package)
 	if path.is_empty():
 		printerr("[maps] не записано: ", service.last_error)
 		quit(1)
@@ -55,10 +62,11 @@ func _author_green_valley_terrain(terrain: TerrainGrid) -> void:
 				terrain.set_height(cell, 1)
 
 
-func _author_green_valley_water(terrain: TerrainGrid, water: WaterGrid) -> void:
+func _author_green_valley_pond_basin(terrain: TerrainGrid) -> void:
 	# A small fresh-water pond near the settlement centre so citizens have
 	# somewhere to draw water. Dig a shallow basin with a deeper middle:
-	# the rim is one step deep (a ford), the centre is two steps deep (not a ford).
+	# the rim is one step deep (a ford), the centre is four steps / 2 m deep,
+	# beyond the 1.5 m walking limit.
 	var pond_centre := Vector2i(10, -7)
 	var pond_radius := 3
 	for z in range(pond_centre.y - pond_radius, pond_centre.y + pond_radius + 1):
@@ -70,9 +78,13 @@ func _author_green_valley_water(terrain: TerrainGrid, water: WaterGrid) -> void:
 			var dz := cell.y - pond_centre.y
 			var dist_sq := dx * dx + dz * dz
 			if dist_sq <= 1:
-				terrain.set_height(cell, -2)
+				terrain.set_height(cell, -4)
 			elif dist_sq <= pond_radius * pond_radius:
 				terrain.set_height(cell, -1)
+
+
+func _author_green_valley_water(terrain: TerrainGrid, water: WaterGrid) -> void:
+	var pond_centre := Vector2i(10, -7)
 	var lake := water.create_body(WaterBody.Type.LAKE, 0)
 	if lake == null:
 		return

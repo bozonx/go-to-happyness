@@ -22,10 +22,11 @@ static func run_all() -> void:
 	_test_cells_reference_registered_bodies_only()
 	_test_depth_is_derived_from_the_ground()
 	_test_flood_fills_the_basin_and_stops_at_the_rim()
-	_test_paint_skips_ground_above_the_surface()
 	_test_undo_restores_the_layer_exactly()
 	_test_freezing_refuses_lava_and_fast_water()
 	_test_codec_round_trip()
+	_test_codec_rejects_damaged_cells_without_partial_decode()
+	_test_hanging_water_is_removed()
 	_test_document_round_trip_carries_the_registry()
 	_test_deep_water_blocks_and_a_ford_costs_more()
 	_test_ice_carries_a_walker_before_a_cart()
@@ -43,6 +44,8 @@ static func run_all() -> void:
 	_test_border_nothing_never_floods()
 	_test_border_lava_floods_edge_with_lava()
 	_test_access_service_finds_banks_not_water()
+	_test_building_placement_rejects_open_and_frozen_water()
+	_test_navigation_refuses_every_edge_outside_the_board()
 	print("    [PASS] Water Layer Tests")
 
 
@@ -75,7 +78,7 @@ static func _dig_basin(terrain: TerrainGrid) -> void:
 			assert(terrain.set_height(Vector2i(x, z), -1))
 	for z in range(-2, 3):
 		for x in range(-2, 3):
-			assert(terrain.set_height(Vector2i(x, z), -2))
+			assert(terrain.set_height(Vector2i(x, z), -4))
 
 
 # --- The body owns the type --------------------------------------------------
@@ -84,7 +87,7 @@ static func _test_body_defaults_and_flow() -> void:
 	var sea := WaterBody.of_type(1, WaterBody.Type.SEA)
 	assert(sea.salinity == WaterBody.Salinity.SALT)
 	assert(not sea.is_drinkable())
-	assert(sea.wave_amplitude > WaterBody.of_type(2, WaterBody.Type.LAKE).wave_amplitude)
+	assert(sea.colour != WaterBody.of_type(2, WaterBody.Type.LAKE).colour)
 
 	var lava := WaterBody.of_type(3, WaterBody.Type.LAVA)
 	assert(lava.is_lava())
@@ -135,15 +138,15 @@ static func _test_depth_is_derived_from_the_ground() -> void:
 	var terrain := _terrain()
 	var water := _water_over(terrain)
 	var pond := water.create_body(WaterBody.Type.LAKE, 0)
-	assert(terrain.set_height(Vector2i(0, 0), -2))
+	assert(terrain.set_height(Vector2i(0, 0), -4))
 	assert(water.set_cell(Vector2i(0, 0), pond.id, 0))
-	assert(water.depth_steps_at(terrain, Vector2i(0, 0)) == 2)
+	assert(water.depth_steps_at(terrain, Vector2i(0, 0)) == 4)
 	assert(water.is_wet(terrain, Vector2i(0, 0)))
 	assert(not water.is_ford(terrain, Vector2i(0, 0)))
 
 	# Raise the bottom and the same cell becomes a ford, then dry land — without a
 	# single write to the water layer. That is the point of not storing depth.
-	assert(terrain.set_height(Vector2i(0, 0), -1))
+	assert(terrain.set_height(Vector2i(0, 0), -3))
 	assert(water.is_ford(terrain, Vector2i(0, 0)))
 	assert(terrain.set_height(Vector2i(0, 0), 0))
 	assert(not water.is_wet(terrain, Vector2i(0, 0)))
@@ -163,30 +166,9 @@ static func _test_flood_fills_the_basin_and_stops_at_the_rim() -> void:
 	assert(service.last_delta_size() == 81)
 	assert(water.is_wet(terrain, Vector2i(4, 4)))
 	assert(not water.has_water(Vector2i(5, 5)))
-	# Rim one step down, middle two: one level, two depths, one ford ring.
+	# Rim one step down, middle four: one level, a ford ring and deep centre.
 	assert(water.is_ford(terrain, Vector2i(4, 0)))
 	assert(not water.is_ford(terrain, Vector2i(0, 0)))
-
-
-static func _test_paint_skips_ground_above_the_surface() -> void:
-	var terrain := _terrain()
-	_dig_basin(terrain)
-	var water := _water_over(terrain)
-	var service := WaterService.new()
-	service.configure(water, terrain)
-	var lake := service.create_body(WaterBody.Type.LAKE, 0)
-
-	# A stroke across the bank and the basin wets only the basin: painting water
-	# that stands zero deep on dry ground would put a lake on a hillside.
-	var cells: Array[Vector2i] = [Vector2i(4, 0), Vector2i(5, 0), Vector2i(6, 0)]
-	assert(service.paint(cells, lake.id, 0))
-	assert(water.has_water(Vector2i(4, 0)))
-	assert(not water.has_water(Vector2i(5, 0)))
-
-	# ...and a stroke entirely on such ground is a refusal, not a silent no-op.
-	var dry: Array[Vector2i] = [Vector2i(6, 0), Vector2i(7, 0)]
-	assert(not service.paint(dry, lake.id, 0))
-	assert(service.last_rejection() == WaterService.REASON_NOTHING_TO_DO)
 
 
 static func _test_undo_restores_the_layer_exactly() -> void:
@@ -213,8 +195,8 @@ static func _test_freezing_refuses_lava_and_fast_water() -> void:
 	var water := _water_over(terrain)
 	var service := WaterService.new()
 	service.configure(water, terrain)
-	assert(terrain.set_height(Vector2i(0, 0), -2))
-	assert(terrain.set_height(Vector2i(2, 0), -2))
+	assert(terrain.set_height(Vector2i(0, 0), -4))
+	assert(terrain.set_height(Vector2i(2, 0), -4))
 
 	var lava := service.create_body(WaterBody.Type.LAVA, 0)
 	assert(water.set_cell(Vector2i(0, 0), lava.id, 0))
@@ -258,6 +240,35 @@ static func _test_codec_round_trip() -> void:
 	other.configure(1.0, BOARD_CELLS / 2)
 	other.add_body(lake.duplicate_body())
 	assert(not MapWaterCodec.decode_into(buffer, other))
+
+
+static func _test_codec_rejects_damaged_cells_without_partial_decode() -> void:
+	var terrain := _terrain()
+	_dig_basin(terrain)
+	var water := _water_over(terrain)
+	var lake := water.create_body(WaterBody.Type.LAKE, 0)
+	assert(water.set_cell(Vector2i.ZERO, lake.id, 0))
+	var buffer := MapWaterCodec.encode(water, false)
+	var half := BOARD_CELLS / 2
+	var zero_offset := MapWaterCodec.HEADER_BYTES + (half * BOARD_CELLS + half) * MapWaterCodec.BYTES_PER_CELL
+	buffer[zero_offset + 1] = 77 # registry has no such body
+	var restored := _water_over(terrain)
+	restored.add_body(lake.duplicate_body())
+	assert(not MapWaterCodec.decode_into(buffer, restored))
+	assert(restored.wet_cell_count() == 0, "validation happens before the first cell write")
+
+
+static func _test_hanging_water_is_removed() -> void:
+	var terrain := _terrain()
+	var water := _water_over(terrain)
+	var lake := water.create_body(WaterBody.Type.LAKE, 0)
+	assert(terrain.set_height(Vector2i.ZERO, -1))
+	assert(water.set_cell(Vector2i.ZERO, lake.id, 0))
+	assert(water.damaged_body_ids(terrain).is_empty(), "four banks support the cell")
+	assert(terrain.set_height(Vector2i.RIGHT, -1))
+	assert(water.damaged_body_ids(terrain) == [lake.id], "a low dry side leaves hanging water")
+	assert(water.remove_damaged_bodies(terrain) == [lake.id])
+	assert(not water.has_body(lake.id) and not water.has_water(Vector2i.ZERO))
 
 
 static func _test_document_round_trip_carries_the_registry() -> void:
@@ -328,7 +339,7 @@ static func _test_lava_is_impassable_at_any_depth() -> void:
 	var terrain := _terrain()
 	var water := _water_over(terrain)
 	var lava := water.create_body(WaterBody.Type.LAVA, 0)
-	assert(terrain.set_height(Vector2i(0, 0), -1))
+	assert(terrain.set_height(Vector2i(0, 0), -WaterGrid.FORD_MAX_DEPTH_STEPS))
 	assert(water.set_cell(Vector2i(0, 0), lava.id, 0))
 	var nav := _nav_over(terrain, water)
 	# Shallow enough to be a ford if it were water; it is not water (§9.4).
@@ -576,13 +587,21 @@ static func _test_terrain_reflow_splits_disconnected_water() -> void:
 		assert(terrain.set_height(cell, -1))
 	var lake := service.create_body(WaterBody.Type.LAKE, 0)
 	assert(lake != null and service.flood(middle, lake.id, 0))
+	assert(service.set_frozen([left, right] as Array[Vector2i], true, 2))
+	assert(service.set_flow([left, right] as Array[Vector2i], lake.id, SlopeCatalog.DIR_E, 1))
 
 	assert(terrain.set_height(middle, 0))
 	var edits := service.reflow_bodies_after_terrain([middle])
-	assert(edits.size() == 2, "one reflow kept the original lake and created one detached body")
+	assert(edits.size() == 1, "one atomic reflow replaces the lake with all detached bodies")
 	assert(water.body_count() == 2, "a dry ridge split the lake into two bodies")
-	assert(water.is_wet(terrain, left) and water.is_wet(terrain, right), "both detached parts remain water")
+	assert(water.is_wet(terrain, left) and water.is_wet(terrain, right), "both detached parts remain water: left=%s/%d right=%s/%d bodies=%d" % [water.is_wet(terrain, left), water.body_id_at(left), water.is_wet(terrain, right), water.body_id_at(right), water.body_count()])
 	assert(water.body_id_at(left) != water.body_id_at(right), "the detached parts have distinct ids")
+	assert(water.is_frozen(left) and water.is_frozen(right), "splitting preserves authored ice")
+	assert(water.body_at(left).flow_strength_at(left) == 1 and water.body_at(right).flow_strength_at(right) == 1, "splitting partitions authored flow")
+	assert(service.undo(), "the topology replacement is one undo step")
+	assert(water.body_count() == 1 and water.is_wet(terrain, left) and water.is_wet(terrain, right))
+	assert(water.body_id_at(left) == water.body_id_at(right), "undo restores the original body identity")
+	assert(water.is_frozen(left) and water.is_frozen(right), "undo keeps the ice flags")
 
 
 static func _test_border_nothing_never_floods() -> void:
@@ -627,13 +646,20 @@ static func _test_access_service_finds_banks_not_water() -> void:
 	var lake := service.create_body(WaterBody.Type.LAKE, 0)
 	assert(service.flood(Vector2i.ZERO, lake.id, 0))
 
+	var nav := _nav_over(terrain, water)
 	var access := WaterAccessService.new()
-	access.configure(water, terrain)
+	access.configure(water, terrain, nav)
 	var positions := access.source_positions()
 	assert(not positions.is_empty())
 	for position: Vector3 in positions:
 		var cell := terrain.cell_from_position(position)
 		assert(not water.is_wet(terrain, cell), "an access point is the bank, never the water")
+	var all_blocked: Dictionary = {}
+	for z in range(terrain.min_cell().y, terrain.max_cell().y + 1):
+		for x in range(terrain.min_cell().x, terrain.max_cell().x + 1):
+			all_blocked[Vector2i(x, z)] = true
+	nav.set_blocked_cells(all_blocked)
+	assert(not access.has_source(), "navigation changes invalidate cached bank positions")
 
 	# Salt water is not drinkable, so a sea leaves no access points at all (§9.2).
 	var sea_terrain := _terrain()
@@ -648,5 +674,29 @@ static func _test_access_service_finds_banks_not_water() -> void:
 	assert(not sea_access.has_source())
 
 
-## A session with no map still needs water, and it gets a dug basin in the real
-## grids rather than the prop-plus-blocked-cells arrangement it used to get.
+static func _test_building_placement_rejects_open_and_frozen_water() -> void:
+	var terrain := _terrain()
+	var water := _water_over(terrain)
+	var lake := water.create_body(WaterBody.Type.LAKE, 1)
+	assert(water.set_cell(Vector2i.ZERO, lake.id, 1))
+	var port := BuildingPlacementRuntimePort.new()
+	port.terrain_grid = terrain
+	port.water_grid = water
+	port.terrain_height_at = func(_x: float, _z: float, _fallback: float) -> float: return 0.0
+	port.max_build_slope = 0.5
+	var placement := BuildingPlacementService.new()
+	placement.configure(port)
+	var centre := Vector3(0.5, 0.0, 0.5)
+	assert(placement.footprint_overlaps_terrain_obstacle(centre, Vector2i.ONE))
+	assert(water.set_frozen(Vector2i.ZERO, true, 2))
+	assert(placement.footprint_overlaps_terrain_obstacle(centre, Vector2i.ONE), "ice never becomes a foundation")
+
+
+static func _test_navigation_refuses_every_edge_outside_the_board() -> void:
+	var nav := NavGrid.new()
+	nav.configure(1.0, 5)
+	assert(nav.is_board_cell(Vector2i(-2, -2)))
+	assert(nav.is_board_cell(Vector2i(2, 2)), "odd boards retain their positive rim")
+	assert(not nav.is_board_cell(Vector2i(3, 2)))
+	assert(not nav.is_edge_passable(Vector2i(2, 2), Vector2i(3, 2)))
+	assert(not nav.is_step_passable(Vector2i(2, 2), Vector2i(3, 2)))

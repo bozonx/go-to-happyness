@@ -265,17 +265,37 @@ static func _flat_normal() -> Image:
 	return image
 
 
+## Sobel-free central difference over the height map in the source's alpha, done
+## on the raw byte buffers.
+##
+## The per-pixel `get_pixel`/`set_pixel` version was four `Color` allocations and
+## five calls for each of 262 144 texels, per authored layer, run lazily while the
+## first ground material was being created — i.e. in the middle of loading a map.
+## Reading `get_data()` once and walking `PackedByteArray` is the same arithmetic
+## without the per-texel call overhead.
 static func _normal_from_height(source: Image) -> Image:
-	var image := Image.create_empty(TEXTURE_SIZE, TEXTURE_SIZE, false, Image.FORMAT_RGBA8)
-	for y in TEXTURE_SIZE:
-		var previous_y := (y - 1 + TEXTURE_SIZE) % TEXTURE_SIZE
-		var next_y := (y + 1) % TEXTURE_SIZE
-		for x in TEXTURE_SIZE:
-			var previous_x := (x - 1 + TEXTURE_SIZE) % TEXTURE_SIZE
-			var next_x := (x + 1) % TEXTURE_SIZE
-			var dx := source.get_pixel(next_x, y).a - source.get_pixel(previous_x, y).a
-			var dy := source.get_pixel(x, next_y).a - source.get_pixel(x, previous_y).a
+	var size := source.get_width()
+	var heights := source.get_data()
+	var normals := PackedByteArray()
+	normals.resize(size * size * 4)
+	var inverse := 1.0 / 255.0
+	for y in size:
+		var row := y * size
+		var previous_row := ((y - 1 + size) % size) * size
+		var next_row := ((y + 1) % size) * size
+		for x in size:
+			var previous_x := (x - 1 + size) % size
+			var next_x := (x + 1) % size
+			# RGBA8: alpha is the fourth byte of each texel, and alpha is where the
+			# authored height map lives (§7.1).
+			var dx := float(heights[(row + next_x) * 4 + 3] - heights[(row + previous_x) * 4 + 3]) * inverse
+			var dy := float(heights[(next_row + x) * 4 + 3] - heights[(previous_row + x) * 4 + 3]) * inverse
 			var normal := Vector3(-dx * 2.4, -dy * 2.4, 1.0).normalized()
-			image.set_pixel(x, y, Color(normal.x * 0.5 + 0.5, normal.y * 0.5 + 0.5, normal.z * 0.5 + 0.5, 1.0))
+			var offset := (row + x) * 4
+			normals[offset] = int(normal.x * 127.5 + 127.5)
+			normals[offset + 1] = int(normal.y * 127.5 + 127.5)
+			normals[offset + 2] = int(normal.z * 127.5 + 127.5)
+			normals[offset + 3] = 255
+	var image := Image.create_from_data(size, size, false, Image.FORMAT_RGBA8, normals)
 	image.generate_mipmaps()
 	return image

@@ -40,9 +40,9 @@ const ICE_THICKNESS_SHIFT := 1
 const ICE_THICKNESS_MASK := 0x03
 const MAX_ICE_THICKNESS := 3
 
-## Depth, in steps, up to which a cell is a ford rather than open water (§9.7).
-## One step is 0.5 m — knee-deep.
-const FORD_MAX_DEPTH_STEPS := 1
+## Direct walkers may wade up to 1.5 m. Terrain steps are 0.5 m; deeper water
+## has no walkable floor and swimming is deliberately unsupported.
+const FORD_MAX_DEPTH_STEPS := 3
 ## What wading costs compared with dry ground of the same material (§9.7).
 const FORD_WEIGHT_MULTIPLIER := 3.0
 
@@ -143,7 +143,6 @@ func remove_body(body_id: int) -> bool:
 		_body_ids[index] = WaterBody.NO_BODY
 		_heights[index] = 0
 		_flags[index] = 0
-		_touch()
 	_body_cells.erase(body_id)
 	_revision += 1
 	return true
@@ -154,8 +153,8 @@ func has_body(body_id: int) -> bool:
 
 
 ## Swaps a body's metadata in place. The id and all cell references stay; only the
-## body object changes. Used by retype operations to change a body's type, colour,
-## wave and other properties without touching any cells.
+## body object changes. Used by retype operations to change a body's type, colour
+## and other properties without touching any cells.
 func replace_body(body_id: int, new_body: WaterBody) -> bool:
 	if not _bodies.has(body_id):
 		return false
@@ -194,7 +193,62 @@ func next_free_body_id() -> int:
 func clear_bodies() -> void:
 	_bodies.clear()
 	_body_cells.clear()
+	_heights.fill(0)
+	_body_ids.fill(WaterBody.NO_BODY)
+	_flags.fill(0)
 	_revision += 1
+
+
+## Returns registry ids which cannot describe a physically supported body.
+## Every open side of every wet column must meet the same body, a bank at or
+## above the surface, or the exact board edge. Holes and low dry neighbours leave
+## a hanging sheet, while mixed levels and dangling flow/ice corrupt metadata.
+func damaged_body_ids(terrain: TerrainGrid) -> Array[int]:
+	var damaged: Array[int] = []
+	if terrain == null or terrain.board_cells != board_cells:
+		for body: WaterBody in bodies():
+			damaged.append(body.id)
+		return damaged
+	for body: WaterBody in bodies():
+		var body_cells := cells_of_body(body.id)
+		var broken := body_cells.is_empty()
+		for cell: Vector2i in body_cells:
+			if terrain.is_hole(cell) or terrain.height_of(cell) >= body.surface_height:
+				broken = true
+				break
+			if height_of(cell) != body.surface_height:
+				broken = true
+				break
+			if is_frozen(cell) and (ice_thickness_at(cell) <= 0 or not body.can_freeze_at(cell)):
+				broken = true
+				break
+			for offset: Vector2i in ORTHOGONAL_OFFSETS:
+				var neighbour := cell + offset
+				if not is_inside(neighbour):
+					continue
+				if terrain.is_hole(neighbour):
+					broken = true
+					break
+				if terrain.height_of(neighbour) < body.surface_height and body_id_at(neighbour) != body.id:
+					broken = true
+					break
+			if broken:
+				break
+		if not broken:
+			for flow_cell: Vector2i in body.flow:
+				if body_id_at(flow_cell) != body.id:
+					broken = true
+					break
+		if broken:
+			damaged.append(body.id)
+	return damaged
+
+
+func remove_damaged_bodies(terrain: TerrainGrid) -> Array[int]:
+	var removed := damaged_body_ids(terrain)
+	for body_id: int in removed:
+		remove_body(body_id)
+	return removed
 
 
 # --- Reads --------------------------------------------------------------------
@@ -370,8 +424,10 @@ func flood_cells(terrain: TerrainGrid, seed: Vector2i, level: int, keep_body_id 
 		return found
 	var seen: Dictionary = {seed: true}
 	var queue: Array[Vector2i] = [seed]
-	while not queue.is_empty():
-		var cell: Vector2i = queue.pop_front()
+	var head := 0
+	while head < queue.size():
+		var cell: Vector2i = queue[head]
+		head += 1
 		found.append(cell)
 		for offset: Vector2i in ORTHOGONAL_OFFSETS:
 			var neighbour := cell + offset
