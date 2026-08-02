@@ -14,6 +14,10 @@ const WorldResourceStateScript = preload("res://game/features/world/domain/world
 
 var simulation: Node
 var map_document: MapDocument = null
+## The entrance this session began at. Entities bound to another one are not
+## created (`map_start.md` §3.2): a player who came in from the south must not
+## find the cart the author put at the north gate.
+var start_option: StringName = &""
 
 class NaturalEntry:
 	extends RefCounted
@@ -21,9 +25,10 @@ class NaturalEntry:
 	var props: Dictionary = {}
 
 
-func setup(p_simulation: Node, map_document: MapDocument = null) -> void:
+func setup(p_simulation: Node, map_document: MapDocument = null, p_start_option: StringName = &"") -> void:
 	simulation = p_simulation
 	self.map_document = map_document
+	start_option = p_start_option
 
 
 func _entities_of_kind(kind: StringName) -> Array[NaturalEntry]:
@@ -31,6 +36,8 @@ func _entities_of_kind(kind: StringName) -> Array[NaturalEntry]:
 	if map_document == null:
 		return result
 	for placed: MapEntityRecord in map_document.entities.entities:
+		if not placed.belongs_to_start(start_option):
+			continue
 		var archetype := EntityArchetypeCatalog.get_archetype(placed.archetype_id)
 		if archetype == null or not archetype.has_component(&"settlement_natural"):
 			continue

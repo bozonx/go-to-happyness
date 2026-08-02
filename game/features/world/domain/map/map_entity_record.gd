@@ -31,6 +31,19 @@ var props: Dictionary = {}
 var appearance: Dictionary = {}
 var tags: Array[StringName] = []
 var activity: StringName = &""
+## Pack-defined meaning, exactly as a zone carries one (`map_start.md` §6.5). The
+## engine stores it and interprets only its own handful (`MapEntityFunction`).
+var function: StringName = &""
+## Start options this entity belongs to (§3.2). Empty — the default — means it
+## exists always, which is every entity a v7 map ever authored. A non-empty list
+## is what makes a cart at the north gate and a backpack at the south gate two
+## genuinely different entrances without copying the map or branching a scenario.
+var starts: Array[StringName] = []
+
+
+## Whether this entity is created for the entrance the session begins at.
+func belongs_to_start(option_id: StringName) -> bool:
+	return starts.is_empty() or option_id in starts
 
 
 ## Клетка, которой объект принадлежит: она выводится из якоря, а не из
@@ -66,6 +79,10 @@ func to_dict() -> Dictionary:
 		result["tags"] = tags.map(func(tag: StringName) -> String: return String(tag))
 	if activity != &"":
 		result["activity"] = String(activity)
+	if function != &"":
+		result["function"] = String(function)
+	if not starts.is_empty():
+		result["starts"] = starts.map(func(value: StringName) -> String: return String(value))
 	return result
 
 
@@ -102,6 +119,9 @@ static func from_dict(source: Dictionary) -> MapEntityRecord:
 	for tag: Variant in source.get("tags", []):
 		record.tags.append(StringName(tag))
 	record.activity = StringName(source.get("activity", ""))
+	record.function = StringName(source.get("function", ""))
+	for option_id: Variant in source.get("starts", []):
+		record.starts.append(StringName(option_id))
 	return record
 
 

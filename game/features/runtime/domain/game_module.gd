@@ -18,10 +18,16 @@ func module_id() -> StringName:
 	return &""
 
 
-## Parameters this module accepts in `start.modules[<id>]`. The launch screen and
-## the game editor build their controls from this list, which is why neither of
-## them contains a module-specific widget.
-func start_parameters() -> Array[StartParameterDef]:
+## Parameters this module accepts in `start.modules[<id>]`. The launch screen, the
+## game editor and the map editor's start section all build their controls from
+## this list, which is why none of them contains a module-specific widget.
+##
+## It is `EntityPropertyDef` — the same schema a placed object's properties use
+## (`map_start.md` §2.6). The separate `StartParameterDef` that used to be here
+## described the same four control types more poorly and had three independently
+## written control builders, so every new kind of parameter cost three edits in
+## three screens and the map editor got it last.
+func start_parameters() -> Array[EntityPropertyDef]:
 	return []
 
 
@@ -62,8 +68,9 @@ func restore_state(_runtime: GameRuntime, _state: Dictionary) -> bool:
 ## Modules call this instead of repeating `parameters.get(key, fallback)`.
 func resolve_parameters(supplied: Dictionary) -> Dictionary:
 	var resolved: Dictionary = {}
-	for parameter: StartParameterDef in start_parameters():
-		resolved[parameter.id] = parameter.coerce(supplied.get(parameter.id, parameter.default_value))
+	for parameter: EntityPropertyDef in start_parameters():
+		resolved[parameter.name] = parameter.clamp_value(
+			supplied.get(parameter.name, parameter.default))
 	for key: Variant in supplied:
 		if not resolved.has(key):
 			resolved[key] = supplied[key]

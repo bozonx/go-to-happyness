@@ -819,7 +819,7 @@ func _setup_world_and_events() -> void:
 func _setup_controllers_and_world() -> void:
 	game.ambient_spawner = AmbientSpawner.new()
 	game.add_child(game.ambient_spawner)
-	game.ambient_spawner.setup(game, game.launch_config.map_document)
+	game.ambient_spawner.setup(game, game.launch_config.map_document, game.launch_config.start_option)
 	game.player_controller = PlayerController.new()
 	game.add_child(game.player_controller)
 	game.player_controller.setup(game)

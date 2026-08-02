@@ -134,7 +134,12 @@ func read_header(source: StringName, id: StringName) -> Dictionary:
 	var parsed := _read_json(path.path_join(MAP_JSON))
 	if parsed.is_empty():
 		return {}
-	var meta := MapMeta.from_dict(parsed)
+	# Through the same migration the loader runs: the launch screen must offer the
+	# entrances of a v7 map too, and those are the ones the migration invents.
+	var upgraded := MapFormatMigration.upgrade(parsed)
+	if upgraded.is_empty():
+		return {}
+	var meta := MapMeta.from_dict(upgraded)
 	return {
 		"source": source,
 		"id": id,
@@ -147,6 +152,10 @@ func read_header(source: StringName, id: StringName) -> Dictionary:
 		# The launch screen needs the era policy before it has a session, and the
 		# header is the only place it can get it without decoding the terrain.
 		"progression": meta.start.progression,
+		# Entrances and their overrides decide both the start carousel and the
+		# parameter chain (`map_start.md` §3, §2.5), and both are needed before a
+		# session exists — so the whole start record travels with the header.
+		"start": meta.start,
 		"author": meta.author,
 		"path": path,
 		"has_preview": FileAccess.file_exists(path.path_join(PREVIEW_PNG)),
@@ -183,11 +192,14 @@ func load_package(path: String) -> MapDocument:
 		return null
 
 	var version := int(parsed.get("format_version", 0))
-	if version != MapMeta.FORMAT_VERSION:
+	# An older map is upgraded here, before any typed reader sees it, so the whole
+	# format-history problem lives in one file instead of in every consumer.
+	var upgraded := MapFormatMigration.upgrade(parsed)
+	if upgraded.is_empty():
 		last_error = "неподдерживаемая версия карты (%d, требуется %d)" % [version, MapMeta.FORMAT_VERSION]
 		return null
 
-	var document := MapDocument.from_json(parsed)
+	var document := MapDocument.from_json(upgraded)
 	var terrain_path := path.path_join(TERRAIN_BIN)
 	if FileAccess.file_exists(terrain_path):
 		var buffer := FileAccess.get_file_as_bytes(terrain_path)

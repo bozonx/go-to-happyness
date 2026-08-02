@@ -8,12 +8,17 @@ extends RefCounted
 var areas: Array[ZoneAreaRecord] = []
 var anchors: Array[ZoneAnchorRecord] = []
 var routes: Array[ZoneRouteRecord] = []
+## Party appearance, one level above the anchors (`map_start.md` §4.2). It lives
+## in the zone layer and not in a file of its own because it is made entirely of
+## zone primitives: slots point at anchors, the formation grows inside an area.
+var spawn_groups: Array[MapSpawnGroup] = []
 
 
 func clear() -> void:
 	areas.clear()
 	anchors.clear()
 	routes.clear()
+	spawn_groups.clear()
 
 
 func area_by_id(id: StringName) -> ZoneAreaRecord:
@@ -34,6 +39,13 @@ func route_by_id(id: StringName) -> ZoneRouteRecord:
 	for route in routes:
 		if route.id == id:
 			return route
+	return null
+
+
+func spawn_group_by_id(id: StringName) -> MapSpawnGroup:
+	for group in spawn_groups:
+		if group.id == id:
+			return group
 	return null
 
 
@@ -58,6 +70,7 @@ func to_json() -> Dictionary:
 		"areas": areas.map(func(area: ZoneAreaRecord) -> Dictionary: return area.to_dict()),
 		"anchors": anchors.map(func(anchor: ZoneAnchorRecord) -> Dictionary: return anchor.to_dict()),
 		"routes": routes.map(func(route: ZoneRouteRecord) -> Dictionary: return route.to_dict()),
+		"spawn_groups": spawn_groups.map(func(group: MapSpawnGroup) -> Dictionary: return group.to_dict()),
 	}
 
 
@@ -72,6 +85,11 @@ func from_json(source: Dictionary) -> void:
 	for raw_route in source.get("routes", []):
 		if raw_route is Dictionary:
 			routes.append(ZoneRouteRecord.from_dict(raw_route))
+	for raw_group in source.get("spawn_groups", []):
+		if raw_group is Dictionary:
+			var group := MapSpawnGroup.from_dict(raw_group)
+			if group.id != &"":
+				spawn_groups.append(group)
 
 
 ## Map-only role gate. Building-only rooms own fixtures and are supplied by a
@@ -117,6 +135,23 @@ func validate(board_cells: int) -> Array[String]:
 		for stop in route.stops:
 			if anchor_by_id(stop) == null:
 				errors.append("маршрут %s ссылается на отсутствующую точку %s" % [route.id, stop])
+	for group in spawn_groups:
+		_validate_id(group.id, ids, errors)
+		# A group made of neither places nor a clearing has nowhere to put anybody,
+		# and the failure would otherwise surface as a launch error on a map that
+		# looked complete in the editor (`map_start.md` §4.3).
+		if group.slots.is_empty() and group.area_id == &"":
+			errors.append("группа появления %s не имеет ни слотов, ни области" % group.id)
+		if group.area_id != &"" and area_by_id(group.area_id) == null:
+			errors.append("группа появления %s ссылается на отсутствующую область %s" % [group.id, group.area_id])
+		for slot in group.slots:
+			var anchor := anchor_by_id(slot.anchor_id)
+			if anchor == null:
+				errors.append("слот %s группы %s ссылается на отсутствующую точку %s" % [
+					slot.id, group.id, slot.anchor_id])
+			elif not anchor.is_spawn():
+				errors.append("слот %s группы %s ссылается на точку %s с ролью %s вместо spawn" % [
+					slot.id, group.id, anchor.id, anchor.role])
 	return errors
 
 

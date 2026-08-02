@@ -38,6 +38,7 @@ func launch_game_definition(
 	module_parameters: Dictionary = {},
 	selected_era: StringName = &"",
 	resolved_map: MapDocument = null,
+	start_option: StringName = &"",
 ) -> void:
 	pending_save_path = ""
 	editor_return_scene = ""
@@ -52,7 +53,8 @@ func launch_game_definition(
 	if document == null:
 		push_warning("[launch] игровая сессия отменена: карта %s не открылась: %s" % [selected_map, _map_service.last_error])
 		return
-	active_session = GameSessionConfig.create(definition, selected_map, document, module_parameters, selected_era)
+	active_session = GameSessionConfig.create(
+		definition, selected_map, document, module_parameters, selected_era, start_option)
 	get_tree().change_scene_to_file(GAME_RUNTIME_SCENE)
 
 
@@ -75,6 +77,7 @@ func launch_editor_test(
 	map_ref: StringName = &"editor:preview",
 	spawn_override := Vector3.INF,
 	editor_state: Dictionary = {},
+	start_option: StringName = &"",
 ) -> void:
 	if document == null:
 		push_warning("[launch] тест-запуск отменён: карта отсутствует")
@@ -87,7 +90,7 @@ func launch_editor_test(
 	pending_editor_document = document
 	pending_editor_state = editor_state.duplicate(true)
 	editor_return_scene = return_scene
-	active_session = GameSessionConfig.create(definition, map_ref, document)
+	active_session = GameSessionConfig.create(definition, map_ref, document, {}, &"", start_option)
 	active_session.spawn_override = spawn_override
 	get_tree().change_scene_to_file(GAME_RUNTIME_SCENE)
 

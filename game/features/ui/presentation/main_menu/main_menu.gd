@@ -46,6 +46,15 @@ var _definition: GameDefinition = null
 ## `module_id -> { parameter_id: value }`, collected from the declared controls.
 var _module_values: Dictionary = {}
 var _map_service := MapDocumentService.new()
+## The chosen entrance (`map_start.md` §3). One per map, and the map decides what
+## `selectable` means; the menu only offers what it is allowed to offer.
+var selected_start: StringName = &""
+## Start data of the chosen map, read from its header — the entrances, their
+## overrides and the defaults every parameter is resolved against.
+var _map_start: MapStart = MapStart.new()
+## The §2.5 chain behind every control on this screen, recomputed on each change
+## so what the player sees is what the session will receive.
+var _resolution: StartParameterResolution = StartParameterResolution.new()
 
 
 func _ready() -> void:
@@ -90,6 +99,10 @@ func _setup_game_options() -> void:
 
 func _on_game_selected(index: int) -> void:
 	selected_game = StringName(game_option.get_item_metadata(index))
+	# Player choices belong to the game and map they were made under; carrying
+	# them across would hand another game a parameter it never declared.
+	_module_values.clear()
+	selected_start = &""
 	_definition = GameModuleRegistry.resolve_definition(selected_game)
 	game_description_label.text = _definition.description if _definition != null else "Игра не читается"
 	_setup_map_options()
@@ -132,6 +145,8 @@ func _setup_map_options() -> void:
 
 func _on_landscape_selected(index: int) -> void:
 	selected_map = StringName(landscape_option.get_item_metadata(index))
+	_module_values.clear()
+	selected_start = &""
 	_refresh_map_preview()
 	_rebuild_parameters()
 	_update_summary()
@@ -149,14 +164,17 @@ func _rebuild_parameters() -> void:
 	for child in parameters_box.get_children():
 		parameters_box.remove_child(child)
 		child.queue_free()
-	_module_values.clear()
 	selected_era = &""
 	if _definition == null:
 		parameters_title.text = "Параметры"
 		return
+	_read_map_start()
+	_resolve_parameters()
 	var progression := SessionProgression.resolve(_definition.progression, _selected_map_policy())
 	selected_era = progression.current_era
 	var rendered := 0
+	if _add_start_control():
+		rendered += 1
 	for entry: Dictionary in _definition.menu_parameters:
 		if StringName(entry.get("type", "")) == GameDefinition.MENU_PARAMETER_ERA:
 			if _add_era_control(progression, String(entry.get("label", "Начальная эра"))):
@@ -175,12 +193,67 @@ func _rebuild_parameters() -> void:
 ## The era policy of the selected map, read from its header. Loading the package
 ## here would decode terrain and water on every click in the map list.
 func _selected_map_policy() -> ProgressionPolicy:
+	return _map_start.progression
+
+
+## The start record of the chosen map, and the entrance chosen inside it. Read
+## from the header rather than the package: the launch screen must not decode
+## terrain and water to know how many ways into a map there are.
+func _read_map_start() -> void:
+	_map_start = MapStart.new()
 	if selected_map.is_empty():
-		return ProgressionPolicy.new()
+		selected_start = &""
+		return
 	var address := MapDocumentService.split_key(selected_map)
 	var header := _map_service.read_header(address["source"], address["id"])
-	var policy: Variant = header.get("progression", null)
-	return policy if policy is ProgressionPolicy else ProgressionPolicy.new()
+	var start: Variant = header.get("start", null)
+	if start is MapStart:
+		_map_start = start
+	var chosen := _map_start.start_by_id(selected_start)
+	if chosen == null or not chosen.selectable or not chosen.suits_definition(selected_game):
+		var fallback := _map_start.default_option(selected_game)
+		selected_start = fallback.id if fallback != null else &""
+
+
+## Runs the §2.5 chain for what is currently chosen. Every control on the screen
+## is drawn from the result, so the numbers the player reads are the numbers the
+## session will be created with — not an approximation the launch then redoes.
+func _resolve_parameters() -> void:
+	var declared: Dictionary = {}
+	if _definition != null:
+		for module_id: StringName in _definition.module_ids:
+			declared[module_id] = GameModuleRegistry.start_parameters_of(module_id)
+	var option := _map_start.start_by_id(selected_start)
+	_resolution = StartParameterResolver.resolve(
+		declared,
+		_definition.start_module_parameters if _definition != null else {},
+		_map_start.module_settings,
+		option.module_overrides if option != null else {},
+		_module_values,
+	)
+
+
+## The entrances the player may pick (§12, block 2). A map with one entrance
+## draws no picker at all: a choice of one is noise, not information.
+func _add_start_control() -> bool:
+	var options := _map_start.selectable_options(selected_game)
+	if options.size() < 2:
+		return false
+	var option_button := OptionButton.new()
+	option_button.custom_minimum_size = Vector2(0, 40)
+	for entrance: MapStartOption in options:
+		option_button.add_item(entrance.display_name())
+		option_button.set_item_metadata(option_button.item_count - 1, entrance.id)
+		option_button.set_item_tooltip(option_button.item_count - 1, entrance.display_description())
+		if entrance.id == selected_start:
+			option_button.select(option_button.item_count - 1)
+	option_button.item_selected.connect(func(index: int) -> void:
+		selected_start = StringName(option_button.get_item_metadata(index))
+		# An entrance carries its own overrides, so everything below it is stale.
+		_rebuild_parameters()
+		_update_summary())
+	_add_labelled("Место старта", option_button)
+	return true
 
 
 func _add_era_control(progression: SessionProgression, label_text: String) -> bool:
@@ -202,52 +275,63 @@ func _add_era_control(progression: SessionProgression, label_text: String) -> bo
 	return true
 
 
+## One inspector row, built from the declaring module's own schema. The three
+## hand-written control builders this replaces — one here, one in the game editor
+## and one static panel in the map editor — are why a new kind of parameter used
+## to cost three edits in three screens (`map_start.md` §2.6).
+##
+## The parameter arrives already resolved (§2.5), so the control shows the
+## narrowed range rather than the module's, and a locked parameter is drawn
+## disabled instead of vanishing: an empty space explains nothing.
 func _add_module_control(module_id: StringName, parameter_id: StringName) -> bool:
 	if module_id not in _definition.module_ids:
 		return false
-	var parameter := StartParameterDef.find(GameModuleRegistry.start_parameters_of(module_id), parameter_id)
-	if parameter == null:
+	var declared := EntityPropertyDef.find(
+		GameModuleRegistry.start_parameters_of(module_id), parameter_id)
+	if declared == null:
 		return false
-	var authored: Variant = _definition.parameters_for(module_id).get(parameter_id, parameter.default_value)
-	var value: Variant = parameter.coerce(authored)
-	_set_module_value(module_id, parameter_id, value)
-	match parameter.type:
-		StartParameterDef.TYPE_INT:
-			var spin := SpinBox.new()
-			spin.min_value = parameter.min_value
-			spin.max_value = parameter.max_value
-			spin.value = int(value)
-			spin.value_changed.connect(func(new_value: float) -> void:
-				_set_module_value(module_id, parameter_id, int(new_value))
-				_update_summary())
-			_add_labelled(parameter.label, spin)
-		StartParameterDef.TYPE_BOOL:
-			var check := CheckBox.new()
-			check.text = parameter.label
-			check.button_pressed = bool(value)
-			check.toggled.connect(func(pressed: bool) -> void:
-				_set_module_value(module_id, parameter_id, pressed)
-				_update_summary())
-			parameters_box.add_child(check)
-		StartParameterDef.TYPE_ENUM:
-			var option := OptionButton.new()
-			for choice: Dictionary in parameter.options:
-				option.add_item(String(choice.get("label", choice.get("value", ""))))
-				option.set_item_metadata(option.item_count - 1, choice.get("value"))
-				if choice.get("value") == value:
-					option.select(option.item_count - 1)
-			option.item_selected.connect(func(index: int) -> void:
-				_set_module_value(module_id, parameter_id, option.get_item_metadata(index))
-				_update_summary())
-			_add_labelled(parameter.label, option)
-		_:
-			var edit := LineEdit.new()
-			edit.text = String(value)
-			edit.text_changed.connect(func(new_text: String) -> void:
-				_set_module_value(module_id, parameter_id, new_text)
-				_update_summary())
-			_add_labelled(parameter.label, edit)
+	var entry := _resolution.entry(module_id, parameter_id)
+	if entry == null:
+		return false
+	var property := _narrowed_property(declared, entry)
+	_set_module_value(module_id, parameter_id, entry.value)
+	var inspector := EditorPropertyInspector.new()
+	inspector.set_fields([property], {parameter_id: entry.value}, false, entry.is_player_choice())
+	# Only the value and the summary change: rebuilding the panel here would free
+	# the control under the player's cursor, and a player's own choice cannot
+	# narrow anyone's range, so nothing else on screen becomes stale.
+	inspector.property_committed.connect(func(_name: StringName, value: Variant) -> void:
+		_set_module_value(module_id, parameter_id, value)
+		_resolve_parameters()
+		_update_summary())
+	parameters_box.add_child(inspector)
+	parameters_box.add_child(_provenance_label(entry))
 	return true
+
+
+## A copy of the declaration carrying the range the chain agreed on. The module's
+## own schema is left alone: it describes what the module can simulate, not what
+## this map allows.
+func _narrowed_property(declared: EntityPropertyDef, entry: StartParameterResolution.Entry) -> EntityPropertyDef:
+	var property := EntityPropertyDef.from_dict(declared.to_dict())
+	property.minimum = entry.minimum
+	property.maximum = entry.maximum
+	property.options = entry.options.duplicate()
+	if entry.locked_by != 0:
+		property.editable = false
+		property.unavailable_reason = "%s закрепил это значение" % StartParameterResolution.level_name(entry.locked_by)
+	return property
+
+
+## Why the slider stops where it does (§12). Without it, a range the map narrowed
+## is indistinguishable from a bug in the menu.
+func _provenance_label(entry: StartParameterResolution.Entry) -> Label:
+	var label := Label.new()
+	label.text = "\n".join(entry.explain())
+	label.add_theme_font_size_override("font_size", 11)
+	label.modulate = Color(1.0, 1.0, 1.0, 0.55)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	return label
 
 
 func _add_labelled(label_text: String, control: Control) -> void:
@@ -276,13 +360,17 @@ func _update_summary() -> void:
 			description_label.text = era.display_description()
 	if selected_era.is_empty():
 		description_label.text = _definition.name
-	for module_id: StringName in _module_values:
-		var declared := GameModuleRegistry.start_parameters_of(module_id)
-		var values: Dictionary = _module_values[module_id]
-		for parameter_id: StringName in values:
-			var parameter := StartParameterDef.find(declared, parameter_id)
-			if parameter != null:
-				lines.append("%s: %s" % [parameter.label, values[parameter_id]])
+	var entrance := _map_start.start_by_id(selected_start)
+	if entrance != null and _map_start.selectable_options(selected_game).size() > 1:
+		lines.append("Место старта: %s" % entrance.display_name())
+	# The summary reads the resolved values, not the collected ones: a parameter
+	# the map locked never appears in `_module_values`, and leaving it out of the
+	# summary would hide exactly the value the player did not get to choose.
+	for entry: Dictionary in _definition.menu_parameters:
+		var module_id := StringName(entry.get("module", ""))
+		var resolved := _resolution.entry(module_id, StringName(entry.get("id", "")))
+		if resolved != null:
+			lines.append("%s: %s" % [resolved.label, resolved.value])
 	param_summary_label.text = "• " + "\n• ".join(lines)
 
 
@@ -301,7 +389,7 @@ func _on_start_game_pressed() -> void:
 		return
 	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
 	launch_mgr.call("launch_game_definition", selected_game, selected_map,
-		_module_values.duplicate(true), selected_era)
+		_module_values.duplicate(true), selected_era, null, selected_start)
 
 
 func _on_editor_pressed() -> void:

@@ -27,8 +27,10 @@ extends RefCounted
 ## Surface appearance — material index and the detail byte holding variant, wear
 ## and snow depth (`terrain_materials.md` §5) — is stored here but is NOT mesh
 ## input: it reaches the GPU through the index and detail maps (§7.3). So painting
-## it dirties the *surface* set, never a chunk, and that is what makes a material
-## brush cost one texel instead of a remesh (§7.5).
+## it dirties the *surface* set, not a chunk, and that is what makes a material
+## brush cost one texel instead of a remesh (§7.5). The single exception is a
+## repaint that changes the auto-rock kind (§3) of a column which actually has a
+## vertical face to draw it on — see `_touch_cliff_kind`.
 
 ## Vertical step in metres. All stored heights are integer multiples of it.
 const HEIGHT_STEP := 0.5
@@ -318,7 +320,8 @@ func set_cell_state(cell: Vector2i, height: int, slope_class: int, slope_dir: in
 		or _slope_indices[index] != next_index
 		or _flags[index] != next_flags
 	)
-	var surface_changed := _materials[index] != material_index or _details[index] != next_detail
+	var previous_material := int(_materials[index])
+	var surface_changed := previous_material != material_index or _details[index] != next_detail
 	_heights[index] = height
 	_slope_classes[index] = slope_class
 	_slope_dirs[index] = next_dir
@@ -335,6 +338,10 @@ func set_cell_state(cell: Vector2i, height: int, slope_class: int, slope_dir: in
 	# material/detail-only vegetation changes.
 	if surface_changed:
 		_touch_surface(cell)
+	if not geometry_changed:
+		# A geometry edit already re-emits the whole chunk, faces included; only a
+		# surface-only write has to ask whether it moved a cliff kind.
+		_touch_cliff_kind(cell, previous_material, material_index)
 	return true
 
 
@@ -354,10 +361,12 @@ func set_material_index(cell: Vector2i, material_index: int) -> bool:
 	if not is_inside(cell) or not TerrainMaterialCatalog.is_valid_index(material_index):
 		return false
 	var index := _index_of(cell)
-	if _materials[index] == material_index:
+	var previous := int(_materials[index])
+	if previous == material_index:
 		return true
 	_materials[index] = material_index
 	_touch_surface(cell)
+	_touch_cliff_kind(cell, previous, material_index)
 	return true
 
 
@@ -966,3 +975,44 @@ func _expand_dirty_chunk(chunk: Vector2i, cell: Vector2i) -> void:
 func _touch_surface(cell: Vector2i) -> void:
 	_revision += 1
 	_dirty_surface_cells[cell] = true
+
+
+## The ONE exception to "painting a material is not a mesh operation"
+## (`terrain_materials.md` §7.5).
+##
+## A vertical face is not drawn with the material on top of it; it is drawn with
+## that material's `cliff_material` (§3), and that number lives in the mesh's
+## vertex data because it is flat per quad. So repainting the top of a cliff from
+## grass to stone really does change geometry data — and while nothing asked for
+## a rebuild, the face kept its old rooted-soil texture until some unrelated
+## height edit happened to pass through the chunk.
+##
+## The remesh is asked for only when BOTH are true: the two materials disagree
+## about their face kind, and this column actually has a face to draw. Repainting
+## flat ground — which is what a brush spends nearly all its strokes on — still
+## costs one texel and nothing else.
+func _touch_cliff_kind(cell: Vector2i, previous_material: int, next_material: int) -> void:
+	if TerrainMaterialCatalog.cliff_index_of_index(previous_material) == TerrainMaterialCatalog.cliff_index_of_index(next_material):
+		return
+	if not _emits_face(cell):
+		return
+	_touch(cell)
+
+
+## Whether this column can put a vertical face on the world: it stands above a
+## neighbour, sits beside missing ground, or its corners are tilted by a ramp.
+## Deliberately generous — a false positive is one extra chunk rebuild, a false
+## negative is a face left showing the wrong rock.
+func _emits_face(cell: Vector2i) -> bool:
+	if is_hole(cell):
+		return false
+	if is_ramp_cell(cell):
+		return true
+	var height := height_of(cell)
+	for direction: int in SlopeCatalog.ORTHOGONAL_DIRECTIONS:
+		var neighbour := cell + SlopeCatalog.direction_offset(direction)
+		if not is_inside(neighbour) or is_hole(neighbour):
+			return true
+		if height_of(neighbour) < height or is_ramp_cell(neighbour):
+			return true
+	return false

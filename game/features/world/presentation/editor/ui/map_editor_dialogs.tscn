@@ -400,3 +400,113 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 placeholder_text = "clear"
+
+[node name="StartsHeader" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "Варианты старта"
+
+[node name="StartsSpacer" type="Control" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+
+[node name="StartsListLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Входы на карту:"
+
+[node name="StartsColumn" type="VBoxContainer" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="StartsList" type="ItemList" parent="StartSettingsDialog/Body/Scroll/Grid/StartsColumn"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 110)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="StartsButtons" type="HBoxContainer" parent="StartSettingsDialog/Body/Scroll/Grid/StartsColumn"]
+layout_mode = 2
+
+[node name="AddStartButton" type="Button" parent="StartSettingsDialog/Body/Scroll/Grid/StartsColumn/StartsButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Добавить"
+
+[node name="RemoveStartButton" type="Button" parent="StartSettingsDialog/Body/Scroll/Grid/StartsColumn/StartsButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Удалить"
+
+[node name="DefaultStartButton" type="Button" parent="StartSettingsDialog/Body/Scroll/Grid/StartsColumn/StartsButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Сделать стартом по умолчанию"
+
+[node name="StartIdLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "ID варианта:"
+
+[node name="StartOptionIdEdit" type="LineEdit" parent="StartSettingsDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="StartNameLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Название:"
+
+[node name="StartOptionNameEdit" type="LineEdit" parent="StartSettingsDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="StartDescriptionLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Описание:"
+
+[node name="StartOptionDescriptionEdit" type="LineEdit" parent="StartSettingsDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="StartGroupLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Группа появления:"
+
+[node name="StartOptionGroupOption" type="OptionButton" parent="StartSettingsDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="StartCameraLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Камера:"
+
+[node name="StartOptionCameraOption" type="OptionButton" parent="StartSettingsDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="StartSelectableLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Доступен игроку:"
+
+[node name="StartOptionSelectableCheck" type="CheckBox" parent="StartSettingsDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="RestrictionsHeader" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "Параметры модулей"
+
+[node name="RestrictionsSpacer" type="Control" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+
+[node name="ModuleParametersLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Значения карты:"
+
+[node name="ModuleParametersBox" type="VBoxContainer" parent="StartSettingsDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3

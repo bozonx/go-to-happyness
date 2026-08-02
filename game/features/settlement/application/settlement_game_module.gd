@@ -20,12 +20,16 @@ func required_modules() -> Array[StringName]:
 	return [&"core.world"]
 
 
-func start_parameters() -> Array[StartParameterDef]:
+## Party size is a `party`-scoped parameter offered to the player: a map narrows
+## it with `restrict` and a start option proposes its own, but no map decides it
+## by how many anchors somebody drew (`map_start.md` §5.3).
+func start_parameters() -> Array[EntityPropertyDef]:
 	return [
-		StartParameterDef.integer(&"starting_population", "Стартовое население", 4, 1, 24),
-		StartParameterDef.integer(&"starting_money", "Монеты", 500, 0, 100000),
-		StartParameterDef.integer(&"starting_wellbeing", "Благополучие", 75, 0, 100),
-		StartParameterDef.text(&"biome", "Биом", "summer_valley"),
+		EntityPropertyDef.integer(&"starting_population", "Стартовое население", 4, 1, 24,
+			EntityPropertyDef.SCOPE_PARTY).offered_to_player(),
+		EntityPropertyDef.integer(&"starting_money", "Монеты", 500, 0, 100000).offered_to_player(),
+		EntityPropertyDef.integer(&"starting_wellbeing", "Благополучие", 75, 0, 100).offered_to_player(),
+		EntityPropertyDef.text(&"biome", "Биом", "summer_valley", EntityPropertyDef.SCOPE_WORLD),
 	]
 
 
@@ -35,8 +39,9 @@ func validate_session(session: GameSessionConfig) -> Array[String]:
 	if not raw is Dictionary:
 		return ["start parameters должны быть объектом"]
 	var launch := _launch_config(session)
-	errors.append_array(MapValidator.validate_party_spawns(
-		launch.map_document, launch.starting_population, launch.has_spawn_override()))
+	errors.append_array(MapValidator.validate_party_capacity(
+		launch.map_document, session.start_option, launch.starting_population,
+		launch.has_spawn_override()))
 	return errors
 
 
@@ -73,6 +78,10 @@ func _launch_config(session: GameSessionConfig) -> GameLaunchConfig:
 	launch.map_ref = session.map_ref
 	launch.map_document = session.map_document
 	launch.spawn_override = session.spawn_override
+	launch.start_option = session.start_option
+	var option := session.start_option_record()
+	if option != null:
+		launch.spawn_group = option.spawn_group
 	# World style is map-owned. Starting resources and equipment are map-owned too:
 	# they live on the backpack entity. Everything else arrives through the
 	# recursively merged game/map/session parameters.

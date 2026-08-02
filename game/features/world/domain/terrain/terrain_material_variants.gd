@@ -7,6 +7,22 @@ extends RefCounted
 ## packed: materials pay only for the surface styles they actually use. Several
 ## grass variants can therefore share one ground style while keeping distinct
 ## vegetation cards (the five flower colours all use the same meadow floor).
+##
+## ## The layer layout is a contract, not a suggestion
+##
+## This file defines the ONE layout of the terrain texture array:
+##
+## ```
+## [ surface styles, materials in catalog order ][ cliff faces, CLIFF_IDS order ]
+##   0 .. SURFACE_LAYER_COUNT-1                    CLIFF_LAYER_OFFSET ..
+## ```
+##
+## Presentation must assemble its arrays to match — it may not insert a block of
+## its own in the middle. It did once, for the simplified render mode, and since
+## nothing compared the two the cliff shader spent the whole time sampling ground
+## placeholders instead of rock. `TOTAL_LAYER_COUNT` is the number every array
+## built from this layout must have, and `TestDomainTerrainTextures` now asserts
+## it against the real `Texture2DArray`.
 
 const MAX_VARIANTS := 16
 
@@ -47,6 +63,32 @@ const SURFACE_STYLE_BY_VARIANT: Array = [
 ]
 
 
+## Derived layout, built once at class load. `surface_layer_offset` used to sum
+## the styles of every preceding material on every call, and `layer_of` called it
+## — so the mesher paid a nested scan of the whole catalog for every wall quad it
+## emitted, to recover a constant.
+static var SURFACE_STYLE_COUNT_BY_INDEX := PackedInt32Array()
+static var SURFACE_LAYER_OFFSET_BY_INDEX := PackedInt32Array()
+static var SURFACE_LAYER_COUNT := 0
+static var CLIFF_LAYER_OFFSET := 0
+static var TOTAL_LAYER_COUNT := 0
+
+
+static func _static_init() -> void:
+	var offset := 0
+	for index in VARIANTS_BY_INDEX.size():
+		var styles: Array = SURFACE_STYLE_BY_VARIANT[index]
+		var highest := 0
+		for style: int in styles:
+			highest = maxi(highest, style)
+		SURFACE_STYLE_COUNT_BY_INDEX.append(highest + 1)
+		SURFACE_LAYER_OFFSET_BY_INDEX.append(offset)
+		offset += highest + 1
+	SURFACE_LAYER_COUNT = offset
+	CLIFF_LAYER_OFFSET = offset
+	TOTAL_LAYER_COUNT = offset + TerrainMaterialCatalog.cliff_count()
+
+
 static func variant_count(material_index: int) -> int:
 	if not TerrainMaterialCatalog.is_valid_index(material_index):
 		return 1
@@ -71,11 +113,7 @@ static func clamp_variant(material_index: int, variant: int) -> int:
 static func surface_style_count(material_index: int) -> int:
 	if not TerrainMaterialCatalog.is_valid_index(material_index):
 		return 1
-	var styles: Array = SURFACE_STYLE_BY_VARIANT[material_index]
-	var highest := 0
-	for style: int in styles:
-		highest = maxi(highest, style)
-	return highest + 1
+	return SURFACE_STYLE_COUNT_BY_INDEX[material_index]
 
 
 static func surface_style_of(material_index: int, variant: int) -> int:
@@ -86,26 +124,20 @@ static func surface_style_of(material_index: int, variant: int) -> int:
 
 static func surface_layer_offset(material_index: int) -> int:
 	var index := material_index if TerrainMaterialCatalog.is_valid_index(material_index) else TerrainMaterialCatalog.DEFAULT_INDEX
-	var offset := 0
-	for previous in index:
-		offset += surface_style_count(previous)
-	return offset
+	return SURFACE_LAYER_OFFSET_BY_INDEX[index]
 
 
 static func layer_of(material_index: int, variant: int) -> int:
 	var index := material_index if TerrainMaterialCatalog.is_valid_index(material_index) else TerrainMaterialCatalog.DEFAULT_INDEX
-	return surface_layer_offset(index) + surface_style_of(index, variant)
+	return SURFACE_LAYER_OFFSET_BY_INDEX[index] + surface_style_of(index, variant)
 
 
 static func surface_layer_count() -> int:
-	var count := 0
-	for index in TerrainMaterialCatalog.MATERIAL_COUNT:
-		count += surface_style_count(index)
-	return count
+	return SURFACE_LAYER_COUNT
 
 
 static func cliff_layer_of(cliff_index: int) -> int:
-	return surface_layer_count() + clampi(cliff_index, 0, TerrainMaterialCatalog.cliff_count() - 1)
+	return CLIFF_LAYER_OFFSET + clampi(cliff_index, 0, TerrainMaterialCatalog.cliff_count() - 1)
 
 
 static func cliff_layer_of_material(material_index: int) -> int:
@@ -113,7 +145,7 @@ static func cliff_layer_of_material(material_index: int) -> int:
 
 
 static func total_layer_count() -> int:
-	return surface_layer_count() + TerrainMaterialCatalog.cliff_count()
+	return TOTAL_LAYER_COUNT
 
 
 static func procedural_variant(material_index: int, cell: Vector2i) -> int:

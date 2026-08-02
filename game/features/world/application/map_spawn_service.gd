@@ -10,13 +10,17 @@ extends RefCounted
 ##
 ## Two levels of API, and the difference matters:
 ##
-## * `hero_spawn_position` / `companion_spawn_positions` read the authored party
-##   starts one-to-one. A starting party is authored per member, so there is no
-##   contention to resolve and no reason to make launch depend on a navigation
-##   field that may not be published yet.
 ## * `claim` is the §15 operation: it filters candidates by passability, access
 ##   rights and occupancy and hands out a place, remembering that it did. A wave,
 ##   a respawn or a drop zone goes through this one.
+## * `plan_party` lays out a whole group at once (`map_start.md` §4.3). It is not
+##   `claim` in a loop: a party is placed as a unit, in the author's order, and a
+##   member that does not fit refuses the *launch* rather than the placement.
+##
+## What used to be here — `hero_spawn_position` and `companion_spawn_positions`,
+## read one anchor per party member — is gone. That pair is what made the map's
+## geometry own the party size (`map_start.md` §5.3): a map with three companion
+## anchors capped the game at four settlers and rejected any other number.
 ##
 ## **Coordinates.** Zone geometry is authored in board cells (`active_zones.md`
 ## §6): `pos.x/z` are cell coordinates with a `.5` centre offset and `pos.y` is
@@ -26,8 +30,29 @@ extends RefCounted
 ## authored level says which terrace the author meant, not where the mesh ended
 ## up after the last edit.
 
-const HERO_START := &"core:hero_start"
-const COMPANION_START := &"core:companion_start"
+## Party appearance functions (`map_start.md` §4.1). A `spawn` anchor's role stays
+## geometric and its meaning is a function, so a pack adds its own kind of
+## appearance without the closed role list growing an entry.
+const PARTY_LEADER := &"core:party_leader"
+const PARTY_SLOT := &"core:party_slot"
+## Where the first frame looks from. Deliberately a `poi` and not a `spawn`: the
+## validator demands dry passable ground of every spawn, and a good establishing
+## camera stands over water, over a cliff or past the rim of the board (§4.1).
+const CAMERA_START := &"core:camera_start"
+
+## v7 names, read for one release (§16). They are resolved on load by
+## `MapFormatMigration`; this table exists so a document held in memory from an
+## older session, or a pack that still ships the old string, is not silently
+## ignored by the readers below.
+const FUNCTION_ALIASES: Dictionary = {
+	&"core:hero_start": PARTY_LEADER,
+	&"core:companion_start": PARTY_SLOT,
+}
+
+
+## The current name of an authored function.
+static func canonical_function(function: StringName) -> StringName:
+	return FUNCTION_ALIASES.get(function, function)
 
 
 ## Outcome of a §15 placement request: a world position, or a refusal that says
@@ -85,32 +110,22 @@ func spawn_positions(zones: MapZoneLayer, cell_size := 1.0) -> Array[Vector3]:
 	return positions
 
 
-## The authored hero position, or `Vector3.INF` when the map is incomplete.
-func hero_spawn_position(zones: MapZoneLayer, cell_size := 1.0) -> Vector3:
+## The anchor carrying a function, or null. Alias-aware, so a document that still
+## holds `core:hero_start` in memory answers the same as a migrated one.
+func anchor_with_function(zones: MapZoneLayer, function: StringName) -> ZoneAnchorRecord:
 	for anchor in zones.anchors:
-		if anchor.is_spawn() and anchor.function == HERO_START:
-			return world_position_of(anchor, cell_size)
-	return Vector3.INF
+		if canonical_function(anchor.function) == function:
+			return anchor
+	return null
 
 
-## The authored hero facing in degrees, or 0 when there is no hero start. A spawn
-## point says which way the unit looks; ignoring it left every authored hero
-## facing north regardless of what the author drew.
-func hero_spawn_facing(zones: MapZoneLayer) -> float:
-	for anchor in zones.anchors:
-		if anchor.is_spawn() and anchor.function == HERO_START:
-			return anchor.facing
-	return 0.0
-
-
-## Companion starts in authoring order. Their identity is their index; that is
-## sufficient until party definitions become authored content of their own.
-func companion_spawn_positions(zones: MapZoneLayer, cell_size := 1.0) -> Array[Vector3]:
-	var positions: Array[Vector3] = []
-	for anchor in zones.anchors:
-		if anchor.is_spawn() and anchor.function == COMPANION_START:
-			positions.append(world_position_of(anchor, cell_size))
-	return positions
+## Where the first frame looks from, or `Vector3.INF` when the entrance names no
+## camera. Passability is deliberately not checked (§4.1).
+func camera_position(zones: MapZoneLayer, camera_id: StringName, cell_size := 1.0) -> Vector3:
+	var anchor := zones.anchor_by_id(camera_id)
+	if anchor == null or canonical_function(anchor.function) != CAMERA_START:
+		return Vector3.INF
+	return world_position_of(anchor, cell_size)
 
 
 ## Board cells → world space. The one place the conversion lives (§9).
@@ -145,7 +160,7 @@ func claim(
 		tags.append(ZoneAccess.AUDIENCE_VISITOR)
 	var refused_reason := "нет точек появления с функцией %s" % function
 	for anchor in zones.anchors:
-		if not anchor.is_spawn() or anchor.function != function:
+		if not anchor.is_spawn() or canonical_function(anchor.function) != function:
 			continue
 		refused_reason = "все точки появления %s заняты или недоступны" % function
 		if _claimed.has(anchor.id):
@@ -167,6 +182,187 @@ func claim(
 			_claimed[address] = true
 			return SpawnPlacement.granted(cell_to_world(cell, float(area.y_min), cell_size), address)
 	return SpawnPlacement.refused(refused_reason)
+
+
+## --- Party placement (`map_start.md` §4.3) -------------------------------------
+
+## Where one member of the party ends up: a world position and the bearing the
+## author gave the place it came from.
+class PartyPlacement:
+	extends RefCounted
+
+	var position := Vector3.INF
+	var facing := 0.0
+	## Slot id, or the group id when the member was grown into the formation.
+	var address: StringName = &""
+
+
+## Outcome of laying out a party of `count` in a group. A refusal names the group
+## and how many did not fit, because "the map needs 7 companion anchors" was
+## exactly the message that told an author nothing about which clearing was small.
+class PartyPlan:
+	extends RefCounted
+
+	var ok := false
+	var placements: Array[PartyPlacement] = []
+	var reason := ""
+
+
+## Lays out `count` members in `group`, leader first (§4.3):
+##
+## 1. the leader takes the slot tagged `leader`, or the centre of the area;
+## 2. remaining members take free slots in `order`;
+## 3. anyone left over is grown into the formation, or refused, per `fallback`;
+## 4. every position is checked for passability, rights and occupancy;
+## 5. a party that does not fit **blocks the launch** — quietly shrinking it would
+##    hand the player fewer settlers than they chose and call that success.
+func plan_party(
+	zones: MapZoneLayer,
+	group: MapSpawnGroup,
+	count: int,
+	cell_size := 1.0,
+	agent_tags: Array[StringName] = [],
+) -> PartyPlan:
+	var plan := PartyPlan.new()
+	if group == null:
+		plan.reason = "вариант старта не называет группу появления"
+		return plan
+	if not group.admits(agent_tags):
+		plan.reason = "группа %s не принимает этот отряд" % group.id
+		return plan
+	if count <= 0:
+		plan.ok = true
+		return plan
+	if count > group.capacity:
+		plan.reason = "группа %s рассчитана на %d, а отряд из %d" % [group.id, group.capacity, count]
+		return plan
+	var tags: Array[StringName] = agent_tags.duplicate()
+	if tags.is_empty():
+		tags.append(ZoneAccess.AUDIENCE_VISITOR)
+	var area := zones.area_by_id(group.area_id) if group.area_id != &"" else null
+	var taken: Dictionary = {}
+
+	var leader_slot := group.slot_with_tag(MapSpawnGroup.TAG_LEADER)
+	if leader_slot != null:
+		var leader := _placement_at_slot(zones, group, leader_slot, cell_size, tags, taken)
+		if leader != null:
+			plan.placements.append(leader)
+	for slot in group.ordered_slots():
+		if plan.placements.size() >= count:
+			break
+		if leader_slot != null and slot.id == leader_slot.id:
+			continue
+		var placement := _placement_at_slot(zones, group, slot, cell_size, tags, taken)
+		if placement != null:
+			plan.placements.append(placement)
+	if plan.placements.size() >= count:
+		plan.ok = true
+		plan.placements.resize(count)
+		return plan
+
+	var missing := count - plan.placements.size()
+	if group.fallback == MapSpawnGroup.FALLBACK_FAIL:
+		plan.reason = "в группе %s не хватает %d мест" % [group.id, missing]
+		return plan
+	var origin := _group_origin(zones, group, area, plan.placements, cell_size)
+	if origin == Vector3.INF:
+		plan.reason = "группе %s негде разместить ещё %d участников" % [group.id, missing]
+		return plan
+	for offset: Vector2 in _formation_offsets(group, missing + plan.placements.size()):
+		if plan.placements.size() >= count:
+			break
+		var candidate := origin + Vector3(offset.x, 0.0, offset.y)
+		var cell := Vector2i(floori(candidate.x / cell_size), floori(candidate.z / cell_size))
+		if taken.has(cell) or not _cell_is_free(zones, cell, tags):
+			continue
+		if area != null and not area.contains_cell(cell):
+			continue
+		taken[cell] = true
+		var placement := PartyPlacement.new()
+		placement.position = candidate
+		placement.facing = group.facing
+		placement.address = group.id
+		plan.placements.append(placement)
+	if plan.placements.size() < count:
+		plan.reason = "в группе %s не помещаются %d участников" % [
+			group.id, count - plan.placements.size()]
+		return plan
+	plan.ok = true
+	return plan
+
+
+func _placement_at_slot(
+	zones: MapZoneLayer,
+	group: MapSpawnGroup,
+	slot: MapSpawnGroup.Slot,
+	cell_size: float,
+	tags: Array[StringName],
+	taken: Dictionary,
+) -> PartyPlacement:
+	var anchor := zones.anchor_by_id(slot.anchor_id)
+	if anchor == null:
+		return null
+	var cell := anchor.cell()
+	if taken.has(cell) or not _cell_is_free(zones, cell, tags):
+		return null
+	taken[cell] = true
+	var placement := PartyPlacement.new()
+	placement.position = world_position_of(anchor, cell_size)
+	placement.facing = anchor.facing if not is_zero_approx(anchor.facing) else group.facing
+	placement.address = slot.id
+	return placement
+
+
+## Where the formation grows from: the area's centre when there is one, otherwise
+## the first authored place. A group with neither is refused by the layer's
+## validation, so `INF` here only happens on a document nobody validated.
+func _group_origin(
+	zones: MapZoneLayer,
+	group: MapSpawnGroup,
+	area: ZoneAreaRecord,
+	placed: Array[PartyPlacement],
+	cell_size: float,
+) -> Vector3:
+	if area != null:
+		# `centroid` answers in board cells at the area's lowest level, the same
+		# space every other authored coordinate uses; world conversion happens here,
+		# on the runtime boundary, exactly like `world_position_of`.
+		var centre := area.centroid()
+		if centre != Vector3.INF:
+			return Vector3(centre.x * cell_size, centre.y * TerrainGrid.HEIGHT_STEP, centre.z * cell_size)
+	if not placed.is_empty():
+		return placed[0].position
+	if not group.slots.is_empty():
+		var anchor := zones.anchor_by_id(group.slots[0].anchor_id)
+		if anchor != null:
+			return world_position_of(anchor, cell_size)
+	return Vector3.INF
+
+
+## Offsets from the origin, in metres, in the order they should be tried. `loose`
+## walks rings of eight at multiples of `spacing`; `line` walks a single row
+## alternating sides so the group stays centred on the origin.
+func _formation_offsets(group: MapSpawnGroup, needed: int) -> Array[Vector2]:
+	var spacing := maxf(group.spacing, 0.5)
+	var offsets: Array[Vector2] = []
+	if group.formation == MapSpawnGroup.FORMATION_LINE:
+		var direction := Vector2(cos(deg_to_rad(group.facing + 90.0)), sin(deg_to_rad(group.facing + 90.0)))
+		for index in range(needed * 2 + 1):
+			var step := float((index + 1) / 2) * spacing * (1.0 if index % 2 == 0 else -1.0)
+			offsets.append(direction * step)
+		return offsets
+	const RING: Array[Vector2i] = [
+		Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1), Vector2i(0, 1), Vector2i(-1, 1),
+		Vector2i(-1, 0), Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1),
+	]
+	# Two laps beyond what is needed: cells inside the rings are refused by water,
+	# rights and occupancy, and a party that cannot fit must be told so rather than
+	# be silently truncated by a candidate list that ran out.
+	var laps := needed / RING.size() + 3
+	for lap in range(1, laps + 1):
+		for offset: Vector2i in RING:
+			offsets.append(Vector2(float(offset.x), float(offset.y)) * spacing * float(lap))
+	return offsets
 
 
 ## Passability plus rights. Rights are read off the overlays directly rather than

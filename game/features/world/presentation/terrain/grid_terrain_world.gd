@@ -446,6 +446,21 @@ func _sync_render_mode_parameters() -> void:
 		_ground_material.set_shader_parameter(&"render_mode_idx", mode_val)
 	if _cliff_material != null:
 		_cliff_material.set_shader_parameter(&"render_mode_idx", mode_val)
+	_sync_simple_textures()
+
+
+## The simplified array is procedural and therefore the one thing here that is
+## still generated texel by texel. It is built on the first frame the mode is
+## actually selected — an inspection aid must not be part of the cost of opening
+## a map that never uses it.
+func _sync_simple_textures() -> void:
+	if render_mode != RenderMode.SIMPLE:
+		return
+	var textures := _library.simple_texture_array()
+	if _ground_material != null:
+		_ground_material.set_shader_parameter(&"simple_textures", textures)
+	if _cliff_material != null:
+		_cliff_material.set_shader_parameter(&"simple_textures", textures)
 
 
 func _rebuild_tall_grass(body: StaticBody3D, chunk: Vector2i, lod: int) -> void:
@@ -509,7 +524,6 @@ func _ground_shader_material() -> ShaderMaterial:
 	_ground_material.set_shader_parameter(&"coverage_palette", _coverage_library.palette_texture())
 	_ground_material.set_shader_parameter(&"coverage_capacity", float(_coverage_library.palette_size()))
 	_ground_material.set_shader_parameter(&"layer_lookup_map", _library.layer_lookup_texture())
-	_ground_material.set_shader_parameter(&"simple_layer_lookup_map", _library.simple_layer_lookup_texture())
 	_ground_material.set_shader_parameter(&"board_cells", float(grid.board_cells))
 	_ground_material.set_shader_parameter(&"cell_size", grid.cell_size)
 	_ground_material.set_shader_parameter(&"material_count", float(TerrainMaterialCatalog.MATERIAL_COUNT))
@@ -518,6 +532,7 @@ func _ground_shader_material() -> ShaderMaterial:
 	_ground_material.set_shader_parameter(&"edge_rounding", edge_rounding)
 	_ground_material.set_shader_parameter(&"edge_bevel", 1.0 if edge_bevel else 0.0)
 	_ground_material.set_shader_parameter(&"render_mode_idx", float(render_mode))
+	_sync_simple_textures()
 	return _ground_material
 
 
@@ -527,9 +542,11 @@ func _cliff_shader_material() -> ShaderMaterial:
 	_cliff_material = ShaderMaterial.new()
 	_cliff_material.shader = load(CLIFF_SHADER_PATH)
 	_cliff_material.set_shader_parameter(&"surface_textures", _library.texture_array())
+	_cliff_material.set_shader_parameter(&"surface_normals", _library.normal_array())
 	_cliff_material.set_shader_parameter(&"cell_size", grid.cell_size)
 	_cliff_material.set_shader_parameter(&"full_smoothing", 1.0 if full_smoothing else 0.0)
 	_cliff_material.set_shader_parameter(&"edge_rounding", edge_rounding)
 	_cliff_material.set_shader_parameter(&"edge_bevel", 1.0 if edge_bevel else 0.0)
 	_cliff_material.set_shader_parameter(&"render_mode_idx", float(render_mode))
+	_sync_simple_textures()
 	return _cliff_material

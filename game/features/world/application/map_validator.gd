@@ -29,7 +29,40 @@ static func validate(document: MapDocument, terrain: TerrainGrid, water: WaterGr
 	_validate_coverage(document, terrain, water, errors)
 	_validate_entities(document, terrain, errors)
 	_validate_scenario(document, errors)
+	_validate_starts(document, errors)
 	return errors
+
+
+## Dangling references between the three things a start option ties together
+## (`map_start.md` §13). Each of them produces a map that opens fine in the editor
+## and fails at launch, which is the worst place to find out.
+static func _validate_starts(document: MapDocument, errors: Array[String]) -> void:
+	var start := document.meta.start
+	if start.default_start != &"" and start.start_by_id(start.default_start) == null:
+		errors.append("default_start ссылается на несуществующий вариант %s" % start.default_start)
+	var ids: Dictionary = {}
+	for option: MapStartOption in start.starts:
+		if ids.has(option.id):
+			errors.append("дублирующийся id варианта старта: %s" % option.id)
+		ids[option.id] = true
+		if option.spawn_group == &"":
+			errors.append("вариант старта %s не называет группу появления" % option.id)
+		elif document.zones.spawn_group_by_id(option.spawn_group) == null:
+			errors.append("вариант старта %s ссылается на несуществующую группу появления %s" % [
+				option.id, option.spawn_group])
+		if option.camera != &"":
+			var camera := document.zones.anchor_by_id(option.camera)
+			if camera == null:
+				errors.append("вариант старта %s ссылается на несуществующую камеру %s" % [
+					option.id, option.camera])
+			elif MapSpawnService.canonical_function(camera.function) != MapSpawnService.CAMERA_START:
+				errors.append("камера %s варианта %s не несёт функцию %s" % [
+					option.camera, option.id, MapSpawnService.CAMERA_START])
+	for entity: MapEntityRecord in document.entities.entities:
+		for option_id: StringName in entity.starts:
+			if not ids.has(option_id):
+				errors.append("сущность %s привязана к несуществующему варианту старта %s" % [
+					entity.id, option_id])
 
 
 ## A valid stroke can become invalid after the author reshapes the terrain under
@@ -71,26 +104,46 @@ static func _validate_coverage(
 		])
 
 
-## Launch-time party validation. `validate` stays reusable by the editor, where
-## the intended population is not necessarily known; the game supplies its
-## actual party size immediately before bootstrapping a session.
+## Launch-time party validation (`map_start.md` §4.3, §13). `validate` stays
+## reusable by the editor, where the intended population is not necessarily known;
+## the game supplies its actual party size immediately before bootstrapping.
+##
+## This replaces the rule that a map must carry exactly `population - 1`
+## companion anchors. That rule made the geometry own the party size, and its
+## error message named anchors the player had never seen. What is checked now is
+## whether the chosen entrance's group can hold the chosen party — a question
+## about a clearing, which is a thing an author can look at and fix.
+##
 ## `spawn_override` is the editor's "test from here" launch (`map_editor.md` §12).
-## It supplies the party start itself, so demanding authored anchors on top of it
-## would make the one feature that exists to skip authoring impossible to use on
-## a half-drawn map.
-static func validate_party_spawns(document: MapDocument, population: int, spawn_override := false) -> Array[String]:
+## It replaces the whole group (§4.5), so demanding authored places on top of it
+## would make the one feature that exists to skip authoring unusable on a
+## half-drawn map.
+static func validate_party_capacity(
+	document: MapDocument,
+	start_option: StringName,
+	population: int,
+	spawn_override := false,
+) -> Array[String]:
 	var errors: Array[String] = []
 	if document == null:
 		errors.append("для запуска нужна карта")
 		return errors
 	if spawn_override:
 		return errors
-	var spawns := MapSpawnService.new()
-	if spawns.hero_spawn_position(document.zones) == Vector3.INF:
-		errors.append("карта требует spawn-точку с function core:hero_start")
-	var expected_companions := maxi(population - 1, 0)
-	if spawns.companion_spawn_positions(document.zones).size() < expected_companions:
-		errors.append("карта требует %d spawn-точек с function core:companion_start" % expected_companions)
+	var option := document.meta.start.start_by_id(start_option)
+	if option == null:
+		option = document.meta.start.default_option(document.meta.start.game_definition)
+	if option == null:
+		errors.append("карта не объявляет ни одного варианта старта")
+		return errors
+	var group := document.zones.spawn_group_by_id(option.spawn_group)
+	if group == null:
+		errors.append("вариант старта %s ссылается на несуществующую группу появления %s" % [
+			option.id, option.spawn_group])
+		return errors
+	var plan := MapSpawnService.new().plan_party(document.zones, group, population, document.meta.cell_size)
+	if not plan.ok:
+		errors.append(plan.reason)
 	return errors
 
 
@@ -194,6 +247,7 @@ static func warnings(document: MapDocument, nav_grid: NavGrid) -> Array[String]:
 	# guard below: an unreachable objective is a navigation question, but a rule
 	# that can never fire is answerable from the document alone.
 	_warn_about_scenario(document, warnings)
+	_warn_about_starts(document, warnings)
 	if nav_grid == null:
 		return warnings
 	# An anchor standing on an impassable cell is reachable only by teleport.
@@ -241,6 +295,19 @@ static func _warn_about_scenario(document: MapDocument, warnings: Array[String])
 			var declared := scenario.flag_by_id(flag_id)
 			if declared != null and not written.has(flag_id):
 				warnings.append("условие исхода читает флаг %s, который ни одно правило не меняет" % flag_id)
+
+
+## Start findings a map still launches with (`map_start.md` §13). Missing
+## `default_start` is deliberately not an error: the map runs, and the obligation
+## it creates falls on the menu, which has to ask.
+static func _warn_about_starts(document: MapDocument, warnings: Array[String]) -> void:
+	var start := document.meta.start
+	if start.starts.size() > 1 and start.default_start == &"":
+		warnings.append("несколько вариантов старта и не выбран стартовый по умолчанию")
+	for group: MapSpawnGroup in document.zones.spawn_groups:
+		if group.area_id == &"" and group.slots.size() < group.capacity:
+			warnings.append("группа %s без области вмещает %d из объявленных %d" % [
+				group.id, group.slots.size(), group.capacity])
 
 
 static func _warn_if_anchor_unreachable(anchor: ZoneAnchorRecord, nav_grid: NavGrid, warnings: Array[String]) -> void:

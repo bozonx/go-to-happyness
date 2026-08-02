@@ -445,7 +445,9 @@ func start_session(active_config: GameLaunchConfig) -> void:
 		launch_config.map_document.water,
 		null
 	)
-	map_errors.append_array(MapValidator.validate_party_spawns(launch_config.map_document, POPULATION))
+	map_errors.append_array(MapValidator.validate_party_capacity(
+		launch_config.map_document, launch_config.start_option, POPULATION,
+		launch_config.has_spawn_override()))
 	if not map_errors.is_empty():
 		push_error("[launch] Invalid map: %s" % "; ".join(map_errors))
 		return

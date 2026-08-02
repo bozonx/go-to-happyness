@@ -35,14 +35,24 @@ var zone_event_bus := ZoneEventBus.new()
 ## flags, rules and win/lose conditions are host functionality, and a map that
 ## carries none simply has an idle runtime.
 var scenario_runtime := MapScenarioRuntime.new()
+## The entrance the session began at (`map_start.md` §3). It reaches the world
+## because entities may be bound to one, and because a start option's initial
+## flags are the first thing the scenario sees.
+var start_option: StringName = &""
 
 
-func _init(p_map_document: MapDocument = null, p_cell_size := DEFAULT_CELL_SIZE) -> void:
+func _init(
+	p_map_document: MapDocument = null,
+	p_cell_size := DEFAULT_CELL_SIZE,
+	p_start_option: StringName = &"",
+	p_start_flags: Dictionary = {},
+) -> void:
 	map_document = p_map_document
+	start_option = p_start_option
 	cell_size = p_cell_size
 	if map_document != null:
 		nav_grid.configure(cell_size, map_document.board_cells())
-		scenario_runtime.configure(map_document.scenario)
+		scenario_runtime.configure(map_document.scenario, p_start_flags)
 	# Presence reaches the rule table the moment the tracker publishes it. Wired
 	# at construction so no game has to remember to connect it — forgetting would
 	# leave zone triggers silently dead in exactly one game.
@@ -65,7 +75,7 @@ func build(
 		push_error("[world] session requires scene host, camera and map")
 		return null
 	world_setup = WorldSetupScene.instantiate() as WorldSetup
-	world_setup.setup(camera, cell_size, board_cells, trail_field, map_document)
+	world_setup.setup(camera, cell_size, board_cells, trail_field, map_document, start_option)
 	scene_host.add_child(world_setup)
 	world_setup.build(scene_host)
 	entity_runtime = world_setup.map_entity_runtime

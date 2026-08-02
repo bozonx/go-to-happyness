@@ -20,31 +20,33 @@ func create_citizens() -> void:
 	if map_document == null:
 		push_error("[spawn] SettlementGame requires map-authored party spawn points")
 		return
-	var spawns := MapSpawnService.new()
 	var cell_size := map_document.meta.cell_size
 	var starts: Array[Vector3] = []
 	var facing := 0.0
 	if game.launch_config.has_spawn_override():
-		# Editor test run "from here" (map_editor.md §12): the author asked to
-		# start at a cell without moving the map's authored `core:hero_start`, so
-		# the party is laid out around that cell and the document is not touched.
+		# Editor test run "from here" (map_start.md §4.5): the override replaces the
+		# whole spawn group, so the party is laid out around the requested cell and
+		# the map's authored places are neither used nor required.
 		starts = _party_ring(game.launch_config.spawn_override, cell_size, game.POPULATION)
 	else:
-		var hero_spawn := spawns.hero_spawn_position(map_document.zones, cell_size)
-		var companion_spawns := spawns.companion_spawn_positions(map_document.zones, cell_size)
-		if hero_spawn == Vector3.INF or companion_spawns.size() < game.POPULATION - 1:
-			push_error("[spawn] Map needs one core:hero_start and %d core:companion_start anchors" % (game.POPULATION - 1))
+		var group := map_document.zones.spawn_group_by_id(game.launch_config.spawn_group)
+		var plan := MapSpawnService.new().plan_party(
+			map_document.zones, group, game.POPULATION, cell_size)
+		if not plan.ok:
+			# A party that does not fit blocks the launch (§4.3). Placing fewer
+			# settlers than the player asked for is a bug wearing a fallback's coat.
+			push_error("[spawn] %s" % plan.reason)
 			return
-		facing = spawns.hero_spawn_facing(map_document.zones)
-		starts.append(hero_spawn)
-		starts.append_array(companion_spawns.slice(0, game.POPULATION - 1))
+		for placement: MapSpawnService.PartyPlacement in plan.placements:
+			starts.append(placement.position)
+		facing = plan.placements[0].facing if not plan.placements.is_empty() else 0.0
 	for index in range(game.POPULATION):
 		var spawn_position: Vector3 = starts[index]
 		var terrain_height := game.terrain_height_at(spawn_position.x, spawn_position.z, 0.0)
 		if not is_nan(terrain_height):
 			spawn_position.y = terrain_height + 0.08
 		add_citizen(spawn_position, "unassigned")
-	# The hero looks the way the author drew the spawn point; the rest of the
+	# The hero looks the way the author drew the leader's place; the rest of the
 	# party takes the same bearing so a party start reads as one group.
 	if not is_zero_approx(facing):
 		for citizen in game.citizens:
@@ -133,28 +135,37 @@ func wire_citizen(citizen: Citizen) -> void:
 	citizen.citizen_leaving_departed.connect(func(citizen): game.citizen_lifecycle_service.on_citizen_leaving_departed(citizen))
 
 
+## The starting supplies, read off every container the map marked
+## `core:party_stash` (`map_start.md` §6.5).
+##
+## What this replaces is a lookup through four hardcoded archetype ids that took
+## the *first* match and called it the starter backpack. "Starting" is not a kind
+## of object — it is a role an author gives an object — so a chest, a cart or a
+## barrel now works with no code at all, and two marked containers are summed
+## instead of one being silently ignored.
 func create_starter_backpack() -> void:
 	if game.settlement.warehouse_ever_built:
 		return
 	if game.launch_config == null or game.launch_config.map_document == null:
 		return
 	var spawn: MapEntityRecord = null
-	var archetype: EntityArchetype = null
 	for entity: MapEntityRecord in game.launch_config.map_document.entities.entities:
-		if entity.archetype_id in [&"core:backpack", &"core:starter_backpack", &"backpack", &"starter_backpack"]:
+		if entity.function != MapEntityFunction.PARTY_STASH:
+			continue
+		if not game.launch_config.includes_map_entity(entity):
+			continue
+		var archetype := EntityArchetypeCatalog.get_archetype(entity.archetype_id)
+		var props := archetype.resolved_properties(entity.props) if archetype != null else entity.props
+		for key in props:
+			var amount := int(props[key])
+			if amount > 0:
+				game.settlement.backpack[str(key)] = int(game.settlement.backpack.get(str(key), 0)) + amount
+		if spawn == null:
 			spawn = entity
-			archetype = EntityArchetypeCatalog.get_archetype(entity.archetype_id)
-			break
 	if spawn == null:
-		# Backpack is an optional placement on maps; if absent, start without a ground backpack pile.
+		# A stash is an optional placement; without one the party starts with no
+		# ground pile, exactly as a map that never placed a backpack always did.
 		return
-	# Fill the settlement backpack from the entity's authored props so the
-	# starting resources live on the map, not in the game definition.
-	var props := archetype.resolved_properties(spawn.props) if archetype != null else spawn.props
-	for key in props:
-		var amount := int(props[key])
-		if amount > 0:
-			game.settlement.backpack[str(key)] = amount
 	game.backpack_position = spawn.position
 	var terrain_height := game.terrain_height_at(game.backpack_position.x, game.backpack_position.z, 0.0)
 	if not is_nan(terrain_height):

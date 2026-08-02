@@ -452,12 +452,20 @@ func _add_walls_for_direction(direction: int, near_corner: int, far_corner: int,
 			var far_bottom := _wall_far_bottom
 			var last_x := local_x
 			var last_z := local_z
+			# The face belongs to the column above it and is drawn with THAT column's
+			# auto-rock kind (§3), so two columns may only share a quad when they
+			# agree about it. Merging on the height profile alone gave a long cliff
+			# the face of whichever cell the run happened to start at — a stone shelf
+			# beside a sand one came out entirely as scree.
+			var cliff_layer := TerrainMaterialVariants.cliff_layer_of_material(_materials[index])
 			if is_equal_approx(near_top, far_top) and is_equal_approx(near_bottom, far_bottom):
 				var next_x := local_x + step.x
 				var next_z := local_z + step.y
 				while next_x < TerrainGrid.CHUNK_CELLS and next_z < last_row:
 					var next_index := (next_z + 1) * PADDED_CELLS + 1 + next_x
 					if visited[next_index] == 1:
+						break
+					if TerrainMaterialVariants.cliff_layer_of_material(_materials[next_index]) != cliff_layer:
 						break
 					if not _wall_of(next_index, next_index + neighbour_step, near_corner, far_corner, neighbour_near, neighbour_far, skirts_only):
 						break
@@ -473,7 +481,7 @@ func _add_walls_for_direction(direction: int, near_corner: int, far_corner: int,
 					next_z += step.y
 			_emit_wall(
 				local_x, local_z, last_x, last_z, index, offset, near_corner, far_corner,
-				near_top, far_top, near_bottom, far_bottom, near_first,
+				near_top, far_top, near_bottom, far_bottom, near_first, cliff_layer,
 			)
 
 
@@ -513,7 +521,7 @@ func _wall_of(index: int, neighbour_index: int, near_corner: int, far_corner: in
 	return true
 
 
-func _emit_wall(first_x: int, first_z: int, last_x: int, last_z: int, index: int, offset: Vector2i, near_corner: int, far_corner: int, near_top: float, far_top: float, near_bottom: float, far_bottom: float, near_first: bool) -> void:
+func _emit_wall(first_x: int, first_z: int, last_x: int, last_z: int, index: int, offset: Vector2i, near_corner: int, far_corner: int, near_top: float, far_top: float, near_bottom: float, far_bottom: float, near_first: bool, cliff_layer: int) -> void:
 	# `near` is the end of the run the edge starts at, walking clockwise around
 	# the cell; for the south and west edges that is the far end of the merge.
 	var near_cell := _origin + Vector2i(first_x if near_first else last_x, first_z if near_first else last_z)
@@ -528,10 +536,10 @@ func _emit_wall(first_x: int, first_z: int, last_x: int, last_z: int, index: int
 	var near_bottom_position := Vector3(near_top_position.x, near_bottom * TerrainGrid.HEIGHT_STEP, near_top_position.z)
 	var far_bottom_position := Vector3(far_top_position.x, far_bottom * TerrainGrid.HEIGHT_STEP, far_top_position.z)
 	var normal := Vector3(float(offset.x), 0.0, float(offset.y))
-	# The face belongs to the column above it, and its look comes from that
-	# column's `cliff_material` — never from the material on top of it (§3).
-	var layer := TerrainMaterialVariants.cliff_layer_of_material(_materials[index])
-	_add_wall_quad(far_top_position, near_top_position, near_bottom_position, far_bottom_position, normal, float(layer) / 255.0)
+	# The face's look comes from the `cliff_material` of the column above it —
+	# never from the material on top of it (§3). Every cell of the merged run
+	# agreed on that layer before the run was allowed to grow.
+	_add_wall_quad(far_top_position, near_top_position, near_bottom_position, far_bottom_position, normal, float(cliff_layer) / 255.0)
 
 
 # --- Emission ---------------------------------------------------------------

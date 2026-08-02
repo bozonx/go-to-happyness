@@ -251,14 +251,15 @@ const ACCORDION_EARTH := &"accordion_earth"
 const ACCORDION_EXOPLANET := &"accordion_exoplanet"
 const ACCORDION_COVERAGE := &"accordion_coverage"
 
-const EXOPLANET_MATERIALS: Array[StringName] = [
-	TerrainMaterialCatalog.LUNAR_REGOLITH,
-	TerrainMaterialCatalog.LUNAR_ROCK,
-	TerrainMaterialCatalog.MARS_REGOLITH,
-	TerrainMaterialCatalog.MARS_ROCK,
-]
-
 var _expanded_accordion: StringName = &"earth"
+
+
+## Which drawer a material belongs in is the catalog's `origin` (§8), never a list
+## kept here. The editor used to name the four extraterrestrial materials
+## explicitly, so every new material silently landed under "Земля" — a palette is
+## a view of the catalog, and a view does not get to hold its own copy of it.
+static func _is_exoplanet(material_index: int) -> bool:
+	return TerrainMaterialCatalog.origin_of_index(material_index) != TerrainMaterialCatalog.ORIGIN_EARTH
 
 
 # --- Panels -------------------------------------------------------------------

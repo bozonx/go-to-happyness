@@ -44,8 +44,12 @@ const PACK_ROOTS: Array[String] = [
 const SCOPE_AREA := &"area"
 const SCOPE_ACTIVITY := &"activity"
 const SCOPE_ANCHOR := &"anchor"
+## A placed entity, not a zone (`map_start.md` §6.5). "Starting supplies" is a
+## role an author gives a container, not a kind of container, so it is declared
+## in the same catalogue as everything else a pack labels.
+const SCOPE_ENTITY := &"entity"
 
-const SCOPES: Array[StringName] = [SCOPE_AREA, SCOPE_ACTIVITY, SCOPE_ANCHOR]
+const SCOPES: Array[StringName] = [SCOPE_AREA, SCOPE_ACTIVITY, SCOPE_ANCHOR, SCOPE_ENTITY]
 
 ## Cached across calls; `reload()` drops it when packs change.
 static var _functions: Dictionary = {}
@@ -89,6 +93,15 @@ static func activities() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for entry in all():
 		if entry.get("scope", SCOPE_AREA) == SCOPE_ACTIVITY:
+			result.append(entry)
+	return result
+
+
+## Functions an author can put on a placed entity.
+static func for_entity() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for entry in all():
+		if entry.get("scope", SCOPE_AREA) == SCOPE_ENTITY:
 			result.append(entry)
 	return result
 

@@ -47,9 +47,21 @@ var _dispatching := false
 var _queue: Array[Dictionary] = []
 
 
-func configure(next_scenario: MapScenario) -> void:
+## `initial_flags` are the values the chosen start option declares (`map_start.md`
+## §3.1, §7.3 step 9). They are applied here, before `start()` fires
+## `session_started`, so the first rule of the prologue reads the entrance's
+## state rather than the scenario's neutral default. An undeclared flag is
+## ignored on purpose: the flag table stays the scenario's contract, and letting
+## an entrance create state on write is how a misspelling becomes two flags.
+func configure(next_scenario: MapScenario, initial_flags: Dictionary = {}) -> void:
 	scenario = next_scenario if next_scenario != null else MapScenario.new()
 	flags = scenario.default_flag_values()
+	for flag_id: Variant in initial_flags:
+		var definition := scenario.flag_by_id(StringName(flag_id))
+		if definition == null:
+			push_warning("[scenario] вариант старта задаёт необъявленный флаг %s" % flag_id)
+			continue
+		flags[StringName(flag_id)] = definition.coerce(initial_flags[flag_id])
 	elapsed_seconds = 0.0
 	outcome = &""
 	_fired.clear()

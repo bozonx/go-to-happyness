@@ -31,6 +31,12 @@ var map_document: MapDocument = null
 ## instead of at the map's authored spawn points. `Vector3.INF` means "use the
 ## map", which is every launch that is not a test run.
 var spawn_override := Vector3.INF
+## The entrance this session began at, and the spawn group it names
+## (`map_start.md` §3, §4). The id is carried rather than the record so the
+## settlement never reaches back into map structures it does not own; entities
+## bound to another entrance are filtered by `includes_map_entity`.
+var start_option: StringName = &""
+var spawn_group: StringName = &""
 var starting_money: int = 500
 var starting_wellbeing: int = 75
 var starting_population: int = 4
@@ -66,6 +72,13 @@ func apply_map_start() -> void:
 		return
 	var start := map_document.meta.start
 	world_style = start.style
+
+
+## Whether an authored entity belongs to the entrance this session began at
+## (`map_start.md` §3.2). A map's entities exist always unless they say otherwise,
+## so an unbound entity answers yes and every v7 map keeps its contents.
+func includes_map_entity(entity: MapEntityRecord) -> bool:
+	return entity.belongs_to_start(start_option)
 
 
 static func create_custom(

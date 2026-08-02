@@ -188,13 +188,29 @@ about slopes, rivers or metrics, because that is where the non-obvious constrain
   `metrics.json` in `user://map_gen_lab`. A preset that stops passing §6 is a regression
   of quality, and it is allowed to fail on a deliberate change of algorithm.
 
-## Weather and lighting laboratory
+## World environment: time, season, weather
 
-Weather, time of day, sky, stars, sun/moon, atmospherics and world lighting start in
-`res://tools/weather_lab/weather_lab.tscn`, not the settlement scene. It runs the
-production `SkyAndWeatherController`, cloud shader, rain and firefly effects with fixed
-cameras and calibration geometry. The rules themselves are in
-`design_docs/engine/weather.md`; read it before changing how weather looks or behaves.
+Time of day, the calendar, season, temperature, weather, sky, sun/moon, atmospherics and
+world lighting are **one system with one owning document**:
+`design_docs/engine/world_environment.md`. Read it before changing how any of them looks
+or behaves — including anything that merely reads the time of day.
+
+- **One snapshot out, one director in.** Consumers read `EnvironmentSnapshot`; nothing
+  assembles weather values itself or reaches into the weather rules. Everything that
+  *changes* the environment — cutscenes, map scenario, the lab, the start of a session —
+  goes through `EnvironmentDirector` in `WorldSession`. A second path is the bug.
+- **Function vs accumulation.** Clouds, wind, precipitation intensity, temperature and
+  fog are pure functions of `(day, minute, seed)` and are never stored. Lying snow, ice
+  thickness and regrowth are accumulated state, live in their own layers, and must catch
+  up when time is skipped.
+- Weather must not speak the settlement's vocabulary: the environment takes named weather
+  patterns, and a game maps its own forecast onto them from outside.
+
+### Laboratory
+
+Changes to any of the above start in `res://tools/weather_lab/weather_lab.tscn`, not the
+settlement scene. It runs the production `SkyAndWeatherController`, cloud shader,
+precipitation and firefly effects with fixed cameras and calibration geometry.
 
 - Make and inspect the relevant scenario before wiring a visual change into gameplay:
   F-keys interactively, or `godot --path . res://tools/weather_lab/weather_lab.tscn -- --capture`
@@ -204,14 +220,14 @@ cameras and calibration geometry. The rules themselves are in
   the settlement, `ZenithCamera` for tiling and stars, `HorizonCamera` for atmospheric
   perspective, `TrackingCamera` to keep a sun/moon disc in frame at any hour, and
   `GameplayCamera` for anything that depends on where the player actually looks.
-- **Cloud cover and storm murk are two independent axes** (`weather.md` §4). Grey and
-  haze come only from the storm front; cloudiness alone never seals the sky. Do not
-  collapse them because one preset would look better.
-- Wind is a general weather parameter, not a cloud-shader input: flags and smoke
-  read the same `wind_*` accessors so everything drifts one way. Water waves are a future idea.
-- Keep deterministic forecast and time rules in `simulation/domain`; the lab and the game
-  both feed visual values into `world/presentation`. A weather feature must not depend on
-  `SettlementGame` to render.
+- **Cloud cover and storm murk are two independent axes** (`world_environment.md` §8).
+  Grey and haze come only from the storm front; cloudiness alone never seals the sky. Do
+  not collapse them because one preset would look better.
+- Wind is a general world parameter, not a cloud-shader input: flags, smoke and future
+  waves read the same wind from the snapshot so everything drifts one way.
+- Keep deterministic calendar, season and weather rules in the environment domain; the
+  lab and the game both feed the same values into `world/presentation`. The environment
+  must not depend on `SettlementGame` to render.
 - Add or update a named scenario whenever a change needs a repeatable visual case.
 
 ## Pitfalls

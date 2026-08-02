@@ -51,6 +51,10 @@ var selected_era := -1
 var dirty := false
 
 var _module_checks: Dictionary = {}
+## `module_id -> {parameter: value}` the author has edited since the definition
+## was opened. Kept beside the controls rather than inside them: toggling a module
+## rebuilds the panel, and reading values back off freed controls lost them.
+var _edited_parameters: Dictionary = {}
 var _pending_discard: Callable = Callable()
 
 
@@ -210,6 +214,9 @@ func _new_game() -> void:
 func _sync_definition_to_ui() -> void:
 	if definition == null:
 		return
+	# Pending edits belong to the definition they were made in. Opening another
+	# game keeps them only long enough to write them into the wrong file.
+	_edited_parameters.clear()
 	game_id_edit.text = String(definition.id)
 	game_name_edit.text = definition.name
 	game_description_edit.text = definition.description
@@ -223,13 +230,17 @@ func _sync_definition_to_ui() -> void:
 
 ## One control per parameter every selected module declares, plus a checkbox that
 ## decides whether the launch screen offers it to the player.
+##
+## The controls are `EditorPropertyInspector` rows built from each module's own
+## schema (`map_start.md` §2.6). The hand-written builder that used to be here
+## understood four types and had to be edited — together with its twin in the
+## launch screen — every time a module wanted a fifth.
 func _refresh_module_panels() -> void:
 	if definition == null:
 		return
-	# Toggling a module rebuilds this panel, so read what the author has already
-	# typed before dropping the controls — otherwise every toggle silently reverts
-	# their edits to the values on disk.
-	var edited := _collect_start_parameters()
+	# Toggling a module rebuilds this panel, so what the author has already typed
+	# is kept in `_edited_parameters` rather than read back off the controls:
+	# otherwise every toggle silently reverted their edits to the values on disk.
 	var in_menu := _menu_parameter_keys() if parameters_box.get_child_count() == 0 else _collected_menu_keys()
 	for child in parameters_box.get_children():
 		parameters_box.remove_child(child)
@@ -246,55 +257,42 @@ func _refresh_module_panels() -> void:
 		var header := Label.new()
 		header.text = String(module_id)
 		parameters_box.add_child(header)
-		var authored := definition.parameters_for(module_id)
-		var pending: Dictionary = edited.get(module_id, {})
-		for parameter: StartParameterDef in declared:
-			var value: Variant = pending.get(String(parameter.id),
-				authored.get(String(parameter.id), parameter.default_value))
-			_add_parameter_control(module_id, parameter, value)
-			var key := "%s/%s" % [module_id, parameter.id]
+		var values := _module_values(module_id, declared)
+		var inspector := EditorPropertyInspector.new()
+		inspector.set_fields(declared, values, false)
+		inspector.property_committed.connect(_on_parameter_committed.bind(module_id))
+		inspector.property_reset_requested.connect(func(parameter: StringName) -> void:
+			var reset := EntityPropertyDef.find(declared, parameter)
+			if reset != null:
+				_on_parameter_committed(parameter, reset.default, module_id))
+		parameters_box.add_child(inspector)
+		for parameter: EntityPropertyDef in declared:
+			# Only a parameter the module lets a player see can be offered in the
+			# launch screen (§2.6); an author-only one has no menu control to build.
+			if parameter.visibility != EntityPropertyDef.VISIBILITY_PLAYER:
+				continue
+			var key := "%s/%s" % [module_id, parameter.name]
 			_add_menu_toggle("%s · %s" % [module_id, parameter.label], key, in_menu.has(key))
 
 
-func _add_parameter_control(module_id: StringName, parameter: StartParameterDef, value: Variant) -> void:
-	var row := HBoxContainer.new()
-	var label := Label.new()
-	label.text = parameter.label
-	label.custom_minimum_size = Vector2(220, 0)
-	row.add_child(label)
-	var control: Control
-	match parameter.type:
-		StartParameterDef.TYPE_INT:
-			var spin := SpinBox.new()
-			spin.min_value = parameter.min_value
-			spin.max_value = parameter.max_value
-			spin.value = int(parameter.coerce(value))
-			spin.value_changed.connect(func(_v: float) -> void: _mark_dirty())
-			control = spin
-		StartParameterDef.TYPE_BOOL:
-			var check := CheckBox.new()
-			check.button_pressed = bool(parameter.coerce(value))
-			check.toggled.connect(func(_v: bool) -> void: _mark_dirty())
-			control = check
-		StartParameterDef.TYPE_ENUM:
-			var option := OptionButton.new()
-			for choice: Dictionary in parameter.options:
-				option.add_item(String(choice.get("label", choice.get("value", ""))))
-				option.set_item_metadata(option.item_count - 1, choice.get("value"))
-				if choice.get("value") == value:
-					option.select(option.item_count - 1)
-			option.item_selected.connect(func(_i: int) -> void: _mark_dirty())
-			control = option
-		_:
-			var edit := LineEdit.new()
-			edit.text = String(parameter.coerce(value))
-			edit.text_changed.connect(func(_v: String) -> void: _mark_dirty())
-			control = edit
-	control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	control.set_meta("module_id", module_id)
-	control.set_meta("parameter", parameter)
-	row.add_child(control)
-	parameters_box.add_child(row)
+## Authored values of one module: what the author has edited in this session,
+## falling back to the definition on disk and then to the module's own default.
+func _module_values(module_id: StringName, declared: Array[EntityPropertyDef]) -> Dictionary:
+	var authored := definition.parameters_for(module_id)
+	var pending: Dictionary = _edited_parameters.get(module_id, {})
+	var values: Dictionary = {}
+	for parameter: EntityPropertyDef in declared:
+		var key := String(parameter.name)
+		values[parameter.name] = parameter.clamp_value(
+			pending.get(key, authored.get(key, parameter.default)))
+	return values
+
+
+func _on_parameter_committed(parameter: StringName, value: Variant, module_id: StringName) -> void:
+	var values: Dictionary = _edited_parameters.get(module_id, {})
+	values[String(parameter)] = value
+	_edited_parameters[module_id] = values
+	_mark_dirty()
 
 
 func _add_menu_toggle(label_text: String, key: String, pressed: bool) -> void:
@@ -354,33 +352,20 @@ func _collect_definition_from_ui() -> bool:
 	return true
 
 
+## What the definition will be saved with. Edits live in `_edited_parameters`
+## from the moment they are committed, so this neither reads controls back nor
+## depends on the panel still being built.
 func _collect_start_parameters() -> Dictionary:
 	var collected: Dictionary = {}
-	for row in parameters_box.get_children():
-		if not row is HBoxContainer:
+	for module_id: StringName in _selected_modules():
+		var declared := GameModuleRegistry.start_parameters_of(module_id)
+		if declared.is_empty():
 			continue
-		for control in (row as HBoxContainer).get_children():
-			if not control.has_meta("parameter"):
-				continue
-			var parameter: StartParameterDef = control.get_meta("parameter")
-			var module_id: StringName = control.get_meta("module_id")
-			var values: Dictionary = collected.get(module_id, {})
-			values[String(parameter.id)] = _control_value(control, parameter)
-			collected[module_id] = values
+		var values: Dictionary = {}
+		for parameter: EntityPropertyDef in declared:
+			values[String(parameter.name)] = _module_values(module_id, declared)[parameter.name]
+		collected[module_id] = values
 	return collected
-
-
-static func _control_value(control: Node, parameter: StartParameterDef) -> Variant:
-	if control is SpinBox:
-		return int((control as SpinBox).value)
-	if control is CheckBox:
-		return (control as CheckBox).button_pressed
-	if control is OptionButton:
-		var option := control as OptionButton
-		return option.get_item_metadata(option.selected) if option.selected >= 0 else parameter.default_value
-	if control is LineEdit:
-		return (control as LineEdit).text.strip_edges()
-	return parameter.default_value
 
 
 func _collect_menu_parameters() -> Array[Dictionary]:

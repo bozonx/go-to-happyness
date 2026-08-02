@@ -71,6 +71,11 @@ var history := MapEditorHistory.new()
 ## package instead of minting `new_map.gdmap` over and over.
 var current_path: String = ""
 
+## Entrance a test run starts at (`map_start.md` §14). It is a property of the
+## run, not of the map, which is why an author can check an entrance the player
+## is never offered; empty means the map's own default.
+var test_start_option: StringName = &""
+
 var _service := MapDocumentService.new()
 var _terrain_service := TerrainService.new()
 var _wear_service := SurfaceWearService.new()
@@ -461,7 +466,7 @@ func _open_settings() -> void:
 
 
 func _open_start_settings() -> void:
-	_dialogs.open_start_settings_dialog(document.meta)
+	_dialogs.open_start_settings_dialog(document.meta, document)
 
 
 ## The properties dialog has already written into `document.meta`; everything that
@@ -746,9 +751,9 @@ func _test_run() -> void:
 
 
 ## Shift+F5 — the same run, started at the cell under the cursor (§12). The map's
-## `core:hero_start` is left exactly where the author drew it: checking a far
-## corner used to mean dragging the party start there and remembering to drag it
-## back, and the map came out of the check edited.
+## spawn group is left exactly as the author drew it: checking a far corner used
+## to mean dragging the party start there and remembering to drag it back, and
+## the map came out of the check edited.
 func _test_run_from_cursor() -> void:
 	var brush := _active.hover_brush() if _active != null else null
 	if brush == null or not brush.has_hover:
@@ -768,14 +773,14 @@ func _launch_test_run(spawn_override: Vector3) -> void:
 	var launch_manager: Node = get_node_or_null("/root/GameLaunchManager")
 	var definition_key := document.meta.start.game_definition
 	# Map-level validation only checks the world (anchor placement, entity
-	# bounds). A settlement map also needs a `core:hero_start` and enough
-	# `core:companion_start` for the starting party; that gate lives in the
-	# module and used to fail silently after launch_editor_test changed scenes.
+	# bounds). A settlement map also needs a start option whose spawn group can
+	# hold the starting party; that gate lives in the module and used to fail
+	# silently after launch_editor_test changed scenes.
 	# Run it here so the author sees the problem in the status bar instead of a
 	# black screen. A "from here" run supplies the party start itself and is
 	# therefore exempt — that is the whole point of it.
 	var session_errors := _test_run_service.validate_session(
-		document, definition_key, spawn_override != Vector3.INF)
+		document, definition_key, spawn_override != Vector3.INF, test_start_option)
 	if not session_errors.is_empty():
 		_message = "тест-запуск невозможен: %s" % "; ".join(session_errors)
 		_message_is_error = true
@@ -787,7 +792,7 @@ func _launch_test_run(spawn_override: Vector3) -> void:
 		# Save As (§12: the editor returns as it left).
 		launch_manager.call("launch_editor_test", definition_key, document,
 			RuntimeLaunchManager.MAP_EDITOR_SCENE, &"editor:preview", spawn_override,
-			{"current_path": current_path})
+			{"current_path": current_path}, test_start_option)
 
 
 ## Every committed ground edit becomes exactly one command, recorded here rather

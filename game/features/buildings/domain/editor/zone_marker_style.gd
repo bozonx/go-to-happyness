@@ -35,8 +35,9 @@ const ANCHOR_STYLE: Dictionary = {
 ## A function this build does not interpret still draws as a spawn — the point of
 ## the fallback is that an unknown pack function is normal, not an error.
 const SPAWN_FUNCTION_STYLE: Dictionary = {
-	&"core:hero_start": {"color": Color(1.0, 0.82, 0.25), "size": Vector3(0.5, 1.1, 0.5), "label": "Герой"},
-	&"core:companion_start": {"color": Color(0.45, 0.7, 1.0), "size": Vector3(0.45, 0.9, 0.45), "label": "Житель"},
+	&"core:party_leader": {"color": Color(1.0, 0.82, 0.25), "size": Vector3(0.5, 1.1, 0.5), "label": "Лидер"},
+	&"core:party_slot": {"color": Color(0.45, 0.7, 1.0), "size": Vector3(0.45, 0.9, 0.45), "label": "Отряд"},
+	&"core:camera_start": {"color": Color(0.8, 0.5, 1.0), "size": Vector3(0.4, 0.4, 0.7), "label": "Камера"},
 }
 
 

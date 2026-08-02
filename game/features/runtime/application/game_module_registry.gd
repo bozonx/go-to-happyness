@@ -34,7 +34,7 @@ static func create_module(module_id: StringName) -> GameModule:
 
 ## Parameters a module accepts, without starting a session. The launch screen and
 ## the game editor ask for this before any module instance exists.
-static func start_parameters_of(module_id: StringName) -> Array[StartParameterDef]:
+static func start_parameters_of(module_id: StringName) -> Array[EntityPropertyDef]:
 	var module := create_module(module_id)
 	return module.start_parameters() if module != null else []
 
@@ -99,6 +99,6 @@ static func _validate_menu_parameters(definition: GameDefinition) -> Array[Strin
 		if not has_module(module_id) or module_id not in definition.module_ids:
 			errors.append("параметр меню ссылается на модуль %s вне игры" % module_id)
 			continue
-		if StartParameterDef.find(start_parameters_of(module_id), parameter_id) == null:
+		if EntityPropertyDef.find(start_parameters_of(module_id), parameter_id) == null:
 			errors.append("модуль %s не объявляет параметр %s" % [module_id, parameter_id])
 	return errors

@@ -29,10 +29,10 @@ func validate(document: MapDocument, nav_grid: NavGrid) -> Dictionary:
 
 ## Runs every game module's `validate_session` against the document without
 ## changing scenes. This mirrors what `SessionBootstrapper.run` will check, so a
-## map that fails here (no `core:hero_start` for a settlement, bad progression)
-## is reported in the editor status bar instead of leaving the author on a black
-## screen after the launch. The bootstrapper still validates at start — this is
-## a read-only preflight, not a bypass of its invariant.
+## map that fails here (a start option whose clearing cannot hold the party, bad
+## progression) is reported in the editor status bar instead of leaving the
+## author on a black screen after the launch. The bootstrapper still validates at
+## start — this is a read-only preflight, not a bypass of its invariant.
 ##
 ## `spawn_override` marks the editor's "test from here" run: it brings its own
 ## party start, so a module must not refuse the launch for want of authored
@@ -41,13 +41,15 @@ func validate_session(
 	document: MapDocument,
 	definition_key: StringName,
 	spawn_override := false,
+	start_option: StringName = &"",
 ) -> Array[String]:
 	if document == null:
 		return ["карта отсутствует"]
 	var definition := GameModuleRegistry.resolve_definition(definition_key)
 	if definition == null:
 		return ["игра %s не установлена" % definition_key]
-	var session := GameSessionConfig.create(definition, &"editor:preview", document)
+	var session := GameSessionConfig.create(
+		definition, &"editor:preview", document, {}, &"", start_option)
 	if spawn_override:
 		# Any finite position marks the launch as overridden; the actual cell is
 		# the editor's business and does not change what a module may refuse.

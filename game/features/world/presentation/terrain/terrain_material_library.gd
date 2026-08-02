@@ -1,17 +1,47 @@
 class_name TerrainMaterialLibrary
 extends RefCounted
 
-## Packed texture arrays for terrain tops and cliffs. Stored variants are mapped
-## through a tiny 16 x material-count lookup texture, so adding grass colours does
-## not reserve empty layers for every unrelated material.
+## Packed texture arrays for terrain tops and cliffs
+## (design_docs/engine/terrain_materials.md §7.1).
+##
+## ## The layout is owned by the domain
+##
+## `TerrainMaterialVariants` defines the one array layout — surface styles in
+## catalog order, then the cliff faces — and this file's only job is to fill
+## exactly `TOTAL_LAYER_COUNT` layers in exactly that order. It may not insert a
+## block of its own: it did once, for the simplified render mode, and because
+## nothing compared the two the cliff shader spent every frame sampling ground
+## placeholders instead of rock. The simplified mode now has its OWN small array
+## with the SAME layout, so a layer index means one thing everywhere.
+##
+## Stored variants reach a layer through a tiny 16 × material-count lookup
+## texture, so adding grass colours does not reserve empty layers for stone.
+##
+## ## Nothing here is computed per texel at load time
+##
+## Normal maps are authored assets (`<name>_n.png`), baked offline by
+## `tools/bake_terrain_normals.gd` from the height map in each albedo's alpha.
+## Deriving them at runtime was a GDScript loop over 262 144 texels per layer,
+## measured at 4.8 seconds in the middle of loading a map. A style with no baked
+## normal falls back to a flat one rather than paying that cost lazily.
 
 const TEXTURE_SIZE := 512
-const PLACEHOLDER_SIZE := 128
+## Baked normals are half the albedo's resolution on purpose: a normal map is a
+## low-frequency signal next to the colour it accompanies, nobody can see the
+## difference at this camera height, and it is the difference between four and
+## one megabyte of repository per layer.
+const NORMAL_TEXTURE_SIZE := 256
+## The simplified render mode is a readability aid, not a shipping look, so its
+## array is a sixteenth of the memory and never resized up to match the real one.
+const SIMPLE_TEXTURE_SIZE := 128
 const LOOKUP_WIDTH := TerrainMaterialVariants.MAX_VARIANTS
 
 ## Where every authored surface texture lives. One directory for the whole array;
 ## the mesher, the palette swatch and the cliff shader all resolve through it.
 const ASSET_DIR := "res://game/features/world/presentation/terrain/assets/"
+
+## Suffix of the baked normal map belonging to an authored surface or cliff.
+const NORMAL_SUFFIX := "_n"
 
 ## Authored 512² surface underlays (albedo in RGB, height map in alpha) keyed by
 ## material id. The list for a material MUST cover exactly its
@@ -21,10 +51,9 @@ const ASSET_DIR := "res://game/features/world/presentation/terrain/assets/"
 ## variant without an entry here fails loudly instead of sampling a placeholder.
 ##
 ## An empty string means the style is not drawn yet: the layer falls back to a
-## procedural placeholder, exactly as it did before this table existed. That is
-## the whole point of stage 1 — the file paths are frozen now, and dropping the
-## PNG in later (`design_docs/engine/terrain_materials.md` §7.1) lights the layer
-## up without touching this file or the layer layout.
+## procedural placeholder. That is deliberate — the file paths are frozen, and
+## dropping the PNG in later lights the layer up without touching this file or
+## the layer layout.
 const AUTHORED_SURFACE_PATHS: Dictionary = {
 	TerrainMaterialCatalog.GRASS: [
 		"grass_ground_plain", "grass_ground_lush", "grass_ground_parched", "grass_ground_flowering",
@@ -53,6 +82,9 @@ const AUTHORED_CLIFF_PATHS: Array[String] = [
 	"cliff_layered_rock", "cliff_ice_wall", "cliff_dust_slope",
 ]
 
+## Presentation-only tables, one entry per catalog material. Sizes are asserted
+## against the catalog in `test_domain_terrain_textures.gd`: a new material must
+## not silently inherit the colour of whichever entry happens to sit at its index.
 const MATERIAL_COLOURS: Array[Color] = [
 	Color(0.32, 0.49, 0.24), Color(0.42, 0.31, 0.20),
 	Color(0.45, 0.45, 0.47), Color(0.76, 0.68, 0.45),
@@ -83,31 +115,29 @@ const HEIGHT_CONTRAST_BY_MATERIAL: Array[float] = [
 
 var _array: Texture2DArray = null
 var _normal_array: Texture2DArray = null
+var _simple_array: Texture2DArray = null
 var _lookup_texture: ImageTexture = null
-var _simple_lookup_texture: ImageTexture = null
-var _images: Array[Image] = []
-var _authored_layers: Dictionary = {}
-var _simple_layers: Dictionary = {}
 
 
 func texture_array() -> Texture2DArray:
-	_ensure_images()
 	if _array == null:
-		_array = Texture2DArray.new()
-		_array.create_from_images(_images)
+		_array = _build_array(_albedo_images())
 	return _array
 
 
 func normal_array() -> Texture2DArray:
-	_ensure_images()
-	if _normal_array != null:
-		return _normal_array
-	var normals: Array[Image] = []
-	for layer in _images.size():
-		normals.append(_normal_from_height(_images[layer]) if _authored_layers.has(layer) else _flat_normal())
-	_normal_array = Texture2DArray.new()
-	_normal_array.create_from_images(normals)
+	if _normal_array == null:
+		_normal_array = _build_array(_normal_images())
 	return _normal_array
+
+
+## The simplified render mode: the same layout at a sixteenth of the resolution,
+## procedural throughout. It exists so the author can read shape and material
+## boundaries without the authored detail, which is why it never loads a PNG.
+func simple_texture_array() -> Texture2DArray:
+	if _simple_array == null:
+		_simple_array = _build_array(_simple_images())
+	return _simple_array
 
 
 func layer_lookup_texture() -> ImageTexture:
@@ -122,27 +152,8 @@ func layer_lookup_texture() -> ImageTexture:
 	return _lookup_texture
 
 
-func simple_layer_lookup_texture() -> ImageTexture:
-	if _simple_lookup_texture != null:
-		return _simple_lookup_texture
-	_ensure_images()
-	var image := Image.create_empty(LOOKUP_WIDTH, TerrainMaterialCatalog.MATERIAL_COUNT, false, Image.FORMAT_R8)
-	for material_index in TerrainMaterialCatalog.MATERIAL_COUNT:
-		for variant in LOOKUP_WIDTH:
-			var style := TerrainMaterialVariants.surface_style_of(material_index, variant)
-			var key: int = material_index * 16 + style
-			var layer: int
-			if _simple_layers.has(key):
-				layer = int(_simple_layers[key])
-			else:
-				layer = TerrainMaterialVariants.layer_of(material_index, variant)
-			image.set_pixel(variant, material_index, Color(float(layer) / 255.0, 0.0, 0.0, 1.0))
-	_simple_lookup_texture = ImageTexture.create_from_image(image)
-	return _simple_lookup_texture
-
-
 func layer_count() -> int:
-	return TerrainMaterialVariants.total_layer_count()
+	return TerrainMaterialVariants.TOTAL_LAYER_COUNT
 
 
 static func swatch_of(material_index: int, variant: int = 0) -> Color:
@@ -153,51 +164,125 @@ static func swatch_of(material_index: int, variant: int = 0) -> Color:
 	return _tinted(MATERIAL_COLOURS[index], clamped)
 
 
-func _ensure_images() -> void:
-	if not _images.is_empty():
-		return
-	for material_index in TerrainMaterialCatalog.MATERIAL_COUNT:
-		for style in TerrainMaterialVariants.surface_style_count(material_index):
-			var path := _authored_path(material_index, style)
-			var layer := _images.size()
-			if path != "":
-				_images.append(_load_authored(path))
-				_authored_layers[layer] = true
-			else:
-				_images.append(_generate_placeholder(material_index, style))
-	for material_index in TerrainMaterialCatalog.MATERIAL_COUNT:
-		if _authored_path(material_index, 0) == "":
-			continue
-		for style in TerrainMaterialVariants.surface_style_count(material_index):
-			var simple_layer := _images.size()
-			_images.append(_generate_placeholder(material_index, style))
-			_simple_layers[material_index * 16 + style] = simple_layer
-	for cliff_index in TerrainMaterialCatalog.cliff_count():
-		var cliff_path := _authored_cliff_path(cliff_index)
-		if cliff_path != "":
-			_images.append(_load_authored(cliff_path))
-			_authored_layers[_images.size() - 1] = true
-		else:
-			_images.append(_generate(CLIFF_COLOURS[cliff_index], 10, 0.8, 1000 + cliff_index))
+# --- Layer assembly -----------------------------------------------------------
 
+## Walks the layout of `TerrainMaterialVariants` exactly once and calls back for
+## each layer. Every array this class builds goes through it, which is what makes
+## "the three arrays have identical layouts" a property of the code rather than a
+## thing to remember.
+static func _for_each_layer(surface: Callable, cliff: Callable) -> Array[Image]:
+	var images: Array[Image] = []
+	for material_index in TerrainMaterialCatalog.MATERIAL_COUNT:
+		for style in TerrainMaterialVariants.surface_style_count(material_index):
+			images.append(surface.call(material_index, style))
+	for cliff_index in TerrainMaterialCatalog.cliff_count():
+		images.append(cliff.call(cliff_index))
+	return images
+
+
+func _albedo_images() -> Array[Image]:
+	return _for_each_layer(
+		func(material_index: int, style: int) -> Image:
+			var path := authored_surface_path(material_index, style)
+			if path != "":
+				return _load_authored(path, TEXTURE_SIZE)
+			return _generate_placeholder(material_index, style, TEXTURE_SIZE),
+		func(cliff_index: int) -> Image:
+			var path := authored_cliff_path(cliff_index)
+			if path != "":
+				return _load_authored(path, TEXTURE_SIZE)
+			return _generate(CLIFF_COLOURS[cliff_index], 10, 0.8, 1000 + cliff_index, TEXTURE_SIZE),
+	)
+
+
+func _normal_images() -> Array[Image]:
+	return _for_each_layer(
+		func(material_index: int, style: int) -> Image:
+			return _load_normal(authored_surface_path(material_index, style)),
+		func(cliff_index: int) -> Image:
+			return _load_normal(authored_cliff_path(cliff_index)),
+	)
+
+
+func _simple_images() -> Array[Image]:
+	return _for_each_layer(
+		func(material_index: int, style: int) -> Image:
+			return _generate_placeholder(material_index, style, SIMPLE_TEXTURE_SIZE),
+		func(cliff_index: int) -> Image:
+			return _generate(CLIFF_COLOURS[cliff_index], 10, 0.8, 1000 + cliff_index, SIMPLE_TEXTURE_SIZE),
+	)
+
+
+## `Texture2DArray` demands one format, one size and one mip chain from every
+## layer. When they already agree — the normal case, because the whole array
+## comes from one import preset — the images go through untouched and the GPU
+## keeps the compressed data the importer produced.
+##
+## They disagree only when a style has no authored PNG and fell back to a
+## procedural placeholder. Matching a placeholder to a compressed neighbour would
+## mean guessing which compressor the importer chose, so the mismatch is resolved
+## the other way: everything drops to plain RGBA8 at the largest size present.
+## That costs memory exactly while a texture is missing, which is a state worth
+## noticing rather than hiding.
+static func _build_array(images: Array[Image]) -> Texture2DArray:
+	var built := Texture2DArray.new()
+	if images.is_empty():
+		return built
+	if not _layers_agree(images):
+		_flatten_to_rgba8(images)
+	built.create_from_images(images)
+	return built
+
+
+static func _layers_agree(images: Array[Image]) -> bool:
+	var reference := images[0]
+	for index in range(1, images.size()):
+		var image := images[index]
+		if (
+			image.get_format() != reference.get_format()
+			or image.get_width() != reference.get_width()
+			or image.get_height() != reference.get_height()
+			or image.has_mipmaps() != reference.has_mipmaps()
+		):
+			return false
+	return true
+
+
+static func _flatten_to_rgba8(images: Array[Image]) -> void:
+	var size := 0
+	for image: Image in images:
+		size = maxi(size, image.get_width())
+	for index in images.size():
+		var flattened := images[index].duplicate() as Image
+		if flattened.is_compressed():
+			flattened.decompress()
+		if flattened.get_format() != Image.FORMAT_RGBA8:
+			flattened.convert(Image.FORMAT_RGBA8)
+		if flattened.get_width() != size or flattened.get_height() != size:
+			flattened.resize(size, size, Image.INTERPOLATE_LANCZOS)
+		if not flattened.has_mipmaps():
+			flattened.generate_mipmaps()
+		images[index] = flattened
+
+
+# --- Paths --------------------------------------------------------------------
 
 ## Resolves a material + surface style to its authored PNG, or "" when the style
 ## is not drawn yet (or the file is missing on disk). "" routes the caller to the
 ## procedural placeholder, so a not-yet-authored layer never breaks the array.
-func _authored_path(material_index: int, style: int) -> String:
+static func authored_surface_path(material_index: int, style: int) -> String:
 	var id := TerrainMaterialCatalog.id_of_index(material_index)
 	if not AUTHORED_SURFACE_PATHS.has(id):
 		return ""
 	var base_names: Array = AUTHORED_SURFACE_PATHS[id]
 	if style < 0 or style >= base_names.size() or base_names[style] == "":
 		return ""
-	var base_name: String = base_names[style]
-	var path: String = ASSET_DIR + base_name + ".png"
+	var path: String = ASSET_DIR + String(base_names[style]) + ".png"
 	return path if ResourceLoader.exists(path) else ""
 
 
-## Same contract as `_authored_path`, for the cliff face kinds of §3.
-func _authored_cliff_path(cliff_index: int) -> String:
+## Same contract as `authored_surface_path`, for the cliff face kinds of §3.
+static func authored_cliff_path(cliff_index: int) -> String:
 	if cliff_index < 0 or cliff_index >= AUTHORED_CLIFF_PATHS.size():
 		return ""
 	var base_name: String = AUTHORED_CLIFF_PATHS[cliff_index]
@@ -207,23 +292,53 @@ func _authored_cliff_path(cliff_index: int) -> String:
 	return path if ResourceLoader.exists(path) else ""
 
 
-func _load_authored(path: String) -> Image:
+## The baked normal map belonging to an albedo, whether or not it exists yet.
+static func normal_path_of(albedo_path: String) -> String:
+	if albedo_path == "":
+		return ""
+	return albedo_path.get_basename() + NORMAL_SUFFIX + ".png"
+
+
+# --- Images -------------------------------------------------------------------
+
+## Loads an authored texture as-is. No `convert` and no `generate_mipmaps`: the
+## import settings already decide the format and the mip chain, and redoing both
+## at runtime for every layer was most of the two seconds this used to cost. Only
+## a file whose size disagrees with the array is touched.
+static func _load_authored(path: String, size: int) -> Image:
 	var texture := load(path) as Texture2D
 	var image := texture.get_image()
-	image.convert(Image.FORMAT_RGBA8)
-	if image.get_width() != TEXTURE_SIZE or image.get_height() != TEXTURE_SIZE:
-		image.resize(TEXTURE_SIZE, TEXTURE_SIZE, Image.INTERPOLATE_LANCZOS)
-	if not image.has_mipmaps():
-		image.generate_mipmaps()
+	if image.get_width() == size and image.get_height() == size:
+		return image
+	var resized := image.duplicate() as Image
+	if resized.is_compressed():
+		resized.decompress()
+	resized.resize(size, size, Image.INTERPOLATE_LANCZOS)
+	return resized
+
+
+## The baked normal of an albedo, or a flat one when it has not been baked.
+static func _load_normal(albedo_path: String) -> Image:
+	var path := normal_path_of(albedo_path)
+	if path != "" and ResourceLoader.exists(path):
+		return (load(path) as Texture2D).get_image()
+	return _flat_normal()
+
+
+static func _flat_normal() -> Image:
+	var image := Image.create_empty(NORMAL_TEXTURE_SIZE, NORMAL_TEXTURE_SIZE, true, Image.FORMAT_RGBA8)
+	image.fill(Color(0.5, 0.5, 1.0, 1.0))
+	image.generate_mipmaps()
 	return image
 
 
-func _generate_placeholder(material_index: int, style: int) -> Image:
+static func _generate_placeholder(material_index: int, style: int, size: int) -> Image:
 	return _generate(
 		_tinted(MATERIAL_COLOURS[material_index], style),
 		GRAIN_BY_MATERIAL[material_index],
 		HEIGHT_CONTRAST_BY_MATERIAL[material_index],
 		material_index * 31 + style,
+		size,
 	)
 
 
@@ -235,47 +350,57 @@ static func _tinted(base: Color, variant: int) -> Color:
 	return base
 
 
-static func _generate(base: Color, grain: int, height_contrast: float, seed_value: int) -> Image:
-	var image := Image.create_empty(PLACEHOLDER_SIZE, PLACEHOLDER_SIZE, true, Image.FORMAT_RGBA8)
+## Procedural noise, written straight into the byte buffer. It is generated at the
+## resolution it will be USED at: the old version always built 128² and then
+## resized up to 512², which is four megabytes of interpolation to recover detail
+## the source never had.
+static func _generate(base: Color, grain: int, height_contrast: float, seed_value: int, size: int) -> Image:
 	var noise := FastNoiseLite.new()
 	noise.seed = seed_value * 7919
 	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
-	noise.frequency = 1.0 / maxf(float(grain), 1.0)
+	var scale := float(size) / 128.0
+	noise.frequency = 1.0 / maxf(float(grain) * scale, 1.0)
 	var detail := FastNoiseLite.new()
 	detail.seed = seed_value * 7919 + 13
 	detail.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	detail.frequency = 1.0 / maxf(float(grain) * 0.35, 1.0)
-	for y in PLACEHOLDER_SIZE:
-		for x in PLACEHOLDER_SIZE:
+	detail.frequency = 1.0 / maxf(float(grain) * scale * 0.35, 1.0)
+	var pixels := PackedByteArray()
+	pixels.resize(size * size * 4)
+	var offset := 0
+	for y in size:
+		for x in size:
 			var coarse := noise.get_noise_2d(float(x), float(y)) * 0.5 + 0.5
 			var fine := detail.get_noise_2d(float(x), float(y)) * 0.5 + 0.5
 			var value := clampf(coarse * 0.7 + fine * 0.3, 0.0, 1.0)
 			var albedo := base.lerp(base.lightened(0.35), value * 0.55).darkened((1.0 - value) * 0.18)
-			albedo.a = clampf(0.5 + (value - 0.5) * height_contrast * 2.0, 0.0, 1.0)
-			image.set_pixel(x, y, albedo)
-	image.resize(TEXTURE_SIZE, TEXTURE_SIZE, Image.INTERPOLATE_CUBIC)
+			pixels[offset] = int(clampf(albedo.r, 0.0, 1.0) * 255.0)
+			pixels[offset + 1] = int(clampf(albedo.g, 0.0, 1.0) * 255.0)
+			pixels[offset + 2] = int(clampf(albedo.b, 0.0, 1.0) * 255.0)
+			pixels[offset + 3] = int(clampf(0.5 + (value - 0.5) * height_contrast * 2.0, 0.0, 1.0) * 255.0)
+			offset += 4
+	var image := Image.create_from_data(size, size, false, Image.FORMAT_RGBA8, pixels)
 	image.generate_mipmaps()
 	return image
 
 
-static func _flat_normal() -> Image:
-	var image := Image.create_empty(TEXTURE_SIZE, TEXTURE_SIZE, true, Image.FORMAT_RGBA8)
-	image.fill(Color(0.5, 0.5, 1.0, 1.0))
-	image.generate_mipmaps()
-	return image
-
-
-## Sobel-free central difference over the height map in the source's alpha, done
-## on the raw byte buffers.
-##
-## The per-pixel `get_pixel`/`set_pixel` version was four `Color` allocations and
-## five calls for each of 262 144 texels, per authored layer, run lazily while the
-## first ground material was being created — i.e. in the middle of loading a map.
-## Reading `get_data()` once and walking `PackedByteArray` is the same arithmetic
-## without the per-texel call overhead.
-static func _normal_from_height(source: Image) -> Image:
-	var size := source.get_width()
-	var heights := source.get_data()
+## Central difference over the height map in the source's alpha, on the raw byte
+## buffers. **This is a baking-time function** — `tools/bake_terrain_normals.gd`
+## is its only caller — and it stays here because the packing rule it inverts
+## (alpha carries height, §7.1) is this file's rule.
+static func normal_from_height(source: Image, size: int) -> Image:
+	var heights := source
+	if heights.is_compressed():
+		heights = heights.duplicate() as Image
+		heights.decompress()
+	if heights.get_format() != Image.FORMAT_RGBA8:
+		if heights == source:
+			heights = heights.duplicate() as Image
+		heights.convert(Image.FORMAT_RGBA8)
+	if heights.get_width() != size or heights.get_height() != size:
+		if heights == source:
+			heights = heights.duplicate() as Image
+		heights.resize(size, size, Image.INTERPOLATE_LANCZOS)
+	var data := heights.get_data()
 	var normals := PackedByteArray()
 	normals.resize(size * size * 4)
 	var inverse := 1.0 / 255.0
@@ -288,14 +413,12 @@ static func _normal_from_height(source: Image) -> Image:
 			var next_x := (x + 1) % size
 			# RGBA8: alpha is the fourth byte of each texel, and alpha is where the
 			# authored height map lives (§7.1).
-			var dx := float(heights[(row + next_x) * 4 + 3] - heights[(row + previous_x) * 4 + 3]) * inverse
-			var dy := float(heights[(next_row + x) * 4 + 3] - heights[(previous_row + x) * 4 + 3]) * inverse
+			var dx := float(data[(row + next_x) * 4 + 3] - data[(row + previous_x) * 4 + 3]) * inverse
+			var dy := float(data[(next_row + x) * 4 + 3] - data[(previous_row + x) * 4 + 3]) * inverse
 			var normal := Vector3(-dx * 2.4, -dy * 2.4, 1.0).normalized()
 			var offset := (row + x) * 4
 			normals[offset] = int(normal.x * 127.5 + 127.5)
 			normals[offset + 1] = int(normal.y * 127.5 + 127.5)
 			normals[offset + 2] = int(normal.z * 127.5 + 127.5)
 			normals[offset + 3] = 255
-	var image := Image.create_from_data(size, size, false, Image.FORMAT_RGBA8, normals)
-	image.generate_mipmaps()
-	return image
+	return Image.create_from_data(size, size, false, Image.FORMAT_RGBA8, normals)

@@ -63,7 +63,7 @@ const NO_FUNCTION := "—"
 var _tool: StringName = TOOL_AREA
 var _area_role: StringName = ZoneAreaRecord.ROLE_REGION
 var _anchor_role: StringName = ZoneAnchorRecord.ROLE_SPAWN
-var _armed_function: StringName = MapSpawnService.HERO_START
+var _armed_function: StringName = MapSpawnService.PARTY_LEADER
 
 var _selected_area_id: StringName = &""
 var _selected_anchor_id: StringName = &""
@@ -281,7 +281,7 @@ func _cycle_role() -> void:
 
 func _default_function_for_anchor(role: StringName) -> StringName:
 	if role == ZoneAnchorRecord.ROLE_SPAWN:
-		return MapSpawnService.HERO_START
+		return MapSpawnService.PARTY_LEADER
 	return &""
 
 
@@ -324,8 +324,8 @@ func _add_anchor(cell: Vector2i) -> void:
 		anchor.properties = ZoneFunctionCatalog.default_properties(_armed_function)
 	# The party start is the one address a settlement launch looks up by name, so
 	# the first one authored gets the readable id instead of `spawn_3`.
-	if anchor.function == MapSpawnService.HERO_START and not context.document.zones.has_id(&"hero_start"):
-		anchor.id = &"hero_start"
+	if anchor.function == MapSpawnService.PARTY_LEADER and not context.document.zones.has_id(&"party_leader"):
+		anchor.id = &"party_leader"
 	# Board cells, not metres: `pos.y` is the terrain *level* the author placed it
 	# on (§6). Conversion to world space happens once, in `MapSpawnService`.
 	anchor.pos = Vector3(float(cell.x) + 0.5, float(context.terrain.height_of(cell)), float(cell.y) + 0.5)
@@ -593,22 +593,22 @@ func rebuild_views() -> void:
 		for rect: Rect2i in area.rects:
 			_add_area_quad(rect, color, area.is_overlay())
 		index += 1
-	var companion_index := 0
+	var slot_index := 0
 	for anchor: ZoneAnchorRecord in context.document.zones.anchors:
-		if anchor.is_spawn() and anchor.function == MapSpawnService.COMPANION_START:
-			companion_index += 1
-		_add_anchor_marker(anchor, _anchor_label(anchor, companion_index))
+		if MapSpawnService.canonical_function(anchor.function) == MapSpawnService.PARTY_SLOT:
+			slot_index += 1
+		_add_anchor_marker(anchor, _anchor_label(anchor, slot_index))
 	for route: ZoneRouteRecord in context.document.zones.routes:
 		_add_route(route)
 
 
-## Companion starts are numbered in authoring order; the label mirrors what
-## `MapSpawnService.companion_spawn_positions` returns, so the on-map text and the
-## spawn order the runtime uses stay in sync.
-func _anchor_label(anchor: ZoneAnchorRecord, companion_index: int) -> String:
+## Party slots are numbered in authoring order, which is the order a spawn group
+## with no explicit `order` fills them in, so the on-map text matches where the
+## second settler actually appears.
+func _anchor_label(anchor: ZoneAnchorRecord, slot_index: int) -> String:
 	var style := ZoneMarkerStyle.of_anchor(anchor)
-	if anchor.is_spawn() and anchor.function == MapSpawnService.COMPANION_START:
-		return "%s %d" % [style.get("label", "Житель"), companion_index]
+	if MapSpawnService.canonical_function(anchor.function) == MapSpawnService.PARTY_SLOT:
+		return "%s %d" % [style.get("label", "Отряд"), slot_index]
 	if style.has("label"):
 		return String(style["label"])
 	return String(anchor.id)

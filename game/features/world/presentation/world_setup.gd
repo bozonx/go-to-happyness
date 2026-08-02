@@ -55,6 +55,9 @@ var _map_document: MapDocument = null
 ## The territory scene that owns the ground and the water. Kept because the
 ## retained as the session's territory projection.
 var _territory: TerritoryBase = null
+## Entrance the session began at; entities bound to another one are not built
+## (`map_start.md` §3.2).
+var _start_option: StringName = &""
 
 
 func setup(
@@ -63,12 +66,14 @@ func setup(
 	p_board_cells: int,
 	p_trail_field: RefCounted,
 	p_map_document: MapDocument,
+	p_start_option: StringName = &"",
 ) -> void:
 	_camera = p_camera
 	_cell_size = p_cell_size
 	_board_cells = p_board_cells
 	_trail_field = p_trail_field
 	_map_document = p_map_document
+	_start_option = p_start_option
 
 
 func build(parent: Node) -> void:
@@ -176,7 +181,7 @@ func _build_terrain(parent: Node) -> void:
 func _build_map_entities() -> void:
 	if _territory == null:
 		return
-	map_entity_runtime.load_map(_map_document, terrain_grid)
+	map_entity_runtime.load_map(_map_document, terrain_grid, _start_option)
 	if map_entity_presenter == null:
 		map_entity_presenter = MapEntityPresenter.new()
 		map_entity_presenter.name = "MapEntities"

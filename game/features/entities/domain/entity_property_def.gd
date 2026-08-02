@@ -71,6 +71,26 @@ const SECTIONS: Array[StringName] = [
 	SECTION_GAMEPLAY, SECTION_BEHAVIOR, SECTION_LINKS,
 ]
 
+## Which part of the start UI a parameter belongs to (`map_start.md` §2.6). Only
+## start parameters set it; a property of a placed object leaves it at `session`
+## and no reader of object properties ever looks.
+const SCOPE_WORLD := &"world"
+const SCOPE_SESSION := &"session"
+const SCOPE_PARTY := &"party"
+const SCOPES: Array[StringName] = [SCOPE_WORLD, SCOPE_SESSION, SCOPE_PARTY]
+
+## Who may see the field. `player` is the only value that lets a game definition
+## surface the parameter in the launch screen; `author` keeps it to the editors.
+const VISIBILITY_AUTHOR := &"author"
+const VISIBILITY_PLAYER := &"player"
+const VISIBILITY_HIDDEN := &"hidden"
+
+## What a map (and a start option under it) may do to the parameter — the third
+## level of §2.5. `fixed` means the declaring module owns the value outright.
+const OVERRIDE_FREE := &"free"
+const OVERRIDE_RESTRICT_ONLY := &"restrict_only"
+const OVERRIDE_FIXED := &"fixed"
+
 var name: StringName = &""
 var label: String = ""
 var type: StringName = TYPE_STRING
@@ -95,6 +115,93 @@ var editable: bool = true
 var unavailable_reason: String = ""
 ## Nested schema of a `list` property's repeating group.
 var entries: Array[EntityPropertyDef] = []
+
+## --- Start-parameter facets (`map_start.md` §2.6) ------------------------------
+## These four fields are what let one schema serve both an authored object and a
+## launch parameter. They are inert for object properties: nothing in the fill
+## mode reads them, and their defaults describe the ordinary "a map may override
+## this, only the author sees it" case.
+var scope: StringName = SCOPE_SESSION
+var visibility: StringName = VISIBILITY_AUTHOR
+var override_policy: StringName = OVERRIDE_FREE
+## A parameter that must end up with a value. A definition leaving it unset is a
+## validation error rather than a silent default.
+var required: bool = false
+
+
+## --- Declaration helpers -------------------------------------------------------
+## Modules declare their start parameters in code, so the four common shapes get
+## constructors. Everything else — `float`, `flags`, references — is built by
+## assigning fields, exactly as pack-authored properties already are.
+
+static func integer(
+	p_name: StringName,
+	p_label: String,
+	p_default: int,
+	p_min: int,
+	p_max: int,
+	p_scope: StringName = SCOPE_SESSION,
+) -> EntityPropertyDef:
+	var property := EntityPropertyDef.new()
+	property.name = p_name
+	property.label = p_label
+	property.type = TYPE_INT
+	property.default = p_default
+	property.minimum = p_min
+	property.maximum = p_max
+	property.scope = p_scope
+	return property
+
+
+static func flag(p_name: StringName, p_label: String, p_default: bool, p_scope: StringName = SCOPE_SESSION) -> EntityPropertyDef:
+	var property := EntityPropertyDef.new()
+	property.name = p_name
+	property.label = p_label
+	property.type = TYPE_BOOL
+	property.default = p_default
+	property.scope = p_scope
+	return property
+
+
+static func text(p_name: StringName, p_label: String, p_default: String, p_scope: StringName = SCOPE_SESSION) -> EntityPropertyDef:
+	var property := EntityPropertyDef.new()
+	property.name = p_name
+	property.label = p_label
+	property.type = TYPE_STRING
+	property.default = p_default
+	property.scope = p_scope
+	return property
+
+
+static func choice(
+	p_name: StringName,
+	p_label: String,
+	p_default: Variant,
+	p_options: Array,
+	p_scope: StringName = SCOPE_SESSION,
+) -> EntityPropertyDef:
+	var property := EntityPropertyDef.new()
+	property.name = p_name
+	property.label = p_label
+	property.type = TYPE_ENUM
+	property.default = p_default
+	property.options = p_options.duplicate()
+	property.scope = p_scope
+	return property
+
+
+## Marks the parameter as one a game definition may surface in the launch screen.
+## Chained onto a constructor so a declaration stays one expression.
+func offered_to_player() -> EntityPropertyDef:
+	visibility = VISIBILITY_PLAYER
+	return self
+
+
+static func find(properties: Array[EntityPropertyDef], property_name: StringName) -> EntityPropertyDef:
+	for property: EntityPropertyDef in properties:
+		if property.name == property_name:
+			return property
+	return null
 
 
 static func is_reference_type(property_type: StringName) -> bool:
@@ -176,6 +283,14 @@ func clamp_value(value: Variant) -> Variant:
 		if maximum != null:
 			as_float = minf(as_float, float(maximum))
 		return as_float
+	# An enum carries its own range: an authored value outside the declared options
+	# is a typo, and letting it through would hand a module a state it never listed.
+	# Only a declared option list can decide that, so an open enum passes through.
+	if type == TYPE_ENUM and not options.is_empty():
+		for option: Variant in options:
+			if String(option) == String(coerced):
+				return coerced
+		return default
 	return coerced
 
 
@@ -219,6 +334,14 @@ func to_dict() -> Dictionary:
 		result["editable"] = false
 	if not unavailable_reason.is_empty():
 		result["unavailable_reason"] = unavailable_reason
+	if scope != SCOPE_SESSION:
+		result["scope"] = String(scope)
+	if visibility != VISIBILITY_AUTHOR:
+		result["visibility"] = String(visibility)
+	if override_policy != OVERRIDE_FREE:
+		result["override_policy"] = String(override_policy)
+	if required:
+		result["required"] = true
 	if not entries.is_empty():
 		var nested: Array = []
 		for entry: EntityPropertyDef in entries:
@@ -248,6 +371,10 @@ static func from_dict(source: Dictionary) -> EntityPropertyDef:
 	property.pick_on_map = bool(source.get("pick_on_map", false))
 	property.editable = bool(source.get("editable", true))
 	property.unavailable_reason = String(source.get("unavailable_reason", ""))
+	property.scope = StringName(source.get("scope", SCOPE_SESSION))
+	property.visibility = StringName(source.get("visibility", VISIBILITY_AUTHOR))
+	property.override_policy = StringName(source.get("override_policy", OVERRIDE_FREE))
+	property.required = bool(source.get("required", false))
 	var raw_entries: Variant = source.get("entries", null)
 	if raw_entries is Array:
 		for raw_entry: Variant in raw_entries as Array:

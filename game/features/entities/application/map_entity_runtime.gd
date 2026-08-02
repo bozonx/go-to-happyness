@@ -25,11 +25,17 @@ class RuntimeEntity:
 var _entities: Dictionary = {}
 
 
-func load_map(document: MapDocument, terrain: TerrainGrid = null) -> void:
+## `start_option` is the entrance the session began at. An entity bound to a
+## different one is not created at all (`map_start.md` §3.2) — that binding is
+## what makes the cart at the north gate and the backpack at the south gate two
+## real entrances rather than two copies of the map.
+func load_map(document: MapDocument, terrain: TerrainGrid = null, start_option: StringName = &"") -> void:
 	_entities.clear()
 	if document == null:
 		return
 	for placed: MapEntityRecord in document.entities.entities:
+		if not placed.belongs_to_start(start_option):
+			continue
 		var archetype := EntityArchetypeCatalog.get_archetype(placed.archetype_id)
 		if archetype == null:
 			continue

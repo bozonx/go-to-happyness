@@ -54,9 +54,31 @@ const ContentIdScript = preload("res://game/features/content/domain/content_id.g
 @onready var _start_latitude_spin: SpinBox = %StartLatitudeSpin
 @onready var _start_weather_edit: LineEdit = %StartWeatherEdit
 
+@onready var _starts_list: ItemList = %StartsList
+@onready var _add_start_button: Button = %AddStartButton
+@onready var _remove_start_button: Button = %RemoveStartButton
+@onready var _default_start_button: Button = %DefaultStartButton
+@onready var _start_option_id_edit: LineEdit = %StartOptionIdEdit
+@onready var _start_option_name_edit: LineEdit = %StartOptionNameEdit
+@onready var _start_option_description_edit: LineEdit = %StartOptionDescriptionEdit
+@onready var _start_option_group_option: OptionButton = %StartOptionGroupOption
+@onready var _start_option_camera_option: OptionButton = %StartOptionCameraOption
+@onready var _start_option_selectable_check: CheckBox = %StartOptionSelectableCheck
+@onready var _module_parameters_box: VBoxContainer = %ModuleParametersBox
+
 ## The meta the properties dialog is currently editing. Held only between opening
 ## and confirming, so a cancelled dialog cannot write anything.
 var _editing_meta: MapMeta = null
+## Working copies of the start options and the map's module sections. The dialog
+## edits these and writes them into the meta only on confirmation, which is what
+## makes «Отмена» mean something for a list the author has been adding rows to.
+var _editing_starts: Array[MapStartOption] = []
+var _editing_default_start: StringName = &""
+var _editing_sections: Dictionary = {}
+var _selected_start := -1
+## The map being edited, needed for the spawn groups and camera anchors a start
+## option points at. Zones are the map's, not the header's.
+var _editing_document: MapDocument = null
 
 
 func _ready() -> void:
@@ -70,11 +92,27 @@ func _ready() -> void:
 	_save_as_dialog.confirmed.connect(_on_save_as_confirmed)
 	_properties_dialog.confirmed.connect(_on_properties_confirmed)
 	_start_dialog.confirmed.connect(_on_start_settings_confirmed)
-	_start_game_option.item_selected.connect(func(_index: int) -> void: _refresh_progression_fields())
+	_start_game_option.item_selected.connect(func(_index: int) -> void:
+		_refresh_progression_fields()
+		# Module parameters belong to the game's modules, so changing the game
+		# changes which controls exist at all.
+		_rebuild_module_parameters())
+	_starts_list.item_selected.connect(_on_start_option_selected)
+	_add_start_button.pressed.connect(_add_start_option)
+	_remove_start_button.pressed.connect(_remove_start_option)
+	_default_start_button.pressed.connect(_make_start_option_default)
+	_start_option_id_edit.text_submitted.connect(func(_text: String) -> void: _commit_start_option_fields())
+	_start_option_id_edit.focus_exited.connect(_commit_start_option_fields)
+	_start_option_name_edit.text_submitted.connect(func(_text: String) -> void: _commit_start_option_fields())
+	_start_option_name_edit.focus_exited.connect(_commit_start_option_fields)
+	_start_option_description_edit.focus_exited.connect(_commit_start_option_fields)
+	_start_option_group_option.item_selected.connect(func(_index: int) -> void: _commit_start_option_fields())
+	_start_option_camera_option.item_selected.connect(func(_index: int) -> void: _commit_start_option_fields())
+	_start_option_selectable_check.toggled.connect(func(_pressed: bool) -> void: _commit_start_option_fields())
 	_progression_mode_option.item_selected.connect(func(_index: int) -> void: _update_progression_controls())
 	# Ids are cleaned as they are typed rather than rejected on save
 	# (content_packaging.md §3.3).
-	for field: LineEdit in [_new_id_edit, _save_as_id_edit, _prop_id_edit, _start_style_edit]:
+	for field: LineEdit in [_new_id_edit, _save_as_id_edit, _prop_id_edit, _start_style_edit, _start_option_id_edit]:
 		field.text_changed.connect(_sanitize_field.bind(field))
 
 
@@ -192,8 +230,14 @@ func _on_properties_confirmed() -> void:
 
 ## Gameplay start is intentionally separate from map identity and world bounds:
 ## it grows with game modules, while the base properties dialog stays stable.
-func open_start_settings_dialog(meta: MapMeta) -> void:
+##
+## `document` supplies the spawn groups and camera anchors a start option points
+## at (`map_start.md` §3.1): an entrance is a reference into the zone layer, and
+## offering the author a free-text field for it would produce dangling links the
+## validator then has to explain.
+func open_start_settings_dialog(meta: MapMeta, document: MapDocument = null) -> void:
 	_editing_meta = meta
+	_editing_document = document
 	_fill_game_options(meta.start.game_definition)
 	_start_style_edit.text = String(meta.start.style)
 	_start_time_spin.value = meta.start.time_of_day
@@ -201,14 +245,18 @@ func open_start_settings_dialog(meta: MapMeta) -> void:
 	_start_latitude_spin.value = meta.start.latitude
 	_start_weather_edit.text = String(meta.start.weather_preset)
 	_refresh_progression_fields(meta.start.progression)
+	_copy_starts_for_editing(meta.start)
+	_rebuild_module_parameters()
 	_start_dialog.popup_centered()
 
 
 func _on_start_settings_confirmed() -> void:
 	if _editing_meta == null:
 		return
+	_commit_start_option_fields()
 	var meta := _editing_meta
 	_editing_meta = null
+	_editing_document = null
 	meta.start.game_definition = StringName(_start_game_option.get_item_metadata(_start_game_option.selected))
 	var style := ContentIdScript.normalize_id(_start_style_edit.text)
 	meta.start.style = StringName(style) if not style.is_empty() else &"generic"
@@ -218,7 +266,236 @@ func _on_start_settings_confirmed() -> void:
 	var weather := _start_weather_edit.text.strip_edges()
 	meta.start.weather_preset = StringName(weather) if not weather.is_empty() else &"clear"
 	_write_progression_policy(meta)
+	meta.start.starts = _editing_starts.duplicate()
+	meta.start.default_start = _editing_default_start
+	meta.start.module_settings = _editing_sections.duplicate()
 	properties_applied.emit()
+
+
+# --- Start options ------------------------------------------------------------
+
+## Deep copies of what the meta holds, so «Отмена» discards the whole session of
+## edits rather than half of them.
+func _copy_starts_for_editing(start: MapStart) -> void:
+	_editing_starts.clear()
+	for option: MapStartOption in start.starts:
+		_editing_starts.append(MapStartOption.from_dict(option.to_dict()))
+	_editing_default_start = start.default_start
+	_editing_sections.clear()
+	for module_id: Variant in start.module_settings:
+		var section: ModuleSettingsSection = start.module_settings[module_id]
+		_editing_sections[StringName(module_id)] = ModuleSettingsSection.from_dict(section.to_dict())
+	_selected_start = 0 if not _editing_starts.is_empty() else -1
+	_refresh_starts_list()
+
+
+func _refresh_starts_list() -> void:
+	_starts_list.clear()
+	for option: MapStartOption in _editing_starts:
+		var marks := []
+		if option.id == _editing_default_start:
+			marks.append("по умолчанию")
+		if not option.selectable:
+			marks.append("не выбирается")
+		var suffix := "  · %s" % ", ".join(marks) if not marks.is_empty() else ""
+		_starts_list.add_item("%s%s" % [option.display_name(), suffix])
+	if _selected_start >= 0 and _selected_start < _starts_list.item_count:
+		_starts_list.select(_selected_start)
+	_refresh_start_option_fields()
+
+
+func _on_start_option_selected(index: int) -> void:
+	# The fields belong to the row that was selected a moment ago; writing them
+	# after the switch would copy one entrance's name onto another.
+	_commit_start_option_fields()
+	_selected_start = index
+	_refresh_start_option_fields()
+
+
+func _refresh_start_option_fields() -> void:
+	_fill_spawn_group_options()
+	_fill_camera_options()
+	var option := _selected_start_option()
+	var editable := option != null
+	for control: Control in [_start_option_id_edit, _start_option_name_edit,
+			_start_option_description_edit, _start_option_group_option,
+			_start_option_camera_option, _start_option_selectable_check,
+			_remove_start_button, _default_start_button]:
+		if control is LineEdit:
+			(control as LineEdit).editable = editable
+		elif control is BaseButton:
+			(control as BaseButton).disabled = not editable
+	if option == null:
+		_start_option_id_edit.text = ""
+		_start_option_name_edit.text = ""
+		_start_option_description_edit.text = ""
+		return
+	_start_option_id_edit.text = String(option.id)
+	_start_option_name_edit.text = option.display_name()
+	_start_option_description_edit.text = option.display_description()
+	_select_metadata(_start_option_group_option, option.spawn_group)
+	_select_metadata(_start_option_camera_option, option.camera)
+	_start_option_selectable_check.set_pressed_no_signal(option.selectable)
+
+
+## Writes the visible fields back into the selected entrance. Called on every
+## field commit and before anything that changes the selection, because the
+## dialog holds no other copy of what the author typed.
+func _commit_start_option_fields() -> void:
+	var option := _selected_start_option()
+	if option == null:
+		return
+	var next_id := StringName(ContentIdScript.normalize_id(_start_option_id_edit.text))
+	if next_id != &"" and next_id != option.id and not _has_start_id(next_id):
+		# Entities and saves address an entrance by id, so a rename has to carry
+		# `default_start` with it or the map silently loses its default.
+		if _editing_default_start == option.id:
+			_editing_default_start = next_id
+		option.id = next_id
+	option.name = MapLocalizedText.of(_start_option_name_edit.text)
+	option.description = MapLocalizedText.of(_start_option_description_edit.text)
+	option.spawn_group = StringName(_selected_metadata(_start_option_group_option))
+	option.camera = StringName(_selected_metadata(_start_option_camera_option))
+	option.selectable = _start_option_selectable_check.button_pressed
+	_refresh_starts_list_labels()
+
+
+## Only the row captions, so committing a field does not steal the selection.
+func _refresh_starts_list_labels() -> void:
+	for index in mini(_starts_list.item_count, _editing_starts.size()):
+		var option := _editing_starts[index]
+		var marks := []
+		if option.id == _editing_default_start:
+			marks.append("по умолчанию")
+		if not option.selectable:
+			marks.append("не выбирается")
+		var suffix := "  · %s" % ", ".join(marks) if not marks.is_empty() else ""
+		_starts_list.set_item_text(index, "%s%s" % [option.display_name(), suffix])
+
+
+func _selected_start_option() -> MapStartOption:
+	if _selected_start < 0 or _selected_start >= _editing_starts.size():
+		return null
+	return _editing_starts[_selected_start]
+
+
+func _has_start_id(id: StringName) -> bool:
+	for option: MapStartOption in _editing_starts:
+		if option.id == id:
+			return true
+	return false
+
+
+func _add_start_option() -> void:
+	_commit_start_option_fields()
+	var option := MapStartOption.new()
+	var index := _editing_starts.size() + 1
+	while _has_start_id(StringName("start_%d" % index)):
+		index += 1
+	option.id = StringName("start_%d" % index)
+	option.name = MapLocalizedText.of("Вариант %d" % index)
+	# A new entrance points at the only group there is, when there is only one:
+	# an author who drew a single clearing means that one.
+	if _editing_document != null and _editing_document.zones.spawn_groups.size() == 1:
+		option.spawn_group = _editing_document.zones.spawn_groups[0].id
+	_editing_starts.append(option)
+	if _editing_default_start == &"":
+		_editing_default_start = option.id
+	_selected_start = _editing_starts.size() - 1
+	_refresh_starts_list()
+
+
+func _remove_start_option() -> void:
+	var option := _selected_start_option()
+	if option == null:
+		return
+	_editing_starts.remove_at(_selected_start)
+	if _editing_default_start == option.id:
+		_editing_default_start = _editing_starts[0].id if not _editing_starts.is_empty() else &""
+	_selected_start = mini(_selected_start, _editing_starts.size() - 1)
+	_refresh_starts_list()
+
+
+func _make_start_option_default() -> void:
+	_commit_start_option_fields()
+	var option := _selected_start_option()
+	if option != null:
+		_editing_default_start = option.id
+		_refresh_starts_list()
+
+
+func _fill_spawn_group_options() -> void:
+	_start_option_group_option.clear()
+	_start_option_group_option.add_item("— не выбрана —")
+	_start_option_group_option.set_item_metadata(0, "")
+	if _editing_document == null:
+		return
+	for group: MapSpawnGroup in _editing_document.zones.spawn_groups:
+		_start_option_group_option.add_item(group.display_name())
+		_start_option_group_option.set_item_metadata(
+			_start_option_group_option.item_count - 1, String(group.id))
+
+
+func _fill_camera_options() -> void:
+	_start_option_camera_option.clear()
+	_start_option_camera_option.add_item("— без камеры —")
+	_start_option_camera_option.set_item_metadata(0, "")
+	if _editing_document == null:
+		return
+	for anchor: ZoneAnchorRecord in _editing_document.zones.anchors:
+		if MapSpawnService.canonical_function(anchor.function) != MapSpawnService.CAMERA_START:
+			continue
+		_start_option_camera_option.add_item(String(anchor.id))
+		_start_option_camera_option.set_item_metadata(
+			_start_option_camera_option.item_count - 1, String(anchor.id))
+
+
+# --- Module parameters --------------------------------------------------------
+
+## Controls for every parameter the selected game's modules declare, built from
+## the same schema and the same inspector the launch screen uses (§2.6, §11.2).
+## The static fields that used to stand here knew four types and no module at
+## all, so a map could not override a single gameplay value.
+func _rebuild_module_parameters() -> void:
+	for child in _module_parameters_box.get_children():
+		_module_parameters_box.remove_child(child)
+		child.queue_free()
+	var definition := GameModuleRegistry.resolve_definition(
+		StringName(_start_game_option.get_item_metadata(_start_game_option.selected)))
+	if definition == null:
+		return
+	for module_id: StringName in definition.module_ids:
+		var declared := GameModuleRegistry.start_parameters_of(module_id)
+		if declared.is_empty():
+			continue
+		var header := Label.new()
+		header.text = String(module_id)
+		header.add_theme_font_size_override("font_size", 12)
+		_module_parameters_box.add_child(header)
+		var section := _section_for(module_id)
+		var values: Dictionary = {}
+		for parameter: EntityPropertyDef in declared:
+			# A parameter the map does not override shows the game's own value, so
+			# the author sees what the map will actually start with rather than a
+			# blank the format has no way to express.
+			values[parameter.name] = section.value_of(parameter.name) if section.has_value(parameter.name) \
+				else definition.parameters_for(module_id).get(String(parameter.name), parameter.default)
+		var inspector := EditorPropertyInspector.new()
+		inspector.set_fields(declared, values, false)
+		inspector.property_committed.connect(func(parameter: StringName, value: Variant) -> void:
+			_section_for(module_id).values[String(parameter)] = value)
+		inspector.property_reset_requested.connect(func(parameter: StringName) -> void:
+			# Reset means "stop overriding", not "write the default back": a map
+			# that copied the game's value would silently freeze it there.
+			_section_for(module_id).values.erase(String(parameter))
+			_rebuild_module_parameters())
+		_module_parameters_box.add_child(inspector)
+
+
+func _section_for(module_id: StringName) -> ModuleSettingsSection:
+	if not _editing_sections.has(module_id):
+		_editing_sections[module_id] = ModuleSettingsSection.new()
+	return _editing_sections[module_id]
 
 
 func _refresh_progression_fields(authored_policy: ProgressionPolicy = null) -> void:
@@ -310,6 +587,10 @@ static func _add_options(option: OptionButton, pairs: Array) -> void:
 	for pair: Array in pairs:
 		option.add_item(String(pair[1]))
 		option.set_item_metadata(option.item_count - 1, pair[0])
+
+
+static func _selected_metadata(option: OptionButton) -> String:
+	return String(option.get_item_metadata(option.selected)) if option.selected >= 0 else ""
 
 
 static func _select_metadata(option: OptionButton, value: Variant) -> void:

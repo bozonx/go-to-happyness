@@ -1,7 +1,7 @@
 {
 	"anchors": [
 		{
-			"function": "core:hero_start",
+			"function": "core:party_leader",
 			"id": "hero_start",
 			"pos": [
 				-22.5,
@@ -11,7 +11,7 @@
 			"role": "spawn"
 		},
 		{
-			"function": "core:companion_start",
+			"function": "core:party_slot",
 			"id": "companion_1",
 			"pos": [
 				-21.0,
@@ -21,7 +21,7 @@
 			"role": "spawn"
 		},
 		{
-			"function": "core:companion_start",
+			"function": "core:party_slot",
 			"id": "companion_2",
 			"pos": [
 				-22.5,
@@ -31,7 +31,7 @@
 			"role": "spawn"
 		},
 		{
-			"function": "core:companion_start",
+			"function": "core:party_slot",
 			"id": "companion_3",
 			"pos": [
 				-21.0,
@@ -367,8 +367,14 @@
 			}
 		},
 		{
-			"archetype": "core:starter_backpack",
+			"archetype": "core:backpack",
+			"function": "core:party_stash",
 			"id": "starter_backpack",
+			"props": {
+				"food": 16,
+				"tarp": 1,
+				"water": 8
+			},
 			"transform": {
 				"position": [
 					-24.0,
@@ -377,11 +383,6 @@
 				],
 				"scale": 1.0,
 				"yaw": 0.0
-			},
-			"props": {
-				"food": 16,
-				"water": 8,
-				"tarp": 1
 			}
 		},
 		{
@@ -2210,7 +2211,7 @@
 		}
 	],
 	"flags": {},
-	"format_version": 7,
+	"format_version": 8,
 	"id": "green_valley",
 	"kind": "map",
 	"map_kind": "map",
@@ -2235,7 +2236,7 @@
 			"kind": "archetype"
 		},
 		{
-			"id": "core:starter_backpack",
+			"id": "core:backpack",
 			"kind": "archetype"
 		},
 		{
@@ -2270,19 +2271,65 @@
 	"revision": "6a6e8d59a001",
 	"routes": [],
 	"rules": [],
+	"spawn_groups": [
+		{
+			"capacity": 12,
+			"fallback": "nearest_valid",
+			"id": "legacy_party",
+			"name": {
+				"ru": "Старт отряда"
+			},
+			"slots": [
+				{
+					"anchor": "hero_start",
+					"id": "leader",
+					"order": 0,
+					"tags": [
+						"leader"
+					]
+				},
+				{
+					"anchor": "companion_1",
+					"id": "slot_1",
+					"order": 1
+				},
+				{
+					"anchor": "companion_2",
+					"id": "slot_2",
+					"order": 2
+				},
+				{
+					"anchor": "companion_3",
+					"id": "slot_3",
+					"order": 3
+				}
+			]
+		}
+	],
 	"start": {
 		"day_of_year": 120,
+		"default_start": "default",
 		"game_definition": "core:settlement",
-		"module_settings": {},
 		"latitude": 54.0,
+		"module_settings": {},
+		"progression": {
+			"allowed_eras": [],
+			"default_era": "tent",
+			"mode": "inherit"
+		},
+		"starts": [
+			{
+				"id": "default",
+				"name": {
+					"ru": "Начало"
+				},
+				"selectable": true,
+				"spawn_group": "legacy_party"
+			}
+		],
 		"style": "generic",
 		"time_of_day": 480,
-		"weather_preset": "clear",
-		"progression": {
-			"mode": "inherit",
-			"allowed_eras": [],
-			"default_era": "tent"
-		}
+		"weather_preset": "clear"
 	},
 	"tags": [],
 	"victory": [],

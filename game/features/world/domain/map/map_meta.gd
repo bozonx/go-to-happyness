@@ -38,7 +38,13 @@ const BORDER_KINDS: Array[StringName] = [BORDER_OCEAN, BORDER_LAVA, BORDER_NOTHI
 ## `start.module_settings`. Progression is not: it is host functionality, so
 ## `start.progression` (v7) constrains or disables a game's eras without the map
 ## naming the module that advances them.
-const FORMAT_VERSION := 7
+##
+## v8 breaks the tie between the party's size and the map's geometry
+## (`map_start.md` §16): `spawn_groups[]` replaces one anchor per member,
+## `start.starts[]` names the entrances that use them, and each module settings
+## section says whether it sets a value, narrows a range or locks a choice.
+## `MapFormatMigration` reads v7 and writes v8, so no authored map is lost.
+const FORMAT_VERSION := 8
 
 ## Board presets (§6.2). All are multiples of `TerrainGrid.CHUNK_CELLS` so the
 ## board is whole chunks. The default is the largest one that still loads

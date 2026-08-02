@@ -71,47 +71,73 @@ const CLIFF_IDS: Array[StringName] = [
 	CLIFF_DUST_SLOPE,
 ]
 
+## Where the surface occurs (§8). This is NOT a biome — a biome is a computed mask
+## over a region and it decides pressure suits, temperature and which materials a
+## generator may place there. `origin` is the far coarser question "does this
+## surface exist on Earth at all", and it exists so that a palette, a generator
+## recipe or a content pack can group the catalog without keeping a private copy
+## of the list. The map editor used to hardcode exactly this, which meant a newly
+## added material silently landed in the wrong drawer.
+const ORIGIN_EARTH := &"earth"
+const ORIGIN_LUNA := &"luna"
+const ORIGIN_MARS := &"mars"
+
+const ORIGIN_IDS: Array[StringName] = [ORIGIN_EARTH, ORIGIN_LUNA, ORIGIN_MARS]
+
 ## §2. `repose_class` is a slope class from `SlopeCatalog`: the steepest slope the
 ## material holds without a retaining structure. `nav_weight` multiplies the base
 ## traversal cost. `soil` is what digging yields. `cliff` is the face kind under
-## it (§3). `wear_weights` overrides `nav_weight` per wear level for the materials
-## that declare their weight wear-dependent — for everything else wear is visual
-## only (§6.1). `wear_recovery_days` is how many simulated days without a visit
-## drop one wear level; 0 means never (rock does not grow back).
+## it (§3). `origin` is the world it occurs on. `wear_weights` overrides
+## `nav_weight` per wear level for the materials that declare their weight
+## wear-dependent — for everything else wear is visual only (§6.1).
+## `wear_recovery_days` is how many simulated days without a visit drop one wear
+## level; 0 means never (rock does not grow back).
+##
+## **This table is the only place a material property is written.** Every lookup
+## array below is DERIVED from it at class load, so the fast indexed path and the
+## readable record cannot drift apart. They used to be two hand-maintained copies
+## with nothing comparing them, which is a silent way to change an angle of repose.
 const MATERIALS: Array = [
 	{
 		"id": GRASS, "index": 0, "repose_class": SlopeCatalog.CLASS_STEEP,
 		"nav_weight": 1.0, "soil": SOIL, "cliff": CLIFF_ROOTED_SOIL,
+		"origin": ORIGIN_EARTH,
 		"wear_weights": null, "wear_recovery_days": 4,
 	},
 	{
 		"id": DIRT, "index": 1, "repose_class": SlopeCatalog.CLASS_STEEP,
 		"nav_weight": 1.0, "soil": SOIL, "cliff": CLIFF_ROOTED_SOIL,
+		"origin": ORIGIN_EARTH,
 		"wear_weights": null, "wear_recovery_days": 8,
 	},
 	{
 		"id": STONE, "index": 2, "repose_class": SlopeCatalog.CLASS_PRE_CLIFF,
 		"nav_weight": 1.2, "soil": SOIL_STONE, "cliff": CLIFF_LAYERED_ROCK,
+		"origin": ORIGIN_EARTH,
 		"wear_weights": null, "wear_recovery_days": 0,
 	},
 	{
 		"id": SAND, "index": 3, "repose_class": SlopeCatalog.CLASS_MODERATE,
 		"nav_weight": 1.3, "soil": SOIL_SAND, "cliff": CLIFF_SAND_SCREE,
+		"origin": ORIGIN_EARTH,
 		"wear_weights": null, "wear_recovery_days": 2,
 	},
 	{
 		"id": GRAVEL, "index": 4, "repose_class": SlopeCatalog.CLASS_STEEP,
 		"nav_weight": 1.15, "soil": SOIL_GRAVEL, "cliff": CLIFF_GRAVEL_SCREE,
+		"origin": ORIGIN_EARTH,
 		"wear_weights": null, "wear_recovery_days": 0,
 	},
 	{
 		"id": MUD, "index": 5, "repose_class": SlopeCatalog.CLASS_MODERATE,
 		"nav_weight": 2.0, "soil": SOIL_MUD, "cliff": CLIFF_WET_CLAY,
+		"origin": ORIGIN_EARTH,
 		"wear_weights": null, "wear_recovery_days": 2,
 	},
 	{
 		"id": GRASS_TALL, "index": 6, "repose_class": SlopeCatalog.CLASS_STEEP,
 		"nav_weight": 2.0, "soil": SOIL, "cliff": CLIFF_ROOTED_SOIL,
+		"origin": ORIGIN_EARTH,
 		# §6.1: untouched 2.0, trodden 1.5, a path 1.0. The only material whose
 		# weight is wear-dependent today, and the reason `wear` is a nav input at
 		# all rather than a texture flag.
@@ -120,6 +146,7 @@ const MATERIALS: Array = [
 	{
 		"id": SCORCHED, "index": 7, "repose_class": SlopeCatalog.CLASS_STEEP,
 		"nav_weight": 1.1, "soil": SOIL_ASH, "cliff": CLIFF_ROOTED_SOIL,
+		"origin": ORIGIN_EARTH,
 		"wear_weights": null, "wear_recovery_days": 4,
 	},
 	{
@@ -128,31 +155,37 @@ const MATERIALS: Array = [
 		# every route across the glacier. "Fast on ice" belongs to the movement
 		# controller, not to search cost.
 		"nav_weight": 1.0, "soil": SOIL_ICE, "cliff": CLIFF_ICE_WALL,
+		"origin": ORIGIN_EARTH,
 		"wear_weights": null, "wear_recovery_days": 0,
 	},
 	{
 		"id": LUNAR_REGOLITH, "index": 9, "repose_class": SlopeCatalog.CLASS_STEEP,
 		"nav_weight": 1.0, "soil": SOIL_REGOLITH, "cliff": CLIFF_DUST_SLOPE,
+		"origin": ORIGIN_LUNA,
 		"wear_weights": null, "wear_recovery_days": 0,
 	},
 	{
 		"id": LUNAR_ROCK, "index": 10, "repose_class": SlopeCatalog.CLASS_PRE_CLIFF,
 		"nav_weight": 1.2, "soil": SOIL_STONE, "cliff": CLIFF_LAYERED_ROCK,
+		"origin": ORIGIN_LUNA,
 		"wear_weights": null, "wear_recovery_days": 0,
 	},
 	{
 		"id": MARS_REGOLITH, "index": 11, "repose_class": SlopeCatalog.CLASS_MODERATE,
 		"nav_weight": 1.1, "soil": SOIL_REGOLITH, "cliff": CLIFF_DUST_SLOPE,
+		"origin": ORIGIN_MARS,
 		"wear_weights": null, "wear_recovery_days": 0,
 	},
 	{
 		"id": MARS_ROCK, "index": 12, "repose_class": SlopeCatalog.CLASS_PRE_CLIFF,
 		"nav_weight": 1.2, "soil": SOIL_STONE, "cliff": CLIFF_LAYERED_ROCK,
+		"origin": ORIGIN_MARS,
 		"wear_weights": null, "wear_recovery_days": 0,
 	},
 	{
 		"id": CLAY, "index": 13, "repose_class": SlopeCatalog.CLASS_STEEP,
 		"nav_weight": 1.1, "soil": SOIL_CLAY, "cliff": CLIFF_WET_CLAY,
+		"origin": ORIGIN_EARTH,
 		"wear_weights": null, "wear_recovery_days": 4,
 	},
 ]
@@ -164,39 +197,32 @@ const DEFAULT_INDEX := 0
 ## material, so it multiplies whatever surface is under it.
 const SNOW_WEIGHT_BY_DEPTH: Array[float] = [1.0, 1.4, 1.8, 2.2]
 
-## Parallel lookups by index. The cascade, the mesher and the publisher walk every
-## cell of a chunk; none of them may pay for a dictionary scan per query.
-const IDS: Array[StringName] = [
-	GRASS, DIRT, STONE, SAND, GRAVEL, MUD, GRASS_TALL, SCORCHED, ICE,
-	LUNAR_REGOLITH, LUNAR_ROCK, MARS_REGOLITH, MARS_ROCK, CLAY,
-]
-const INDEX_BY_ID := {
-	GRASS: 0, DIRT: 1, STONE: 2, SAND: 3, GRAVEL: 4, MUD: 5, GRASS_TALL: 6,
-	SCORCHED: 7, ICE: 8, LUNAR_REGOLITH: 9, LUNAR_ROCK: 10, MARS_REGOLITH: 11,
-	MARS_ROCK: 12, CLAY: 13,
-}
-const REPOSE_CLASS_BY_INDEX: Array[int] = [
-	SlopeCatalog.CLASS_STEEP,
-	SlopeCatalog.CLASS_STEEP,
-	SlopeCatalog.CLASS_PRE_CLIFF,
-	SlopeCatalog.CLASS_MODERATE,
-	SlopeCatalog.CLASS_STEEP,
-	SlopeCatalog.CLASS_MODERATE,
-	SlopeCatalog.CLASS_STEEP,
-	SlopeCatalog.CLASS_STEEP,
-	SlopeCatalog.CLASS_CLIFF,
-	SlopeCatalog.CLASS_STEEP,
-	SlopeCatalog.CLASS_PRE_CLIFF,
-	SlopeCatalog.CLASS_MODERATE,
-	SlopeCatalog.CLASS_PRE_CLIFF,
-	SlopeCatalog.CLASS_STEEP,
-]
-const NAV_WEIGHT_BY_INDEX: Array[float] = [
-	1.0, 1.0, 1.2, 1.3, 1.15, 2.0, 2.0, 1.1, 1.0, 1.0, 1.2, 1.1, 1.2, 1.1,
-]
-const CLIFF_INDEX_BY_INDEX: Array[int] = [0, 0, 4, 2, 3, 1, 0, 0, 5, 6, 4, 6, 4, 1]
+## Parallel lookups by index, built once from `MATERIALS` when the class loads.
+## The cascade, the mesher and the publisher walk every cell of a chunk, so none
+## of them may pay for a dictionary scan per query — but nor may the numbers they
+## read be a second, unverified transcription of the table above.
+static var IDS: Array[StringName] = []
+static var INDEX_BY_ID: Dictionary = {}
+static var REPOSE_CLASS_BY_INDEX := PackedInt32Array()
+static var NAV_WEIGHT_BY_INDEX := PackedFloat32Array()
+static var CLIFF_INDEX_BY_INDEX := PackedInt32Array()
+static var ORIGIN_BY_INDEX: Array[StringName] = []
+static var MATERIAL_COUNT := 0
 
-const MATERIAL_COUNT := 14
+
+static func _static_init() -> void:
+	var cliff_index_by_id: Dictionary = {}
+	for cliff_index in CLIFF_IDS.size():
+		cliff_index_by_id[CLIFF_IDS[cliff_index]] = cliff_index
+	for entry: Dictionary in MATERIALS:
+		var id: StringName = entry["id"]
+		IDS.append(id)
+		INDEX_BY_ID[id] = int(entry["index"])
+		REPOSE_CLASS_BY_INDEX.append(int(entry["repose_class"]))
+		NAV_WEIGHT_BY_INDEX.append(float(entry["nav_weight"]))
+		CLIFF_INDEX_BY_INDEX.append(int(cliff_index_by_id[entry["cliff"]]))
+		ORIGIN_BY_INDEX.append(entry["origin"])
+	MATERIAL_COUNT = IDS.size()
 
 
 static func count() -> int:
@@ -346,6 +372,36 @@ static func cliff_index_of_index(material_index: int) -> int:
 
 static func cliff_count() -> int:
 	return CLIFF_IDS.size()
+
+
+# --- Origin (§8) --------------------------------------------------------------
+
+## Which world this surface occurs on. Callers that want to group the catalog —
+## the editor palette, a generator recipe, a content pack — ask here instead of
+## keeping their own list of "the alien ones".
+static func origin_of_index(material_index: int) -> StringName:
+	if not is_valid_index(material_index):
+		return ORIGIN_BY_INDEX[DEFAULT_INDEX]
+	return ORIGIN_BY_INDEX[material_index]
+
+
+static func origin_of(material_id: StringName) -> StringName:
+	return origin_of_index(index_of(material_id))
+
+
+static func indices_of_origin(origin: StringName) -> PackedInt32Array:
+	var result := PackedInt32Array()
+	for index in ORIGIN_BY_INDEX.size():
+		if ORIGIN_BY_INDEX[index] == origin:
+			result.append(index)
+	return result
+
+
+## Read-only view of the id list. `ids()` hands out a copy for callers that intend
+## to mutate it; anything walking the catalog in a loop wants this one, because a
+## duplicate per iteration is an allocation per palette row.
+static func ids_view() -> Array[StringName]:
+	return IDS
 
 
 static func ids() -> Array[StringName]:

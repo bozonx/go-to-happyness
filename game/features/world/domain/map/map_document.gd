@@ -106,7 +106,7 @@ static func from_json(source: Dictionary) -> MapDocument:
 	# and forage. Everything natural lives as explicit `entities[]` records now.
 	for key: String in source:
 		if _is_meta_key(key) or key == WATER_SECTION or key in MapScenario.SECTIONS \
-				or key in ["areas", "anchors", "routes", "entities", "natural_scatter"]:
+				or key in ["areas", "anchors", "routes", "spawn_groups", "entities", "natural_scatter"]:
 			continue
 		document.sections[key] = _duplicated(source[key])
 	document.zones.from_json(source)

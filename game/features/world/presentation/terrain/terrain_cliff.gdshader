@@ -1,7 +1,7 @@
 shader_type spatial;
 render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 
-// Vertical faces of class 5–7 (design_docs/core/terrain_materials.md §3, §7.2).
+// Vertical faces of class 5–7 (design_docs/engine/terrain_materials.md §3, §7.2).
 //
 // A face is never drawn with the material on top of the column — grass on a sheer
 // wall reads as a rendering bug — so the mesher hands each wall vertex the layer
@@ -14,7 +14,17 @@ render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 // for a wall it is not.
 
 uniform sampler2DArray surface_textures : source_color, filter_linear_mipmap, repeat_enable;
+// The faces read the same baked normals the tops do, through the same layer
+// index. Leaving them out made every cliff in the world a flat plane beside
+// ground that had relief, which reads as the rock being the untextured one.
+uniform sampler2DArray surface_normals : hint_normal, filter_linear_mipmap, repeat_enable;
+// Simplified render mode, same layout at a sixteenth of the resolution.
+uniform sampler2DArray simple_textures : source_color, filter_linear_mipmap, repeat_enable;
 uniform float tile_size = 2.0;
+// How much of the baked relief survives on a face. Faces are seen edge-on and
+// their triplanar projection already stretches, so the full ground strength
+// would read as noise.
+uniform float normal_strength : hint_range(0.0, 1.0) = 0.7;
 // The mesher writes quad sizes in CELLS, so the four edge-mask bits always own
 // the integer part of UV2.x whatever board the map uses. This converts back.
 uniform float cell_size = 1.0;
@@ -92,9 +102,16 @@ void fragment() {
 	blend /= max(blend.x + blend.y + blend.z, 0.0001);
 
 	vec3 uv = world_position / tile_size;
-	vec3 x_plane = texture(surface_textures, vec3(uv.zy, layer_index)).rgb;
-	vec3 y_plane = texture(surface_textures, vec3(uv.xz, layer_index)).rgb;
-	vec3 z_plane = texture(surface_textures, vec3(uv.xy, layer_index)).rgb;
+	bool simple = render_mode_idx > 2.5;
+	vec3 x_plane = simple
+		? texture(simple_textures, vec3(uv.zy, layer_index)).rgb
+		: texture(surface_textures, vec3(uv.zy, layer_index)).rgb;
+	vec3 y_plane = simple
+		? texture(simple_textures, vec3(uv.xz, layer_index)).rgb
+		: texture(surface_textures, vec3(uv.xz, layer_index)).rgb;
+	vec3 z_plane = simple
+		? texture(simple_textures, vec3(uv.xy, layer_index)).rgb
+		: texture(surface_textures, vec3(uv.xy, layer_index)).rgb;
 
 	if (render_mode_idx > 1.5 && render_mode_idx < 2.5) {
 		// Mode 2: Matte / Clay - cliff face shade.
@@ -105,5 +122,22 @@ void fragment() {
 		ALBEDO = (x_plane * blend.x + y_plane * blend.y + z_plane * blend.z) * face_shade;
 		ROUGHNESS = 0.98;
 		SPECULAR = 0.1;
+		if (!simple) {
+			// Triplanar normal, whiteout-blended: each plane's tangent-space normal is
+			// re-based onto the world axes it belongs to, so the relief follows the
+			// face instead of swimming with the projection.
+			vec3 x_normal = texture(surface_normals, vec3(uv.zy, layer_index)).rgb * 2.0 - 1.0;
+			vec3 y_normal = texture(surface_normals, vec3(uv.xz, layer_index)).rgb * 2.0 - 1.0;
+			vec3 z_normal = texture(surface_normals, vec3(uv.xy, layer_index)).rgb * 2.0 - 1.0;
+			vec3 lit_normal = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+			vec3 detail_world = normalize(
+				vec3(0.0, x_normal.y, x_normal.x) * blend.x
+				+ vec3(y_normal.x, 0.0, y_normal.y) * blend.y
+				+ vec3(z_normal.x, z_normal.y, 0.0) * blend.z
+				+ lit_normal
+			);
+			vec3 shaded_world = normalize(mix(lit_normal, detail_world, normal_strength));
+			NORMAL = normalize((VIEW_MATRIX * vec4(shaded_world, 0.0)).xyz);
+		}
 	}
 }

@@ -879,8 +879,9 @@ game/features/world/
 лаборатории, редактора карт и слоя `Terrain Base` редактора зданий.
 
 ```
-[Фаза 4c: Сезоны] — terrain_materials.md §6.3
-   ├── SeasonState: климатическая кривая поверх WeatherState
+[Фаза 4c: Сезоны] — terrain_materials.md §6.3, world_environment.md §19 этап 1
+   ├── Климатическая кривая, календарь и температура — у окружения мира,
+   │   а не у поверхности: она получает шанс снега, температуру и growth_rate
    ├── Снег: накопление, таяние, weights_revision отдельно от topology_revision
    └── Регионы (airless, климат), скафандр, зарастание после пожара
 

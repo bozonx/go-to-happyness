@@ -1,7 +1,7 @@
 shader_type spatial;
 render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 
-// Top surface of the terrain (design_docs/core/terrain_materials.md §7.2, §7.3).
+// Top surface of the terrain (design_docs/engine/terrain_materials.md §7.2, §7.3).
 //
 // The fragment takes four taps of the INDEX MAP around its position, unrolls each
 // into a layer of the one texture array, and mixes them BY THE HEIGHT MAP in the
@@ -20,9 +20,13 @@ uniform sampler2DArray surface_normals : hint_normal, filter_linear_mipmap, repe
 // Indices, therefore nearest. A linearly filtered index is a different material.
 uniform sampler2D index_map : filter_nearest, repeat_disable;
 uniform sampler2D detail_map : filter_nearest, repeat_disable;
+// The simplified render mode: the SAME layer layout at a sixteenth of the
+// resolution, procedural throughout. A second lookup table used to redirect the
+// simplified mode into extra layers appended to the main array — which is what
+// pushed the cliff faces out of the place the domain says they live.
+uniform sampler2DArray simple_textures : source_color, filter_linear_mipmap, repeat_enable;
 // Stored material+variant -> packed Texture2DArray layer.
 uniform sampler2D layer_lookup_map : filter_nearest, repeat_disable;
-uniform sampler2D simple_layer_lookup_map : filter_nearest, repeat_disable;
 // Built coverage over the ground (map_editor.md §5.2.1): R is the catalog index,
 // G is the coverage's own wear. Indices again, therefore nearest.
 uniform sampler2D coverage_map : filter_nearest, repeat_disable;
@@ -150,11 +154,11 @@ void fragment() {
 			(variant + 0.5) / variant_capacity,
 			(material_index + 0.5) / material_count
 		);
-		float layer = (render_mode_idx > 2.5)
-			? floor(texture(simple_layer_lookup_map, lookup_uv).r * 255.0 + 0.5)
-			: floor(texture(layer_lookup_map, lookup_uv).r * 255.0 + 0.5);
+		float layer = floor(texture(layer_lookup_map, lookup_uv).r * 255.0 + 0.5);
 
-		vec4 texel = texture(surface_textures, vec3(tile_uv, layer));
+		vec4 texel = (render_mode_idx > 2.5)
+			? texture(simple_textures, vec3(tile_uv, layer))
+			: texture(surface_textures, vec3(tile_uv, layer));
 		float bilinear = mix(1.0 - f.x, f.x, offset.x) * mix(1.0 - f.y, f.y, offset.y);
 
 		// The coverage of the same column, resolved to a colour here so the tap
