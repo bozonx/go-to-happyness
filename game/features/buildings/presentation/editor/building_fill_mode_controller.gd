@@ -587,10 +587,11 @@ func _rotated_vector(rotation: Vector3, axis: String, direction: int) -> Vector3
 ## Reset buttons of the transform section. Each one resets its own field of every
 ## selected object, and the brush along with the rotation.
 func reset_rotation() -> void:
-	current_pitch_deg = 0.0
-	current_yaw_deg = 0.0
-	current_roll_deg = 0.0
 	var records := selected_records()
+	if records.is_empty():
+		current_pitch_deg = 0.0
+		current_yaw_deg = 0.0
+		current_roll_deg = 0.0
 	var ignored_ids: Array = selected_object_ids()
 	var anchors: Dictionary = {}
 	var rotations: Dictionary = {}
@@ -613,15 +614,19 @@ func reset_rotation() -> void:
 			_apply_transform_to_node(record)
 			changed = true
 	_commit_transform_reset(changed, "Поворот сброшен.")
+	if records.is_empty():
+		_sync_brush_transform_fields()
 	refresh_ghost()
 
 
 ## Drops the authored offset: the object sits exactly on the cells it owns. The
 ## cells themselves do not move — there is no "zero cell" to go back to.
 func reset_offset() -> void:
-	current_offset = Vector3.ZERO
+	var records := selected_records()
+	if records.is_empty():
+		current_offset = Vector3.ZERO
 	var changed := false
-	for record: FillObjectRecord in selected_records():
+	for record: FillObjectRecord in records:
 		if record.offset.is_zero_approx():
 			continue
 		record.pos = record.anchor_pos()
@@ -629,11 +634,15 @@ func reset_offset() -> void:
 		_apply_transform_to_node(record)
 		changed = true
 	_commit_transform_reset(changed, "Смещение сброшено: объект стоит ровно по своим клеткам.")
+	if records.is_empty():
+		_sync_brush_transform_fields()
 	refresh_ghost()
 
 
 func reset_scale() -> void:
 	var records := selected_records()
+	if records.is_empty():
+		current_scale = 1.0
 	var ignored_ids: Array = selected_object_ids()
 	var anchors: Dictionary = {}
 	var rotations: Dictionary = {}
@@ -657,6 +666,9 @@ func reset_scale() -> void:
 		_apply_transform_to_node(record)
 		changed = true
 	_commit_transform_reset(changed, "Масштаб сброшен.")
+	if records.is_empty():
+		_sync_brush_transform_fields()
+	refresh_ghost()
 
 
 func _commit_transform_reset(changed: bool, message: String) -> void:
@@ -815,6 +827,7 @@ func refresh_ghost() -> void:
 	var ghost_pos := snapped_position(_editor.cursor_hit_pos, current_asset_id, current_scale)
 	_ghost.position = ghost_pos + current_offset
 	_ghost.rotation_degrees = Vector3(current_pitch_deg, current_yaw_deg, current_roll_deg)
+	_ghost.scale = Vector3.ONE * current_scale
 	# Update ghost colour based on placement state.
 	var state := _compute_ghost_state(ghost_pos)
 	_update_ghost_color(state)
@@ -1118,11 +1131,17 @@ func on_zone_deleted(zone_id: StringName) -> void:
 func _refresh_inspector() -> void:
 	var record := find_record(selected_object_id)
 	if record == null:
-		_set_transform_fields_enabled(false)
 		_refresh_zone_options(&"", null)
 		_update_zone_highlight()
 		var selected_asset := WorldAssetCatalog.get_asset(current_asset_id)
 		if selected_asset != null:
+			_set_transform_fields_enabled(true)
+			# The cursor owns brush position. Its fine transform is still authored
+			# here and must immediately affect the placement ghost.
+			_pos_x_spin.editable = false
+			_pos_y_spin.editable = false
+			_pos_z_spin.editable = false
+			_sync_brush_transform_fields()
 			_inspector_title.text = "Ассет: %s" % selected_asset.name
 			_id_label.text = "Категория: %s" % WorldAssetCatalog.category_display_name(selected_asset.category)
 			_asset_label.text = "Размер: %d×%d×%d м" % [selected_asset.size_in_blocks.x, selected_asset.size_in_blocks.y, selected_asset.size_in_blocks.z]
@@ -1130,6 +1149,7 @@ func _refresh_inspector() -> void:
 			_controls_vbox.set_fields(
 				_appearance_definitions(selected_asset), selected_asset.default_appearance(), true, false)
 		else:
+			_set_transform_fields_enabled(false)
 			_inspector_title.text = "Инспектор наполнения"
 			_id_label.text = "ID: —"
 			_asset_label.text = "Выберите ассет в палитре или объект в 3D"
@@ -1449,11 +1469,36 @@ func _sync_transform_fields(record: FillObjectRecord) -> void:
 	_syncing_ui = false
 
 
+func _sync_brush_transform_fields() -> void:
+	_syncing_ui = true
+	_pos_x_spin.value = 0.0
+	_pos_y_spin.value = _editor.active_layer
+	_pos_z_spin.value = 0.0
+	_off_x_spin.value = current_offset.x
+	_off_y_spin.value = current_offset.y
+	_off_z_spin.value = current_offset.z
+	_pitch_spin.value = current_pitch_deg
+	_yaw_spin.value = current_yaw_deg
+	_roll_spin.value = current_roll_deg
+	_scale_spin.value = current_scale
+	_syncing_ui = false
+
+
 func _on_transform_spin_changed(_value: float) -> void:
 	if _syncing_ui:
 		return
 	var record := find_record(selected_object_id)
 	if record == null:
+		if current_asset_id.is_empty():
+			return
+		current_offset = EditorFillConventions.clamp_offset(
+			Vector3(_off_x_spin.value, _off_y_spin.value, _off_z_spin.value))
+		current_pitch_deg = _pitch_spin.value
+		current_yaw_deg = _yaw_spin.value
+		current_roll_deg = _roll_spin.value
+		current_scale = EditorFillConventions.normalized_scale(
+			WorldAssetCatalog.get_asset(current_asset_id), _scale_spin.value)
+		refresh_ghost()
 		return
 	var old_anchor := record.anchor_pos()
 	var old_offset := record.offset
@@ -1512,7 +1557,6 @@ func _on_transform_spin_changed(_value: float) -> void:
 		target.rot = rotations[target.id]
 		target.scale = scales[target.id]
 		_apply_transform_to_node(target)
-	current_offset = candidate_offset
 	_update_selection_marker()
 	# One field of one object is one undo step, however many intermediate values
 	# the wheel or the arrows produced.

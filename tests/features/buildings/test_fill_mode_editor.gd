@@ -219,12 +219,26 @@ func _run() -> void:
 	assert(fill.selected_object_id.is_empty(), "Esc clears fill selection")
 	fill.select_object(editor.blueprint.objects[0].id)
 	print("  multi-axis rotation + Esc ok")
+	var ui_record = editor.blueprint.objects[0]
+	var ui_yaw_before: float = ui_record.rot.y
+	fill._yaw_spin.value = ui_yaw_before + EditorFillConventions.ROTATION_STEP_DEG
+	assert(is_equal_approx(ui_record.rot.y, ui_yaw_before + EditorFillConventions.ROTATION_STEP_DEG),
+		"реальный value_changed общего SpinBox применяет трансформацию")
 
 	# Шаг поворота общий на оба редактора и не зависит от ассета.
 	fill.select_object("")
+	fill.current_asset_id = &"campfire"
+	fill._refresh_inspector()
+	fill._off_x_spin.value = 0.5
+	fill._scale_spin.value = 1.2
+	assert(is_equal_approx(fill.current_offset.x, 0.5), "поле смещения меняет кисть через реальный UI-сигнал")
+	assert(is_equal_approx(fill.current_scale, 1.2), "поле масштаба меняет кисть через реальный UI-сигнал")
 	fill.current_pitch_deg = 0.0
 	fill.current_yaw_deg = 0.0
 	fill.current_roll_deg = 0.0
+	fill.current_offset = Vector3.ZERO
+	fill.current_scale = 1.0
+	fill._sync_brush_transform_fields()
 	fill.rotate_selection("y", 1)
 	assert(is_equal_approx(fill.current_yaw_deg, EditorFillConventions.ROTATION_STEP_DEG),
 		"шаг быстрого поворота — общий, а не заданный ассетом")
@@ -250,10 +264,13 @@ func _run() -> void:
 	fill._syncing_ui = false
 	fill._on_transform_spin_changed(0.5)
 	assert(is_equal_approx(placed.offset.x, 0.5), "смещение записано")
+	assert(fill.current_offset.is_zero_approx(),
+		"смещение выбранного объекта не меняет смещение кисти и фантома")
 	assert(fill.occupied_cells(placed.anchor_pos(), placed.asset_id, placed.scale.x, placed.rot.y) == cell_before,
 		"смещение не переселяет объект в соседнюю клетку")
 	fill.reset_offset()
 	assert(placed.offset.is_zero_approx(), "кнопка ↺ сбрасывает смещение")
+	assert(fill.current_offset.is_zero_approx(), "сброс объекта не затрагивает кисть")
 
 	# Множественное выделение: клетка применяется сдвигом ко всему выделению.
 	fill.select_object(editor.blueprint.objects[0].id)
