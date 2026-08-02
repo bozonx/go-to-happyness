@@ -1138,7 +1138,8 @@ func _apply_appearance_value(record: MapEntityRecord, property_name: StringName,
 	if definition == null:
 		return false
 	var next: Variant = FillObjectRecord.json_safe_value(definition.clamp_value(value))
-	if record.appearance.get(key, definition.default) == next:
+	var current: Variant = FillObjectRecord.json_safe_value(record.appearance.get(key, definition.default))
+	if current == next:
 		return false
 	var before := context.document.entities.to_json()
 	record.appearance[key] = next
@@ -1156,7 +1157,8 @@ func _apply_brush_value(property_name: StringName, value: Variant) -> bool:
 			if definition.name == property_name:
 				var key := String(property_name).trim_prefix(APPEARANCE_PREFIX)
 				var next: Variant = FillObjectRecord.json_safe_value(definition.clamp_value(value))
-				if _brush_appearance.get(key, definition.default) == next:
+				var current: Variant = FillObjectRecord.json_safe_value(_brush_appearance.get(key, definition.default))
+				if current == next:
 					return false
 				_brush_appearance[key] = next
 				notify_ui_changed()
