@@ -14,6 +14,8 @@ static func run_all() -> void:
 	_test_settlement_with_complete_party_is_launchable()
 	_test_showcase_without_spawns_is_launchable()
 	_test_unknown_game_definition_reports_error()
+	_test_spawn_override_launches_a_half_drawn_map()
+	_test_preflight_runs_the_zone_layer_rules()
 	print("    [PASS] Map Test Run Service Tests")
 
 
@@ -54,6 +56,36 @@ static func _test_unknown_game_definition_reports_error() -> void:
 	var service := MapTestRunService.new()
 	var errors := service.validate_session(document, &"core:not_installed")
 	assert(not errors.is_empty(), "unknown game definition should be reported")
+
+
+## "Тест отсюда" (Shift+F5) brings its own party start, so the map does not need
+## authored spawn anchors for it. This is the whole feature: checking a far corner
+## must not require dragging `core:hero_start` there and back.
+static func _test_spawn_override_launches_a_half_drawn_map() -> void:
+	var document := MapDocument.create(&"settle", "Settle", BOARD_CELLS)
+	var service := MapTestRunService.new()
+	assert(not service.validate_session(document, &"core:settlement").is_empty(),
+		"a plain F5 still demands the authored party")
+	assert(service.validate_session(document, &"core:settlement", true).is_empty(),
+		"a run from the cursor does not")
+
+
+## The check button, F5 and save must answer the same question. While the
+## preflight skipped `MapZoneLayer.validate`, a duplicate zone id reported "no
+## errors", launched, and then refused to save.
+static func _test_preflight_runs_the_zone_layer_rules() -> void:
+	var document := _settlement_with_party(BOARD_CELLS)
+	var twin := ZoneAnchorRecord.new()
+	twin.id = &"hero_start" # already taken by the party's hero start
+	twin.role = ZoneAnchorRecord.ROLE_WAYPOINT
+	twin.pos = Vector3(2.5, 0.0, 2.5)
+	document.zones.anchors.append(twin)
+
+	var service := MapTestRunService.new()
+	var result := service.validate(document, null)
+	var errors: Array = result["errors"]
+	assert(errors.any(func(m: String) -> bool: return m.find("дублирующийся id") >= 0),
+		"the preflight sees what save sees: %s" % "; ".join(errors))
 
 
 static func _settlement_with_party(board_cells: int) -> MapDocument:

@@ -566,9 +566,22 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 	fill_ctrl._select(&"", false)
 	var stroke_count_before: int = editor.document.entities.entities.size()
 	var stroke_depth_before: int = editor.history.undo_depth()
-	editor._brush.hovered_cell = Vector2i(30, 30)
+	var stroke_start := Vector2i.ZERO
+	for x in range(1, editor.document.terrain.board_cells - 5):
+		for z in range(1, editor.document.terrain.board_cells - 1):
+			var candidate := Vector2i(x, z)
+			if fill_ctrl._cells_placeable(Rect2i(candidate, Vector2i(4, 1))) and fill_ctrl._entity_at(candidate) == &"" and fill_ctrl._entity_at(candidate + Vector2i(1, 0)) == &"" \
+					and fill_ctrl._entity_at(candidate + Vector2i(2, 0)) == &"" and fill_ctrl._entity_at(candidate + Vector2i(3, 0)) == &"":
+				stroke_start = candidate
+				break
+		if stroke_start != Vector2i.ZERO:
+			break
+	assert(stroke_start != Vector2i.ZERO, "на карте нашлась свободная полоса для stroke")
+	editor._brush.hovered_cell = stroke_start
+	editor._brush.has_hover = true
 	fill_ctrl.handle_input(_click(MOUSE_BUTTON_LEFT, true))
-	editor._brush.hovered_cell = Vector2i(33, 30)
+	assert(fill_ctrl._placing_stroke, "первый клик начал stroke постановки")
+	editor._brush.hovered_cell = stroke_start + Vector2i(3, 0)
 	fill_ctrl.handle_input(InputEventMouseMotion.new())
 	fill_ctrl.handle_input(_click(MOUSE_BUTTON_LEFT, false))
 	assert(editor.document.entities.entities.size() == stroke_count_before + 4,
@@ -609,6 +622,14 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 	assert(editor._active.reset_inspector_value(FillModeController.INSPECTOR_OFFSET),
 		"смещение сбрасывается")
 	assert(editor.document.entities.entities[0].offset.is_zero_approx(), "сброс вернул объект на свои клетки")
+	assert(editor._active.apply_inspector_value(FillModeController.INSPECTOR_CELL_X, busy_cell.x + 2),
+		"поле Клетка X независимо переносит объект")
+	assert(editor.document.entities.entities[0].cell(editor.document.terrain).x == busy_cell.x + 2,
+		"X не сбрасывается в ноль и не меняет Z")
+	assert(editor._active.apply_inspector_value(FillModeController.INSPECTOR_CELL_Z, busy_cell.y + 2),
+		"поле Клетка Z независимо переносит объект")
+	assert(editor.document.entities.entities[0].cell(editor.document.terrain) == busy_cell + Vector2i(2, 2),
+		"Z подписан и применяется как координата карты")
 	# Клетка правится числом и переносит объект целиком.
 	assert(editor._active.apply_inspector_value(FillModeController.INSPECTOR_CELL, [busy_cell.x + 3, busy_cell.y]),
 		"клетка правится числом")

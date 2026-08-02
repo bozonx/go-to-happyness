@@ -269,6 +269,12 @@ func _vector_control(property: EntityPropertyDef, value: Variant) -> Control:
 		column.add_child(axis)
 		var spin := SpinBox.new()
 		spin.step = float(property.step) if property.step is float or property.step is int else 0.1
+		var has_min := property.minimum is float or property.minimum is int
+		var has_max := property.maximum is float or property.maximum is int
+		spin.allow_greater = not has_max
+		spin.allow_lesser = not has_min
+		spin.min_value = float(property.minimum) if has_min else -1000000.0
+		spin.max_value = float(property.maximum) if has_max else 1000000.0
 		spin.value = float(values[index])
 		spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		column.add_child(spin)

@@ -57,6 +57,26 @@ func _init() -> void:
 	simulation.zone_presence_tracker.on_citizen_cell_changed(first_citizen.ai_id, Vector2i(12, 12), ActorTags.of(first_citizen))
 	assert(entered[0], "entering the gate_yard region published area_entered")
 
+	# 4b. The board is centred on the origin, so half of every map lies in negative
+	#     cells. A `0 … board_cells` bounds check in the cost and presence indexes
+	#     silently dropped every zone drawn there: the editor showed them, the
+	#     runtime did not have them. Both layers are checked west of the origin.
+	var west_weight: float = simulation.nav_grid.get_cell_weight(Vector2i(-6, -6))
+	assert(west_weight > grass_weight,
+		"an overlay west of the origin prices its cells too: %f vs %f" % [west_weight, grass_weight])
+	var west_entered := [false]
+	simulation.zone_event_bus.configure({
+		"area_entered": func(event: ZoneEvent): west_entered[0] = event.subject_id == &"west_camp",
+		"area_exited": func(_event: ZoneEvent): pass,
+		"owner_changed": func(_event: ZoneEvent): pass,
+		"zone_flag_changed": func(_event: ZoneEvent): pass,
+		"slot_reserved": func(_event: ZoneEvent): pass,
+		"slot_released": func(_event: ZoneEvent): pass,
+	})
+	simulation.zone_presence_tracker.on_citizen_cell_changed(
+		first_citizen.ai_id, Vector2i(-10, -10), ActorTags.of(first_citizen))
+	assert(west_entered[0], "a region west of the origin publishes area_entered too")
+
 	# 5. The patrol route's stops resolve and its single edge is walkable — the
 	#    validator's reachability check agrees the map is sound.
 	var warnings := MapValidator.warnings(simulation.launch_config.map_document, simulation.nav_grid)
@@ -92,6 +112,21 @@ func _zone_map() -> MapDocument:
 	forest.effects = {ZoneEffects.KEY_COST: 2.0}
 	forest.add_rect(Rect2i(2, 2, 2, 2)) # cells (2,2)..(3,3)
 	document.zones.areas.append(forest)
+
+	# The same two kinds of area west of the origin. A board of 32 runs -16…15, so
+	# these are ordinary cells — and they were the ones both indexes threw away.
+	var west_camp := ZoneAreaRecord.new()
+	west_camp.id = &"west_camp"
+	west_camp.role = ZoneAreaRecord.ROLE_REGION
+	west_camp.add_rect(Rect2i(-12, -12, 4, 4)) # cells (-12,-12)..(-9,-9)
+	document.zones.areas.append(west_camp)
+
+	var west_thicket := ZoneAreaRecord.new()
+	west_thicket.id = &"west_thicket"
+	west_thicket.role = ZoneAreaRecord.ROLE_OVERLAY
+	west_thicket.effects = {ZoneEffects.KEY_COST: 2.0}
+	west_thicket.add_rect(Rect2i(-7, -7, 3, 3)) # cells (-7,-7)..(-5,-5)
+	document.zones.areas.append(west_thicket)
 
 	var spawn := ZoneAnchorRecord.new()
 	spawn.id = &"hero_start"

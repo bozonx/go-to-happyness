@@ -13,6 +13,8 @@ extends MapEditorMode
 ## действие то же самое (`map_fill_mode.md` §9.1).
 
 const INSPECTOR_CELL := &"editor_cell"
+const INSPECTOR_CELL_X := &"editor_cell_x"
+const INSPECTOR_CELL_Z := &"editor_cell_z"
 const INSPECTOR_ELEVATION := &"editor_elevation"
 const INSPECTOR_OFFSET := &"editor_offset"
 const INSPECTOR_PITCH := &"editor_pitch"
@@ -20,7 +22,7 @@ const INSPECTOR_YAW := &"editor_yaw"
 const INSPECTOR_ROLL := &"editor_roll"
 const INSPECTOR_SCALE := &"editor_scale"
 const INSPECTOR_INITIAL_STATE := &"editor_initial_state"
-const TRANSFORM_PROPERTIES: Array[StringName] = [INSPECTOR_CELL, INSPECTOR_ELEVATION, INSPECTOR_OFFSET, INSPECTOR_PITCH, INSPECTOR_YAW, INSPECTOR_ROLL, INSPECTOR_SCALE]
+const TRANSFORM_PROPERTIES: Array[StringName] = [INSPECTOR_CELL, INSPECTOR_CELL_X, INSPECTOR_CELL_Z, INSPECTOR_ELEVATION, INSPECTOR_OFFSET, INSPECTOR_PITCH, INSPECTOR_YAW, INSPECTOR_ROLL, INSPECTOR_SCALE]
 ## Действие «заменить выделенное на выбранный в палитре архетип».
 const OPTION_REPLACE := &"fill_replace"
 
@@ -52,6 +54,8 @@ var _placing_stroke := false
 var _last_placed_cell := Vector2i(-999999, -999999)
 var _placement_stroke_serial := 0
 var _placement_merge_key: StringName = &""
+var _dragging_selection := false
+var _drag_anchor_cell := Vector2i.ZERO
 
 
 func _init() -> void:
@@ -140,8 +144,9 @@ func pick_from_cell() -> bool:
 
 func _handle_mouse(event: InputEventMouseButton) -> bool:
 	if event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
-		var consumed := _placing_stroke
+		var consumed := _placing_stroke or _dragging_selection
 		_placing_stroke = false
+		_dragging_selection = false
 		return consumed
 	if not event.pressed or not context.brush.has_hover:
 		return false
@@ -170,7 +175,10 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 	var found := _entity_at(cell)
 	if found != &"":
 		_select(found, event.ctrl_pressed)
+		_dragging_selection = not event.ctrl_pressed
+		_drag_anchor_cell = cell
 		rebuild_views()
+		_report_selected_warnings()
 		notify_ui_changed()
 		return true
 	if event.ctrl_pressed:
@@ -190,6 +198,8 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 
 
 func _continue_placement_stroke() -> bool:
+	if _dragging_selection:
+		return _drag_selection_to(context.brush.hovered_cell) if context.brush.has_hover else false
 	if not _placing_stroke or not context.brush.has_hover or _archetype_id == &"":
 		return false
 	var cell := context.brush.hovered_cell
@@ -206,6 +216,38 @@ func _continue_placement_stroke() -> bool:
 	return true
 
 
+func _drag_selection_to(target_cell: Vector2i) -> bool:
+	var primary := context.document.entities.by_id(_selected_id)
+	if primary == null:
+		return false
+	var shift := target_cell - _drag_anchor_cell
+	if shift == Vector2i.ZERO:
+		return true
+	var selected := _selected_ids()
+	var before := context.document.entities.to_json()
+	var proposed: Dictionary = {}
+	for entity_id: StringName in selected:
+		var record := context.document.entities.by_id(entity_id)
+		if record == null:
+			continue
+		var cells := Rect2i(_base_cell(record) + shift, cell_span(record.archetype_id, record.scale, record.yaw_degrees))
+		if not _cells_placeable(cells) or not _cells_free_ignoring(cells, selected, record.archetype_id):
+			context.set_status_message("Перенос невозможен: клетки заняты, вне карты или в вырезе.", true)
+			return true
+		proposed[entity_id] = cells
+	if not _proposed_selection_is_free(proposed):
+		context.set_status_message("Перенос невозможен: объекты выделения пересекутся.", true)
+		return true
+	for entity_id: StringName in proposed:
+		var record := context.document.entities.by_id(entity_id)
+		var archetype := EntityArchetypeCatalog.get_archetype(record.archetype_id) if record != null else null
+		if record != null and archetype != null:
+			record.position = _anchor_position(proposed[entity_id], archetype) + Vector3.UP * record.elevation_blocks + record.offset
+	_drag_anchor_cell = target_cell
+	_commit(before, "перенос сущности", StringName("fill_drag/%s" % primary.id))
+	return true
+
+
 ## Ctrl+ЛКМ добавляет и убирает объект из выделения.  Shift занят пипеткой —
 ## тем же жестом, что и в редакторе зданий, поэтому множественное выделение
 ## получает Ctrl в обоих редакторах.
@@ -213,6 +255,8 @@ func _select(entity_id: StringName, additive: bool) -> void:
 	if not additive:
 		_selected_id = entity_id
 		_additional_selected.clear()
+		if entity_id == &"":
+			_dragging_selection = false
 		return
 	if entity_id == &"":
 		return
@@ -365,6 +409,7 @@ func _place(cell: Vector2i, merge_key: StringName = &"") -> void:
 	_warnings_by_entity[record.id] = _placement_warnings_for_cells(cells, archetype)
 	context.document.entities.entities.append(record)
 	_select(record.id, false)
+	_report_selected_warnings()
 	_commit(before, "размещение %s" % archetype.name, merge_key)
 
 
@@ -451,6 +496,15 @@ func _drop_stale_warnings() -> void:
 	for entity_id: Variant in _warnings_by_entity.keys():
 		if context.document.entities.by_id(entity_id) == null:
 			_warnings_by_entity.erase(entity_id)
+
+
+func _report_selected_warnings() -> void:
+	var primary := context.document.entities.by_id(_selected_id)
+	if primary == null:
+		return
+	var warnings: Array = _warnings_by_entity.get(primary.id, [])
+	if not warnings.is_empty():
+		context.set_status_message("Предупреждение размещения: %s" % "; ".join(warnings), true)
 
 
 func _pick_archetype(cell: Vector2i) -> bool:
@@ -887,16 +941,11 @@ func inspector_lines() -> Array[String]:
 	var primary := context.document.entities.by_id(_selected_id)
 	if primary != null:
 		var archetype := EntityArchetypeCatalog.get_archetype(primary.archetype_id)
-		var lines: Array[String] = [
+		return [
 			"Свойства: %s" % (archetype.name if archetype != null else String(primary.archetype_id)),
 			"id: %s" % primary.id,
 			"архетип: %s" % primary.archetype_id,
-			"клетка: %d, %d" % [_base_cell(primary).x, _base_cell(primary).y],
 		]
-		var warnings: Array = _warnings_by_entity.get(primary.id, [])
-		for warning: Variant in warnings:
-			lines.append("⚠ %s" % String(warning))
-		return lines
 
 	var active_archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
 	if active_archetype != null:
@@ -924,16 +973,15 @@ func inspector_properties() -> Array[EntityPropertyDef]:
 	if not selected.is_empty():
 		# Автор оперирует клеткой и смещением внутри неё — теми же полями, что и в
 		# редакторе зданий. Мировая позиция производна и в полях не участвует.
-		var cell_property := EntityPropertyDef.from_dict({
-			"name": INSPECTOR_CELL, "label": "Клетка" if selected.size() == 1 else "Сдвиг по клеткам",
-			"type": "vector2", "section": "transform", "step": 1.0})
+		var base_cell := _base_cell(context.document.entities.by_id(selected[0])) if selected.size() == 1 else Vector2i.ZERO
 		var offset_property := EntityPropertyDef.from_dict({
 			"name": INSPECTOR_OFFSET, "label": "Смещение", "type": "vector3", "section": "transform",
 			"unit": "м", "step": EditorFillConventions.OFFSET_STEP,
 			"min": -EditorFillConventions.MAX_OFFSET_CELLS, "max": EditorFillConventions.MAX_OFFSET_CELLS,
 			"default": [0.0, 0.0, 0.0]})
 		var properties: Array[EntityPropertyDef] = [
-			cell_property,
+			EntityPropertyDef.from_dict({"name": INSPECTOR_CELL_X, "label": "Клетка X" if selected.size() == 1 else "Сдвиг X", "type": "int", "section": "transform", "step": 1.0, "default": base_cell.x}),
+			EntityPropertyDef.from_dict({"name": INSPECTOR_CELL_Z, "label": "Клетка Z" if selected.size() == 1 else "Сдвиг Z", "type": "int", "section": "transform", "step": 1.0, "default": base_cell.y}),
 			EntityPropertyDef.from_dict({"name": INSPECTOR_ELEVATION, "label": "Уровень Y", "type": "int", "section": "transform", "unit": "блок", "step": 1.0, "default": 0}),
 			offset_property,
 			EntityPropertyDef.from_dict({"name": INSPECTOR_PITCH, "label": "Поворот X", "type": "float", "section": "transform", "unit": "°", "min": 0.0, "max": 359.0, "step": EditorFillConventions.ROTATION_STEP_DEG, "default": 0.0}),
@@ -987,6 +1035,8 @@ func inspector_values() -> Dictionary:
 		var values := archetype.resolved_properties(selected.props) if archetype != null else {}
 		var cell := _base_cell(selected)
 		values[INSPECTOR_CELL] = Vector2(cell.x, cell.y)
+		values[INSPECTOR_CELL_X] = cell.x
+		values[INSPECTOR_CELL_Z] = cell.y
 		values[INSPECTOR_ELEVATION] = selected.elevation_blocks
 		values[INSPECTOR_OFFSET] = selected.offset
 		values[INSPECTOR_PITCH] = selected.pitch_degrees
@@ -1145,7 +1195,7 @@ func reset_inspector_value(property_name: StringName) -> bool:
 		# Сброс смещения ставит объект ровно по своим клеткам; сами клетки не
 		# двигаются — «нулевой клетки» не существует.
 		return _apply_transform_value(primary, property_name, [0.0, 0.0, 0.0], false)
-	if property_name == INSPECTOR_CELL:
+	if property_name in [INSPECTOR_CELL, INSPECTOR_CELL_X, INSPECTOR_CELL_Z]:
 		return false
 	if property_name == INSPECTOR_INITIAL_STATE:
 		return _apply_value(property_name, String(EntityStateSet.FOLLOW_SEASON), false)
@@ -1179,7 +1229,11 @@ func _apply_transform_value(record: MapEntityRecord, property_name: StringName, 
 			var requested := EntityPropertyDef.from_dict({"name": "cell", "type": "vector2"}).coerce_value(value) as Vector2
 			var target_cell := Vector2i(int(round(requested.x)), int(round(requested.y)))
 			shift = target_cell - _base_cell(record)
-		if property_name == INSPECTOR_CELL and shift == Vector2i.ZERO:
+		elif property_name == INSPECTOR_CELL_X:
+			shift.x = int(round(float(value))) - _base_cell(record).x
+		elif property_name == INSPECTOR_CELL_Z:
+			shift.y = int(round(float(value))) - _base_cell(record).y
+		if property_name in [INSPECTOR_CELL, INSPECTOR_CELL_X, INSPECTOR_CELL_Z] and shift == Vector2i.ZERO:
 			return false
 
 		var proposed_cells: Dictionary = {}
