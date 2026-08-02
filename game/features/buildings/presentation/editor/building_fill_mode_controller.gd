@@ -62,9 +62,7 @@ var _toolbar: HBoxContainer = null
 var _inspector_title: Label = null
 var _object_list: ItemList = null
 var _controls_vbox: EditorPropertyInspector = null
-var _transform_section_button: Button = null
-var _transform_grid: GridContainer = null
-var _transform_collapsed := false
+var _transform_inspector: EditorFillTransformInspector = null
 var _pos_x_spin: SpinBox = null
 var _pos_y_spin: SpinBox = null
 var _pos_z_spin: SpinBox = null
@@ -80,9 +78,6 @@ var _catalog_panel: EditorCatalogPanel = null
 var _off_x_spin: SpinBox = null
 var _off_y_spin: SpinBox = null
 var _off_z_spin: SpinBox = null
-var _offset_reset_btn: Button = null
-var _rot_reset_btn: Button = null
-var _scale_reset_btn: Button = null
 var _zone_filter_option: OptionButton = null
 var _zone_out_of_bounds_label: Label = null
 
@@ -112,26 +107,20 @@ func setup(editor: Node) -> void:
 	_zone_filter_option = editor.get_node("%FillZoneFilterOption")
 	_object_list = editor.get_node("%FillObjectList")
 	_controls_vbox = editor.get_node("%FillControlsVBox")
-	_transform_section_button = editor.get_node("%TransformSectionLbl")
-	_transform_grid = editor.get_node("EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid")
-	_pos_x_spin = editor.get_node("%FillPosXSpin")
-	_pos_y_spin = editor.get_node("%FillPosYSpin")
-	_pos_z_spin = editor.get_node("%FillPosZSpin")
-	# The scene lists axes X/Y/Z; keep variable names semantic rather than tied
-	# to the legacy node names that had Y before X.
-	_pitch_spin = editor.get_node("%FillYawSpin")
-	_yaw_spin = editor.get_node("%FillPitchSpin")
-	_roll_spin = editor.get_node("%FillRollSpin")
-	_scale_spin = editor.get_node("%FillScaleSpin")
+	_transform_inspector = editor.get_node("%FillTransformInspector")
+	_pos_x_spin = _transform_inspector.pos_x_spin
+	_pos_y_spin = _transform_inspector.height_spin
+	_pos_z_spin = _transform_inspector.pos_z_spin
+	_pitch_spin = _transform_inspector.pitch_spin
+	_yaw_spin = _transform_inspector.yaw_spin
+	_roll_spin = _transform_inspector.roll_spin
+	_scale_spin = _transform_inspector.scale_spin
 	_replace_btn = editor.get_node("%FillReplaceBtn")
 	_toolbar_delete_btn = editor.get_node("%FillDeleteSelectionBtn")
 	_layer_label = editor.get_node("%FillLayerLabel")
-	_off_x_spin = editor.get_node("%FillOffXSpin")
-	_off_y_spin = editor.get_node("%FillOffYSpin")
-	_off_z_spin = editor.get_node("%FillOffZSpin")
-	_offset_reset_btn = editor.get_node("%FillOffsetResetBtn")
-	_rot_reset_btn = editor.get_node("%FillRotResetBtn")
-	_scale_reset_btn = editor.get_node("%FillScaleResetBtn")
+	_off_x_spin = _transform_inspector.off_x_spin
+	_off_y_spin = _transform_inspector.off_y_spin
+	_off_z_spin = _transform_inspector.off_z_spin
 
 	# Fixture editor — delegated to FixtureEditorPanel
 	_fixture_panel = FixtureEditorPanel.new()
@@ -163,7 +152,6 @@ func setup(editor: Node) -> void:
 	_replace_btn.pressed.connect(_replace_selected_object)
 	_controls_vbox.property_committed.connect(_on_appearance_property_committed)
 	_controls_vbox.property_reset_requested.connect(_on_appearance_property_reset)
-	_transform_section_button.pressed.connect(_toggle_transform_section)
 	for spin: SpinBox in _transform_spins():
 		spin.value_changed.connect(_on_transform_spin_changed)
 	# Клетка и слой — целые; смещение — общий шаг обоих редакторов и предел в одну
@@ -176,20 +164,22 @@ func setup(editor: Node) -> void:
 	_pitch_spin.step = EditorFillConventions.ROTATION_STEP_DEG
 	_roll_spin.step = EditorFillConventions.ROTATION_STEP_DEG
 	_scale_spin.step = EditorFillConventions.SCALE_STEP
-	_offset_reset_btn.pressed.connect(reset_offset)
-	_rot_reset_btn.pressed.connect(reset_rotation)
-	_scale_reset_btn.pressed.connect(reset_scale)
+	_transform_inspector.property_reset_requested.connect(_on_transform_reset_requested)
 
 	current_category = WorldAssetCatalog.first_populated_category(current_category)
 	_catalog_panel.activate()
 
 
-func _toggle_transform_section() -> void:
-	_transform_collapsed = not _transform_collapsed
-	if _transform_grid != null:
-		_transform_grid.visible = not _transform_collapsed
-	if _transform_section_button != null:
-		_transform_section_button.text = ("▶ " if _transform_collapsed else "▼ ") + "Трансформ"
+func _on_transform_reset_requested(property_name: StringName) -> void:
+	match property_name:
+		EditorFillTransformInspector.HEIGHT:
+			_pos_y_spin.value = 0.0
+		EditorFillTransformInspector.OFFSET:
+			reset_offset()
+		EditorFillTransformInspector.ROTATION:
+			reset_rotation()
+		EditorFillTransformInspector.SCALE:
+			reset_scale()
 
 
 # ---------------------------------------------------------------------------
@@ -1224,8 +1214,7 @@ func _set_property(property_name: String, value: Variant) -> void:
 func _set_transform_fields_enabled(enabled: bool) -> void:
 	for spin in _transform_spins():
 		spin.editable = enabled
-	for button: Button in [_offset_reset_btn, _rot_reset_btn, _scale_reset_btn]:
-		button.disabled = not enabled
+	_transform_inspector.set_reset_enabled(enabled)
 	_zone_option.disabled = not enabled
 	_replace_btn.disabled = not enabled
 	if not enabled:
@@ -1480,6 +1469,13 @@ func _on_transform_spin_changed(_value: float) -> void:
 	var base_cell := Vector2i(int(round(_pos_x_spin.value)), int(round(_pos_z_spin.value)))
 	var anchor_xz := EditorFillConventions.anchor_of_cells(base_cell, span)
 	var candidate_anchor := Vector3(anchor_xz.x, float(int(round(_pos_y_spin.value))), anchor_xz.y)
+	# Reconstructing an anchor from a bounding cell is lossy for an already
+	# authored fractional anchor (notably after scaling). If the position fields
+	# themselves were not changed, preserve the exact anchor: editing offset,
+	# rotation or scale must never make the object jump to a neighbouring cell.
+	var old_cells := occupied_cells(old_anchor, record.asset_id, record.scale.x, record.rot.y)
+	if base_cell == old_cells.position and is_equal_approx(_pos_y_spin.value, old_anchor.y):
+		candidate_anchor = old_anchor
 
 	if old_anchor.is_equal_approx(candidate_anchor) and old_offset.is_equal_approx(candidate_offset) \
 			and old_rot.is_equal_approx(candidate_rot) and old_scale.is_equal_approx(candidate_scale):

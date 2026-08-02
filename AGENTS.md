@@ -148,6 +148,16 @@ no-map fallback. See `design_docs/engine/map_editor.md`.
   phase-5 map.
 - Never write a map package non-atomically. `MapDocumentService.save_map_to` stages into
   `.tmp` and swaps; a crash must leave the previous map intact.
+- **Board cells are centred on the origin**, `-N/2 … N-N/2-1`, in `TerrainGrid`, `NavGrid`
+  and the zone layer alike. A `0 <= cell < board_cells` check is the recurring bug of this
+  codebase: it looks right, passes every test whose fixture sits east of the origin, and
+  silently drops three quarters of the map. Ask `MapZoneLayer.is_board_cell` /
+  `TerrainGrid.is_inside`, and put at least one negative cell in any fixture that covers
+  board geometry.
+- Zones are one model for two editors, so their authoring code is shared on purpose:
+  `ZoneAuthoring` (drag rectangle, unique ids, cascading delete), `ZoneMarkerStyle`
+  (colours, sizes, glyphs), `ZoneFunctionCatalog`. Adding a second copy inside either
+  editor is how the two drifted last time — see `design_docs/engine/active_zones.md` §19.
 - `tests/features/world/test_map_editor.gd` drives the real scene end to end. Unit tests
   over the brush and format prove the parts; only that one proves the editor.
 

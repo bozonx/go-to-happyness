@@ -513,7 +513,13 @@ func _refresh_panels() -> void:
 		"доска %d×%d" % [document.meta.board_cells, document.meta.board_cells],
 	])
 	_side_panel.set_inspector("Инспектор — %s" % _active.title, _active.inspector_lines())
-	_side_panel.set_property_fields(_active.inspector_properties(), _active.inspector_values())
+	var inspector_properties: Array[EntityPropertyDef] = _active.inspector_properties()
+	var uses_fill_transform := _active is FillModeController
+	_side_panel.set_fill_transform(_active.inspector_values(), uses_fill_transform)
+	if uses_fill_transform:
+		inspector_properties = inspector_properties.filter(func(property: EntityPropertyDef) -> bool:
+			return property.section != EntityPropertyDef.SECTION_TRANSFORM)
+	_side_panel.set_property_fields(inspector_properties, _active.inspector_values())
 	var scenario_mode := _active as ScenarioModeController
 	if scenario_mode != null:
 		_side_panel.set_entries("", [], "", -1)

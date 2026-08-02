@@ -31,6 +31,7 @@ signal reference_pick_requested(property_name: StringName, reference_type: Strin
 @onready var _map_separator: HSeparator = $Margin/Scroll/Rows/MapSeparator
 @onready var _inspector_title: Label = $Margin/Scroll/Rows/InspectorTitle
 @onready var _inspector: Label = $Margin/Scroll/Rows/Inspector
+@onready var _fill_transform_fields: EditorFillTransformInspector = $Margin/Scroll/Rows/FillTransformFields
 @onready var _inspector_fields: EditorPropertyInspector = $Margin/Scroll/Rows/InspectorFields
 @onready var _separator: HSeparator = $Margin/Scroll/Rows/Separator
 @onready var _list_title: Label = $Margin/Scroll/Rows/ListTitle
@@ -40,6 +41,7 @@ signal reference_pick_requested(property_name: StringName, reference_type: Strin
 
 var _has_inspector_lines: bool = false
 var _has_inspector_properties: bool = false
+var _has_fill_transform: bool = false
 var _has_list: bool = false
 var _all_entries: Array[String] = []
 var _source_indices: Array[int] = []
@@ -49,6 +51,10 @@ var _active_filter := ""
 
 
 func _ready() -> void:
+	_fill_transform_fields.property_committed.connect(func(property_name: StringName, value: Variant) -> void:
+		property_committed.emit(property_name, value))
+	_fill_transform_fields.property_reset_requested.connect(func(property_name: StringName) -> void:
+		property_reset_requested.emit(property_name))
 	_inspector_fields.property_committed.connect(func(property_name: StringName, value: Variant) -> void:
 		property_committed.emit(property_name, value))
 	_inspector_fields.property_reset_requested.connect(func(property_name: StringName) -> void:
@@ -78,6 +84,14 @@ func set_inspector(title: String, lines: Array[String]) -> void:
 func set_property_fields(properties: Array[EntityPropertyDef], values: Dictionary) -> void:
 	_inspector_fields.set_fields(properties, values)
 	_has_inspector_properties = not properties.is_empty()
+	_update_section_visibilities()
+
+
+func set_fill_transform(values: Dictionary, visible: bool, editable := true) -> void:
+	_has_fill_transform = visible
+	if visible:
+		_fill_transform_fields.set_position_visible(values.has(EditorFillTransformInspector.CELL_X))
+		_fill_transform_fields.set_values(values, editable)
 	_update_section_visibilities()
 
 
@@ -165,9 +179,10 @@ func _on_list_multi_selected(_index: int, _selected: bool) -> void:
 
 
 func _update_section_visibilities() -> void:
-	var has_inspector := _has_inspector_lines or _has_inspector_properties
+	var has_inspector := _has_inspector_lines or _has_inspector_properties or _has_fill_transform
 	_inspector_title.visible = has_inspector
 	_inspector.visible = _has_inspector_lines
+	_fill_transform_fields.visible = _has_fill_transform
 	_inspector_fields.visible = _has_inspector_properties
 	_list_title.visible = _has_list
 	_list_search.visible = _has_list and not _all_entries.is_empty() and _filters.is_empty()

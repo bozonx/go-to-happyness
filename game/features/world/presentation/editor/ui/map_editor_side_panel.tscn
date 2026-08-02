@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://game/features/world/presentation/editor/ui/map_editor_side_panel.gd" id="1_side_panel"]
 [ext_resource type="Script" path="res://game/features/ui/presentation/editor_property_inspector.gd" id="2_inspector"]
+[ext_resource type="Script" path="res://game/features/ui/presentation/editor_fill_transform_inspector.gd" id="3_transform"]
 
 [node name="SidePanel" type="PanelContainer"]
 custom_minimum_size = Vector2(280, 0)
@@ -41,6 +42,10 @@ theme_override_font_sizes/font_size = 14
 [node name="Inspector" type="Label" parent="Margin/Scroll/Rows"]
 autowrap_mode = 2
 theme_override_font_sizes/font_size = 12
+
+[node name="FillTransformFields" type="VBoxContainer" parent="Margin/Scroll/Rows"]
+visible = false
+script = ExtResource("3_transform")
 
 [node name="InspectorFields" type="VBoxContainer" parent="Margin/Scroll/Rows"]
 theme_override_constants/separation = 4
