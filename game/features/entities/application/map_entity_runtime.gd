@@ -14,6 +14,7 @@ class RuntimeEntity:
 	var scale := 1.0
 	var state: StringName = EntityStateSet.FOLLOW_SEASON
 	var props: Dictionary = {}
+	var appearance: Dictionary = {}
 	var active := true
 
 var _entities: Dictionary = {}
@@ -40,6 +41,7 @@ func load_map(document: MapDocument, terrain: TerrainGrid = null) -> void:
 		entity.scale = placed.scale
 		entity.state = placed.initial_state
 		entity.props = archetype.resolved_properties(placed.props)
+		entity.appearance = placed.appearance.duplicate(true)
 		_entities[entity.id] = entity
 
 

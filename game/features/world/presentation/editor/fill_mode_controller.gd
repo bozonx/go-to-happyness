@@ -20,17 +20,20 @@ const INSPECTOR_OFFSET := &"editor_offset"
 const INSPECTOR_PITCH := &"editor_pitch"
 const INSPECTOR_YAW := &"editor_yaw"
 const INSPECTOR_ROLL := &"editor_roll"
+const INSPECTOR_ROTATION := &"editor_rotation"
 const INSPECTOR_SCALE := &"editor_scale"
 const INSPECTOR_INITIAL_STATE := &"editor_initial_state"
-const TRANSFORM_PROPERTIES: Array[StringName] = [INSPECTOR_CELL, INSPECTOR_CELL_X, INSPECTOR_CELL_Z, INSPECTOR_ELEVATION, INSPECTOR_OFFSET, INSPECTOR_PITCH, INSPECTOR_YAW, INSPECTOR_ROLL, INSPECTOR_SCALE]
+const TRANSFORM_PROPERTIES: Array[StringName] = [INSPECTOR_CELL, INSPECTOR_CELL_X, INSPECTOR_CELL_Z, INSPECTOR_ELEVATION, INSPECTOR_OFFSET, INSPECTOR_PITCH, INSPECTOR_YAW, INSPECTOR_ROLL, INSPECTOR_ROTATION, INSPECTOR_SCALE]
 ## Действие «заменить выделенное на выбранный в палитре архетип».
 const OPTION_REPLACE := &"fill_replace"
+const APPEARANCE_PREFIX := "appearance/"
 
 var _archetype_id: StringName = &""
 ## Полный образец кисти: пипетка забирает у объекта не только архетип, но и
 ## свойства, поворот, масштаб и смещение — поэтому отдельное дублирование не
 ## нужно (`map_fill_mode.md` §9.1).
 var _brush_props: Dictionary = {}
+var _brush_appearance: Dictionary = {}
 var _brush_initial_state: StringName = EntityStateSet.FOLLOW_SEASON
 var _brush_yaw_degrees := 0.0
 var _brush_pitch_degrees := 0.0
@@ -295,6 +298,7 @@ func _cancel_current_action() -> bool:
 	if _archetype_id != &"":
 		_archetype_id = &""
 		_brush_props.clear()
+		_brush_appearance.clear()
 		_brush_yaw_degrees = 0.0
 		_brush_pitch_degrees = 0.0
 		_brush_roll_degrees = 0.0
@@ -402,6 +406,7 @@ func _place(cell: Vector2i, merge_key: StringName = &"") -> void:
 	record.initial_state = _brush_initial_state
 	record.activity = archetype.activity
 	record.props = _brush_props.duplicate(true)
+	record.appearance = _brush_appearance.duplicate(true)
 	record.yaw_degrees = _brush_yaw_degrees
 	record.pitch_degrees = _brush_pitch_degrees
 	record.roll_degrees = _brush_roll_degrees
@@ -517,6 +522,7 @@ func _pick_archetype(cell: Vector2i) -> bool:
 	# Полный образец, а не только архетип: следующий клик поставит точно такой же
 	# объект. Именно это делает отдельное «дублировать» ненужным.
 	_brush_props = record.props.duplicate(true)
+	_brush_appearance = record.appearance.duplicate(true)
 	_brush_yaw_degrees = record.yaw_degrees
 	_brush_pitch_degrees = record.pitch_degrees
 	_brush_roll_degrees = record.roll_degrees
@@ -686,6 +692,7 @@ func _apply_record_appearance(view: Node3D, record: MapEntityRecord) -> void:
 	var state := archetype.states.get_state(record.initial_state)
 	if state != null and state.visual_kind == EntityStateDef.VISUAL_VARIANT:
 		appearance.merge(asset.state_appearance(state.visual_value), true)
+	appearance.merge(record.appearance, true)
 	view.call("apply_decor_properties", appearance)
 	# DecorObjectController applies asset defaults in `_ready`; repeat after the
 	# node enters the tree so the authored initial state remains visible.
@@ -984,9 +991,7 @@ func inspector_properties() -> Array[EntityPropertyDef]:
 			EntityPropertyDef.from_dict({"name": INSPECTOR_CELL_Z, "label": "Клетка Z" if selected.size() == 1 else "Сдвиг Z", "type": "int", "section": "transform", "step": 1.0, "default": base_cell.y}),
 			EntityPropertyDef.from_dict({"name": INSPECTOR_ELEVATION, "label": "Уровень Y", "type": "int", "section": "transform", "unit": "блок", "step": 1.0, "default": 0}),
 			offset_property,
-			EntityPropertyDef.from_dict({"name": INSPECTOR_PITCH, "label": "Поворот X", "type": "float", "section": "transform", "unit": "°", "min": 0.0, "max": 359.0, "step": EditorFillConventions.ROTATION_STEP_DEG, "default": 0.0}),
-			EntityPropertyDef.from_dict({"name": INSPECTOR_YAW, "label": "Поворот Y", "type": "float", "section": "transform", "unit": "°", "min": 0.0, "max": 359.0, "step": EditorFillConventions.ROTATION_STEP_DEG, "default": 0.0}),
-			EntityPropertyDef.from_dict({"name": INSPECTOR_ROLL, "label": "Поворот Z", "type": "float", "section": "transform", "unit": "°", "min": 0.0, "max": 359.0, "step": EditorFillConventions.ROTATION_STEP_DEG, "default": 0.0}),
+			EntityPropertyDef.from_dict({"name": INSPECTOR_ROTATION, "label": "Поворот", "type": "vector3", "section": "transform", "unit": "°", "step": EditorFillConventions.ROTATION_STEP_DEG, "default": [0.0, 0.0, 0.0]}),
 			EntityPropertyDef.from_dict({"name": INSPECTOR_SCALE, "label": "Масштаб", "type": "float", "section": "transform", "min": EditorFillConventions.SCALE_MIN, "max": EditorFillConventions.SCALE_MAX, "step": EditorFillConventions.SCALE_STEP, "default": 1.0}),
 		]
 		if selected.size() > 1:
@@ -996,6 +1001,7 @@ func inspector_properties() -> Array[EntityPropertyDef]:
 		if archetype != null:
 			properties.append(_initial_state_property(archetype))
 			properties.append_array(archetype.property_schema)
+			properties.append_array(_appearance_definitions(EntityArchetypeCatalog.asset_of(primary.archetype_id)))
 		return properties
 
 	var active_archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
@@ -1003,13 +1009,12 @@ func inspector_properties() -> Array[EntityPropertyDef]:
 		var brush_properties: Array[EntityPropertyDef] = [
 			EntityPropertyDef.from_dict({"name": INSPECTOR_ELEVATION, "label": "Уровень Y", "type": "int", "section": "transform", "unit": "блок", "step": 1.0, "default": 0}),
 			EntityPropertyDef.from_dict({"name": INSPECTOR_OFFSET, "label": "Смещение", "type": "vector3", "section": "transform", "unit": "м", "step": EditorFillConventions.OFFSET_STEP, "min": -EditorFillConventions.MAX_OFFSET_CELLS, "max": EditorFillConventions.MAX_OFFSET_CELLS, "default": [0.0, 0.0, 0.0]}),
-			EntityPropertyDef.from_dict({"name": INSPECTOR_PITCH, "label": "Поворот X", "type": "float", "section": "transform", "unit": "°", "min": 0.0, "max": 359.0, "step": EditorFillConventions.ROTATION_STEP_DEG, "default": 0.0}),
-			EntityPropertyDef.from_dict({"name": INSPECTOR_YAW, "label": "Поворот Y", "type": "float", "section": "transform", "unit": "°", "min": 0.0, "max": 359.0, "step": EditorFillConventions.ROTATION_STEP_DEG, "default": 0.0}),
-			EntityPropertyDef.from_dict({"name": INSPECTOR_ROLL, "label": "Поворот Z", "type": "float", "section": "transform", "unit": "°", "min": 0.0, "max": 359.0, "step": EditorFillConventions.ROTATION_STEP_DEG, "default": 0.0}),
+			EntityPropertyDef.from_dict({"name": INSPECTOR_ROTATION, "label": "Поворот", "type": "vector3", "section": "transform", "unit": "°", "step": EditorFillConventions.ROTATION_STEP_DEG, "default": [0.0, 0.0, 0.0]}),
 			EntityPropertyDef.from_dict({"name": INSPECTOR_SCALE, "label": "Масштаб", "type": "float", "section": "transform", "min": EditorFillConventions.SCALE_MIN, "max": EditorFillConventions.SCALE_MAX, "step": EditorFillConventions.SCALE_STEP, "default": 1.0}),
 			_initial_state_property(active_archetype),
 		]
 		brush_properties.append_array(active_archetype.property_schema)
+		brush_properties.append_array(_appearance_definitions(EntityArchetypeCatalog.asset_of(active_archetype.id)))
 		return brush_properties
 	return []
 
@@ -1028,6 +1033,20 @@ func _initial_state_property(archetype: EntityArchetype) -> EntityPropertyDef:
 	})
 
 
+func _appearance_definitions(asset: WorldAssetDef) -> Array[EntityPropertyDef]:
+	var definitions: Array[EntityPropertyDef] = []
+	if asset == null:
+		return definitions
+	for control: Dictionary in asset.appearance_controls:
+		var source := control.duplicate(true)
+		source["name"] = APPEARANCE_PREFIX + String(control.get("name", ""))
+		source["section"] = "appearance"
+		var definition := EntityPropertyDef.from_dict(source)
+		if definition.is_valid():
+			definitions.append(definition)
+	return definitions
+
+
 func inspector_values() -> Dictionary:
 	var selected := context.document.entities.by_id(_selected_id)
 	if selected != null:
@@ -1042,8 +1061,11 @@ func inspector_values() -> Dictionary:
 		values[INSPECTOR_PITCH] = selected.pitch_degrees
 		values[INSPECTOR_YAW] = selected.yaw_degrees
 		values[INSPECTOR_ROLL] = selected.roll_degrees
+		values[INSPECTOR_ROTATION] = Vector3(selected.pitch_degrees, selected.yaw_degrees, selected.roll_degrees)
 		values[INSPECTOR_SCALE] = selected.scale
 		values[INSPECTOR_INITIAL_STATE] = String(selected.initial_state)
+		for definition: EntityPropertyDef in _appearance_definitions(EntityArchetypeCatalog.asset_of(selected.archetype_id)):
+			values[definition.name] = selected.appearance.get(String(definition.name).trim_prefix(APPEARANCE_PREFIX), definition.default)
 		return values
 
 	var active_archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
@@ -1054,8 +1076,11 @@ func inspector_values() -> Dictionary:
 		brush_values[INSPECTOR_PITCH] = _brush_pitch_degrees
 		brush_values[INSPECTOR_YAW] = _brush_yaw_degrees
 		brush_values[INSPECTOR_ROLL] = _brush_roll_degrees
+		brush_values[INSPECTOR_ROTATION] = Vector3(_brush_pitch_degrees, _brush_yaw_degrees, _brush_roll_degrees)
 		brush_values[INSPECTOR_SCALE] = _brush_scale
 		brush_values[INSPECTOR_INITIAL_STATE] = String(_brush_initial_state)
+		for definition: EntityPropertyDef in _appearance_definitions(EntityArchetypeCatalog.asset_of(active_archetype.id)):
+			brush_values[definition.name] = _brush_appearance.get(String(definition.name).trim_prefix(APPEARANCE_PREFIX), definition.default)
 		return brush_values
 	return {}
 
@@ -1073,6 +1098,8 @@ func _apply_value(property_name: StringName, value: Variant, mergeable: bool) ->
 		return _apply_brush_value(property_name, value)
 	if property_name in TRANSFORM_PROPERTIES:
 		return _apply_transform_value(primary, property_name, value, mergeable)
+	if String(property_name).begins_with(APPEARANCE_PREFIX):
+		return _apply_appearance_value(primary, property_name, value, mergeable)
 	if _selected_ids().size() > 1:
 		return false
 	var archetype := EntityArchetypeCatalog.get_archetype(primary.archetype_id)
@@ -1100,9 +1127,40 @@ func _apply_value(property_name: StringName, value: Variant, mergeable: bool) ->
 	return true
 
 
+func _apply_appearance_value(record: MapEntityRecord, property_name: StringName, value: Variant, mergeable: bool) -> bool:
+	var asset := EntityArchetypeCatalog.asset_of(record.archetype_id)
+	var key := String(property_name).trim_prefix(APPEARANCE_PREFIX)
+	var definition: EntityPropertyDef = null
+	for candidate: EntityPropertyDef in _appearance_definitions(asset):
+		if candidate.name == property_name:
+			definition = candidate
+			break
+	if definition == null:
+		return false
+	var next: Variant = FillObjectRecord.json_safe_value(definition.clamp_value(value))
+	if record.appearance.get(key, definition.default) == next:
+		return false
+	var before := context.document.entities.to_json()
+	record.appearance[key] = next
+	_commit(before, "внешний вид %s" % definition.label, StringName("%s/%s" % [record.id, property_name]) if mergeable else &"")
+	return true
+
+
 func _apply_brush_value(property_name: StringName, value: Variant) -> bool:
 	var archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
 	if archetype == null:
+		return false
+	if String(property_name).begins_with(APPEARANCE_PREFIX):
+		var asset := EntityArchetypeCatalog.asset_of(archetype.id)
+		for definition: EntityPropertyDef in _appearance_definitions(asset):
+			if definition.name == property_name:
+				var key := String(property_name).trim_prefix(APPEARANCE_PREFIX)
+				var next: Variant = FillObjectRecord.json_safe_value(definition.clamp_value(value))
+				if _brush_appearance.get(key, definition.default) == next:
+					return false
+				_brush_appearance[key] = next
+				notify_ui_changed()
+				return true
 		return false
 	if property_name == INSPECTOR_OFFSET:
 		var next_offset := EditorFillConventions.clamp_offset(
@@ -1132,6 +1190,16 @@ func _apply_brush_value(property_name: StringName, value: Variant) -> bool:
 			_brush_yaw_degrees = next_rotation
 		else:
 			_brush_roll_degrees = next_rotation
+		notify_ui_changed()
+		return true
+	if property_name == INSPECTOR_ROTATION:
+		var raw := EntityPropertyDef.from_dict({"name": "rotation", "type": "vector3"}).coerce_value(value) as Vector3
+		var next := Vector3(fposmod(raw.x, 360.0), fposmod(raw.y, 360.0), fposmod(raw.z, 360.0))
+		if Vector3(_brush_pitch_degrees, _brush_yaw_degrees, _brush_roll_degrees).is_equal_approx(next):
+			return false
+		_brush_pitch_degrees = next.x
+		_brush_yaw_degrees = next.y
+		_brush_roll_degrees = next.z
 		notify_ui_changed()
 		return true
 	if property_name == INSPECTOR_SCALE:
@@ -1182,13 +1250,21 @@ func reset_inspector_value(property_name: StringName) -> bool:
 			return _apply_brush_value(property_name, [0.0, 0.0, 0.0])
 		if property_name in [INSPECTOR_ELEVATION, INSPECTOR_PITCH, INSPECTOR_YAW, INSPECTOR_ROLL]:
 			return _apply_brush_value(property_name, 0.0)
+		if property_name == INSPECTOR_ROTATION:
+			return _apply_brush_value(property_name, [0.0, 0.0, 0.0])
 		if property_name == INSPECTOR_SCALE:
 			return _apply_brush_value(property_name, 1.0)
+		if String(property_name).begins_with(APPEARANCE_PREFIX):
+			for definition: EntityPropertyDef in _appearance_definitions(EntityArchetypeCatalog.asset_of(archetype.id)):
+				if definition.name == property_name:
+					return _apply_brush_value(property_name, definition.default)
 		var brush_definition := archetype.get_property(property_name)
 		return _apply_brush_value(property_name, brush_definition.default) \
 			if brush_definition != null else false
 	if property_name in [INSPECTOR_ELEVATION, INSPECTOR_PITCH, INSPECTOR_YAW, INSPECTOR_ROLL]:
 		return _apply_transform_value(primary, property_name, 0.0, false)
+	if property_name == INSPECTOR_ROTATION:
+		return _apply_transform_value(primary, property_name, [0.0, 0.0, 0.0], false)
 	if property_name == INSPECTOR_SCALE:
 		return _apply_transform_value(primary, property_name, 1.0, false)
 	if property_name == INSPECTOR_OFFSET:
@@ -1199,6 +1275,10 @@ func reset_inspector_value(property_name: StringName) -> bool:
 		return false
 	if property_name == INSPECTOR_INITIAL_STATE:
 		return _apply_value(property_name, String(EntityStateSet.FOLLOW_SEASON), false)
+	if String(property_name).begins_with(APPEARANCE_PREFIX):
+		for definition: EntityPropertyDef in _appearance_definitions(EntityArchetypeCatalog.asset_of(primary.archetype_id)):
+			if definition.name == property_name:
+				return _apply_appearance_value(primary, property_name, definition.default, false)
 	var archetype := EntityArchetypeCatalog.get_archetype(primary.archetype_id)
 	var definition := archetype.get_property(property_name) if archetype != null else null
 	return _apply_value(property_name, definition.default, false) if definition != null else false
@@ -1224,6 +1304,7 @@ func _apply_transform_value(record: MapEntityRecord, property_name: StringName, 
 	else:
 		var shift := Vector2i.ZERO
 		var requested_rotation := fposmod(float(value), 360.0) if property_name in [INSPECTOR_PITCH, INSPECTOR_YAW, INSPECTOR_ROLL] else 0.0
+		var requested_rotation_vector := EntityPropertyDef.from_dict({"name": "rotation", "type": "vector3"}).coerce_value(value) as Vector3 if property_name == INSPECTOR_ROTATION else Vector3.ZERO
 		var requested_elevation := int(round(float(value))) if property_name == INSPECTOR_ELEVATION else 0
 		if property_name == INSPECTOR_CELL:
 			var requested := EntityPropertyDef.from_dict({"name": "cell", "type": "vector2"}).coerce_value(value) as Vector2
@@ -1248,6 +1329,8 @@ func _apply_transform_value(record: MapEntityRecord, property_name: StringName, 
 			if property_name == INSPECTOR_PITCH: rotation.x = requested_rotation
 			if property_name == INSPECTOR_YAW: rotation.y = requested_rotation
 			if property_name == INSPECTOR_ROLL: rotation.z = requested_rotation
+			if property_name == INSPECTOR_ROTATION:
+				rotation = Vector3(fposmod(requested_rotation_vector.x, 360.0), fposmod(requested_rotation_vector.y, 360.0), fposmod(requested_rotation_vector.z, 360.0))
 			var scale := target.scale
 			var asset := EntityArchetypeCatalog.asset_of(target.archetype_id)
 			if property_name == INSPECTOR_SCALE:

@@ -21,7 +21,7 @@ const OFFSET_STEP := 0.25
 ## объект. Больше клетки — значит, объект стоит не там, где показывает занятость,
 ## и «занято» перестаёт что-либо значить; такое движение делается сменой клетки.
 const MAX_OFFSET_CELLS := 1.0
-const SCALE_STEP := 0.05
+const SCALE_STEP := 0.1
 const SCALE_MIN := 0.05
 const SCALE_MAX := 10.0
 

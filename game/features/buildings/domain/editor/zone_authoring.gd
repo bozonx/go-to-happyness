@@ -62,7 +62,7 @@ static func remove_area_cascade(
 			removed.append(anchors[index].id)
 			anchors.remove_at(index)
 	remove_route_stops(routes, orphaned)
-	remove_queues_targeting(anchors, routes, orphaned)
+	removed.append_array(remove_queues_targeting(anchors, routes, orphaned))
 	return removed
 
 

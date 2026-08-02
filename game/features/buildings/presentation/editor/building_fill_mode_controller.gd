@@ -62,6 +62,9 @@ var _toolbar: HBoxContainer = null
 var _inspector_title: Label = null
 var _object_list: ItemList = null
 var _controls_vbox: EditorPropertyInspector = null
+var _transform_section_button: Button = null
+var _transform_grid: GridContainer = null
+var _transform_collapsed := false
 var _pos_x_spin: SpinBox = null
 var _pos_y_spin: SpinBox = null
 var _pos_z_spin: SpinBox = null
@@ -109,11 +112,15 @@ func setup(editor: Node) -> void:
 	_zone_filter_option = editor.get_node("%FillZoneFilterOption")
 	_object_list = editor.get_node("%FillObjectList")
 	_controls_vbox = editor.get_node("%FillControlsVBox")
+	_transform_section_button = editor.get_node("%TransformSectionLbl")
+	_transform_grid = editor.get_node("EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid")
 	_pos_x_spin = editor.get_node("%FillPosXSpin")
 	_pos_y_spin = editor.get_node("%FillPosYSpin")
 	_pos_z_spin = editor.get_node("%FillPosZSpin")
-	_yaw_spin = editor.get_node("%FillYawSpin")
-	_pitch_spin = editor.get_node("%FillPitchSpin")
+	# The scene lists axes X/Y/Z; keep variable names semantic rather than tied
+	# to the legacy node names that had Y before X.
+	_pitch_spin = editor.get_node("%FillYawSpin")
+	_yaw_spin = editor.get_node("%FillPitchSpin")
 	_roll_spin = editor.get_node("%FillRollSpin")
 	_scale_spin = editor.get_node("%FillScaleSpin")
 	_replace_btn = editor.get_node("%FillReplaceBtn")
@@ -156,6 +163,7 @@ func setup(editor: Node) -> void:
 	_replace_btn.pressed.connect(_replace_selected_object)
 	_controls_vbox.property_committed.connect(_on_appearance_property_committed)
 	_controls_vbox.property_reset_requested.connect(_on_appearance_property_reset)
+	_transform_section_button.pressed.connect(_toggle_transform_section)
 	for spin: SpinBox in _transform_spins():
 		spin.value_changed.connect(_on_transform_spin_changed)
 	# Клетка и слой — целые; смещение — общий шаг обоих редакторов и предел в одну
@@ -174,6 +182,14 @@ func setup(editor: Node) -> void:
 
 	current_category = WorldAssetCatalog.first_populated_category(current_category)
 	_catalog_panel.activate()
+
+
+func _toggle_transform_section() -> void:
+	_transform_collapsed = not _transform_collapsed
+	if _transform_grid != null:
+		_transform_grid.visible = not _transform_collapsed
+	if _transform_section_button != null:
+		_transform_section_button.text = ("▶ " if _transform_collapsed else "▼ ") + "Трансформ"
 
 
 # ---------------------------------------------------------------------------

@@ -886,9 +886,12 @@ text = ""
 [node name="HSepTransform" type="HSeparator" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 layout_mode = 2
 
-[node name="TransformSectionLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
+[node name="TransformSectionLbl" type="Button" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
+unique_name_in_owner = true
 layout_mode = 2
-text = "Трансформ"
+flat = true
+alignment = 0
+text = "▼ Трансформ"
 theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
 
 [node name="TransformGrid" type="GridContainer" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
@@ -984,7 +987,7 @@ layout_mode = 2
 
 [node name="YawLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
-text = "Поворот Y°"
+text = "Поворот X°"
 
 [node name="FillYawSpin" type="SpinBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 unique_name_in_owner = true
@@ -1001,7 +1004,7 @@ tooltip_text = "Сбросить поворот по всем осям в 0°"
 
 [node name="PitchLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 layout_mode = 2
-text = "Поворот X°"
+text = "Поворот Y°"
 
 [node name="FillPitchSpin" type="SpinBox" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 unique_name_in_owner = true
@@ -1036,7 +1039,7 @@ unique_name_in_owner = true
 layout_mode = 2
 min_value = 0.2
 max_value = 5.0
-step = 0.05
+step = 0.1
 value = 1.0
 
 [node name="FillScaleResetBtn" type="Button" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox/TransformGrid"]

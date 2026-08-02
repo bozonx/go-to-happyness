@@ -26,6 +26,9 @@ var roll_degrees := 0.0
 var scale := 1.0
 var initial_state: StringName = EntityStateSet.FOLLOW_SEASON
 var props: Dictionary = {}
+## Visual overrides declared by the asset's appearance_controls. They are kept
+## separate from gameplay props: a blue sign is not a game rule.
+var appearance: Dictionary = {}
 var tags: Array[StringName] = []
 var activity: StringName = &""
 
@@ -57,6 +60,8 @@ func to_dict() -> Dictionary:
 		result["state"] = String(initial_state)
 	if not props.is_empty():
 		result["props"] = _json_safe(props)
+	if not appearance.is_empty():
+		result["appearance"] = _json_safe(appearance)
 	if not tags.is_empty():
 		result["tags"] = tags.map(func(tag: StringName) -> String: return String(tag))
 	if activity != &"":
@@ -91,6 +96,9 @@ static func from_dict(source: Dictionary) -> MapEntityRecord:
 	var raw_props: Variant = source.get("props", {})
 	if raw_props is Dictionary:
 		record.props = (raw_props as Dictionary).duplicate(true)
+	var raw_appearance: Variant = source.get("appearance", {})
+	if raw_appearance is Dictionary:
+		record.appearance = (raw_appearance as Dictionary).duplicate(true)
 	for tag: Variant in source.get("tags", []):
 		record.tags.append(StringName(tag))
 	record.activity = StringName(source.get("activity", ""))
