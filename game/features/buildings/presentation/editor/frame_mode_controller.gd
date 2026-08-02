@@ -1100,9 +1100,12 @@ func _refresh_cost_ui() -> void:
 	manual_title.text = "Стоимость ресурсов задаётся вручную:"
 	manual_title.add_theme_font_size_override("font_size", 13)
 	_extra_costs_vbox.add_child(manual_title)
+	var used_resources: Array[String] = []
 	for res in _editor.blueprint.manual_costs.keys():
+		used_resources.append(str(res))
+	for res in used_resources:
 		_extra_costs_vbox.add_child(_build_cost_row(
-			_editor.blueprint.manual_costs, str(res), _editor.blueprint.manual_costs[res]))
+			_editor.blueprint.manual_costs, res, _editor.blueprint.manual_costs[res], used_resources))
 
 	var costs_array: Array[String] = []
 	for res in _editor.blueprint.construction_cost.keys():
@@ -1119,8 +1122,8 @@ func _on_cost_mode_selected(index: int) -> void:
 
 func _on_add_extra_cost_pressed() -> void:
 	var default_res := String(BuildingMaterialCatalog.resource_id(_editor.current_material_id))
-	if default_res.is_empty():
-		default_res = "resource"
+	if default_res.is_empty() or not (default_res in ResourceIds.ALL):
+		default_res = String(ResourceIds.ALL[0])
 	var current_qty := int(_editor.blueprint.manual_costs.get(default_res, 0))
 	_editor.blueprint.manual_costs[default_res] = current_qty + 1
 	_editor.blueprint.recalculate_construction_cost()
@@ -1128,11 +1131,23 @@ func _on_add_extra_cost_pressed() -> void:
 	_refresh_cost_ui()
 
 
-func _build_cost_row(costs: Dictionary, key: String, value: int) -> HBoxContainer:
+func _build_cost_row(costs: Dictionary, key: String, value: int, used_resources: Array[String]) -> HBoxContainer:
 	var row := HBoxContainer.new()
-	var name_edit := LineEdit.new()
-	name_edit.text = key
-	name_edit.custom_minimum_size = Vector2(80, 0)
+	var resource_option := OptionButton.new()
+	for res_id in ResourceIds.ALL:
+		var res_str := str(res_id)
+		resource_option.add_item(res_str)
+		var idx := resource_option.item_count - 1
+		resource_option.set_item_metadata(idx, res_str)
+		# Disable resources already used in other rows to prevent duplicate keys
+		if res_str in used_resources and res_str != key:
+			resource_option.set_item_disabled(idx, true)
+	# Select the current resource
+	for i in resource_option.item_count:
+		if str(resource_option.get_item_metadata(i)) == key:
+			resource_option.select(i)
+			break
+	resource_option.custom_minimum_size = Vector2(80, 0)
 	var spin := SpinBox.new()
 	spin.min_value = 1
 	spin.max_value = 9999
@@ -1141,13 +1156,12 @@ func _build_cost_row(costs: Dictionary, key: String, value: int) -> HBoxContaine
 	del_btn.text = "X"
 
 	var old_key := key
-	name_edit.text_submitted.connect(func(new_text: String):
+	resource_option.item_selected.connect(func(index: int):
 		var val: int = costs.get(old_key, 1)
 		costs.erase(old_key)
-		var normalized := new_text.strip_edges()
-		if not normalized.is_empty():
-			costs[normalized] = val
-			old_key = normalized
+		var new_res := str(resource_option.get_item_metadata(index))
+		costs[new_res] = val
+		old_key = new_res
 		_editor.blueprint.recalculate_construction_cost()
 		_editor.mark_dirty()
 		_refresh_cost_ui()
@@ -1164,7 +1178,7 @@ func _build_cost_row(costs: Dictionary, key: String, value: int) -> HBoxContaine
 		_editor.mark_dirty()
 		_refresh_cost_ui()
 	)
-	row.add_child(name_edit)
+	row.add_child(resource_option)
 	row.add_child(spin)
 	row.add_child(del_btn)
 	return row

@@ -121,7 +121,12 @@ func document_changed() -> void:
 	rebuild_views()
 
 
+## Called when the cursor leaves the 3D view. The held gestures end with it: the
+## editor swallows the button release that happens over a panel, so a drag that
+## ended off the map would otherwise resume the moment the cursor came back.
 func clear_hover() -> void:
+	_erasing = false
+	_dragging = false
 	if context != null and context.brush != null:
 		context.brush.clear_hover()
 
