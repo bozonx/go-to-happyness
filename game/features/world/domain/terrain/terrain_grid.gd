@@ -812,6 +812,22 @@ func cell_center(cell: Vector2i) -> Vector3:
 	return Vector3((float(cell.x) + 0.5) * cell_size, height, (float(cell.y) + 0.5) * cell_size)
 
 
+## Read-only views of the two surface arrays, in the grid's own row-major order
+## from `min_cell()`. The GPU index map and detail map are per column and use
+## exactly that order, so publishing a whole board is an array copy rather than a
+## loop of `material_index_at` — which is three GDScript calls per column, and a
+## 256² board is 65 536 of them twice over.
+##
+## They are views, not copies: writing through one bypasses the dirty sets and the
+## revision counter. Callers read.
+func materials_view() -> PackedByteArray:
+	return _materials
+
+
+func details_view() -> PackedByteArray:
+	return _details
+
+
 ## Byte-exact copy of everything stored. Used by tests to prove that applying a
 ## delta and reverting it restores the grid exactly, and it is the shape the save
 ## format (§12) writes per chunk.

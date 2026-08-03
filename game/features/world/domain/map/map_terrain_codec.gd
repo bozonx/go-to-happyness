@@ -69,7 +69,7 @@ static func encode(grid: TerrainGrid, skip_if_default := true) -> PackedByteArra
 	if skip_if_default and is_default(grid):
 		return buffer
 
-	var catalog := _encode_catalog()
+	var catalog := TerrainCatalogBlob.encode()
 	var count := grid.board_cells * grid.board_cells
 	buffer.resize(HEADER_BYTES + catalog.size() + count * BYTES_PER_CELL)
 	_write_header(buffer, grid.board_cells, catalog.size())
@@ -107,7 +107,7 @@ static func decode_into(buffer: PackedByteArray, grid: TerrainGrid) -> bool:
 	if board_cells != grid.board_cells:
 		return false
 
-	var remap := _decode_catalog_remap(buffer)
+	var remap := TerrainCatalogBlob.decode_remap(buffer, HEADER_BYTES, int(buffer.decode_u32(CATALOG_BYTES_OFFSET)))
 	var minimum := grid.min_cell()
 	var maximum := grid.max_cell()
 	var offset := HEADER_BYTES + int(buffer.decode_u32(CATALOG_BYTES_OFFSET))
@@ -188,58 +188,3 @@ static func _write_header(buffer: PackedByteArray, board_cells: int, catalog_byt
 	buffer.encode_u16(6, BYTES_PER_CELL)
 	buffer.encode_u32(8, board_cells)
 	buffer.encode_u32(CATALOG_BYTES_OFFSET, catalog_bytes)
-
-
-# --- Material catalog ---------------------------------------------------------
-
-## `u16 count`, then `u8 length + utf8` per material id, in index order. Plain
-## enough to read in a hex dump, which is the point: this is the part of the file
-## that explains the rest of it.
-static func _encode_catalog() -> PackedByteArray:
-	var blob := PackedByteArray()
-	blob.resize(2)
-	blob.encode_u16(0, TerrainMaterialCatalog.count())
-	for id: StringName in TerrainMaterialCatalog.ids_view():
-		var name := String(id).to_utf8_buffer()
-		blob.append(mini(name.size(), 255))
-		blob.append_array(name.slice(0, 255))
-	return blob
-
-
-## Maps every one of the 256 possible stored bytes onto a current catalog index.
-##
-## A file written before v2 carries no catalog, so its bytes ARE current indices.
-## A file that names a material this build does not have resolves to the default:
-## the alternative is handing a column to whichever surface happens to occupy
-## that number now, which is the exact failure §2.6 exists to prevent.
-static func _decode_catalog_remap(buffer: PackedByteArray) -> PackedByteArray:
-	var remap := PackedByteArray()
-	remap.resize(256)
-	for stored in 256:
-		remap[stored] = TerrainMaterialCatalog.DEFAULT_INDEX if not TerrainMaterialCatalog.is_valid_index(stored) else stored
-	var catalog_bytes := int(buffer.decode_u32(CATALOG_BYTES_OFFSET))
-	if catalog_bytes <= 2:
-		return remap
-	var offset := HEADER_BYTES
-	var count := int(buffer.decode_u16(offset))
-	offset += 2
-	var unknown: Array[String] = []
-	for stored in count:
-		if offset >= buffer.size():
-			break
-		var length := int(buffer[offset])
-		offset += 1
-		var id := StringName(buffer.slice(offset, offset + length).get_string_from_utf8())
-		offset += length
-		if stored > 255:
-			continue
-		var current := TerrainMaterialCatalog.index_of(id)
-		if current < 0:
-			unknown.append(String(id))
-			current = TerrainMaterialCatalog.DEFAULT_INDEX
-		remap[stored] = current
-	if not unknown.is_empty():
-		push_warning("[map] terrain.bin: неизвестные материалы %s заменены на %s" % [
-			", ".join(unknown), TerrainMaterialCatalog.DEFAULT_MATERIAL,
-		])
-	return remap

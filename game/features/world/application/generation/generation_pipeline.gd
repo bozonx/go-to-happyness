@@ -29,6 +29,7 @@ const COMPOSITION_PASSES := 3
 const STAGES: Array[StringName] = [
 	&"border_plan", &"landmass", &"relief", &"mountains", &"hypsometry", &"border",
 	&"quantize", &"passes", &"flow", &"rivers", &"repose", &"reflow", &"lakes",
+	&"surface",
 ]
 
 
@@ -70,6 +71,10 @@ static func run(recipe: MapRecipe, seeds: GenerationSeed, land_fraction_bias := 
 	# it, and the flood that fills it at write time escapes across the whole map.
 	_timed(context, &"reflow", func() -> void: FlowField.build(context))
 	_timed(context, &"lakes", func() -> void: LakeFiller.fill(context))
+	# The surface is chosen from ground nothing will move again, and after the water
+	# plan exists — a lake bed is silt because there is a lake over it, and the
+	# angle a material has to hold is the angle the finished column actually has.
+	_timed(context, &"surface", func() -> void: SurfacePainter.apply(context))
 	return context
 
 

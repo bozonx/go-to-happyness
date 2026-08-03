@@ -92,9 +92,18 @@ var land_max_height := 48
 var hypsometry: StringName = HYPSOMETRY_PLAINS_WITH_PEAKS
 var roughness := 0.3
 var terrace_bias := 0.5
-## Debug knob of the laboratory only (§2.3): runs the same recipe with the angle of
-## repose of another material. Content recipes leave it at `stone`.
+## Debug knob of the laboratory only (§2.3): settles the WHOLE board at the angle
+## of repose of one material, so a shape can be compared against itself under soft
+## soil and under rock. It says nothing about what the map is made of — that is
+## `base_material` and the surface stage below. The two used to be one field, and
+## because the commit wrote it into every column, a knob for comparing shapes was
+## also the only thing deciding the ground of every generated map.
 var repose_override: StringName = TerrainMaterialCatalog.STONE
+
+## Surface layer (§5.2, layer 3). `paint_surface` off leaves the whole board as
+## `base_material`, which is what the shape-only laboratory wants.
+var paint_surface := true
+var base_material: StringName = TerrainMaterialCatalog.GRASS
 
 ## Each entry: count, length, orientation, orientation_jitter, peak_height (Array
 ## of two), peaks_per_range, flank_steepness, foothills, passes.
@@ -306,6 +315,11 @@ func _parse_elevation(source: Dictionary) -> void:
 	if TerrainMaterialCatalog.index_of(repose_override) < 0:
 		errors.append("elevation.repose_override: unknown material \"%s\"" % repose_override)
 		repose_override = TerrainMaterialCatalog.STONE
+	paint_surface = bool(source.get("paint_surface", paint_surface))
+	base_material = StringName(source.get("base_material", base_material))
+	if TerrainMaterialCatalog.index_of(base_material) < 0:
+		errors.append("elevation.base_material: unknown material \"%s\"" % base_material)
+		base_material = TerrainMaterialCatalog.GRASS
 
 
 func _parse_mountains(source: Dictionary) -> void:

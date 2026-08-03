@@ -23,6 +23,8 @@ static func run_all() -> void:
 	_test_material_paint_clamps_the_carried_variant()
 	_test_undo_restores_material_and_detail()
 	_test_detail_survives_a_height_edit()
+	_test_repaint_remeshes_only_where_a_cliff_face_changes()
+	_test_surface_codec_round_trips_and_remaps()
 	print("    [PASS] Surface Paint Tests")
 	_test_wear_rises_once_per_tick_per_cell()
 	_test_wear_needs_traffic_not_a_single_walker()
@@ -52,6 +54,77 @@ static func _make() -> Dictionary:
 	grid.take_dirty_chunks()
 	grid.take_dirty_surface_cells()
 	return {"grid": grid, "service": service, "nav": nav_grid, "publisher": publisher, "wear": wear}
+
+
+## §7.5 says a material brush rebuilds nothing, and §3 says a vertical face is
+## drawn with the auto-rock kind of the column above it. Both are true, and the
+## seam between them is this: a repaint that changes the face kind of a column
+## that HAS a face is the one repaint that must remesh. It did not, so cliffs kept
+## whatever rock they were first built with until an unrelated height edit passed
+## through the chunk.
+static func _test_repaint_remeshes_only_where_a_cliff_face_changes() -> void:
+	var world := _make()
+	var grid: TerrainGrid = world["grid"]
+	var service: TerrainService = world["service"]
+
+	# Flat ground: a repaint is texels only, whatever the two materials are.
+	assert(service.paint_material(_brush([Vector2i(4, 4)]), TerrainMaterialCatalog.STONE))
+	assert(not grid.has_dirty_chunks(), "repainting flat ground is not a mesh operation")
+	assert(grid.has_dirty_surface_cells())
+	grid.take_dirty_surface_cells()
+
+	# A column standing one step above its neighbour draws a face.
+	assert(service.apply_operation(TerrainEditOperation.offset([Vector2i(-4, -4)] as Array[Vector2i], 1)))
+	grid.take_dirty_chunks()
+	grid.take_dirty_surface_cells()
+	assert(grid.height_of(Vector2i(-4, -4)) > grid.height_of(Vector2i(-4, -3)))
+
+	# grass and dirt share `cliff_rooted_soil`, so the face does not change and
+	# neither does the mesh.
+	assert(service.paint_material(_brush([Vector2i(-4, -4)]), TerrainMaterialCatalog.DIRT))
+	assert(
+		TerrainMaterialCatalog.cliff_material_of(TerrainMaterialCatalog.DIRT)
+		== TerrainMaterialCatalog.cliff_material_of(TerrainMaterialCatalog.GRASS)
+	)
+	assert(not grid.has_dirty_chunks(), "same face kind, same mesh")
+	grid.take_dirty_surface_cells()
+
+	# stone cliffs into layered rock instead, so this one has to be re-emitted.
+	assert(service.paint_material(_brush([Vector2i(-4, -4)]), TerrainMaterialCatalog.STONE))
+	assert(grid.has_dirty_chunks(), "the face kind moved, so the face is rebuilt")
+
+
+## The session save carries the surface and not the relief, and its material bytes
+## are only meaningful next to the catalog they were written against (§2.6).
+static func _test_surface_codec_round_trips_and_remaps() -> void:
+	var world := _make()
+	var grid: TerrainGrid = world["grid"]
+	var service: TerrainService = world["service"]
+	assert(service.paint_material(_brush([Vector2i(0, 0), Vector2i(1, 0)]), TerrainMaterialCatalog.MUD))
+	assert(service.set_wear(_brush([Vector2i(0, 0)]), TerrainDetailCodec.MAX_WEAR))
+	assert(service.apply_operation(TerrainEditOperation.offset([Vector2i(-6, -6)] as Array[Vector2i], 2)))
+
+	var encoded := TerrainSurfaceCodec.to_base64(grid)
+	assert(not encoded.is_empty())
+	# Long runs of one material: an almost untouched board must not cost a byte per
+	# column, or every autosave writes a quarter of a megabyte of the same value.
+	var raw_size := Marshalls.base64_to_raw(encoded).size()
+	assert(raw_size < BOARD_CELLS * BOARD_CELLS, "run-length encoding actually ran")
+
+	var restored := TerrainGrid.new()
+	restored.configure(1.0, BOARD_CELLS)
+	assert(TerrainSurfaceCodec.from_base64(encoded, restored))
+	assert(restored.material_of(Vector2i(0, 0)) == TerrainMaterialCatalog.MUD)
+	assert(restored.material_of(Vector2i(1, 0)) == TerrainMaterialCatalog.MUD)
+	assert(restored.wear_at(Vector2i(0, 0)) == TerrainDetailCodec.MAX_WEAR)
+	# Relief is deliberately NOT in the file: it belongs to the map package, and a
+	# save that carried a second copy of it would be a second owner of the ground.
+	assert(restored.height_of(Vector2i(-6, -6)) == 0, "the codec restores surface only")
+
+	# A board of a different size is refused rather than half-applied.
+	var wrong := TerrainGrid.new()
+	wrong.configure(1.0, BOARD_CELLS * 2)
+	assert(not TerrainSurfaceCodec.from_base64(encoded, wrong))
 
 
 static func _brush(cells: Array) -> Array[Vector2i]:

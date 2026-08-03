@@ -37,7 +37,10 @@ extends RefCounted
 ## authors ground the cascade would immediately collapse, and the editor refuses
 ## exactly that by hand (`TerrainService.paint_material`). So every candidate is
 ## checked against the local drop and falls back along `FALLBACKS` until one
-## holds. Stone holds four steps and terminates every chain.
+## holds. Stone holds four steps and terminates every chain — including on the
+## authored border walls, which are exempt from repose entirely (§3.2 of the
+## generation doc) and are steeper than anything in the catalog. Rock is the
+## honest answer there; sand would be a promise the ground cannot keep.
 
 ## Cells from the water line that can still be beach, and how deep water has to be
 ## before its bed stops being sand.
@@ -76,8 +79,8 @@ static func apply(context: GenerationContext) -> void:
 
 	var water_depth := _water_depth_field(context)
 	var shore := _distance_to_water(context, water_depth)
-	var biome := _noise(context.seeds.derive_int(&"surface_biome"), BIOME_NOISE_PERIOD)
-	var variant_noise := _noise(context.seeds.derive_int(&"surface_variant"), VARIANT_NOISE_PERIOD)
+	var biome := _noise(context.seeds.stream_seed(&"surface_biome"), BIOME_NOISE_PERIOD)
+	var variant_noise := _noise(context.seeds.stream_seed(&"surface_variant"), VARIANT_NOISE_PERIOD)
 	var rock_line := _rock_line(context)
 
 	var counts: Dictionary = {}
@@ -99,6 +102,45 @@ static func apply(context: GenerationContext) -> void:
 	context.note("surface: %s" % ", ".join(summary))
 
 
+## Re-checks the finished grid and downgrades any column whose material can no
+## longer hold it. Returns how many were moved.
+##
+## This is not a duplicate of the check `apply` already does — it is the same
+## check against different ground. Slope assignment runs AFTER the commit and
+## reshapes columns (`TerrainGenerationService._assign_slopes`), and the
+## connectivity repair may press a saddle and re-commit on top of that. Both move
+## height under a surface that was chosen from the heights the pipeline produced,
+## so the guarantee "sand is never painted on a cliff" is only true if it is
+## re-established once the ground has actually stopped moving.
+static func settle_grid(grid: TerrainGrid) -> int:
+	if grid == null:
+		return 0
+	var moved := 0
+	var minimum := grid.min_cell()
+	var maximum := grid.max_cell()
+	for z in range(minimum.y, maximum.y + 1):
+		for x in range(minimum.x, maximum.x + 1):
+			var cell := Vector2i(x, z)
+			var current := grid.material_index_at(cell)
+			var settled := _settle(TerrainMaterialCatalog.id_of_index(current), _grid_drop(grid, cell))
+			if settled == current:
+				continue
+			grid.set_material_index(cell, settled)
+			grid.set_variant(cell, TerrainMaterialVariants.clamp_variant(settled, grid.variant_at(cell)))
+			moved += 1
+	return moved
+
+
+static func _grid_drop(grid: TerrainGrid, cell: Vector2i) -> int:
+	var own := grid.height_of(cell)
+	var drop := 0
+	for offset: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var neighbour := cell + offset
+		if grid.is_inside(neighbour):
+			drop = maxi(drop, absi(grid.height_of(neighbour) - own))
+	return drop
+
+
 # --- Choice -------------------------------------------------------------------
 
 static func _candidate(
@@ -110,10 +152,10 @@ static func _candidate(
 		# The bed the author would have painted under the lake, so draining it later
 		# leaves a beach or a silt flat rather than whatever the land happened to be
 		# (`terrain_materials.md` §2.5: there is no `lakebed` material).
-		if context.river_cells.has(index):
+		if context.river_cells.has(cell):
 			return TerrainMaterialCatalog.GRAVEL
 		return TerrainMaterialCatalog.SAND if water_depth[index] <= SHALLOW_STEPS else TerrainMaterialCatalog.MUD
-	if context.river_cells.has(index):
+	if context.river_cells.has(cell):
 		return TerrainMaterialCatalog.GRAVEL
 
 	var drop := _local_drop(context, cell)

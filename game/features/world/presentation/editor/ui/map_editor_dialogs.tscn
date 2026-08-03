@@ -401,6 +401,25 @@ layout_mode = 2
 size_flags_horizontal = 3
 placeholder_text = "clear"
 
+[node name="ClimateLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Климат:"
+
+[node name="StartClimateOption" type="OptionButton" parent="StartSettingsDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="DynamicLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Окружение идёт:"
+
+[node name="StartDynamicCheck" type="CheckBox" parent="StartSettingsDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+button_pressed = true
+text = "время и погода меняются"
+
 [node name="StartsHeader" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 15

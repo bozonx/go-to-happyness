@@ -169,7 +169,11 @@ var selection_marker: MeshInstance3D:
 	get: return world_setup.selection_marker
 var fireflies: Array[FirefliesEffect]:
 	get: return world_setup.fireflies
-var weather_state := WeatherState.new()
+## Whether anything is falling right now, as of the last tick. Cached only so the
+## "rain has started/stopped" message can notice the edge; every other weather
+## question goes to `simulation_tick_controller.environment()`
+## (`world_environment.md` §2).
+var is_precipitating := false
 var ambient_spawner: AmbientSpawner
 var camera_target: Vector3:
 	get: return camera_controller.camera_target
@@ -387,6 +391,8 @@ var building_status_indicator_controller: BuildingStatusIndicatorController
 var first_person_hud_controller: FirstPersonHUDController
 var label_distance_fade_controller: LabelDistanceFadeController
 var trail_field: TrailFieldService
+## Wear and regrowth of the ground itself (`terrain_materials.md` §6.1, §6.4).
+var surface_controller: SettlementSurfaceController
 var trail_texture_renderer: TrailTextureRenderer
 var resource_pile_service: ResourcePileService
 var foraging_service: ForagingService

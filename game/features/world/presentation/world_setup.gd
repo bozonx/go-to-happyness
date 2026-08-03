@@ -3,7 +3,7 @@ extends Node
 
 const SelectionMarkerScene = preload("res://game/features/world/presentation/selection_marker.tscn")
 const PreviewEntranceMarkerScene = preload("res://game/features/world/presentation/preview_entrance_marker.tscn")
-const RainEffectScene = preload("res://game/features/world/presentation/rain_effect.tscn")
+const PrecipitationEffectScene = preload("res://game/features/world/presentation/precipitation_effect.tscn")
 const SkyAndWeatherControllerScene = preload("res://game/features/world/presentation/sky_and_weather_controller.tscn")
 @export var village_boundary_markers_scene: PackedScene = preload("res://game/features/buildings/presentation/village_boundary_markers.tscn")
 @export var village_territory_overlay_scene: PackedScene = preload("res://game/features/buildings/presentation/village_territory_overlay.tscn")
@@ -13,7 +13,7 @@ var environment_node: WorldEnvironment
 var world_environment: Environment
 var sky_material: ShaderMaterial
 var sun: DirectionalLight3D
-var rain_effect: RainEffect
+var precipitation_effect: PrecipitationEffect
 var sky_and_weather_controller: SkyAndWeatherController
 ## The board's ground (grid_terrain_system.md §13). Owned by the territory scene,
 ## published here because it is the one place that answers "how high is the
@@ -27,6 +27,11 @@ var terrain_service := TerrainService.new()
 ## The board's water (§9), published beside the ground for the same reason: it is
 ## what routing and presentation both read.
 var water_grid: WaterGrid
+## The one owner of writes to that water, for the same reason `terrain_service`
+## is here: water is authored and never simulated, but ice is not authoring — the
+## environment freezes and thaws bodies during a session (`world_environment.md`
+## §13), and a write around the transaction boundary is one navigation never sees.
+var water_service := WaterService.new()
 ## Where a citizen can stand to draw water. Owned here because it is derived from
 ## the two grids this node publishes and from nothing else (§9.2).
 var water_access := WaterAccessService.new()
@@ -89,7 +94,7 @@ func build(parent: Node) -> void:
 	_build_terrain(parent)
 	_build_map_entities()
 	_build_boundary(parent)
-	_build_rain_effect(parent)
+	_build_precipitation_effect(parent)
 	_build_sky_and_weather_controller(parent)
 	_build_trail_overlay(parent)
 	_build_selection_marker(parent)
@@ -104,7 +109,7 @@ func dispose() -> void:
 	for node: Node in [
 		village_boundary_markers,
 		village_territory_overlay,
-		rain_effect,
+		precipitation_effect,
 		sky_and_weather_controller,
 		trail_overlay,
 		selection_marker,
@@ -116,7 +121,7 @@ func dispose() -> void:
 			node.free()
 	village_boundary_markers = null
 	village_territory_overlay = null
-	rain_effect = null
+	precipitation_effect = null
 	sky_and_weather_controller = null
 	trail_overlay = null
 	selection_marker = null
@@ -127,31 +132,12 @@ func dispose() -> void:
 	_territory = null
 
 
-func update_daylight(
-	game_minutes: float,
-	cloud_cover: float,
-	rain_intensity: float,
-	runtime_seconds: float,
-	storm_influence: float = 0.0,
-	cloud_pattern_seed: float = 0.0,
-	wind: Vector2 = Vector2.ZERO,
-	weather_minutes: float = -1.0,
-	precipitation_type: int = WeatherState.Precipitation.RAIN,
-	wind_displacement: Vector2 = Vector2.ZERO
-) -> void:
+## Hands the environment snapshot to the sky (`world_environment.md` §2). One
+## value in, nothing assembled here: this used to be a ten-argument positional
+## relay, and every field the environment gained cost an edit in three files.
+func update_daylight(snapshot: EnvironmentSnapshot, runtime_seconds: float) -> void:
 	if sky_and_weather_controller != null:
-		sky_and_weather_controller.update_daylight(
-			game_minutes,
-			cloud_cover,
-			rain_intensity,
-			runtime_seconds,
-			storm_influence,
-			cloud_pattern_seed,
-			wind,
-			weather_minutes,
-			precipitation_type,
-			wind_displacement
-		)
+		sky_and_weather_controller.update_daylight(snapshot, runtime_seconds)
 
 
 ## The board gets a real `TerrainGrid`, meshed and collided by `GridTerrainWorld`.
@@ -174,6 +160,7 @@ func _build_terrain(parent: Node) -> void:
 	)
 	terrain_service.configure(terrain_grid)
 	water_grid = territory.configure_water(_board_cells, _cell_size, _map_document.water)
+	water_service.configure(water_grid, terrain_grid)
 	territory.configure_water_border(_map_document.meta.border_kind, _map_document.meta.border_level)
 	water_access.configure(water_grid, terrain_grid)
 
@@ -215,13 +202,13 @@ func _build_sky() -> void:
 	world_environment.sky = sky
 
 
-func _build_rain_effect(parent: Node) -> void:
+func _build_precipitation_effect(parent: Node) -> void:
 	if DisplayServer.get_name() == "headless":
 		return
-	rain_effect = RainEffectScene.instantiate() as RainEffect
-	rain_effect.name = "RainEffect"
-	rain_effect.set_camera(_camera)
-	parent.add_child(rain_effect)
+	precipitation_effect = PrecipitationEffectScene.instantiate() as PrecipitationEffect
+	precipitation_effect.name = "PrecipitationEffect"
+	precipitation_effect.set_camera(_camera)
+	parent.add_child(precipitation_effect)
 
 
 func _build_sky_and_weather_controller(parent: Node) -> void:
@@ -232,7 +219,7 @@ func _build_sky_and_weather_controller(parent: Node) -> void:
 		sun,
 		world_environment,
 		sky_material,
-		rain_effect,
+		precipitation_effect,
 		fireflies,
 		sun_glare_material
 	)

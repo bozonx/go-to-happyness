@@ -26,6 +26,8 @@ static func run_all() -> void:
 	_test_water_bodies_are_supported()
 	_test_border_wall_cannot_be_walked_around()
 	_test_navigation_is_published_once()
+	_test_surface_is_painted_and_always_stands()
+	_test_surface_can_be_turned_off()
 	print("    [PASS] Map Generation Tests")
 
 
@@ -319,3 +321,68 @@ static func _test_navigation_is_published_once() -> void:
 	assert(after - before <= 4, "navigation topology moved %d times for one generation" % (after - before))
 	assert(harness.nav.has_terrain_field(), "the generated board must be published at all")
 	assert(harness.terrain_service.undo_depth() == 0, "generation is a new document, not an undoable edit")
+
+
+# --- Surface (stage 14) -------------------------------------------------------
+
+## Stage 3 of the design's layer list: the map is made of something. It used to be
+## made of exactly one thing — `elevation.repose_override`, a knob for comparing
+## SHAPES, was also the material written into every column — so every generated
+## world was solid stone.
+##
+## The hard promise is the last one: a material may never be painted where its own
+## angle of repose cannot hold the column. Ground that violates it is ground the
+## cascade would collapse the moment anything touched it, and the editor refuses
+## exactly this by hand.
+static func _test_surface_is_painted_and_always_stands() -> void:
+	var generated := _generated(4242)
+	var harness: Harness = generated[0]
+	var grid := harness.grid
+	var seen: Dictionary = {}
+	var minimum := grid.min_cell()
+	var maximum := grid.max_cell()
+	for z in range(minimum.y, maximum.y + 1):
+		for x in range(minimum.x, maximum.x + 1):
+			var cell := Vector2i(x, z)
+			var index := grid.material_index_at(cell)
+			seen[index] = true
+			var drop := 0
+			for offset: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var neighbour := cell + offset
+				if grid.is_inside(neighbour):
+					drop = maxi(drop, absi(grid.height_of(neighbour) - grid.height_of(cell)))
+			# A border wall is an AUTHORED face (§3.2) and the repose pass exempts it,
+			# so some columns are steeper than anything in the catalog holds. The
+			# promise is therefore the one the painter can actually keep: where a
+			# material would collapse, it fell back to the most stable one there is.
+			assert(
+				TerrainMaterialCatalog.holds_height_difference(index, drop)
+				or grid.material_of(cell) == TerrainMaterialCatalog.STONE,
+				"%s at %s cannot hold a drop of %d and is not the fallback" % [grid.material_of(cell), cell, drop],
+			)
+			# Variants must address the palette of the material they landed on.
+			assert(grid.variant_at(cell) < TerrainMaterialVariants.variant_count(index))
+	assert(seen.size() >= 3, "a generated world is made of more than one thing")
+
+	# Same seed, same surface — the painter reads the same finished ground and the
+	# same two noise streams, so it may not introduce a new source of divergence.
+	var again := _generated(4242)
+	var other: Harness = again[0]
+	assert(other.grid.snapshot()["materials"] == grid.snapshot()["materials"])
+	assert(other.grid.snapshot()["details"] == grid.snapshot()["details"])
+
+
+## The shape laboratory wants one flat colour, so it can read relief without the
+## surface arguing with it. That is a recipe switch, not a missing feature.
+static func _test_surface_can_be_turned_off() -> void:
+	var recipe := _recipe()
+	recipe.paint_surface = false
+	recipe.base_material = TerrainMaterialCatalog.STONE
+	var generated := _generated(4242, recipe)
+	var harness: Harness = generated[0]
+	var grid := harness.grid
+	var minimum := grid.min_cell()
+	var maximum := grid.max_cell()
+	for z in range(minimum.y, maximum.y + 1):
+		for x in range(minimum.x, maximum.x + 1):
+			assert(grid.material_of(Vector2i(x, z)) == TerrainMaterialCatalog.STONE)

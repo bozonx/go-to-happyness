@@ -11,10 +11,11 @@ extends RefCounted
 ## `starts` and `default_start` live here rather than at the top level of
 ## `map.json` because an entrance *is* start data: it names a spawn group, a
 ## camera and a set of overrides, and every one of those is resolved by the same
-## code that resolves the fields beside it. `day_of_year` and `latitude` still
-## have no consumer — season and daylight belong to terrain phase 4c — and are
-## declared anyway, for the reason §7 gave: adding them later would raise
-## `format_version` on every map already authored.
+## code that resolves the fields beside it. `day_of_year`, `latitude`,
+## `time_of_day` and `weather_preset` were declared before anything read them,
+## for the reason §7 gave: adding them later would raise `format_version` on
+## every map already authored. `WorldSession` reads them now — they are the input
+## the environment starts from (`world_environment.md` §15).
 
 ## Minute of day the settlement clock starts at; 480 = 08:00, the current default.
 const DEFAULT_TIME_OF_DAY := 480
@@ -25,6 +26,15 @@ var day_of_year := 120
 var latitude := 54.0
 var time_of_day := DEFAULT_TIME_OF_DAY
 var weather_preset: StringName = &"clear"
+## Climate the world runs on (`world_environment.md` §5). It joins the four
+## fields above rather than sitting in a module's settings for the same reason
+## they do: season, temperature and day length are world facts, and a shooter map
+## has them exactly as a settlement map does.
+var climate: StringName = &"temperate"
+## `false` freezes the environment: a session begun in `SCRIPTED` and never
+## released (§7.1 here, `world_environment.md` §14). Arenas and staged scenes
+## want it; ordinary play does not.
+var dynamic := true
 ## `module_id -> ModuleSettingsSection`.
 var module_settings: Dictionary = {}
 ## The authored game that interprets this map. It replaces map-owned mode and
@@ -56,6 +66,8 @@ static func from_dict(source: Dictionary) -> MapStart:
 	start.latitude = clampf(float(source.get("latitude", start.latitude)), -90.0, 90.0)
 	start.time_of_day = clampi(int(source.get("time_of_day", start.time_of_day)), 0, 1439)
 	start.weather_preset = StringName(source.get("weather_preset", start.weather_preset))
+	start.climate = StringName(source.get("climate", start.climate))
+	start.dynamic = bool(source.get("dynamic", start.dynamic))
 	start.game_definition = StringName(source.get("game_definition", start.game_definition))
 	start.progression = ProgressionPolicy.from_dict(source.get("progression", {}))
 	start.module_settings = ModuleSettingsSection.map_from_dict(source.get("module_settings", {}))
@@ -75,6 +87,8 @@ func to_dict() -> Dictionary:
 		"latitude": latitude,
 		"time_of_day": time_of_day,
 		"weather_preset": String(weather_preset),
+		"climate": String(climate),
+		"dynamic": dynamic,
 		"game_definition": String(game_definition),
 		"progression": progression.to_dict(),
 		"module_settings": ModuleSettingsSection.map_to_dict(module_settings),

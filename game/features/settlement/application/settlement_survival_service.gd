@@ -17,7 +17,9 @@ var _day_cycle: SimulationDayCycle
 var _clock: SimulationClock
 var _citizens: Array = []
 var _random: RandomNumberGenerator
-var _weather_state: Variant
+## The environment as of this frame (`world_environment.md` §2). The survival
+## rules read it; they never hold a weather object of their own.
+var _environment_getter: Callable
 var _building_registry: Variant
 var _fire_management_service: Variant
 var _tent_weather_getter: Callable
@@ -40,7 +42,7 @@ func configure(port: SettlementSurvivalRuntimePort) -> void:
 	_clock = port.clock
 	_citizens = port.citizens
 	_random = port.random
-	_weather_state = port.weather_state
+	_environment_getter = port.environment_getter
 	_building_registry = port.building_registry
 	_fire_management_service = port.fire_management_service
 	_tent_weather_getter = port.tent_weather_getter
@@ -72,7 +74,7 @@ func apply_hourly_tent_survival(hour: int, survival_day := 0) -> void:
 		last_zero_wellbeing_departure_day = day
 		skip_zero_wellbeing_departure_applied = true
 		_trigger_zero_wellbeing_departure()
-	if _weather_state.is_raining and hour > 0:
+	if hour > 0 and _is_precipitating():
 		apply_rain_damage()
 
 
@@ -202,3 +204,12 @@ func resolve_exhausted_homecomings() -> void:
 			citizen.fatigue = maxf(35.0, citizen.fatigue - 25.0)
 			citizen.end_work_shift()
 			_add_message.call("%s collapsed from exhaustion and will recover at home today." % citizen.role_label())
+
+
+## Precipitation soaks stores whatever form it takes: a wet snowfall ruins a hide
+## the same way rain does.
+func _is_precipitating() -> bool:
+	if not _environment_getter.is_valid():
+		return false
+	var snapshot: EnvironmentSnapshot = _environment_getter.call()
+	return snapshot != null and snapshot.is_precipitating()

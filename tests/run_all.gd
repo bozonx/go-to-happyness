@@ -1,6 +1,7 @@
 extends SceneTree
 
 const TestDomainEconomyScript = preload("res://tests/domain/test_domain_economy.gd")
+const TestDomainEnvironmentScript = preload("res://tests/domain/test_domain_environment.gd")
 const TestDomainRoutingScript = preload("res://tests/domain/test_domain_routing.gd")
 const TestDomainConstructionScript = preload("res://tests/domain/test_domain_construction.gd")
 const TestDomainLogisticsScript = preload("res://tests/domain/test_domain_logistics.gd")
@@ -52,6 +53,7 @@ func _init() -> void:
 	# 1. Run Domain Unit Tests
 	print("\n[1/2] Running Domain Unit Tests...")
 	TestDomainEconomyScript.run_all()
+	TestDomainEnvironmentScript.run_tests()
 	TestDomainRoutingScript.run_all()
 	TestDomainConstructionScript.run_all()
 	TestDomainLogisticsScript.run_all()

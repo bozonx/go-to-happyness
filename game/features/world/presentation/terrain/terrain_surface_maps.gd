@@ -39,6 +39,12 @@ const INDEX_STRIDE := 1
 const DETAIL_STRIDE := 4
 const COVERAGE_STRIDE := 2
 
+## Stored level -> texel byte, each field spread across the full range so the
+## shader reads 0..1 without knowing how many levels the field has. Precomputed
+## because the alternative is a float division and a round per column per publish.
+const _WEAR_TO_BYTE: Array[int] = [0, 128, 255, 255]
+const _SNOW_TO_BYTE: Array[int] = [0, 85, 170, 255]
+
 var _index_bytes := PackedByteArray()
 var _detail_bytes := PackedByteArray()
 var _coverage_bytes := PackedByteArray()
@@ -97,16 +103,40 @@ func rebuild(grid: TerrainGrid) -> void:
 		return
 	if _board_cells != grid.board_cells or not is_configured():
 		configure(grid.board_cells)
-	var minimum := grid.min_cell()
-	var maximum := grid.max_cell()
-	for z in range(minimum.y, maximum.y + 1):
-		for x in range(minimum.x, maximum.x + 1):
-			_write_cell(grid, Vector2i(x, z))
+	# The index map IS the grid's material array: same row-major order from
+	# `min_cell()`, same one byte per column. Copying it beats walking the board and
+	# asking for each column, which is three GDScript calls per texel — and this
+	# runs on every load and every board resize.
+	var materials := grid.materials_view()
+	if materials.size() == _index_bytes.size():
+		_index_bytes = materials.duplicate()
+	var details := grid.details_view()
+	if details.size() * DETAIL_STRIDE == _detail_bytes.size():
+		_expand_details(details)
+	else:
+		var minimum := grid.min_cell()
+		var maximum := grid.max_cell()
+		for z in range(minimum.y, maximum.y + 1):
+			for x in range(minimum.x, maximum.x + 1):
+				_write_cell(grid, Vector2i(x, z))
 	# A full publish uploads unconditionally: the buffers were just created empty,
 	# so a column that happens to match the cleared texel still has to reach the GPU.
 	_index_dirty = true
 	_detail_dirty = true
 	_upload()
+
+
+## Unpacks the detail byte of every column into the RGBA texel the shader reads.
+## The three fields are spread to the full 0..255 range each, so the shader does
+## not need to know how many levels a field has — only that 1.0 is its maximum.
+func _expand_details(details: PackedByteArray) -> void:
+	var offset := 0
+	for index in details.size():
+		var detail := details[index]
+		_detail_bytes[offset] = TerrainDetailCodec.variant_of(detail) * 17
+		_detail_bytes[offset + 1] = _WEAR_TO_BYTE[TerrainDetailCodec.wear_of(detail)]
+		_detail_bytes[offset + 2] = _SNOW_TO_BYTE[TerrainDetailCodec.snow_depth_of(detail)]
+		offset += DETAIL_STRIDE
 
 
 ## Updates exactly the columns the grid reported dirty, then re-uploads only the
@@ -145,8 +175,8 @@ func _write_cell(grid: TerrainGrid, cell: Vector2i) -> void:
 		_index_dirty = true
 	var detail := grid.detail_at(cell)
 	var red := TerrainDetailCodec.variant_of(detail) * 17 # 0..15 -> 0..255
-	var green := int(round(float(TerrainDetailCodec.wear_of(detail)) * 255.0 / float(TerrainDetailCodec.MAX_WEAR)))
-	var blue := int(round(float(TerrainDetailCodec.snow_depth_of(detail)) * 255.0 / float(TerrainDetailCodec.MAX_SNOW_DEPTH)))
+	var green := _WEAR_TO_BYTE[TerrainDetailCodec.wear_of(detail)]
+	var blue := _SNOW_TO_BYTE[TerrainDetailCodec.snow_depth_of(detail)]
 	var offset := texel * DETAIL_STRIDE
 	if _detail_bytes[offset] != red or _detail_bytes[offset + 1] != green or _detail_bytes[offset + 2] != blue:
 		_detail_bytes[offset] = red
@@ -195,7 +225,7 @@ func _write_coverage_cell(layer: CoverageLayer, cell: Vector2i) -> void:
 	# reuses `TerrainDetailCodec` instead of inventing road flags.
 	var offset := texel * COVERAGE_STRIDE
 	var red := layer.index_at(cell) & 0xFF
-	var green := int(round(float(layer.wear_at(cell)) * 255.0 / float(TerrainDetailCodec.MAX_WEAR)))
+	var green := _WEAR_TO_BYTE[clampi(layer.wear_at(cell), 0, TerrainDetailCodec.MAX_WEAR)]
 	if _coverage_bytes[offset] == red and _coverage_bytes[offset + 1] == green:
 		return
 	_coverage_bytes[offset] = red

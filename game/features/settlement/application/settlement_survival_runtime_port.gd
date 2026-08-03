@@ -8,7 +8,8 @@ var day_cycle: SimulationDayCycle
 var clock: SimulationClock
 var citizens: Array
 var random: RandomNumberGenerator
-var weather_state: Variant
+## Returns the current `EnvironmentSnapshot` (`world_environment.md` §2).
+var environment_getter: Callable
 var building_registry: BuildingRegistry
 var fire_management_service: FireManagementService
 var tent_weather_getter: Callable

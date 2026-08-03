@@ -38,6 +38,11 @@ var outcome: StringName = &""
 
 var _fired: Dictionary = {}
 var _action_handlers: Dictionary = {}
+## Flags a *module* declares for this session, as `id -> MapFlagDef`. Kept apart
+## from `scenario.flags` on purpose: the scenario belongs to the map document,
+## and a module writing into it would persist its own vocabulary into `map.json`
+## the next time the editor saved after a test run.
+var _runtime_flags: Dictionary = {}
 var _started := false
 ## Guards the re-entrancy that makes rule tables loop: an action sets a flag,
 ## `flag_changed` fires rules, one of which sets the flag again. Events raised
@@ -62,10 +67,25 @@ func configure(next_scenario: MapScenario, initial_flags: Dictionary = {}) -> vo
 			push_warning("[scenario] вариант старта задаёт необъявленный флаг %s" % flag_id)
 			continue
 		flags[StringName(flag_id)] = definition.coerce(initial_flags[flag_id])
+	for flag_id: Variant in _runtime_flags:
+		var runtime_flag: MapFlagDef = _runtime_flags[flag_id]
+		flags[runtime_flag.id] = runtime_flag.default_value
 	elapsed_seconds = 0.0
 	outcome = &""
 	_fired.clear()
 	_started = false
+
+
+## A module declares a flag it will keep current — the environment's season,
+## temperature and precipitation (`world_environment.md` §14). Conditions stay the
+## one shape the format has, a test over a declared flag, and an author writes
+## `{"flag": "env.is_snowing"}` with the machinery that already exists.
+func register_flag(definition: MapFlagDef) -> void:
+	if definition == null or definition.id.is_empty():
+		return
+	_runtime_flags[definition.id] = definition
+	if not flags.has(definition.id):
+		flags[definition.id] = definition.default_value
 
 
 ## A module binds its own `then` action here — `gth.settlement:add_resource` —
@@ -157,7 +177,7 @@ func flag_value(flag_id: StringName) -> Variant:
 ## action create state on write is what makes a misspelled flag silently split
 ## into two.
 func set_flag(flag_id: StringName, value: Variant) -> bool:
-	var definition := scenario.flag_by_id(flag_id)
+	var definition := _definition_of(flag_id)
 	if definition == null:
 		push_warning("[scenario] запись в необъявленный флаг %s" % flag_id)
 		return false
@@ -171,13 +191,21 @@ func set_flag(flag_id: StringName, value: Variant) -> bool:
 
 
 func add_to_flag(flag_id: StringName, delta: int) -> bool:
-	var definition := scenario.flag_by_id(flag_id)
+	var definition := _definition_of(flag_id)
 	if definition == null:
 		push_warning("[scenario] запись в необъявленный флаг %s" % flag_id)
 		return false
 	if definition.type != MapFlagDef.TYPE_INT:
 		return set_flag(flag_id, delta > 0)
 	return set_flag(flag_id, int(flags.get(flag_id, 0)) + delta)
+
+
+## A module's declaration wins over the map's: `env.` is the environment's
+## namespace, and a map that declared `env.temperature` as a boolean must not turn
+## a temperature into one.
+func _definition_of(flag_id: StringName) -> MapFlagDef:
+	var runtime_flag: Variant = _runtime_flags.get(flag_id, null)
+	return runtime_flag if runtime_flag is MapFlagDef else scenario.flag_by_id(flag_id)
 
 
 # --- Evaluation ---------------------------------------------------------------

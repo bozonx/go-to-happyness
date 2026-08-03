@@ -43,11 +43,8 @@ const SUN_HORIZON_SWELL := 1.55
 const MOON_HORIZON_SWELL := 1.85
 # How high the body must climb before it settles at its base size.
 const DISC_SWELL_ALTITUDE := 0.34
-# The moon drifts along its own arc across a synodic month, so its rise time varies
-# from night to night. The offset is clamped well inside a half-night: pushed to the
-# physical extreme it would leave whole nights with no moon at all.
-const MOON_SYNODIC_DAYS := 29.53
-const MOON_MAX_OFFSET_HOURS := 3.0
+# The moon's arc, its rise time and its phase are computed by `SolarGeometry` from
+# the calendar and arrive in the snapshot. Only the drawing of the disc is here.
 # Phase axis range across the month: +1 is full, 0 half. It never reaches a new moon
 # — the dark limb is a painterly cue here, so even the thinnest phase keeps most of
 # the disc readable.
@@ -94,7 +91,7 @@ var camera: Camera3D
 var sun: DirectionalLight3D
 var world_environment: Environment
 var sky_material: ShaderMaterial
-var rain_effect: Node3D # RainEffect
+var precipitation_effect: Node3D # PrecipitationEffect
 var fireflies: Array = [] # Array of FirefliesEffect
 var sun_glare_material: ShaderMaterial
 var sun_glare_visibility := 0.0
@@ -120,7 +117,7 @@ func setup(
 	p_sun: DirectionalLight3D,
 	p_world_environment: Environment,
 	p_sky_material: ShaderMaterial,
-	p_rain_effect: Node3D,
+	p_precipitation_effect: Node3D,
 	p_fireflies: Array,
 	p_sun_glare_material: ShaderMaterial
 ) -> void:
@@ -128,29 +125,38 @@ func setup(
 	sun = p_sun
 	world_environment = p_world_environment
 	sky_material = p_sky_material
-	rain_effect = p_rain_effect
+	precipitation_effect = p_precipitation_effect
 	fireflies = p_fireflies
 	sun_glare_material = p_sun_glare_material
 
 
-func update_daylight(
-	game_minutes: float,
-	cloud_cover: float,
-	rain_intensity: float,
-	runtime_seconds: float,
-	storm_influence: float = 0.0,
-	cloud_pattern_seed: float = 0.0,
-	wind_vector: Vector2 = Vector2.ZERO,
-	weather_minutes: float = -1.0,
-	precipitation_type: int = WeatherState.Precipitation.RAIN,
-	wind_displacement: Vector2 = Vector2.ZERO
-) -> void:
+## Draws the sky the snapshot describes (`world_environment.md` §2, §11, §18).
+##
+## It takes **one** value and decides nothing about the weather. The old
+## positional call with ten arguments is what made every new environment value —
+## a season, a temperature, fog — a change to three signatures in two layers;
+## adding a field to the snapshot now costs nothing here until this file wants to
+## read it.
+##
+## `runtime_seconds` is real elapsed time and stays separate on purpose: star
+## twinkle and the glare's own animation must not run at game-clock speed, where
+## minutes pass tens of times faster than seconds.
+func update_daylight(snapshot: EnvironmentSnapshot, runtime_seconds: float) -> void:
 	if DisplayServer.get_name() == "headless":
 		return
-	if sun == null or world_environment == null:
+	if sun == null or world_environment == null or snapshot == null:
 		return
-	var hour := game_minutes / 60.0
-	var solar_height := sin((hour - 6.0) / 12.0 * PI)
+	var cloud_cover := snapshot.cloud_cover
+	var storm_influence := snapshot.storm_influence
+	var rain_intensity := snapshot.precipitation_intensity
+	var cloud_pattern_seed := snapshot.cloud_seed
+	var wind_vector := snapshot.wind_vector
+	var wind_displacement := snapshot.wind_displacement
+	var precipitation_type := snapshot.precipitation
+	# The sun's arc comes from the day of year and the latitude, not from a fixed
+	# sweep (§11). This is why winter reads visually at all: a low sun, a short
+	# day and a southern sunrise are the same thing seen three ways.
+	var solar_height := snapshot.solar_height
 	var solar_intensity := smoothstep(0.0, 0.28, solar_height)
 	var twilight := 1.0 - smoothstep(0.0, 0.28, absf(solar_height))
 	var cloud_night := 1.0 - smoothstep(-0.25, 0.05, solar_height)
@@ -161,10 +167,9 @@ func update_daylight(
 	# storm front: no amount of fair-weather cloud coverage ever greys the sky.
 	var storm := clampf(storm_influence, 0.0, 1.0)
 	var murk := storm
-	# Cloud motion runs on the continuous game clock, so drifting/scrubbing the time
-	# of day scrolls and morphs the clouds with it. Falls back to real seconds when a
-	# caller supplies no game clock (e.g. an isolated preview).
-	var motion_clock := weather_minutes if weather_minutes >= 0.0 else runtime_seconds
+	# Cloud motion runs on the calendar's continuous minute count, so scrubbing or
+	# skipping time scrolls and morphs the clouds with it instead of restarting them.
+	var motion_clock := snapshot.elapsed_minutes
 	# Wind is authored by the shared weather model (bearing*strength, 0..1). Anything
 	# else that reacts to wind reads the same source, so clouds agree with it.
 	var wind := wind_vector
@@ -198,10 +203,11 @@ func update_daylight(
 	else:
 		base_background = twilight_color.lerp(day_color, smoothstep(0.0, 0.42, solar_height))
 	world_environment.background_color = base_background.lerp(overcast_color, murk)
-	var day_progress := clampf((hour - 6.0) / 12.0, 0.0, 1.0)
-	var sun_elevation := 3.0 + maxf(solar_height, 0.0) * 45.0
-	var sun_azimuth := lerpf(-75.0, 11.0, day_progress)
-	sun.rotation_degrees = Vector3(-sun_elevation, sun_azimuth, 0.0)
+	# The light is kept a little above the true altitude at the horizon: a
+	# perfectly horizontal key light throws shadows the length of the board and
+	# reads as a bug rather than as a sunset.
+	var sun_elevation := maxf(snapshot.solar_altitude_degrees, 3.0)
+	sun.rotation_degrees = Vector3(-sun_elevation, snapshot.solar_azimuth_degrees, 0.0)
 	var sun_direction := sun.global_transform.basis.z.normalized()
 	var cloud_sun_visibility := _cloud_sun_visibility(
 		sun_direction,
@@ -256,25 +262,16 @@ func update_daylight(
 	# How dark the clouds paint. Asymmetric on purpose: just after sunset the sun
 	# still rims the clouds warm, but by the pre-dawn deep twilight they must read
 	# as dim night masses instead of daytime white.
-	# The moon runs its own arc across the night, twelve hours out of phase with
-	# the sun: it rises at dusk, peaks at midnight and sets at dawn, tracing the
-	# sky instead of hanging in one spot. Same euler convention as the sun so the
-	# shader reads its direction identically.
-	# Both the rise time and the lit fraction come from one synodic cycle read off the
-	# continuous game clock, so nothing about the moon needs storing or saving: the
-	# same day always shows the same moon.
-	var moon_cycle := motion_clock / (MINUTES_PER_DAY * MOON_SYNODIC_DAYS)
-	var moon_phase_axis := lerpf(
-		MOON_PHASE_AXIS_MIN,
-		MOON_PHASE_AXIS_MAX,
-		cos(moon_cycle * TAU) * 0.5 + 0.5
-	)
-	var moon_offset := _moon_orbit_offset_hours(motion_clock)
-	var moon_hour := fposmod(hour + 12.0 + moon_offset, 24.0)
-	var moon_height := sin((moon_hour - 6.0) / 12.0 * PI)
-	var moon_progress := clampf((moon_hour - 6.0) / 12.0, 0.0, 1.0)
-	var moon_elevation := 3.0 + maxf(moon_height, 0.0) * 52.0
-	var moon_azimuth := lerpf(-75.0, 11.0, moon_progress) + 180.0
+	# The moon rides its own arc, twelve hours out of phase with the sun and with
+	# the declination reversed, which is what makes a winter moon ride high across
+	# a long night. Both the rise time and the lit fraction are functions of the
+	# calendar (§11), so nothing about the moon is ever stored: the same day always
+	# shows the same moon.
+	var moon_phase_axis := clampf(
+		snapshot.lunar_phase_axis, MOON_PHASE_AXIS_MIN, MOON_PHASE_AXIS_MAX)
+	var moon_height := snapshot.lunar_height
+	var moon_elevation := maxf(snapshot.lunar_altitude_degrees, 3.0)
+	var moon_azimuth := snapshot.lunar_azimuth_degrees
 	var moon_basis := Basis.from_euler(Vector3(deg_to_rad(-moon_elevation), deg_to_rad(moon_azimuth), 0.0))
 	var moon_direction := moon_basis.z.normalized()
 	# Discs swell toward the horizon. The same radii feed the sky shader and the
@@ -384,14 +381,44 @@ func update_daylight(
 		sky_material.set_shader_parameter("u_moon_dir", moon_direction)
 		sky_material.set_shader_parameter("u_moon_energy", cloud_night)
 		sky_material.set_shader_parameter("u_moon_phase_axis", moon_phase_axis)
-	if rain_effect != null:
-		rain_effect.set_intensity(rain_intensity)
+	if precipitation_effect != null:
+		# The world's wind, not the cloud-UV drift `wind` was rescaled into above:
+		# flakes are carried by the same wind the flags and the waves read (§9).
+		precipitation_effect.set_precipitation(
+			precipitation_type, rain_intensity, snapshot.wind_vector)
+	_apply_atmosphere(snapshot)
 	_glare_clock = motion_clock
 	_update_sun_glare(direct_light, cloud_cover, sun_radius)
 	var firefly_factor := night_factor * (1.0 - cloud_cover * 0.5)
 	for ff in fireflies:
 		if is_instance_valid(ff):
 			ff.set_night_factor(firefly_factor)
+
+
+## Scene fog reads the snapshot's visibility range — it does not decide it
+## (`world_environment.md` §12). "How far can you see" must have exactly one
+## answer for the whole game, or the render and the rules drift apart: a target
+## the shooter's acquisition says is invisible must not be plainly on screen.
+func _apply_atmosphere(snapshot: EnvironmentSnapshot) -> void:
+	if world_environment == null:
+		return
+	var visibility := maxf(snapshot.visibility_range, 1.0)
+	world_environment.fog_enabled = visibility < EnvironmentState.CLEAR_VISIBILITY * 0.85
+	if not world_environment.fog_enabled:
+		return
+	# Godot's fog is exponential — transmittance is `exp(-density * z)` — so "can be
+	# seen for `visibility` metres" means roughly five percent left at that range,
+	# which is `3 / visibility`. The reciprocal alone reads as no fog at all: at a
+	# visibility of two hundred metres it leaves two thirds of the light at the far
+	# side of a settlement.
+	world_environment.fog_density = clampf(3.0 / visibility, 0.0, 0.12)
+	# Fog takes the colour of the sky it hangs under, so a foggy dawn is peach and a
+	# foggy storm is grey without either being authored twice. The floor keeps a
+	# night fog visible: unlit fog is indistinguishable from plain darkness, and the
+	# real thing catches the moon.
+	world_environment.fog_light_color = world_environment.background_color.lerp(
+		Color("c9d4dc"), 0.55)
+	world_environment.fog_sky_affect = 0.0
 
 
 func _cloud_layer_mix(
@@ -579,14 +606,6 @@ func _horizon_swell(height: float, swell: float) -> float:
 	# above the horizon, not across half the sky.
 	var low := 1.0 - smoothstep(0.0, DISC_SWELL_ALTITUDE, maxf(height, 0.0))
 	return lerpf(1.0, swell, pow(low, 1.6))
-
-
-func _moon_orbit_offset_hours(clock_minutes: float) -> float:
-	# A smooth month-long wander of the moon's rise time. Kept inside a fraction of
-	# the night so the moon is always up after dusk: a physically honest new moon
-	# would leave the night sky empty, which a cosy game has nothing to gain from.
-	var cycle := clock_minutes / (MINUTES_PER_DAY * MOON_SYNODIC_DAYS)
-	return sin(cycle * TAU) * MOON_MAX_OFFSET_HOURS
 
 
 func _update_moon_light(

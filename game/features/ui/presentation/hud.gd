@@ -22,6 +22,20 @@ func update_clock(text: String) -> void:
 	clock_label.text = text
 
 
+## Season, temperature and forecast beside the clock (`world_environment.md`
+## §19.15). Reads the snapshot like every other consumer: the HUD assembles
+## nothing and asks the weather rules nothing.
+func update_environment(snapshot: EnvironmentSnapshot) -> void:
+	if snapshot == null:
+		return
+	var falling := ""
+	if snapshot.is_precipitating():
+		falling = ", снег" if snapshot.is_snowing() else ", дождь"
+	clock_label.tooltip_text = "%s · %+.0f°C%s · световой день %.1f ч" % [
+		snapshot.pattern_name, snapshot.temperature, falling, snapshot.daylight_hours,
+	]
+
+
 func update_camera_hint(text: String) -> void:
 	camera_hint_label.text = text
 

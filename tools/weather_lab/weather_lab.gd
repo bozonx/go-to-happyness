@@ -1,15 +1,22 @@
 extends Node3D
 
-## Isolated visual lab for weather, sky, daylight, and atmospheric effects.
+## Isolated visual lab for the world environment: weather, sky, daylight, season
+## and atmospherics (`world_environment.md` §17).
+##
+## It has **no weather logic of its own**. It drives a real `EnvironmentDirector`
+## and renders the snapshot that comes back, exactly as a cutscene will — which is
+## what makes it evidence about the game rather than about the lab.
 ##
 ## Interactive: F-keys choose a scenario; 1-7 choose a camera; Left/Right move
 ## time; Up/Down change cloud cover; PageUp/PageDown change the storm front;
-## R changes rain. GameplayCamera and GameplayLowCamera reproduce the in-game rig,
-## which is the only way to judge effects that depend on where the player is looking.
+## R toggles precipitation; `[`/`]` step the **day of year**, because a low winter
+## sun, a short day and a snowfall cannot be inspected with an hour dial alone.
+## GameplayCamera and GameplayLowCamera reproduce the in-game rig, which is the
+## only way to judge effects that depend on where the player is looking.
 ## Batch: godot --path .
 ## res://tools/weather_lab/weather_lab.tscn -- --capture. Captures go to user://weather_lab.
 
-const RainEffectScene := preload("res://game/features/world/presentation/rain_effect.tscn")
+const PrecipitationEffectScene := preload("res://game/features/world/presentation/precipitation_effect.tscn")
 const FirefliesEffectScene := preload("res://game/features/world/presentation/fireflies_effect.tscn")
 const SkyAndWeatherControllerScene := preload("res://game/features/world/presentation/sky_and_weather_controller.tscn")
 const SkyShader := preload("res://game/features/world/presentation/sky_clouds.gdshader")
@@ -67,6 +74,20 @@ const SCENARIOS := [
 	{"name": "flare_gameplay_morning", "minutes": 430.0, "overcast": 0.1, "rain": 0.0, "camera": &"GameplayLowCamera", "track": "sun"},
 	{"name": "flare_gameplay_edge", "minutes": 1020.0, "overcast": 0.1, "rain": 0.0, "camera": &"GameplayLowCamera", "track": "sun", "pitch": 30.0},
 	{"name": "flare_centred", "minutes": 1020.0, "overcast": 0.1, "rain": 0.0, "camera": &"TrackingCamera", "track": "sun"},
+	# Season. None of these can be reached with an hour dial: the sun's arc, the
+	# length of the day and what falls out of the sky are all functions of the day
+	# of year (`world_environment.md` §11, §19.14), so the lab has that axis too.
+	# `solar_arc_*` are the same hour on the two solstices — the pair is the proof
+	# that winter reads visually at all.
+	{"name": "solar_arc_summer", "minutes": 720.0, "overcast": 0.1, "rain": 0.0, "day_of_year": 172, "camera": &"HorizonCamera"},
+	{"name": "solar_arc_winter", "minutes": 720.0, "overcast": 0.1, "rain": 0.0, "day_of_year": 355, "camera": &"HorizonCamera"},
+	{"name": "winter_noon", "minutes": 720.0, "overcast": 0.35, "rain": 0.0, "day_of_year": 20, "camera": &"ContextCamera"},
+	{"name": "winter_snowfall", "minutes": 660.0, "overcast": 0.62, "storm": 0.6, "rain": 0.9, "day_of_year": 20, "climate": &"polar", "camera": &"ContextCamera"},
+	{"name": "winter_dusk_low_sun", "minutes": 930.0, "overcast": 0.2, "rain": 0.0, "day_of_year": 355, "camera": &"TrackingCamera", "track": "sun"},
+	# Fog is a snapshot value with the scene atmosphere as its consumer (§12); the
+	# pre-dawn window on a clear night is where it is thickest.
+	{"name": "foggy_morning", "minutes": 330.0, "overcast": 0.05, "rain": 0.0, "day_of_year": 280, "camera": &"HorizonCamera"},
+	{"name": "polar_summer_midnight", "minutes": 0.0, "overcast": 0.15, "rain": 0.0, "day_of_year": 172, "climate": &"polar", "latitude": 78.0, "camera": &"HorizonCamera"},
 ]
 
 const CAMERA_KEYS := [
@@ -105,7 +126,7 @@ const TRACK_FRAMING_HEIGHT := 0.18
 
 var controller: SkyAndWeatherController
 var sky_material: ShaderMaterial
-var rain: RainEffect
+var precipitation: PrecipitationEffect
 var fireflies: Array = []
 var camera: Camera3D
 var game_minutes := 720.0
@@ -114,10 +135,13 @@ var storm_influence := 0.0
 var rain_intensity := 0.0
 var cloud_pattern_seed := 2.4
 var runtime_seconds := 0.0
-var lab_weather := WeatherState.new()
-# Continuous game-time clock (never wraps) that drives cloud drift/morph, so scrubbing
-# time scrolls the clouds. It also creeps forward on its own for a live preview.
-var weather_minutes := 720.0
+## The production director, not a lab-local weather model (`world_environment.md`
+## §17). The lab poses the environment through it exactly as a cutscene does, so
+## what these captures show is what the game will show.
+var director := EnvironmentDirector.new()
+var day_of_year := 172
+var climate: StringName = &"temperate"
+var latitude := 54.0
 # Passive game-minutes per real second so the preview clouds always drift a little.
 const WEATHER_PASSIVE_RATE := 24.0
 var weather_time_scale := 1.0
@@ -136,12 +160,7 @@ func _ready() -> void:
 	_configure_cameras()
 	_select_camera(&"ContextCamera")
 	_build_weather_rig()
-	lab_weather.cloud_seed = cloud_pattern_seed
-	lab_weather.wind_previous_direction = cloud_pattern_seed
-	lab_weather.wind_direction = cloud_pattern_seed
-	lab_weather.wind_base_strength = 0.42
-	lab_weather.wind_gust_amount = 0.18
-	lab_weather._rebuild_wind_displacement_samples()
+	_configure_director()
 	_capture_mode = OS.get_cmdline_user_args().has("--capture")
 	if _capture_mode and DisplayServer.get_name() == "headless":
 		push_error("Weather lab captures require a rendering driver. Run the documented non-headless capture command.")
@@ -155,6 +174,15 @@ func _ready() -> void:
 		interface.visible = false
 
 
+## Poses the environment for the current lab settings. Every scenario goes
+## through here, so a preset is a set of director calls and never a private path
+## into the sky. The session is created frozen (`dynamic: false`), which is the
+## same SCRIPTED mode a staged scene uses (§14).
+func _configure_director() -> void:
+	director.configure(climate, day_of_year, int(game_minutes), latitude, &"clear", 7, false)
+	director.minutes_per_second = WEATHER_PASSIVE_RATE
+
+
 func _build_weather_rig() -> void:
 	sky_material = ShaderMaterial.new()
 	sky_material.shader = SkyShader
@@ -164,9 +192,9 @@ func _build_weather_rig() -> void:
 	environment.background_mode = Environment.BG_SKY
 	environment.sky = sky
 
-	rain = RainEffectScene.instantiate() as RainEffect
-	rain.set_camera(camera)
-	add_child(rain)
+	precipitation = PrecipitationEffectScene.instantiate() as PrecipitationEffect
+	precipitation.set_camera(camera)
+	add_child(precipitation)
 	var swarm := FirefliesEffectScene.instantiate() as FirefliesEffect
 	swarm.position = Vector3(-2.8, 0.0, -1.6)
 	add_child(swarm)
@@ -178,7 +206,7 @@ func _build_weather_rig() -> void:
 
 	controller = SkyAndWeatherControllerScene.instantiate() as SkyAndWeatherController
 	add_child(controller)
-	controller.setup(camera, sun, environment, sky_material, rain, fireflies, glare_material)
+	controller.setup(camera, sun, environment, sky_material, precipitation, fireflies, glare_material)
 
 
 func _configure_cameras() -> void:
@@ -213,10 +241,10 @@ func _select_camera(camera_name: StringName) -> void:
 		return
 	camera = next_camera
 	camera.make_current()
-	if rain != null:
-		rain.set_camera(camera)
+	if precipitation != null:
+		precipitation.set_camera(camera)
 	if controller != null:
-		controller.setup(camera, sun, environment, sky_material, rain, fireflies, glare_material)
+		controller.setup(camera, sun, environment, sky_material, precipitation, fireflies, glare_material)
 
 
 func _process(delta: float) -> void:
@@ -226,8 +254,8 @@ func _process(delta: float) -> void:
 		return
 	# One lab clock drives daylight, stars, cloud evolution and wind. Space proves
 	# that every sky animation freezes when game time does.
-	weather_minutes += delta * WEATHER_PASSIVE_RATE * weather_time_scale
-	game_minutes = fposmod(weather_minutes, 1440.0)
+	director.scrub_minutes(delta * WEATHER_PASSIVE_RATE * weather_time_scale)
+	game_minutes = director.state.calendar.minute_of_day
 	_handle_input(delta)
 	_apply_state()
 	_aim_tracking_camera()
@@ -255,15 +283,27 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		_update_status()
 	if event.keycode == KEY_C:
 		_save_capture("manual")
+	# The day-of-year axis. Without it there is nothing to inspect a winter sun,
+	# a short day or a snowfall with (§17).
+	if event.keycode == KEY_BRACKETLEFT:
+		_step_day(-7)
+	if event.keycode == KEY_BRACKETRIGHT:
+		_step_day(7)
+
+
+func _step_day(days: int) -> void:
+	director.scrub_minutes(float(days) * 1440.0)
+	day_of_year = director.state.calendar.day_of_year
+	_update_status()
 
 
 func _handle_input(delta: float) -> void:
 	var changed := false
 	if Input.is_key_pressed(KEY_LEFT):
-		weather_minutes -= delta * 180.0
+		director.scrub_minutes(-delta * 180.0)
 		changed = true
 	if Input.is_key_pressed(KEY_RIGHT):
-		weather_minutes += delta * 180.0
+		director.scrub_minutes(delta * 180.0)
 		changed = true
 	if Input.is_key_pressed(KEY_UP):
 		overcast += delta * 0.5
@@ -277,7 +317,7 @@ func _handle_input(delta: float) -> void:
 	if Input.is_key_pressed(KEY_PAGEDOWN):
 		storm_influence -= delta * 0.5
 		changed = true
-	game_minutes = fposmod(weather_minutes, 1440.0)
+	game_minutes = director.state.calendar.minute_of_day
 	overcast = clampf(overcast, 0.0, 1.0)
 	storm_influence = clampf(storm_influence, 0.0, 1.0)
 	if changed:
@@ -289,9 +329,13 @@ func _apply_scenario(index: int) -> void:
 		return
 	var scenario: Dictionary = SCENARIOS[index]
 	game_minutes = scenario["minutes"]
-	# The day index moves the moon along its synodic cycle, which is the only way to
-	# capture different phases: the phase is emergent geometry, not a parameter.
-	weather_minutes = float(scenario.get("day", 0)) * 1440.0 + scenario["minutes"]
+	climate = StringName(scenario.get("climate", &"temperate"))
+	latitude = float(scenario.get("latitude", 54.0))
+	day_of_year = int(scenario.get("day_of_year", 172))
+	_configure_director()
+	# The `day` index moves the moon along its synodic cycle, which is the only way
+	# to capture different phases: the phase is emergent geometry, not a parameter.
+	director.scrub_minutes(float(scenario.get("day", 0)) * 1440.0)
 	overcast = scenario["overcast"]
 	storm_influence = scenario.get("storm", 0.0)
 	rain_intensity = scenario["rain"]
@@ -332,30 +376,34 @@ func _aim_tracking_camera() -> void:
 
 
 func _apply_state() -> void:
-	var precipitation := (
-		WeatherState.Precipitation.RAIN if rain_intensity > 0.0
-		else WeatherState.Precipitation.NONE
-	)
-	controller.update_daylight(
-		game_minutes,
-		overcast,
-		rain_intensity,
-		runtime_seconds,
-		storm_influence,
-		cloud_pattern_seed,
-		_lab_wind(),
-		weather_minutes,
-		precipitation,
-		lab_weather.wind_displacement_at(weather_minutes)
-	)
-
-
-func _lab_wind() -> Vector2:
-	# Exercise the same stable daily bearing and broad strength changes as gameplay.
-	var angle := lab_weather.wind_direction_at(weather_minutes)
-	var strength := lab_weather.wind_strength_at(weather_minutes)
-	strength = lerpf(strength, 1.0, storm_influence * 0.85)
-	return Vector2(cos(angle), sin(angle)) * strength
+	# The lab holds the sky through the director's scripted mode, with a zero
+	# transition so a capture is a function of the preset and not of the frame it
+	# was taken on. It never reaches into the sky controller or the weather rules —
+	# that second path is exactly what §2 exists to prevent.
+	director.set_sky(overcast, storm_influence, 0.0)
+	if rain_intensity > 0.0:
+		director.force_precipitation(600.0, 0.0)
+	else:
+		director.stop_precipitation(0.0)
+	var snapshot := director.snapshot()
+	# The regulators are absolute here: a blend is what a cutscene gets, but a
+	# preset asking for 62 % cover must capture 62 % cover.
+	snapshot.cloud_cover = overcast
+	snapshot.storm_influence = storm_influence
+	snapshot.precipitation_intensity = rain_intensity
+	# The lab poses a moment rather than living through one, so the fade-in at the
+	# edge of the forced window would otherwise report "nothing is falling" at the
+	# very minute the preset asks for precipitation. What falls is still decided the
+	# one way it is decided anywhere — by the climate's snow chance (§10).
+	if rain_intensity > 0.0:
+		snapshot.precipitation = (
+			EnvironmentSnapshot.Precipitation.SNOW if snapshot.snow_chance >= 0.5
+			else EnvironmentSnapshot.Precipitation.RAIN
+		)
+	else:
+		snapshot.precipitation = EnvironmentSnapshot.Precipitation.NONE
+	snapshot.cloud_seed = cloud_pattern_seed
+	controller.update_daylight(snapshot, runtime_seconds)
 
 
 func _process_capture() -> void:
@@ -387,28 +435,40 @@ func _save_capture(name: String) -> void:
 		return
 	# Sun visibility and key energy are printed alongside every capture: how the world
 	# lighting answers a cloud crossing the sun is a number, not something to squint at.
-	print("WEATHER_LAB_CAPTURE %s sun_visibility=%.2f key_energy=%.2f moon_light=%.3f" % [
+	var snapshot := director.snapshot()
+	print("WEATHER_LAB_CAPTURE %s sun_visibility=%.2f key_energy=%.2f moon_light=%.3f season=%s day=%d temp=%.1f daylight=%.1f visibility=%.0f" % [
 		ProjectSettings.globalize_path(path),
 		controller.current_sun_visibility,
 		sun.light_energy,
 		0.0 if controller.moon_light == null else controller.moon_light.light_energy,
+		snapshot.season,
+		snapshot.day_of_year,
+		snapshot.temperature,
+		snapshot.daylight_hours,
+		snapshot.visibility_range,
 	])
 
 
 func _update_status() -> void:
+	var snapshot := director.snapshot()
 	var hour := int(game_minutes) / 60
 	var minute := int(game_minutes) % 60
-	var lunar_day := weather_minutes / 1440.0
-	status.text = "Weather lab · %s%s | day %.1f %02d:%02d  sky x%.2f  clouds %.0f%%  front %.0f%%  rain %.0f%%\nF1–F%d presets • 1–%d cameras • Space pause • -/= speed • ←/→ time • ↑/↓ clouds • PgUp/PgDn front • R rain • C screenshot" % [
+	var falling := "снег" if snapshot.is_snowing() else ("дождь" if snapshot.is_precipitating() else "сухо")
+	status.text = "Weather lab \u00b7 %s%s | %s д.%d %02d:%02d  x%.2f  облака %.0f%%  фронт %.0f%%  осадки %.0f%%\n%+.0f\u00b0C \u00b7 %s \u00b7 св.день %.1f ч \u00b7 видимость %.0f м\nF1\u2013F%d пресеты \u2022 1\u2013%d камеры \u2022 Space пауза \u2022 -/= скорость \u2022 \u2190/\u2192 время \u2022 [/] день года \u2022 \u2191/\u2193 облака \u2022 PgUp/PgDn фронт \u2022 R осадки \u2022 C снимок" % [
 		camera.name,
-		"" if track_body == "" else " →" + track_body,
-		lunar_day,
+		"" if track_body == "" else " \u2192" + track_body,
+		snapshot.season,
+		snapshot.day_of_year,
 		hour,
 		minute,
 		weather_time_scale,
 		overcast * 100.0,
 		storm_influence * 100.0,
 		rain_intensity * 100.0,
+		snapshot.temperature,
+		falling,
+		snapshot.daylight_hours,
+		snapshot.visibility_range,
 		SCENARIOS.size(),
 		CAMERA_KEYS.size(),
 	]

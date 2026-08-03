@@ -7,7 +7,10 @@ const ResourcePileScript = preload("res://game/features/logistics/domain/resourc
 var parent_node: Node3D
 var resource_piles: Array[ResourcePileScript]
 var settlement: RefCounted
-var weather_state: RefCounted
+## Reads the environment rather than holding a weather object: piles get wet from
+## whatever is falling, and the answer to "is it falling" has one owner
+## (`world_environment.md` §2).
+var environment_getter: Callable
 var _visuals: RefCounted = null
 
 func set_visuals(visuals_ref: RefCounted) -> void:
@@ -20,17 +23,14 @@ func _get_visuals() -> RefCounted:
 		_visuals = script_cls.new()
 	return _visuals
 
-func _init(parent: Node3D = null, piles: Array[ResourcePileScript] = [], settlement_ref: RefCounted = null, weather_ref: RefCounted = null) -> void:
-	parent_node = parent
-	resource_piles = piles
-	settlement = settlement_ref
-	weather_state = weather_ref
+func _init(parent: Node3D = null, piles: Array[ResourcePileScript] = [], settlement_ref: RefCounted = null, environment: Callable = Callable()) -> void:
+	setup(parent, piles, settlement_ref, environment)
 
-func setup(parent: Node3D, piles: Array[ResourcePileScript], settlement_ref: RefCounted, weather_ref: RefCounted) -> void:
+func setup(parent: Node3D, piles: Array[ResourcePileScript], settlement_ref: RefCounted, environment: Callable = Callable()) -> void:
 	parent_node = parent
 	resource_piles = piles
 	settlement = settlement_ref
-	weather_state = weather_ref
+	environment_getter = environment
 
 func create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_pile := false) -> Node3D:
 	if resources.is_empty():
@@ -139,8 +139,9 @@ func drop_resource_pile(position: Vector3, resource_type: String, amount: int) -
 
 func decay_resource_piles() -> void:
 	var is_raining := false
-	if weather_state != null and "is_raining" in weather_state:
-		is_raining = bool(weather_state.is_raining)
+	if environment_getter.is_valid():
+		var snapshot: EnvironmentSnapshot = environment_getter.call()
+		is_raining = snapshot != null and snapshot.is_precipitating()
 	for index in range(resource_piles.size() - 1, -1, -1):
 		var pile: ResourcePileScript = resource_piles[index]
 		if pile.is_backpack:

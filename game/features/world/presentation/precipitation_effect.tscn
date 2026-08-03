@@ -1,6 +1,6 @@
 [gd_scene load_steps=10 format=3]
 
-[ext_resource type="Script" path="res://game/features/world/presentation/rain_effect.gd" id="1_re"]
+[ext_resource type="Script" path="res://game/features/world/presentation/precipitation_effect.gd" id="1_re"]
 
 [sub_resource type="ParticleProcessMaterial" id="StreakProcess"]
 emission_shape = 3
@@ -73,7 +73,7 @@ billboard_mode = 1
 size = Vector2(0.055, 0.055)
 material = SubResource("SplashDrawMaterial")
 
-[node name="RainEffect" type="Node3D"]
+[node name="PrecipitationEffect" type="Node3D"]
 script = ExtResource("1_re")
 
 [node name="RainStreaks" type="GPUParticles3D" parent="."]

@@ -129,20 +129,20 @@ func _test_mode_switching(editor: Node) -> void:
 	var initial_entries: Array = editor._active.palette_entries()
 	# Earth is open by default: catalog earth materials + 3 group headers
 	# (Земля, Экзопланеты, Покрытие).
-	assert(initial_entries.size() == (TerrainMaterialCatalog.count() - SurfaceModeController.EXOPLANET_MATERIALS.size()) + 3, "initial palette contains earth materials and group headers")
+	assert(initial_entries.size() == TerrainMaterialCatalog.indices_of_origin(TerrainMaterialCatalog.ORIGIN_EARTH).size() + 3, "initial palette contains earth materials and group headers")
 	# Click Earth header to collapse it
 	editor._active.select_palette_entry(&"accordion_earth")
 	assert(editor._active.palette_entries().size() == 3, "collapsing earth leaves only the group headers")
 	# Click Exoplanets header to expand it
 	editor._active.select_palette_entry(&"accordion_exoplanet")
-	assert(editor._active.palette_entries().size() == SurfaceModeController.EXOPLANET_MATERIALS.size() + 3, "expanding exoplanets shows exoplanet materials")
+	assert(editor._active.palette_entries().size() == _exoplanet_material_count() + 3, "expanding exoplanets shows exoplanet materials")
 	# Select an exoplanet material
 	editor._active.select_palette_entry(TerrainMaterialCatalog.LUNAR_REGOLITH)
 	assert(editor._active.selected_palette_entry() == TerrainMaterialCatalog.LUNAR_REGOLITH, "selected lunar regolith")
 	# Select an earth material - automatically switches accordion back to earth
 	editor._active.select_palette_entry(TerrainMaterialCatalog.GRASS)
 	assert(editor._active.selected_palette_entry() == TerrainMaterialCatalog.GRASS, "selected grass")
-	assert(editor._active.palette_entries().size() == (TerrainMaterialCatalog.count() - SurfaceModeController.EXOPLANET_MATERIALS.size()) + 3, "accordion switched back to earth")
+	assert(editor._active.palette_entries().size() == TerrainMaterialCatalog.indices_of_origin(TerrainMaterialCatalog.ORIGIN_EARTH).size() + 3, "accordion switched back to earth")
 	var surface_ctrl := editor._active as SurfaceModeController
 	var init_wear := surface_ctrl._wear_level
 	surface_ctrl.activate_option(SurfaceModeController.OPTION_WEAR)
@@ -1051,3 +1051,14 @@ func _key(keycode: Key, ctrl := false, shift := false) -> InputEventKey:
 	event.shift_pressed = shift
 	event.pressed = true
 	return event
+
+
+## Materials the surface palette files under "Экзопланеты". Derived from the
+## catalog's `origin` (§8) for the same reason the palette itself is: a test that
+## keeps its own list of the alien materials stops testing the grouping and starts
+## testing its own copy of it.
+static func _exoplanet_material_count() -> int:
+	return (
+		TerrainMaterialCatalog.count()
+		- TerrainMaterialCatalog.indices_of_origin(TerrainMaterialCatalog.ORIGIN_EARTH).size()
+	)

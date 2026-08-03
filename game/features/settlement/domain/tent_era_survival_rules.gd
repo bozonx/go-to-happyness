@@ -14,6 +14,23 @@ const WEATHER_NAMES := {
 	Weather.RAIN: "Rain",
 }
 
+## What each forecast looks like in the sky (`world_environment.md` §7).
+##
+## This mapping is the whole point of the environment taking named patterns: the
+## settlement keeps announcing "Потепление" to the player, and the engine's
+## weather hears `clear`. Nothing below the settlement learns what a tent era is,
+## so a shooter on the same engine does not inherit its warming and cooling.
+const WEATHER_PATTERNS := {
+	Weather.WARMING: &"clear",
+	Weather.COOLING: &"cloudy",
+	Weather.RAIN: &"rain",
+}
+
+
+static func weather_pattern_for(weather: int) -> StringName:
+	return WEATHER_PATTERNS.get(weather, &"fair")
+
+
 static func weather_for_day(day: int) -> int:
 	# Stable cycle is intentional for now: it is testable and lets the player
 	# plan around the morning forecast. A future event generator may replace it.

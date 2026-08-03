@@ -180,6 +180,10 @@ func restore(p_game: SettlementGame, section: Dictionary) -> bool:
 		game.ambient_spawner.restore_resource_state(world_state.get("natural_resources", {}))
 	if game.road_network_service != null and world_state.get("roads", []) is Array:
 		game.road_network_service.restore_state(world_state.get("roads", []))
+	# The surface the session wore into the map: paths trodden into meadow, ground
+	# that burned and grew back (`terrain_materials.md` §6.1, §6.4). Relief is not
+	# in the save at all — it came back from the map package with the world.
+	_restore_terrain_surface(game, world_state.get("terrain_surface", ""))
 	# Map-zone session state (§13) is laid over the freshly-built registry: the
 	# geometry and roles came back from the map document in `_setup_zone_runtime`,
 	# and only what a session mutated (owner, flags) is restored from the save.
@@ -305,6 +309,18 @@ func _resolve_saved_building_blueprint(saved_type: String, data: Dictionary) -> 
 ## Overlays saved per-tree state onto the freshly generated forest. The forest
 ## layout is deterministic (fixed cells), so trees are matched by cell rather
 ## than despawned and rebuilt. Older saves omit `forest` and leave it pristine.
+## Lays the saved surface back over the map's terrain. A save from before this
+## layer existed carries "", and the map's own surface is then simply left alone —
+## which is the correct reading of "this session never recorded one".
+func _restore_terrain_surface(game: SettlementGame, encoded: Variant) -> void:
+	if not (encoded is String) or String(encoded).is_empty():
+		return
+	if game.world_setup == null or game.world_setup.terrain_grid == null:
+		return
+	if not TerrainSurfaceCodec.from_base64(String(encoded), game.world_setup.terrain_grid):
+		push_warning("[save] слой поверхности не подошёл к доске и был пропущен")
+
+
 func _restore_forest(tree_states: Array) -> void:
 	game.world_resource_state.restore_tree_state(tree_states)
 	for entry in tree_states:

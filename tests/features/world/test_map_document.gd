@@ -24,6 +24,7 @@ static func run_all() -> void:
 	_test_write_target_follows_the_mode()
 	print("    [PASS] Map Write Target Tests")
 	_test_terrain_layer_round_trips_byte_for_byte()
+	_test_terrain_layer_remaps_materials_by_name()
 	_test_default_board_writes_no_layer()
 	_test_foreign_or_truncated_layer_is_refused()
 	print("    [PASS] Map Terrain Codec Tests")
@@ -175,7 +176,10 @@ static func _test_terrain_layer_round_trips_byte_for_byte() -> void:
 	var bytes := MapTerrainCodec.encode(source)
 	assert(MapTerrainCodec.is_valid(bytes))
 	assert(MapTerrainCodec.board_cells_of(bytes) == BOARD_CELLS)
-	assert(bytes.size() == MapTerrainCodec.HEADER_BYTES + BOARD_CELLS * BOARD_CELLS * MapTerrainCodec.BYTES_PER_CELL)
+	# Header, then the material catalog the file was written with, then the cells.
+	var catalog_bytes := int(bytes.decode_u32(MapTerrainCodec.CATALOG_BYTES_OFFSET))
+	assert(catalog_bytes > 0, "the file names the materials its bytes refer to")
+	assert(bytes.size() == MapTerrainCodec.HEADER_BYTES + catalog_bytes + BOARD_CELLS * BOARD_CELLS * MapTerrainCodec.BYTES_PER_CELL)
 
 	var restored := TerrainGrid.new()
 	restored.configure(1.0, BOARD_CELLS)
@@ -188,6 +192,74 @@ static func _test_terrain_layer_round_trips_byte_for_byte() -> void:
 	# And re-encoding the restored grid gives the same file, which is the property
 	# that actually keeps a map stable across an open-and-save that changed nothing.
 	assert(MapTerrainCodec.encode(restored) == bytes)
+
+
+## §2.6: a material index is only meaningful next to the list of names it was
+## written against. The header carries that list, so a file written by a build
+## whose catalog was ordered differently still loads the surfaces its author
+## painted — and a material this build has never heard of degrades to the default
+## instead of becoming whichever surface inherited its number.
+static func _test_terrain_layer_remaps_materials_by_name() -> void:
+	var source := TerrainGrid.new()
+	source.configure(1.0, BOARD_CELLS)
+	source.set_material(Vector2i(0, 0), TerrainMaterialCatalog.MUD)
+	source.set_material(Vector2i(1, 0), TerrainMaterialCatalog.STONE)
+	var bytes := MapTerrainCodec.encode(source)
+
+	# Rewrite the header's catalog so that the two stored bytes name each other's
+	# material: exactly what a build with a differently ordered catalog produces.
+	var swapped := _with_swapped_catalog_names(bytes, TerrainMaterialCatalog.MUD, TerrainMaterialCatalog.STONE)
+	var restored := TerrainGrid.new()
+	restored.configure(1.0, BOARD_CELLS)
+	assert(MapTerrainCodec.decode_into(swapped, restored))
+	assert(restored.material_of(Vector2i(0, 0)) == TerrainMaterialCatalog.STONE, "the byte followed its name, not its number")
+	assert(restored.material_of(Vector2i(1, 0)) == TerrainMaterialCatalog.MUD)
+
+	# A name this build does not know falls back to the default surface.
+	var unknown := _with_renamed_catalog_entry(bytes, TerrainMaterialCatalog.MUD, "obsidian")
+	var degraded := TerrainGrid.new()
+	degraded.configure(1.0, BOARD_CELLS)
+	assert(MapTerrainCodec.decode_into(unknown, degraded))
+	assert(degraded.material_of(Vector2i(0, 0)) == TerrainMaterialCatalog.DEFAULT_MATERIAL)
+	assert(degraded.material_of(Vector2i(1, 0)) == TerrainMaterialCatalog.STONE, "an unknown entry does not disturb its neighbours")
+
+
+## Both helpers rewrite the catalog blob and splice the untouched cell payload
+## back on, so the test stays about the remap rather than about byte offsets.
+static func _with_swapped_catalog_names(bytes: PackedByteArray, first: StringName, second: StringName) -> PackedByteArray:
+	return _rebuilt_catalog(bytes, {String(first): String(second), String(second): String(first)})
+
+
+static func _with_renamed_catalog_entry(bytes: PackedByteArray, id: StringName, replacement: String) -> PackedByteArray:
+	return _rebuilt_catalog(bytes, {String(id): replacement})
+
+
+static func _rebuilt_catalog(bytes: PackedByteArray, renames: Dictionary) -> PackedByteArray:
+	var catalog_bytes := int(bytes.decode_u32(MapTerrainCodec.CATALOG_BYTES_OFFSET))
+	var offset := MapTerrainCodec.HEADER_BYTES
+	var count := int(bytes.decode_u16(offset))
+	offset += 2
+	var names: Array[String] = []
+	for _entry in count:
+		var length := int(bytes[offset])
+		offset += 1
+		names.append(bytes.slice(offset, offset + length).get_string_from_utf8())
+		offset += length
+
+	var blob := PackedByteArray()
+	blob.resize(2)
+	blob.encode_u16(0, count)
+	for name: String in names:
+		var written: String = renames.get(name, name)
+		var utf8 := written.to_utf8_buffer()
+		blob.append(utf8.size())
+		blob.append_array(utf8)
+
+	var rebuilt := bytes.slice(0, MapTerrainCodec.HEADER_BYTES)
+	rebuilt.encode_u32(MapTerrainCodec.CATALOG_BYTES_OFFSET, blob.size())
+	rebuilt.append_array(blob)
+	rebuilt.append_array(bytes.slice(MapTerrainCodec.HEADER_BYTES + catalog_bytes))
+	return rebuilt
 
 
 static func _test_default_board_writes_no_layer() -> void:

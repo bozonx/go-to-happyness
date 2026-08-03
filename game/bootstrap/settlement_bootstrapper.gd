@@ -179,6 +179,11 @@ func _setup_ai_and_navigation() -> void:
 		game.citizen_ai = CitizenAISystem.new()
 		game.citizen_ai.name = "CitizenAI"
 		game.add_child(game.citizen_ai)
+	# One clock for the world (`world_environment.md` §4). The settlement reads the
+	# session's calendar rather than running a second one, which is what keeps the
+	# hour the citizens work by and the hour the sun is drawn from the same number.
+	game.clock.bind(game.world_session.environment.state.calendar)
+	game.world_session.environment.minutes_per_second = game.GAME_MINUTES_PER_SECOND
 	game.nav_grid = game.world_session.nav_grid
 	# Adopted, not created: the world session already seeded it from the map's
 	# coverage layer, and a second service would be a second write-owner of road
@@ -334,7 +339,9 @@ func _setup_canteen_and_resources() -> void:
 	port.is_work_time = func(): return game.simulation_tick_controller.is_work_time()
 	port.update_workers = game.update_workers
 	game.canteen_service.configure(port)
-	game.resource_pile_service = ResourcePileService.new(game, game.resource_piles, game.settlement, game.weather_state)
+	game.resource_pile_service = ResourcePileService.new(
+		game, game.resource_piles, game.settlement,
+		func() -> EnvironmentSnapshot: return game.simulation_tick_controller.environment())
 	game.resource_pile_service.set_visuals(ResourcePileVisuals.new())
 
 
@@ -419,7 +426,7 @@ func _setup_settlement_survival_and_daily_rules() -> void:
 	survival_port.clock = game.clock
 	survival_port.citizens = game.citizens
 	survival_port.random = game.random
-	survival_port.weather_state = game.weather_state
+	survival_port.environment_getter = func() -> EnvironmentSnapshot: return game.simulation_tick_controller.environment()
 	survival_port.building_registry = game.building_registry
 	survival_port.fire_management_service = game.fire_management_service
 	survival_port.tent_weather_getter = func() -> int: return game.tent_weather
@@ -812,8 +819,18 @@ func _setup_world_and_events() -> void:
 	var _event_registry := EventRegistry.new()
 	_event_registry.register_all(TentEraEvents.build())
 	game.event_service = EventService.new(_event_registry)
+	_apply_daily_forecast()
+
+
+## The settlement's forecast, announced to the player in its own words and handed
+## to the environment as a weather pattern (`world_environment.md` §7). The
+## settlement owns which day gets which weather; the sky owns what that looks like.
+func _apply_daily_forecast() -> void:
 	game.tent_weather = TentEraSurvivalRules.weather_for_day(game.day_cycle.current_day)
-	game.weather_state.new_day(game.tent_weather, game.random, int(game.clock.minutes))
+	if game.world_session != null:
+		game.world_session.environment.set_pattern(
+			TentEraSurvivalRules.weather_pattern_for(game.tent_weather),
+			int(game.clock.minutes))
 
 
 func _setup_controllers_and_world() -> void:
@@ -833,6 +850,10 @@ func _setup_controllers_and_world() -> void:
 	# WorldSetup and its TerrainService only exist after create_world(). Anchors
 	# subscribe here so every subsequently registered footprint pins its ground.
 	game.terrain_anchor_service.configure(game.world_setup.terrain_service, game.building_registry)
+	# Surface wear and regrowth need the same `TerrainService`, and the trail field
+	# they read their crossings from already exists by now.
+	game.surface_controller = SettlementSurfaceController.new()
+	game.surface_controller.configure(game.world_setup.terrain_service, game.trail_field)
 	if game.ui_manager != null:
 		game.ui_manager.create_interface()
 	game.ambient_spawner.create_forest()

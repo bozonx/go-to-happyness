@@ -53,6 +53,10 @@ const ContentIdScript = preload("res://game/features/content/domain/content_id.g
 @onready var _start_day_spin: SpinBox = %StartDaySpin
 @onready var _start_latitude_spin: SpinBox = %StartLatitudeSpin
 @onready var _start_weather_edit: LineEdit = %StartWeatherEdit
+## Climate is a world fact, not a module setting (`world_environment.md` §5): the
+## season, the temperature and the length of the day all come off its curve.
+@onready var _start_climate_option: OptionButton = %StartClimateOption
+@onready var _start_dynamic_check: CheckBox = %StartDynamicCheck
 
 @onready var _starts_list: ItemList = %StartsList
 @onready var _add_start_button: Button = %AddStartButton
@@ -244,6 +248,8 @@ func open_start_settings_dialog(meta: MapMeta, document: MapDocument = null) -> 
 	_start_day_spin.value = meta.start.day_of_year
 	_start_latitude_spin.value = meta.start.latitude
 	_start_weather_edit.text = String(meta.start.weather_preset)
+	_fill_climate_options(meta.start.climate)
+	_start_dynamic_check.button_pressed = meta.start.dynamic
 	_refresh_progression_fields(meta.start.progression)
 	_copy_starts_for_editing(meta.start)
 	_rebuild_module_parameters()
@@ -265,6 +271,9 @@ func _on_start_settings_confirmed() -> void:
 	meta.start.latitude = float(_start_latitude_spin.value)
 	var weather := _start_weather_edit.text.strip_edges()
 	meta.start.weather_preset = StringName(weather) if not weather.is_empty() else &"clear"
+	if _start_climate_option.selected >= 0:
+		meta.start.climate = StringName(_start_climate_option.get_item_text(_start_climate_option.selected))
+	meta.start.dynamic = _start_dynamic_check.button_pressed
 	_write_progression_policy(meta)
 	meta.start.starts = _editing_starts.duplicate()
 	meta.start.default_start = _editing_default_start
@@ -625,3 +634,17 @@ static func _split_names(text: String) -> Array[StringName]:
 		if not cleaned.is_empty():
 			result.append(StringName(cleaned))
 	return result
+
+
+## The climates this build knows, plus whatever a pack registered. Listing them
+## rather than typing an id is what keeps a misspelled climate from silently
+## becoming the temperate default at launch.
+func _fill_climate_options(current: StringName) -> void:
+	_start_climate_option.clear()
+	var ids := ClimateCatalog.ids()
+	for index in range(ids.size()):
+		_start_climate_option.add_item(String(ids[index]), index)
+		if ids[index] == current:
+			_start_climate_option.select(index)
+	if _start_climate_option.selected < 0 and not ids.is_empty():
+		_start_climate_option.select(0)

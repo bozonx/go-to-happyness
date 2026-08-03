@@ -85,6 +85,13 @@ var river_cells: Dictionary = {}
 ## generation error, so the ratio is a metric and not a curiosity (§3.6).
 var river_stats: Dictionary = {"traced": 0, "terminated": 0}
 
+## Stage 14 — what the ground is made of (`SurfacePainter`). One catalog index and
+## one packed detail byte per column, exactly as `TerrainGrid` stores them, so the
+## commit copies rather than decides. Material was a single recipe-wide constant
+## until this layer existed, which is why every generated map used to be stone.
+var materials := PackedByteArray()
+var details := PackedByteArray()
+
 ## Free-form notes a stage wants the report to carry ("2 passes carved", …).
 var notes: Array[String] = []
 ## stage id -> milliseconds.

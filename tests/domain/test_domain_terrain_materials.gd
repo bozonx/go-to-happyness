@@ -13,6 +13,8 @@ extends RefCounted
 
 static func run_all() -> void:
 	_test_every_material_has_a_valid_repose_class()
+	_test_lookup_tables_agree_with_the_record()
+	_test_every_material_declares_an_origin()
 	_test_indices_are_dense_unique_and_frozen()
 	_test_every_material_declares_a_cliff_face()
 	_test_nav_weights_never_undercut_a_road()
@@ -46,6 +48,46 @@ static func _test_every_material_has_a_valid_repose_class() -> void:
 	assert(TerrainMaterialCatalog.repose_class_of(TerrainMaterialCatalog.MARS_ROCK) == SlopeCatalog.CLASS_PRE_CLIFF)
 	# The glacier is the only surface that stands vertically on its own.
 	assert(TerrainMaterialCatalog.repose_class_of(TerrainMaterialCatalog.ICE) == SlopeCatalog.CLASS_CLIFF)
+
+
+## The catalog is read two ways: as records (`MATERIALS`) and as indexed lookup
+## arrays the mesher and the cascade walk. Those used to be two hand-written
+## copies, and NOTHING compared them — a mistyped `repose_class` in one of them
+## would have changed the angle of repose of a material while the record kept
+## saying otherwise. The arrays are derived now, and this is the test that says so.
+static func _test_lookup_tables_agree_with_the_record() -> void:
+	assert(TerrainMaterialCatalog.MATERIAL_COUNT == TerrainMaterialCatalog.MATERIALS.size())
+	assert(TerrainMaterialCatalog.IDS.size() == TerrainMaterialCatalog.MATERIAL_COUNT)
+	assert(TerrainMaterialCatalog.REPOSE_CLASS_BY_INDEX.size() == TerrainMaterialCatalog.MATERIAL_COUNT)
+	assert(TerrainMaterialCatalog.NAV_WEIGHT_BY_INDEX.size() == TerrainMaterialCatalog.MATERIAL_COUNT)
+	assert(TerrainMaterialCatalog.CLIFF_INDEX_BY_INDEX.size() == TerrainMaterialCatalog.MATERIAL_COUNT)
+	for index in TerrainMaterialCatalog.count():
+		var entry := TerrainMaterialCatalog.entry_of_index(index)
+		assert(TerrainMaterialCatalog.IDS[index] == entry["id"])
+		assert(TerrainMaterialCatalog.index_of(entry["id"]) == index)
+		assert(TerrainMaterialCatalog.repose_class_of_index(index) == int(entry["repose_class"]))
+		assert(is_equal_approx(TerrainMaterialCatalog.nav_weight_of_index(index), float(entry["nav_weight"])))
+		assert(TerrainMaterialCatalog.soil_of_index(index) == entry["soil"])
+		assert(TerrainMaterialCatalog.cliff_material_of_index(index) == entry["cliff"])
+		assert(TerrainMaterialCatalog.origin_of_index(index) == entry["origin"])
+
+
+## §8: a material says which world it occurs on, so a palette or a generator can
+## group the catalog without keeping its own list of "the alien ones" — which the
+## map editor did, and which silently filed every new material under Earth.
+static func _test_every_material_declares_an_origin() -> void:
+	var grouped := 0
+	for origin: StringName in TerrainMaterialCatalog.ORIGIN_IDS:
+		grouped += TerrainMaterialCatalog.indices_of_origin(origin).size()
+	assert(grouped == TerrainMaterialCatalog.count(), "every material lands in exactly one origin")
+	assert(TerrainMaterialCatalog.origin_of(TerrainMaterialCatalog.GRASS) == TerrainMaterialCatalog.ORIGIN_EARTH)
+	assert(TerrainMaterialCatalog.origin_of(TerrainMaterialCatalog.MARS_ROCK) == TerrainMaterialCatalog.ORIGIN_MARS)
+	assert(TerrainMaterialCatalog.origin_of(TerrainMaterialCatalog.LUNAR_REGOLITH) == TerrainMaterialCatalog.ORIGIN_LUNA)
+	# Origin is not a mechanic: two rocks on two planets still behave the same way.
+	assert(
+		TerrainMaterialCatalog.repose_class_of(TerrainMaterialCatalog.MARS_ROCK)
+		== TerrainMaterialCatalog.repose_class_of(TerrainMaterialCatalog.LUNAR_ROCK)
+	)
 
 
 ## §2.6: after the one renumbering that freed index 4 for `gravel`, an index is

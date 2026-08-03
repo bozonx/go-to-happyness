@@ -190,9 +190,16 @@ func skip_night() -> void:
 	for survival_hour in _skip_night_survival_hours():
 		simulation.settlement_survival_service.apply_hourly_tent_survival(int(survival_hour.hour), int(survival_hour.day))
 	simulation.settlement_survival_service.is_skipping_night = false
-	simulation.day_cycle.current_day = target_day
+	# The jump goes through the environment, not through the clock: crossing
+	# midnight is a calendar operation, and the snow that fell and the ice that
+	# formed while the player slept must catch up in one step
+	# (`world_environment.md` §4, §13.1).
+	if simulation.world_session != null:
+		simulation.world_session.environment.set_time_of_day(6 * 60)
+	else:
+		simulation.day_cycle.current_day = target_day
+		simulation.clock.set_time(6 * 60)
 	simulation.tent_weather = TentEraSurvivalRulesScript.weather_for_day(simulation.day_cycle.current_day)
-	simulation.clock.set_time(6 * 60)
 	# Living through the night crosses 06:00, when the daily water/food sink runs and
 	# frees storage. Skipping must apply the same rules, otherwise stores stay full,
 	# no production is assignable, and workers have nothing to wake up for.

@@ -39,6 +39,19 @@ var scenario_runtime := MapScenarioRuntime.new()
 ## because entities may be bound to one, and because a start option's initial
 ## flags are the first thing the scenario sees.
 var start_option: StringName = &""
+## Time, calendar, season, temperature and weather of this session
+## (`world_environment.md` §2, §18). It lives here rather than in a game because
+## every game on the engine has a sky and a clock, and because a cutscene or a
+## map rule must reach the environment without knowing which game is running.
+##
+## **One snapshot out, one director in.** Consumers read `environment.snapshot()`;
+## everything that changes the environment goes through the director.
+var environment := EnvironmentDirector.new()
+## Snow lying on the ground and ice on the water (§13). The environment commands
+## it; the terrain and water layers own the data.
+var environment_accumulation := EnvironmentAccumulationService.new()
+## The environment's actions, flags and moments inside the map scenario (§14).
+var environment_scenario := EnvironmentScenarioVocabulary.new()
 
 
 func _init(
@@ -46,6 +59,7 @@ func _init(
 	p_cell_size := DEFAULT_CELL_SIZE,
 	p_start_option: StringName = &"",
 	p_start_flags: Dictionary = {},
+	p_seed := 0,
 ) -> void:
 	map_document = p_map_document
 	start_option = p_start_option
@@ -53,6 +67,12 @@ func _init(
 	if map_document != null:
 		nav_grid.configure(cell_size, map_document.board_cells())
 		scenario_runtime.configure(map_document.scenario, p_start_flags)
+	_configure_environment(p_seed)
+	# Wired at construction, like the zone bus below: an author's rule that sets
+	# the hour must work in every game, not only in the one whose bootstrapper
+	# remembered to connect it.
+	environment_scenario.install(environment, scenario_runtime)
+	environment.time_jumped.connect(_on_time_jumped)
 	# Presence reaches the rule table the moment the tracker publishes it. Wired
 	# at construction so no game has to remember to connect it — forgetting would
 	# leave zone triggers silently dead in exactly one game.
@@ -85,6 +105,34 @@ func build(
 	return world_setup
 
 
+## The environment starts from the values the session resolved (§15). It reads
+## them off the document here rather than anywhere deeper, because the order that
+## produces them belongs to `map_start.md` §7 and the environment gets answers.
+func _configure_environment(p_seed: int) -> void:
+	var start := map_document.meta.start if map_document != null else MapStart.new()
+	environment.configure(
+		start.climate,
+		start.day_of_year,
+		start.time_of_day,
+		start.latitude,
+		start.weather_preset,
+		p_seed,
+		start.dynamic,
+	)
+
+
+## Skipping a night does not skip the snow that fell during it (§13.1).
+func _on_time_jumped(skipped_minutes: float) -> void:
+	environment_accumulation.catch_up(environment.snapshot(), skipped_minutes)
+
+
+## Advances the environment and everything it drives. One call per frame from the
+## host: nothing downstream advances time, it only reads the snapshot.
+func tick_environment(delta: float) -> void:
+	environment.tick(delta)
+	environment_accumulation.tick(environment.snapshot())
+
+
 func publish_navigation() -> void:
 	if world_setup == null or world_setup.terrain_grid == null or world_setup.water_grid == null:
 		return
@@ -98,6 +146,14 @@ func publish_navigation() -> void:
 	# The map seeds the road network and stops there: no editing service is passed,
 	# because in a session the settlement's construction is what changes coverage.
 	road_network.configure(nav_grid)
+	# Accumulation reaches the real layers only once the world is built. Before
+	# that the environment still runs — it simply has nothing to snow on.
+	environment_accumulation.configure(
+		world_setup.terrain_service,
+		world_setup.water_service,
+		world_setup.terrain_grid,
+		world_setup.water_grid,
+	)
 	if map_document != null:
 		coverage_navigation_publisher.configure(map_document.coverage, road_network)
 	# Static authored entities are the world's base obstacle layer. Game modules

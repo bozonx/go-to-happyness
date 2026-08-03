@@ -15,8 +15,19 @@ func _init(p_game: SettlementGame) -> void:
 	game = p_game
 
 
+## Minutes since this settlement began, for the schedules that measure in them
+## (a trade caravan's return). Deliberately counted from the *session's* day and
+## not from the calendar's continuous total, because those are different numbers
+## the moment a run starts on any day but the first (§4).
 func total_game_minutes() -> float:
 	return float(game.day_cycle.current_day - 1) * 24.0 * 60.0 + game.game_minutes
+
+
+## The environment as it is this frame (`world_environment.md` §2). Every weather,
+## daylight and season question in the settlement goes through here — nothing
+## assembles values from the rules itself, and nothing keeps a second copy.
+func environment() -> EnvironmentSnapshot:
+	return game.world_session.environment.snapshot() if game.world_session != null else EnvironmentSnapshot.new()
 
 
 func is_night() -> bool:
@@ -55,17 +66,22 @@ func refresh_living_status(citizen: Citizen) -> void:
 
 func update_clock(delta: float) -> void:
 	var previous_hour := game.clock.hour()
-	var events := game.day_cycle.advance(delta, game.GAME_MINUTES_PER_SECOND, game.settlement.workday_hours)
-	if game.weather_state.update(game.clock.minutes):
-		if game.weather_state.is_raining:
-			game.update_interface("Rain has started.")
-		else:
-			game.update_interface("Rain has stopped.")
+	var was_precipitating := game.is_precipitating
+	# The environment moves time — for this game and for every other one on the
+	# engine — and the settlement then reads what happened (§2, §4).
+	if game.world_session != null:
+		game.world_session.tick_environment(delta)
+	var events := game.day_cycle.collect_events(game.settlement.workday_hours)
+	game.is_precipitating = environment().is_precipitating()
+	if game.is_precipitating != was_precipitating:
+		var falling := "Snow" if environment().is_snowing() else "Rain"
+		game.update_interface("%s has %s." % [falling, "started" if game.is_precipitating else "stopped"])
 	if game.clock.hour() != previous_hour:
 		game.settlement_survival_service.apply_hourly_tent_survival(game.clock.hour())
 		game.settlement_survival_service.apply_hourly_work_fatigue()
 	if game.ui_manager.hud != null:
-		game.ui_manager.hud.update_clock("%s  %02d:%02d  x%d" % ["Night" if game.clock.is_night() else "Day", game.clock.hour(), game.clock.minute(), int(game.time_multiplier)])
+		game.ui_manager.hud.update_clock(_clock_text())
+		game.ui_manager.hud.update_environment(environment())
 	if game.survival_event_controller != null:
 		game.survival_event_controller.update_skip_night_button()
 	for event in events:
@@ -73,30 +89,36 @@ func update_clock(delta: float) -> void:
 			game.simulation_event_dispatcher.dispatch_event(event, game.day_cycle.current_day)
 
 
+func _clock_text() -> String:
+	# Season and day of year sit beside the hour (§19.15): without them the player
+	# cannot tell a short winter afternoon from an early summer evening, which is
+	# the whole point of the calendar existing.
+	var snapshot := environment()
+	return "%s  %02d:%02d  x%d  ·  %s, день %d" % [
+		"Ночь" if game.clock.is_night() else "День",
+		game.clock.hour(),
+		game.clock.minute(),
+		int(game.time_multiplier),
+		_season_label(snapshot.season),
+		snapshot.day_of_year,
+	]
+
+
+const SEASON_LABELS := {
+	&"winter": "зима", &"spring": "весна", &"summer": "лето", &"autumn": "осень",
+	&"dry": "сухой сезон", &"wet": "сезон дождей",
+}
+
+
+func _season_label(season: StringName) -> String:
+	return String(SEASON_LABELS.get(season, String(season)))
+
+
+## Pushes this frame's environment into the sky (§2). The settlement supplies the
+## snapshot and real elapsed seconds and decides nothing else about the weather.
 func update_daylight() -> void:
 	if game.world_setup != null:
-		var cloud_cover := game.weather_state.cloud_cover_at(game.clock.minutes)
-		var rain_intensity := game.weather_state.intensity_at(game.clock.minutes)
-		var storm_influence := game.weather_state.storm_influence_at(game.clock.minutes)
-		# Continuous game-time so cloud drift/morph advances (and fast-forwards) with
-		# the clock; wind comes from the shared weather model so it matches whatever
-		# waves/flags/sails read from it.
-		var weather_minutes := total_game_minutes()
-		var wind := game.weather_state.wind_vector_at(game.clock.minutes)
-		var wind_displacement := game.weather_state.wind_displacement_at(game.clock.minutes)
-		var precipitation := game.weather_state.precipitation_type_at(game.clock.minutes)
-		game.world_setup.update_daylight(
-			game.game_minutes,
-			cloud_cover,
-			rain_intensity,
-			game.runtime_seconds,
-			storm_influence,
-			game.weather_state.cloud_seed,
-			wind,
-			weather_minutes,
-			precipitation,
-			wind_displacement
-		)
+		game.world_setup.update_daylight(environment(), game.runtime_seconds)
 
 
 func guard_citizen_positions() -> void:
@@ -174,6 +196,8 @@ func tick(delta: float) -> void:
 		game.ambient_spawner.update_wild_food(delta)
 	guard_citizen_positions()
 	game.world_navigation_controller.update_trail_overlay()
+	if game.surface_controller != null:
+		game.surface_controller.tick(game.day_cycle.current_day)
 	update_daylight()
 	if game.building_lifecycle_service != null:
 		game.building_lifecycle_service.update_house_lights()

@@ -192,8 +192,12 @@ about slopes, rivers or metrics, because that is where the non-obvious constrain
 
 Time of day, the calendar, season, temperature, weather, sky, sun/moon, atmospherics and
 world lighting are **one system with one owning document**:
-`design_docs/engine/world_environment.md`. Read it before changing how any of them looks
-or behaves — including anything that merely reads the time of day.
+`design_docs/engine/world_environment.md` (этап 1 реализован). Read it before changing how
+any of them looks or behaves — including anything that merely reads the time of day.
+
+- The feature is `game/features/environment/`. `WorldCalendar` owns game time;
+  `SimulationClock` is the settlement's *reading* of it, not a second clock. Do not add
+  a system that advances time — `WorldSession.tick_environment` does that, once.
 
 - **One snapshot out, one director in.** Consumers read `EnvironmentSnapshot`; nothing
   assembles weather values itself or reaches into the weather rules. Everything that
@@ -228,6 +232,11 @@ precipitation and firefly effects with fixed cameras and calibration geometry.
 - Keep deterministic calendar, season and weather rules in the environment domain; the
   lab and the game both feed the same values into `world/presentation`. The environment
   must not depend on `SettlementGame` to render.
+- `[` / `]` step the **day of year**. A winter sun, a short day, a snowfall and a foggy
+  morning cannot be inspected with the hour dial, which is why `solar_arc_summer` /
+  `solar_arc_winter`, `winter_snowfall` and `foggy_morning` exist as a fixed pair set.
+- The lab has **no weather logic**: it poses a real `EnvironmentDirector` and renders the
+  snapshot that comes back, so a capture is evidence about the game and not about the lab.
 - Add or update a named scenario whenever a change needs a repeatable visual case.
 
 ## Pitfalls

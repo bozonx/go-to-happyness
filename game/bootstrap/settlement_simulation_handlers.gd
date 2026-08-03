@@ -20,8 +20,15 @@ func on_school_day_ended() -> void:
 
 
 func on_daily_settlement_update(_event: SimulationDayEvent) -> void:
+	# 06:00 is when the settlement declares the day's weather, and it declares it in
+	# its own words while handing the environment the matching pattern
+	# (`world_environment.md` §7). Between midnight and now the sky ran on whatever
+	# the climate rolled, which is what a game without its own forecast always gets.
 	game.tent_weather = TentEraSurvivalRules.weather_for_day(game.day_cycle.current_day)
-	game.weather_state.new_day(game.tent_weather, game.random, int(game.clock.minutes))
+	if game.world_session != null:
+		game.world_session.environment.set_pattern(
+			TentEraSurvivalRules.weather_pattern_for(game.tent_weather),
+			int(game.clock.minutes))
 	game.update_interface("Forecast: %s." % TentEraSurvivalRules.WEATHER_NAMES[game.tent_weather])
 	if game.event_service != null:
 		game.event_service.log.clear_flag(&"smoky_firewood")
@@ -39,6 +46,10 @@ func on_daily_settlement_update(_event: SimulationDayEvent) -> void:
 		game.building_lifecycle_service.remove_expired_temporary_tents()
 	if game.settlement_daily_rules_service != null:
 		game.settlement_daily_rules_service.apply_daily_settlement_rules()
+	# Ground recovers on the same schedule everything else does: trodden grass
+	# grows back where nobody walked, burned ground turns to meadow again (§6.1, §6.4).
+	if game.surface_controller != null:
+		game.surface_controller.advance_day(game.day_cycle.current_day)
 	game.outside_work_controller.return_outside_workers()
 
 

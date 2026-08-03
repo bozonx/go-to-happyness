@@ -28,6 +28,16 @@ const MATURE_PATH_WEIGHT := 1.4
 
 enum TrailState { NONE, YOUNG, MATURE, DEGRADING }
 
+## A walker crossed into this cell. The trail field counts it for the routing
+## weight; `SurfaceWearService` listens for the same crossing and counts it for
+## the surface (`terrain_materials.md` §6.1).
+##
+## The design is explicit that these must be ONE counter, not two: a visible worn
+## path and a cheap-to-walk path that disagree is a bug the player can see. They
+## stay one by both being driven from this signal — the crossing is observed in
+## exactly one place, and each consumer draws its own conclusion from it.
+signal cell_entered(cell: Vector2i)
+
 var _world_size := 0.0
 var _cell_size := 1.0
 var _resolution := 0
@@ -146,6 +156,9 @@ func _register_segment_cell_entries(walker_id: int, from: Vector3, to: Vector3, 
 			continue
 		previous_registered = cell
 		_last_cells[walker_id] = cell
+		# Announced before the nav-cell filter: the surface of a cell is worn by
+		# being walked on whether or not routing has an opinion about it.
+		cell_entered.emit(cell)
 		if not _is_nav_cell(cell):
 			continue
 		_cell_strengths[cell] = float(_cell_strengths.get(cell, 0.0)) + traffic_strength

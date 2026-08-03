@@ -17,7 +17,7 @@ const SCRIPTS: Array[String] = [
 	"res://tests/features/world/test_terrain_brush.gd",
 	"res://tests/features/world/test_coverage_layer.gd",
 	"res://tests/features/world/test_map_document.gd",
-	"res://tests/features/world/test_map_editor.gd",
+	"res://tests/domain/test_map_generation.gd",
 ]
 
 

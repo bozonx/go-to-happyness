@@ -28,9 +28,9 @@ const STATE_SIZE := 7
 ## The fields that mean "ground moved" — everything `changes_geometry` compares.
 ## Material and detail are deliberately absent: they are the surface, and the
 ## surface reaches the GPU without a vertex (`terrain_materials.md` §7.5).
-const GEOMETRY_FIELDS: PackedInt32Array = PackedInt32Array([
+const GEOMETRY_FIELDS: Array[int] = [
 	STATE_HEIGHT, STATE_SLOPE_CLASS, STATE_SLOPE_DIR, STATE_SLOPE_INDEX, STATE_FLAGS,
-])
+]
 
 var cells: Array[Vector2i] = []
 

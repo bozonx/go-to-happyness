@@ -3,7 +3,6 @@ extends RefCounted
 
 const SettlementRulesScript = preload("res://game/features/settlement/domain/settlement_rules.gd")
 const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
-const WeatherStateScript = preload("res://game/features/simulation/domain/weather_state.gd")
 
 
 static func run_all() -> void:
@@ -15,7 +14,6 @@ static func run_all() -> void:
 	_test_tent_survival_rules()
 	_test_clock_wraps_and_reports_elapsed_minutes()
 	_test_day_cycle_schedule()
-	_test_weather_state()
 	_test_workforce_policy()
 	_test_overtime_sources_are_independent()
 	_test_cheer_up_mechanic()
@@ -253,11 +251,15 @@ static func _test_tent_survival_rules() -> void:
 
 
 static func _test_clock_wraps_and_reports_elapsed_minutes() -> void:
+	# The clock no longer moves time — the calendar does (`world_environment.md`
+	# §4). What it still owns is reporting which whole minutes went by, across
+	# midnight and across a jump alike.
 	var clock := SimulationClock.new()
 	assert(clock.hour() == 8)
 	clock.minutes = 1439.0
-	assert(clock.advance(0.0, 1.0).is_empty())
-	var elapsed := clock.advance(2.0, 1.0)
+	assert(clock.elapsed_minutes().is_empty())
+	clock.calendar.advance(2.0, 1.0)
+	var elapsed := clock.elapsed_minutes()
 	assert(elapsed.size() == 2)
 	assert(elapsed[0] == 0 and elapsed[1] == 1)
 	assert(clock.hour() == 0 and clock.minute() == 1)
@@ -266,7 +268,8 @@ static func _test_clock_wraps_and_reports_elapsed_minutes() -> void:
 static func _test_day_cycle_schedule() -> void:
 	var cycle := SimulationDayCycle.new()
 	cycle.clock.set_time(8 * 60 + 59)
-	var meal_events := cycle.advance(1.0, 1.0, 8)
+	cycle.clock.calendar.advance(1.0, 1.0)
+	var meal_events := cycle.collect_events(8)
 	assert(meal_events.size() == 1)
 	assert(meal_events[0].kind == SimulationDayEvent.Kind.MEAL and meal_events[0].hour == 9)
 	assert(cycle.events_for_minute(9 * 60, 8).is_empty())
@@ -278,44 +281,6 @@ static func _test_day_cycle_schedule() -> void:
 
 	var midnight_events := cycle.events_for_minute(0, 8)
 	assert(midnight_events.size() == 1 and midnight_events[0].kind == SimulationDayEvent.Kind.DAY_STARTED)
-
-
-static func _test_weather_state() -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 12345
-
-	var clear: RefCounted = WeatherStateScript.new()
-	clear.new_day(TentEraSurvivalRulesScript.Weather.WARMING, rng, 6 * 60)
-	assert(clear.intensity_at(6 * 60) == 0.0)
-	assert(clear.intensity_at(12 * 60) == 0.0)
-	assert(clear.cloud_phase_at(12 * 60) in [WeatherStateScript.CloudPhase.CLEAR, WeatherStateScript.CloudPhase.FAIR, WeatherStateScript.CloudPhase.PARTLY_CLOUDY])
-	assert(clear.storm_influence_at(12 * 60) == 0.0)
-	var clear_samples: Array[float] = []
-	for sample_minute in range(0, 24 * 60, 60):
-		clear_samples.append(clear.cloud_cover_at(sample_minute))
-	assert(clear_samples.max() - clear_samples.min() > 0.08)
-	assert(not clear.update(12 * 60.0))
-	assert(not clear.is_raining)
-	var morning_direction: float = clear.wind_direction_at(5 * 60)
-	var evening_direction: float = clear.wind_direction_at(20 * 60)
-	assert(is_equal_approx(morning_direction, evening_direction))
-	var wind_offset_before: Vector2 = clear.wind_displacement_at(8 * 60)
-	var wind_offset_after: Vector2 = clear.wind_displacement_at(9 * 60)
-	assert(wind_offset_after.distance_to(wind_offset_before) > 0.0)
-	var first_day_direction: float = clear.wind_direction
-	var first_day_end_offset: Vector2 = clear.wind_displacement_at(1439.0)
-	clear.new_day(TentEraSurvivalRulesScript.Weather.WARMING, rng, 6 * 60)
-	assert(is_equal_approx(clear.wind_direction_at(0.0), first_day_direction))
-	assert(clear.wind_displacement_at(0.0).distance_to(first_day_end_offset) < 10.0)
-	assert(not is_equal_approx(clear.wind_direction_at(5 * 60), first_day_direction))
-
-	var rain: RefCounted = WeatherStateScript.new()
-	rain.new_day(TentEraSurvivalRulesScript.Weather.RAIN, rng, 6 * 60)
-	assert(rain.rain_start_minute >= 6 * 60)
-	assert(rain.cloud_cover_at(rain.rain_start_minute) >= 0.0)
-	assert(rain.cloud_cover_at(rain.rain_start_minute) <= 1.0)
-	assert(rain.storm_influence_at(rain.rain_start_minute) == 1.0)
-	assert(rain.storm_influence_at(maxf(0.0, rain.rain_start_minute - WeatherStateScript.CLOUD_BUILDUP_MINUTES - 1.0)) == 0.0)
 
 
 static func _test_workforce_policy() -> void:

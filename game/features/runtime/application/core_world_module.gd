@@ -34,7 +34,7 @@ func start(runtime: GameRuntime, session: GameSessionConfig) -> bool:
 		return false
 	runtime.world_session = WorldSession.new(
 		session.map_document, WorldSession.DEFAULT_CELL_SIZE,
-		session.start_option, session.start_flags())
+		session.start_option, session.start_flags(), session.seed)
 	return true
 
 
@@ -44,10 +44,35 @@ func stop(runtime: GameRuntime) -> void:
 		runtime.world_session = null
 
 
+## Bumped with the environment section (`world_environment.md` §16). A save
+## written before it restores with a default environment rather than being
+## refused: a world with no recorded calendar is an old world, not a broken one.
+func section_version() -> int:
+	return 2
+
+
+func migrate_section(from_version: int, state: Dictionary) -> Dictionary:
+	if from_version != 1:
+		return {}
+	var migrated := state.duplicate(true)
+	migrated["environment"] = {}
+	migrated["accumulation"] = {}
+	return migrated
+
+
 func save_state(runtime: GameRuntime) -> Dictionary:
 	if runtime == null or runtime.world_session == null:
 		return {}
-	return {"entities": runtime.world_session.entity_runtime.lifecycle_snapshot()}
+	var session := runtime.world_session
+	return {
+		"entities": session.entity_runtime.lifecycle_snapshot(),
+		# Only what does not follow from time: calendar, seed, the rolled pattern
+		# and the director's override. Cloud and wind are recomputed (§16).
+		"environment": session.environment.save_state(),
+		# Snow depth and ice live in their own layers; this is only where the
+		# sweep had got to, so a reload does not restart it from one corner.
+		"accumulation": session.environment_accumulation.save_state(),
+	}
 
 
 func restore_state(runtime: GameRuntime, state: Dictionary) -> bool:
@@ -56,6 +81,13 @@ func restore_state(runtime: GameRuntime, state: Dictionary) -> bool:
 	var entities: Variant = state.get("entities", {})
 	if not (entities is Dictionary):
 		return false
+	var session := runtime.world_session
+	var environment: Variant = state.get("environment", {})
+	if environment is Dictionary and not (environment as Dictionary).is_empty():
+		session.environment.restore_state(environment as Dictionary)
+	var accumulation: Variant = state.get("accumulation", {})
+	if accumulation is Dictionary:
+		session.environment_accumulation.restore_state(accumulation as Dictionary)
 	runtime.world_session.entity_runtime.restore_lifecycle(entities as Dictionary)
 	if runtime.world_session.world_setup != null:
 		runtime.world_session.nav_grid.set_blocked_cells(runtime.world_session.entity_navigation_blocked_cells())

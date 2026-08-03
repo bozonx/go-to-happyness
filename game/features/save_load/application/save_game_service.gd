@@ -189,6 +189,11 @@ static func capture_settlement_section(game: Node) -> Dictionary:
 		# zones (older build, or a no-map session) writes an empty list and loads
 		# with the registry left at its freshly-built default.
 		"map_zones": game.map_zone_registry.session_state_to_dict() if "map_zone_registry" in game and game.map_zone_registry != null else [],
+		# Only the SURFACE of the terrain, never its relief: the map package owns
+		# the ground and reloads it, but material and detail change during play —
+		# citizens wear paths and burned cells regrow (`terrain_materials.md` §6.1,
+		# §6.4). Run-length encoded, so an untouched board is a few hundred bytes.
+		"terrain_surface": _terrain_surface_state(game),
 	}
 
 	return {
@@ -318,3 +323,13 @@ static func restore_camera(camera_state: Dictionary) -> Dictionary:
 	result["yaw"] = float(camera_state.get("yaw", 42.0))
 	result["pitch"] = float(camera_state.get("pitch", 52.0))
 	return result
+
+
+## The session's surface layer as base64, or "" when there is no terrain to read.
+## Empty is a valid state and loads as "leave the map's surface alone", which is
+## exactly right for a save written before this layer existed.
+static func _terrain_surface_state(game: Node) -> String:
+	if not ("world_setup" in game) or game.world_setup == null:
+		return ""
+	var grid: TerrainGrid = game.world_setup.terrain_grid
+	return "" if grid == null else TerrainSurfaceCodec.to_base64(grid)

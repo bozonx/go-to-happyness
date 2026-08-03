@@ -22,6 +22,8 @@ static func run_all() -> void:
 	_test_cliff_table_matches_catalog()
 	_test_all_paths_live_in_one_asset_directory()
 	_test_every_authored_base_name_is_unique()
+	_test_presentation_tables_are_catalog_sized()
+	_test_built_arrays_match_the_domain_layout()
 	print("    [PASS] Terrain Texture Registry Tests")
 
 
@@ -115,3 +117,46 @@ static func _test_every_authored_base_name_is_unique() -> void:
 		assert(base_name != "")
 		assert(not seen.has(base_name))
 		seen[base_name] = true
+
+
+## Presentation keeps a few per-material tables of its own — swatch colour, noise
+## grain, height contrast. They are indexed by catalog index, so a material added
+## without extending them would silently inherit whatever sits at its number.
+static func _test_presentation_tables_are_catalog_sized() -> void:
+	assert(TerrainMaterialLibrary.MATERIAL_COLOURS.size() == TerrainMaterialCatalog.MATERIAL_COUNT)
+	assert(TerrainMaterialLibrary.GRAIN_BY_MATERIAL.size() == TerrainMaterialCatalog.MATERIAL_COUNT)
+	assert(TerrainMaterialLibrary.HEIGHT_CONTRAST_BY_MATERIAL.size() == TerrainMaterialCatalog.MATERIAL_COUNT)
+	assert(TerrainMaterialLibrary.CLIFF_COLOURS.size() == TerrainMaterialCatalog.cliff_count())
+	# The grass swatches are the palette's per-variant colours, not a per-material
+	# table, so they follow the variant count of grass instead of the catalog.
+	assert(
+		TerrainMaterialLibrary.GRASS_SWATCHES.size()
+		== TerrainMaterialVariants.variant_count(TerrainMaterialCatalog.index_of(TerrainMaterialCatalog.GRASS))
+	)
+
+
+## **The invariant this whole file exists for.** `TerrainMaterialVariants` defines
+## the layer layout and the mesher writes cliff layer numbers into vertex data
+## from it; the library has to fill exactly those layers, in exactly that order.
+##
+## It did not. Extra layers for the simplified render mode were appended in the
+## middle of the array, pushing all seven cliff faces past the numbers the mesher
+## was sending — so every vertical face in the game sampled a procedural ground
+## placeholder instead of rock, and nothing failed, because nothing compared the
+## two. Building the real arrays here costs about a tenth of a second and closes
+## that hole.
+static func _test_built_arrays_match_the_domain_layout() -> void:
+	var expected := TerrainMaterialVariants.TOTAL_LAYER_COUNT
+	assert(expected == TerrainMaterialVariants.SURFACE_LAYER_COUNT + TerrainMaterialCatalog.cliff_count())
+	assert(TerrainMaterialVariants.CLIFF_LAYER_OFFSET == TerrainMaterialVariants.SURFACE_LAYER_COUNT)
+	for cliff_index in TerrainMaterialCatalog.cliff_count():
+		var layer := TerrainMaterialVariants.cliff_layer_of(cliff_index)
+		assert(layer >= TerrainMaterialVariants.SURFACE_LAYER_COUNT and layer < expected)
+
+	var library := TerrainMaterialLibrary.new()
+	assert(library.layer_count() == expected)
+	assert(library.texture_array().get_layers() == expected, "the albedo array is the layout, not a superset of it")
+	assert(library.normal_array().get_layers() == expected)
+	# The simplified mode is its own array with the SAME layout, so a layer index
+	# means one thing everywhere and no lookup has to be redirected.
+	assert(library.simple_texture_array().get_layers() == expected)

@@ -152,6 +152,13 @@ func _commit(context: GenerationContext) -> void:
 	_write_water(context)
 	context.stage_times[&"water"] = Time.get_ticks_msec() - started
 
+	# Slope assignment just moved columns, so a surface chosen from the heights the
+	# pipeline produced may now be sitting on ground it cannot hold. Re-settling is
+	# the same rule as the painter's, applied to the ground that actually exists.
+	var downgraded := SurfacePainter.settle_grid(_grid)
+	if downgraded > 0:
+		context.note("surface: %d columns re-settled after slope assignment" % downgraded)
+
 	started = Time.get_ticks_msec()
 	_nav_publisher.publish_all()
 	context.stage_times[&"publish"] = Time.get_ticks_msec() - started
@@ -235,15 +242,25 @@ func _buffer_index(cell: Vector2i) -> int:
 ## writes height, slope, material and flags together and dirties geometry and
 ## surface separately — which is what keeps this from costing a remesh per column.
 func _write_heights(context: GenerationContext) -> void:
-	var material := TerrainMaterialCatalog.index_of(context.recipe.repose_override)
+	# Material and detail come from the surface stage, one value per column. They
+	# used to be a single recipe constant repeated across the board — which is why
+	# every generated map was made of stone — and the commit is deliberately not
+	# where that decision gets made now: it copies what stage 14 decided.
+	var painted := context.materials.size() == context.cell_count
+	var fallback := TerrainMaterialCatalog.index_of(context.recipe.base_material)
+	if fallback < 0:
+		fallback = TerrainMaterialCatalog.DEFAULT_INDEX
 	_water.clear_bodies()
-	_grid.configure(CELL_SIZE, context.board_cells, 0, context.recipe.repose_override)
+	_grid.configure(CELL_SIZE, context.board_cells, 0, TerrainMaterialCatalog.id_of_index(fallback))
 	_water.configure(CELL_SIZE, context.board_cells)
 	for index in context.cell_count:
 		var cell := context.cell_of_index(index)
 		_grid.set_cell_state(
 			cell, context.heights[index],
-			SlopeCatalog.CLASS_FLAT, 0, 0, material, 0, TerrainDetailCodec.DEFAULT_DETAIL,
+			SlopeCatalog.CLASS_FLAT, 0, 0,
+			int(context.materials[index]) if painted else fallback,
+			0,
+			int(context.details[index]) if painted else TerrainDetailCodec.DEFAULT_DETAIL,
 		)
 
 
