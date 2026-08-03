@@ -149,6 +149,13 @@ toggle_mode = true
 text = "🧪"
 tooltip_text = "Пипетка: включить выбор элемента под курсором (P)"
 
+[node name="WalkBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(38, 0)
+text = "▶"
+tooltip_text = "Походить по зданию (F5). Старт — от входа или от выбранной тест-точки (F6, Alt+1…9, N — свойства)"
+
 
 [node name="ModeFrameBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
 unique_name_in_owner = true

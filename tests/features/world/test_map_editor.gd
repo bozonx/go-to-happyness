@@ -37,6 +37,9 @@ func _run() -> void:
 	_test_entities_mode_renders_anchor_markers(editor)
 	_test_zones_mode_authoring(editor)
 	_test_zones_mode_cascade_and_rename(editor)
+	_test_a_party_point_makes_the_map_launchable(editor)
+	_test_start_dialog_edits_spawn_groups(editor)
+	_test_test_points_aim_the_run(editor)
 	await _test_terrain_editing_and_shared_undo(editor)
 	_test_ramp_connection_and_shared_undo(editor)
 	_test_fill_placement_and_shared_undo(editor)
@@ -375,6 +378,153 @@ func _test_zones_mode_cascade_and_rename(editor: Node) -> void:
 		"undo walked the whole gesture back")
 	editor._select_mode(&"terrain")
 	print("  zones cascade and rename ok")
+
+
+## The gesture the whole editor exists to make possible: put the party's start
+## point down, and the map launches.
+##
+## It used not to. A spawn group and an entrance were what the launch looks up,
+## and neither was authorable anywhere — `MapSpawnGroup` had one caller, the
+## v7→v8 migration. So the author placed the point, the editor accepted it, and
+## `F5` answered "вариант старта не называет группу появления": a record they
+## could not create, about a map that looked finished.
+func _test_a_party_point_makes_the_map_launchable(editor: Node) -> void:
+	editor._select_mode(&"zones")
+	var mode: MapZonesModeController = editor._active
+	var document: MapDocument = editor.document
+	var depth: int = editor.history.undo_depth()
+	assert(document.zones.spawn_groups.is_empty(), "a fresh map has no spawn group")
+	assert(document.meta.start.starts.is_empty(), "a fresh map has no entrance")
+
+	mode.select_palette_entry(&"point")
+	mode.activate_option(&"anchor_spawn")
+	mode.activate_option(StringName("function_%s" % MapSpawnService.PARTY_LEADER))
+	editor._brush.has_hover = true
+	editor._brush.hovered_cell = Vector2i(3, -4)
+	mode.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+
+	assert(document.zones.spawn_groups.size() == 1, "the party point built a spawn group")
+	var group: MapSpawnGroup = document.zones.spawn_groups[0]
+	assert(group.slot_with_tag(MapSpawnGroup.TAG_LEADER) != null, "the point is the leader's place")
+	assert(document.meta.start.starts.size() == 1, "and the entrance that names it")
+	assert(document.meta.start.starts[0].spawn_group == group.id, "the entrance points at the group")
+
+	# The gate that used to refuse: a settlement launch asking for four settlers.
+	var capacity_errors := MapValidator.validate_party_capacity(document, &"", 4)
+	assert(capacity_errors.is_empty(), "the map seats a party of four: %s" % "; ".join(capacity_errors))
+	# And the rules the save path runs agree, so the map that launches also saves.
+	var errors := document.zones.validate(document.board_cells())
+	errors.append_array(MapValidator.validate(document, document.terrain, document.water, null))
+	assert(errors.is_empty(), "the built structure validates: %s" % "; ".join(errors))
+
+	# A second party point is a second place in the same group, not a second group.
+	mode.activate_option(StringName("function_%s" % MapSpawnService.PARTY_SLOT))
+	editor._brush.hovered_cell = Vector2i(4, -4)
+	mode.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	assert(document.zones.spawn_groups.size() == 1, "the second point joined the group")
+	assert(document.zones.spawn_groups[0].slots.size() == 2, "as a second place in it")
+
+	# One click, one undo — the group and the entrance come back together, because
+	# the half-state between them is a map the validator refuses.
+	editor._undo()
+	assert(document.zones.spawn_groups[0].slots.size() == 1, "undo took the second place back")
+	while editor.history.undo_depth() > depth:
+		editor._undo()
+	assert(document.zones.spawn_groups.is_empty(), "undo removed the group")
+	assert(document.meta.start.starts.is_empty(), "and the entrance with it, in the same step")
+	editor._select_mode(&"terrain")
+	print("  party start authoring ok")
+
+
+## The explicit half: the start dialog can build and edit a group by hand, for the
+## map whose author wants two entrances rather than the one the point implied.
+## Driven through the real dialog scene because the whole failure mode here is a
+## control that exists in the script and not in the `.tscn`.
+func _test_start_dialog_edits_spawn_groups(editor: Node) -> void:
+	var document: MapDocument = editor.document
+	var depth: int = editor.history.undo_depth()
+	editor._open_start_settings()
+	var dialogs: MapEditorDialogs = editor._dialogs
+
+	dialogs._add_group()
+	var group: MapSpawnGroup = dialogs._selected_group_record()
+	assert(group != null, "a group was added to the working copy")
+	assert(document.zones.spawn_groups.is_empty(), "and not to the document until confirmed")
+	dialogs._group_name_edit.text = "Северный лагерь"
+	dialogs._group_id_edit.text = "north_camp"
+	MapEditorDialogs._select_metadata(dialogs._group_fallback_option, MapSpawnGroup.FALLBACK_FAIL)
+	dialogs._commit_group_fields()
+
+	# An entrance added now can name it — the dropdown reads the working copies,
+	# not the document, which is the difference between authoring both in one
+	# sitting and having to reopen the dialog.
+	dialogs._add_start_option()
+	dialogs._refresh_start_option_fields()
+	assert(dialogs._selected_start_option().spawn_group == &"north_camp",
+		"the only group there is becomes the new entrance's group")
+
+	dialogs._on_start_settings_confirmed()
+	assert(document.zones.spawn_groups.size() == 1, "the confirmed group reached the document")
+	assert(document.zones.spawn_groups[0].id == &"north_camp", "with the id the author typed")
+	assert(document.zones.spawn_groups[0].fallback == MapSpawnGroup.FALLBACK_FAIL, "and its fallback")
+	# The dialog is part of the one undo stack like every other gesture (§3.3).
+	assert(editor.history.undo_depth() == depth + 1, "a confirmed dialog is one undo step")
+	editor._undo()
+	assert(document.zones.spawn_groups.is_empty(), "undo took the group back off")
+	assert(document.meta.start.starts.is_empty(), "and the entrance with it")
+	print("  start dialog spawn groups ok")
+
+
+## Test points, and the bug they exist to end: the top bar's `▶⌖` could never
+## work, because reaching the button meant leaving the map and the brush dropped
+## its hover on the way. The editor remembers the last cell the cursor was over,
+## so a button press acts on where the author was looking.
+func _test_test_points_aim_the_run(editor: Node) -> void:
+	editor._select_mode(&"terrain")
+	editor._brush.has_hover = true
+	editor._brush.hovered_cell = Vector2i(11, -7)
+	editor._remember_hovered_cell()
+	# Exactly what happens when the pointer travels to the toolbar.
+	editor._brush.has_hover = false
+	assert(editor._has_last_hovered_cell, "the cell survived the cursor leaving the map")
+
+	editor._add_test_point_here()
+	assert(editor.test_points.points.size() == 1, "the toolbar command placed a point")
+	assert(editor.test_points.points[0].cell == Vector2i(11, -7), "on the cell the author was over")
+	assert(editor.test_points.selected == 0, "and the run is aimed at it")
+	assert(editor._test_point_views.get_child_count() == 1, "the marker is drawn")
+
+	# Pressing it again on the same cell selects rather than stacks a second cone.
+	editor._add_test_point_here()
+	assert(editor.test_points.points.size() == 1, "a second press on the same cell adds nothing")
+
+	# `F5` now runs from the point, and the position is read off the live terrain —
+	# an author digs under their own test point constantly.
+	var expected := MapSpawnService.cell_to_world(
+		Vector2i(11, -7), float(editor.document.terrain.height_of(Vector2i(11, -7))),
+		editor.document.meta.cell_size)
+	assert(editor._world_position_of_cell(Vector2i(11, -7)) == expected, "the run starts on the ground")
+
+	# The menu shows what F5 will do; the map's own entrance is always the first row.
+	editor._refresh_run_menu()
+	var popup: PopupMenu = editor._test_target_button.get_popup()
+	# Menu ids are deliberately positive: `PopupMenu` reads a negative id as
+	# "assign one for me", which turned the entrance row into item 0 and made the
+	# menu answer with an index into the list of points.
+	assert(popup.get_item_id(0) == editor.MENU_MAP_START, "the entrance is offered too")
+	assert(popup.is_item_checked(1), "the point is the checked target")
+
+	editor._select_test_target(editor.RUN_TARGET_MAP_START)
+	assert(editor.test_points.selected == -1, "aiming back at the map's entrance")
+	# `Alt+5` on a map with one point means nothing rather than "the last one".
+	editor._select_test_target(4)
+	assert(editor.test_points.selected == -1, "a shortcut past the end of the list does nothing")
+
+	editor._select_test_target(0)
+	editor._remove_selected_test_point()
+	assert(editor.test_points.points.is_empty(), "the point was removed")
+	assert(editor._test_point_views.get_child_count() == 0, "and its marker with it")
+	print("  test points ok")
 
 
 func _test_terrain_editing_and_shared_undo(editor: Node) -> void:

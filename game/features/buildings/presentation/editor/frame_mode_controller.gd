@@ -1402,6 +1402,10 @@ func on_save_pressed() -> void:
 		_editor.current_path = result["path"]
 		_editor._dirty = false
 		_editor.reset_history()
+		# Save As gives the blueprint a file for the first time, or a different one;
+		# the places the author walks from follow it rather than staying beside a
+		# file that is no longer the document.
+		_editor.persist_test_points()
 		_editor.set_status("Сохранено: %s (%d блоков, %d объектов)" % [
 			result["path"], _editor.blueprint.block_count(), _editor.blueprint.objects.size()])
 	else:

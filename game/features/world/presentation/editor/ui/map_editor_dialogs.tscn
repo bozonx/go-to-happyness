@@ -420,6 +420,146 @@ layout_mode = 2
 button_pressed = true
 text = "время и погода меняются"
 
+[node name="GroupsHeader" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "Группы появления"
+
+[node name="GroupsSpacer" type="Control" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+
+[node name="GroupsListLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Где появляется отряд:"
+
+[node name="GroupsColumn" type="VBoxContainer" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="GroupsList" type="ItemList" parent="StartSettingsDialog/Body/Scroll/Grid/GroupsColumn"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 90)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="GroupsButtons" type="HBoxContainer" parent="StartSettingsDialog/Body/Scroll/Grid/GroupsColumn"]
+layout_mode = 2
+
+[node name="AddGroupButton" type="Button" parent="StartSettingsDialog/Body/Scroll/Grid/GroupsColumn/GroupsButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Добавить"
+
+[node name="RemoveGroupButton" type="Button" parent="StartSettingsDialog/Body/Scroll/Grid/GroupsColumn/GroupsButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Удалить"
+
+[node name="GroupIdLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "ID группы:"
+
+[node name="GroupIdEdit" type="LineEdit" parent="StartSettingsDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="GroupNameLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Название:"
+
+[node name="GroupNameEdit" type="LineEdit" parent="StartSettingsDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="GroupAreaLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Площадка:"
+
+[node name="GroupAreaOption" type="OptionButton" parent="StartSettingsDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="GroupCapacityLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Вместимость:"
+
+[node name="GroupCapacitySpin" type="SpinBox" parent="StartSettingsDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 1.0
+max_value = 64.0
+value = 12.0
+
+[node name="GroupFormationLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Построение:"
+
+[node name="GroupFormationOption" type="OptionButton" parent="StartSettingsDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="GroupSpacingLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Интервал, м:"
+
+[node name="GroupSpacingSpin" type="SpinBox" parent="StartSettingsDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 0.5
+max_value = 8.0
+step = 0.1
+value = 1.5
+
+[node name="GroupFallbackLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Если мест не хватает:"
+
+[node name="GroupFallbackOption" type="OptionButton" parent="StartSettingsDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="GroupSlotsLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Именные места:"
+
+[node name="SlotsColumn" type="VBoxContainer" parent="StartSettingsDialog/Body/Scroll/Grid"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="GroupSlotsList" type="ItemList" parent="StartSettingsDialog/Body/Scroll/Grid/SlotsColumn"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 90)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="SlotsButtons" type="HBoxContainer" parent="StartSettingsDialog/Body/Scroll/Grid/SlotsColumn"]
+layout_mode = 2
+
+[node name="SlotAnchorOption" type="OptionButton" parent="StartSettingsDialog/Body/Scroll/Grid/SlotsColumn/SlotsButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="AddSlotButton" type="Button" parent="StartSettingsDialog/Body/Scroll/Grid/SlotsColumn/SlotsButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Добавить"
+
+[node name="RemoveSlotButton" type="Button" parent="StartSettingsDialog/Body/Scroll/Grid/SlotsColumn/SlotsButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Убрать"
+
+[node name="SlotLeaderButton" type="Button" parent="StartSettingsDialog/Body/Scroll/Grid/SlotsColumn/SlotsButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Место лидера"
+
 [node name="StartsHeader" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 15

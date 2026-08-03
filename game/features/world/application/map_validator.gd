@@ -46,7 +46,12 @@ static func _validate_starts(document: MapDocument, errors: Array[String]) -> vo
 			errors.append("дублирующийся id варианта старта: %s" % option.id)
 		ids[option.id] = true
 		if option.spawn_group == &"":
-			errors.append("вариант старта %s не называет группу появления" % option.id)
+			# Naming the gesture, not the record. An author who has never opened the
+			# start dialog does not know what a spawn group is, and the map they are
+			# looking at is missing a *point*, which is a thing they can put down.
+			errors.append(
+				"вариант старта %s не называет группу появления: поставьте точку старта партии "
+				% option.id + "(режим «Зоны и точки» → W → роль spawn → функция «лидер партии»)")
 		elif document.zones.spawn_group_by_id(option.spawn_group) == null:
 			errors.append("вариант старта %s ссылается на несуществующую группу появления %s" % [
 				option.id, option.spawn_group])
@@ -134,7 +139,10 @@ static func validate_party_capacity(
 	if option == null:
 		option = document.meta.start.default_option(document.meta.start.game_definition)
 	if option == null:
-		errors.append("карта не объявляет ни одного варианта старта")
+		errors.append(
+			"карта не объявляет ни одного варианта старта: поставьте точку старта партии "
+			+ "(режим «Зоны и точки» → W → роль spawn → функция «лидер партии») "
+			+ "или заведите вариант в «Старт»")
 		return errors
 	var group := document.zones.spawn_group_by_id(option.spawn_group)
 	if group == null:

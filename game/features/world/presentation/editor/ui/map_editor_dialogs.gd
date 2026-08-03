@@ -70,6 +70,22 @@ const ContentIdScript = preload("res://game/features/content/domain/content_id.g
 @onready var _start_option_selectable_check: CheckBox = %StartOptionSelectableCheck
 @onready var _module_parameters_box: VBoxContainer = %ModuleParametersBox
 
+@onready var _groups_list: ItemList = %GroupsList
+@onready var _add_group_button: Button = %AddGroupButton
+@onready var _remove_group_button: Button = %RemoveGroupButton
+@onready var _group_id_edit: LineEdit = %GroupIdEdit
+@onready var _group_name_edit: LineEdit = %GroupNameEdit
+@onready var _group_area_option: OptionButton = %GroupAreaOption
+@onready var _group_capacity_spin: SpinBox = %GroupCapacitySpin
+@onready var _group_formation_option: OptionButton = %GroupFormationOption
+@onready var _group_spacing_spin: SpinBox = %GroupSpacingSpin
+@onready var _group_fallback_option: OptionButton = %GroupFallbackOption
+@onready var _group_slots_list: ItemList = %GroupSlotsList
+@onready var _slot_anchor_option: OptionButton = %SlotAnchorOption
+@onready var _add_slot_button: Button = %AddSlotButton
+@onready var _remove_slot_button: Button = %RemoveSlotButton
+@onready var _slot_leader_button: Button = %SlotLeaderButton
+
 ## The meta the properties dialog is currently editing. Held only between opening
 ## and confirming, so a cancelled dialog cannot write anything.
 var _editing_meta: MapMeta = null
@@ -83,6 +99,16 @@ var _selected_start := -1
 ## The map being edited, needed for the spawn groups and camera anchors a start
 ## option points at. Zones are the map's, not the header's.
 var _editing_document: MapDocument = null
+## Working copies of the spawn groups, on the same terms as the start options
+## above: «Отмена» discards the whole session of edits.
+##
+## Groups are edited here rather than in the zones mode because a group is start
+## data — it is what an entrance names — while the zone layer only stores it. The
+## points themselves stay where they are drawn; this list is about which of them
+## belong together and what happens when the party outgrows them.
+var _editing_groups: Array[MapSpawnGroup] = []
+var _selected_group := -1
+var _selected_slot := -1
 
 
 func _ready() -> void:
@@ -114,9 +140,24 @@ func _ready() -> void:
 	_start_option_camera_option.item_selected.connect(func(_index: int) -> void: _commit_start_option_fields())
 	_start_option_selectable_check.toggled.connect(func(_pressed: bool) -> void: _commit_start_option_fields())
 	_progression_mode_option.item_selected.connect(func(_index: int) -> void: _update_progression_controls())
+	_groups_list.item_selected.connect(_on_group_selected)
+	_add_group_button.pressed.connect(_add_group)
+	_remove_group_button.pressed.connect(_remove_group)
+	_group_slots_list.item_selected.connect(func(index: int) -> void: _selected_slot = index)
+	_add_slot_button.pressed.connect(_add_slot)
+	_remove_slot_button.pressed.connect(_remove_slot)
+	_slot_leader_button.pressed.connect(_make_slot_leader)
+	for field: LineEdit in [_group_id_edit, _group_name_edit]:
+		field.text_submitted.connect(func(_text: String) -> void: _commit_group_fields())
+		field.focus_exited.connect(_commit_group_fields)
+	for control: OptionButton in [_group_area_option, _group_formation_option, _group_fallback_option]:
+		control.item_selected.connect(func(_index: int) -> void: _commit_group_fields())
+	for spin: SpinBox in [_group_capacity_spin, _group_spacing_spin]:
+		spin.value_changed.connect(func(_value: float) -> void: _commit_group_fields())
 	# Ids are cleaned as they are typed rather than rejected on save
 	# (content_packaging.md §3.3).
-	for field: LineEdit in [_new_id_edit, _save_as_id_edit, _prop_id_edit, _start_style_edit, _start_option_id_edit]:
+	for field: LineEdit in [_new_id_edit, _save_as_id_edit, _prop_id_edit, _start_style_edit,
+			_start_option_id_edit, _group_id_edit]:
 		field.text_changed.connect(_sanitize_field.bind(field))
 
 
@@ -251,6 +292,10 @@ func open_start_settings_dialog(meta: MapMeta, document: MapDocument = null) -> 
 	_fill_climate_options(meta.start.climate)
 	_start_dynamic_check.button_pressed = meta.start.dynamic
 	_refresh_progression_fields(meta.start.progression)
+	# Groups first: a start option's group dropdown is filled from this list, so
+	# copying them the other way round showed an author "— не выбрана —" beside an
+	# entrance that names a group perfectly well.
+	_copy_groups_for_editing(document)
 	_copy_starts_for_editing(meta.start)
 	_rebuild_module_parameters()
 	_start_dialog.popup_centered()
@@ -259,10 +304,14 @@ func open_start_settings_dialog(meta: MapMeta, document: MapDocument = null) -> 
 func _on_start_settings_confirmed() -> void:
 	if _editing_meta == null:
 		return
+	_commit_group_fields()
 	_commit_start_option_fields()
 	var meta := _editing_meta
+	var document := _editing_document
 	_editing_meta = null
 	_editing_document = null
+	if document != null:
+		document.zones.spawn_groups = _editing_groups.duplicate()
 	meta.start.game_definition = StringName(_start_game_option.get_item_metadata(_start_game_option.selected))
 	var style := ContentIdScript.normalize_id(_start_style_edit.text)
 	meta.start.style = StringName(style) if not style.is_empty() else &"generic"
@@ -279,6 +328,247 @@ func _on_start_settings_confirmed() -> void:
 	meta.start.default_start = _editing_default_start
 	meta.start.module_settings = _editing_sections.duplicate()
 	properties_applied.emit()
+
+
+# --- Spawn groups -------------------------------------------------------------
+
+## Deep copies through the format, exactly as the start options are copied.
+func _copy_groups_for_editing(document: MapDocument) -> void:
+	_editing_groups.clear()
+	if document != null:
+		for group: MapSpawnGroup in document.zones.spawn_groups:
+			_editing_groups.append(MapSpawnGroup.from_dict(group.to_dict()))
+	_selected_group = 0 if not _editing_groups.is_empty() else -1
+	_selected_slot = -1
+	_refresh_groups_list()
+
+
+func _refresh_groups_list() -> void:
+	_groups_list.clear()
+	for group: MapSpawnGroup in _editing_groups:
+		# Both the name and the id: the id is what an entrance stores and what the
+		# validator names, so an author renaming a group needs to see it.
+		_groups_list.add_item("%s (%s)" % [group.display_name(), group.id])
+	if _selected_group >= 0 and _selected_group < _groups_list.item_count:
+		_groups_list.select(_selected_group)
+	_refresh_group_fields()
+
+
+func _selected_group_record() -> MapSpawnGroup:
+	if _selected_group < 0 or _selected_group >= _editing_groups.size():
+		return null
+	return _editing_groups[_selected_group]
+
+
+func _on_group_selected(index: int) -> void:
+	_commit_group_fields()
+	_selected_group = index
+	_selected_slot = -1
+	_refresh_group_fields()
+
+
+func _refresh_group_fields() -> void:
+	_fill_group_area_options()
+	_fill_slot_anchor_options()
+	var group := _selected_group_record()
+	var has_group := group != null
+	for field: LineEdit in [_group_id_edit, _group_name_edit]:
+		field.editable = has_group
+	for spin: SpinBox in [_group_capacity_spin, _group_spacing_spin]:
+		spin.editable = has_group
+	for button: BaseButton in [_remove_group_button, _add_slot_button, _remove_slot_button,
+			_slot_leader_button, _group_area_option, _group_formation_option,
+			_group_fallback_option, _slot_anchor_option]:
+		button.disabled = not has_group
+	_refresh_slots_list()
+	if group == null:
+		_group_id_edit.text = ""
+		_group_name_edit.text = ""
+		return
+	_group_id_edit.text = String(group.id)
+	_group_name_edit.text = group.display_name()
+	_select_metadata(_group_area_option, group.area_id)
+	_group_capacity_spin.set_value_no_signal(group.capacity)
+	_select_metadata(_group_formation_option, group.formation)
+	_group_spacing_spin.set_value_no_signal(group.spacing)
+	_select_metadata(_group_fallback_option, group.fallback)
+
+
+func _refresh_slots_list() -> void:
+	_group_slots_list.clear()
+	var group := _selected_group_record()
+	if group == null:
+		return
+	for slot: MapSpawnGroup.Slot in group.ordered_slots():
+		var suffix := " · лидер" if slot.has_tag(MapSpawnGroup.TAG_LEADER) else ""
+		_group_slots_list.add_item("%d. %s%s" % [slot.order, slot.anchor_id, suffix])
+	if _selected_slot >= 0 and _selected_slot < _group_slots_list.item_count:
+		_group_slots_list.select(_selected_slot)
+
+
+## Regions only. An overlay changes a calculation and is not a place, so offering
+## one here would produce a group whose formation grows inside a cost modifier.
+func _fill_group_area_options() -> void:
+	_group_area_option.clear()
+	_group_area_option.add_item("— без площадки —")
+	_group_area_option.set_item_metadata(0, "")
+	if _editing_document == null:
+		return
+	for area: ZoneAreaRecord in _editing_document.zones.areas:
+		if area.role != ZoneAreaRecord.ROLE_REGION:
+			continue
+		_group_area_option.add_item("%s (%s)" % [area.area_name, area.id])
+		_group_area_option.set_item_metadata(_group_area_option.item_count - 1, String(area.id))
+
+
+## Spawn points that are not already a place in this group. A point may belong to
+## two groups — two entrances sharing a clearing is a normal map — but listing one
+## twice inside the same group would build a group that seats one settler on
+## another's head.
+func _fill_slot_anchor_options() -> void:
+	_slot_anchor_option.clear()
+	var group := _selected_group_record()
+	if _editing_document == null:
+		return
+	for anchor: ZoneAnchorRecord in _editing_document.zones.anchors:
+		if not anchor.is_spawn():
+			continue
+		if group != null and _slot_for_anchor(group, anchor.id) != null:
+			continue
+		_slot_anchor_option.add_item(String(anchor.id))
+		_slot_anchor_option.set_item_metadata(_slot_anchor_option.item_count - 1, String(anchor.id))
+
+
+func _slot_for_anchor(group: MapSpawnGroup, anchor_id: StringName) -> MapSpawnGroup.Slot:
+	for slot: MapSpawnGroup.Slot in group.slots:
+		if slot.anchor_id == anchor_id:
+			return slot
+	return null
+
+
+func _add_group() -> void:
+	_commit_group_fields()
+	var group := MapSpawnGroup.new()
+	var index := _editing_groups.size() + 1
+	while _group_id_taken(StringName("group_%d" % index)):
+		index += 1
+	group.id = StringName("group_%d" % index)
+	group.name = MapLocalizedText.of("Группа %d" % index)
+	_editing_groups.append(group)
+	_selected_group = _editing_groups.size() - 1
+	_selected_slot = -1
+	_refresh_groups_list()
+
+
+func _group_id_taken(id: StringName) -> bool:
+	for group: MapSpawnGroup in _editing_groups:
+		if group.id == id:
+			return true
+	return false
+
+
+## Removing a group clears the entrances that named it rather than leaving them
+## pointing at nothing: a dangling reference is a launch error the author would
+## meet later, and they are looking at both lists right now.
+func _remove_group() -> void:
+	var group := _selected_group_record()
+	if group == null:
+		return
+	_editing_groups.remove_at(_selected_group)
+	for option: MapStartOption in _editing_starts:
+		if option.spawn_group == group.id:
+			option.spawn_group = &""
+	_selected_group = mini(_selected_group, _editing_groups.size() - 1)
+	_selected_slot = -1
+	_refresh_groups_list()
+	_refresh_start_option_fields()
+
+
+func _add_slot() -> void:
+	var group := _selected_group_record()
+	if group == null or _slot_anchor_option.selected < 0:
+		return
+	var anchor_id := StringName(_slot_anchor_option.get_item_metadata(_slot_anchor_option.selected))
+	if anchor_id == &"" or _slot_for_anchor(group, anchor_id) != null:
+		return
+	var slot := MapSpawnGroup.Slot.new()
+	slot.anchor_id = anchor_id
+	var next := 0
+	for existing: MapSpawnGroup.Slot in group.slots:
+		next = maxi(next, existing.order + 1)
+	slot.order = next
+	slot.id = StringName("slot_%d" % next) if next > 0 or group.slot_with_tag(
+		MapSpawnGroup.TAG_LEADER) != null else &"leader"
+	if slot.id == &"leader":
+		slot.tags = [MapSpawnGroup.TAG_LEADER]
+	group.slots.append(slot)
+	group.capacity = maxi(group.capacity, group.slots.size())
+	_refresh_group_fields()
+
+
+func _remove_slot() -> void:
+	var group := _selected_group_record()
+	var slot := _selected_slot_record()
+	if group == null or slot == null:
+		return
+	group.slots.erase(slot)
+	_selected_slot = -1
+	_refresh_group_fields()
+
+
+func _selected_slot_record() -> MapSpawnGroup.Slot:
+	var group := _selected_group_record()
+	if group == null or _selected_slot < 0:
+		return null
+	var ordered := group.ordered_slots()
+	return ordered[_selected_slot] if _selected_slot < ordered.size() else null
+
+
+## Exactly one place carries the leader tag, because exactly one member is the
+## leader: `plan_party` reads the first tagged slot and a second one would be a
+## place that silently never fills.
+func _make_slot_leader() -> void:
+	var group := _selected_group_record()
+	var slot := _selected_slot_record()
+	if group == null or slot == null:
+		return
+	for existing: MapSpawnGroup.Slot in group.slots:
+		existing.tags.erase(MapSpawnGroup.TAG_LEADER)
+	slot.tags.append(MapSpawnGroup.TAG_LEADER)
+	_refresh_group_fields()
+
+
+func _commit_group_fields() -> void:
+	var group := _selected_group_record()
+	if group == null:
+		return
+	var id := ContentIdScript.normalize_id(_group_id_edit.text)
+	if not id.is_empty() and StringName(id) != group.id and not _group_id_taken(StringName(id)):
+		# Entrances follow the rename. Nothing else stores a group id, which is why
+		# this is a loop over one list and not a document-wide pass.
+		for option: MapStartOption in _editing_starts:
+			if option.spawn_group == group.id:
+				option.spawn_group = StringName(id)
+		group.id = StringName(id)
+	group.name = MapLocalizedText.of(_group_name_edit.text)
+	if _group_area_option.selected >= 0:
+		group.area_id = StringName(_group_area_option.get_item_metadata(_group_area_option.selected))
+	group.capacity = int(_group_capacity_spin.value)
+	if _group_formation_option.selected >= 0:
+		group.formation = StringName(_group_formation_option.get_item_metadata(_group_formation_option.selected))
+	group.spacing = float(_group_spacing_spin.value)
+	if _group_fallback_option.selected >= 0:
+		group.fallback = StringName(_group_fallback_option.get_item_metadata(_group_fallback_option.selected))
+	_refresh_groups_list_labels()
+
+
+## Relabels without rebuilding: `_refresh_groups_list` calls back into the field
+## refresh, and calling that from a field commit is how a dropdown ends up
+## resetting itself while the author is using it.
+func _refresh_groups_list_labels() -> void:
+	for index in mini(_groups_list.item_count, _editing_groups.size()):
+		var group := _editing_groups[index]
+		_groups_list.set_item_text(index, "%s (%s)" % [group.display_name(), group.id])
 
 
 # --- Start options ------------------------------------------------------------
@@ -405,8 +695,8 @@ func _add_start_option() -> void:
 	option.name = MapLocalizedText.of("Вариант %d" % index)
 	# A new entrance points at the only group there is, when there is only one:
 	# an author who drew a single clearing means that one.
-	if _editing_document != null and _editing_document.zones.spawn_groups.size() == 1:
-		option.spawn_group = _editing_document.zones.spawn_groups[0].id
+	if _editing_groups.size() == 1:
+		option.spawn_group = _editing_groups[0].id
 	_editing_starts.append(option)
 	if _editing_default_start == &"":
 		_editing_default_start = option.id
@@ -433,13 +723,14 @@ func _make_start_option_default() -> void:
 		_refresh_starts_list()
 
 
+## From the working copies, not the document: a group the author has just added
+## in the section above is not in the document until the dialog is confirmed, and
+## an entrance that cannot name it is an entrance they must come back to.
 func _fill_spawn_group_options() -> void:
 	_start_option_group_option.clear()
 	_start_option_group_option.add_item("— не выбрана —")
 	_start_option_group_option.set_item_metadata(0, "")
-	if _editing_document == null:
-		return
-	for group: MapSpawnGroup in _editing_document.zones.spawn_groups:
+	for group: MapSpawnGroup in _editing_groups:
 		_start_option_group_option.add_item(group.display_name())
 		_start_option_group_option.set_item_metadata(
 			_start_option_group_option.item_count - 1, String(group.id))
@@ -574,6 +865,18 @@ func _fill_static_options() -> void:
 		[MapMeta.BORDER_OCEAN, "Океан"],
 		[MapMeta.BORDER_LAVA, "Лава"],
 		[MapMeta.BORDER_NOTHING, "Ничего"],
+	])
+	# Two formations and three fallbacks, and both lists are the model's whole
+	# vocabulary rather than an editor's subset — a third formation would be a
+	# format change, not a dropdown entry (`map_start.md` §4.2).
+	_add_options(_group_formation_option, [
+		[MapSpawnGroup.FORMATION_LOOSE, "Кольцами вокруг центра"],
+		[MapSpawnGroup.FORMATION_LINE, "Шеренгой по направлению"],
+	])
+	_add_options(_group_fallback_option, [
+		[MapSpawnGroup.FALLBACK_FORMATION, "Достроить по площадке"],
+		[MapSpawnGroup.FALLBACK_NEAREST, "Ближайшие свободные клетки"],
+		[MapSpawnGroup.FALLBACK_FAIL, "Отказать в запуске"],
 	])
 	_add_options(_progression_mode_option, [
 		[ProgressionPolicy.MODE_INHERIT, "Все эры игры"],

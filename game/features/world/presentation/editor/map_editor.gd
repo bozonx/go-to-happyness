@@ -59,6 +59,7 @@ const PLANNED_MODES: Array = []
 @onready var _render_mode_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/RenderModeButton
 @onready var _validate_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/ValidateButton
 @onready var _test_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/TestButton
+@onready var _test_target_button: MenuButton = $UI/Screen/TopBar/Margin/Scroll/Row/TestTargetButton
 @onready var _test_here_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/TestHereButton
 @onready var _dialogs: MapEditorDialogs = $UI/Dialogs
 
@@ -93,6 +94,10 @@ var _road_network := RoadNetworkService.new()
 var _coverage_publisher := CoverageNavigationPublisher.new()
 var _border_ocean := BorderOceanService.new()
 var _test_run_service := MapTestRunService.new()
+## State of the two sections the start dialog may rewrite, captured when it opens.
+## Empty means no dialog is open; a confirmed dialog turns them into one command.
+var _start_zones_snapshot: Dictionary = {}
+var _start_section_snapshot: Dictionary = {}
 
 var _context := MapEditorContext.new()
 var _modes: Array[MapEditorMode] = []
@@ -109,6 +114,28 @@ var _eyedropper_active := false
 ## becoming commands of their own.
 var _recording_border_fill := false
 
+## Named places to launch a test run from (`map_editor.md` §12). Editor state, not
+## map data: it lives in a sidecar beside the package, see `EditorTestPoints`.
+var test_points := EditorTestPoints.new()
+## Last cell the cursor was over, kept after the cursor leaves the 3D view.
+##
+## The brush drops its hover the moment the pointer reaches a panel, which is
+## correct for a brush — a stroke must not continue over the toolbar — and fatal
+## for a button that acts on the hovered cell. `▶⌖` in the top bar therefore never
+## worked: reaching it *was* leaving the map. `Shift+F5` from the keyboard did,
+## which is why this read as "непонятно как работает" rather than as broken.
+var _last_hovered_cell := Vector2i.ZERO
+var _has_last_hovered_cell := false
+## Marker nodes for the test points, rebuilt whenever the list changes. They are
+## drawn by the editor rather than by a mode because a test point belongs to none
+## of them: an author checks a corner while shaping terrain, not while in a mode
+## about spawn markers.
+var _test_point_views: Node3D = null
+## The name/properties inspector for the aimed test point. Built on first use,
+## like the spawn-group editor in the start dialog — a point with no name is the
+## common case, and a dialog that is always there is one more thing on screen.
+var _test_point_dialog: EditorTestPointDialog = null
+
 
 func _ready() -> void:
 	_resolve_launch_mode()
@@ -119,6 +146,10 @@ func _ready() -> void:
 	history.changed.connect(_refresh_panels)
 	get_viewport().size_changed.connect(_refresh_camera_framing)
 	_select_mode(_modes[0].id)
+	# After the world exists: the markers hang off `terrain_world`, which
+	# `_build_services` is what configures.
+	_rebuild_test_point_views()
+	_refresh_run_menu()
 	_refresh_panels()
 
 
@@ -156,6 +187,10 @@ func _open_requested_map() -> void:
 		# a second copy of a map that already had one.
 		var state: Dictionary = launch_manager.get("pending_editor_state")
 		current_path = String(state.get("current_path", ""))
+		# Test points travel with the file, and the file is what came back — reading
+		# them here is what makes a run, a look and another run from the same point
+		# one gesture repeated rather than three.
+		test_points = EditorTestPoints.load_for(current_path)
 		launch_manager.set("pending_editor_state", {})
 		_message = "возврат из тест-запуска · несохранённые правки сохранены"
 		return
@@ -176,6 +211,11 @@ func _open_requested_map() -> void:
 ## editor say so in the panel while the author still has a choice.
 func _adopt_path(path: String) -> void:
 	current_path = path if _service.can_write(path) else ""
+	# Test points follow the file, not the document: they are about *this* map on
+	# disk, and a detached document has no map on disk to be about. Read from the
+	# real path either way, so opening a read-only package still shows the places
+	# the author marked in it.
+	test_points = EditorTestPoints.load_for(path)
 
 
 func _build_services() -> void:
@@ -277,6 +317,7 @@ func _save() -> void:
 	else:
 		current_path = path
 		_message = "сохранено в %s" % path
+		_persist_test_points()
 	_refresh_panels()
 
 
@@ -293,7 +334,19 @@ func _on_save_as_requested(id: StringName) -> void:
 	else:
 		current_path = path
 		_message = "сохранено в %s" % path
+		# Save As gives the map a file for the first time, or a different one. The
+		# points the author has been launching from follow it, rather than staying
+		# beside a package that no longer exists.
+		_persist_test_points()
 	_refresh_panels()
+
+
+## Writes the sidecar for whatever file the document is bound to now, quietly:
+## a save that reports "сохранено" and then a second line about a sidecar is a
+## save that reads as having half failed.
+func _persist_test_points() -> void:
+	if not current_path.is_empty() and not test_points.points.is_empty():
+		test_points.save_to(current_path)
 
 
 func _on_new_pressed() -> void:
@@ -389,7 +442,7 @@ func _select_mode(mode_id: StringName) -> void:
 func _update_shortcut_tooltip() -> void:
 	if _shortcut_tooltip == null or _active == null:
 		return
-	var text := "Общее\nЛКМ — применить · Shift+ПКМ — обратное действие\nПКМ — камера · СКМ — панорама · Колесо — зум\nWASD/QE — движение камеры · Home — показать всю карту\nCtrl+S — сохранить · Ctrl+Z / Ctrl+Shift+Z — отменить / повторить\n1–6 — режим редактора · Esc — снять выделение / в меню\n\n"
+	var text := "Общее\nЛКМ — применить · Shift+ПКМ — обратное действие\nПКМ — камера · СКМ — панорама · Колесо — зум\nWASD/QE — движение камеры · Home — показать всю карту\nCtrl+S — сохранить · Ctrl+Z / Ctrl+Shift+Z — отменить / повторить\n1–6 — режим редактора · Esc — снять выделение / в меню\n\nТест-запуск\nF5 — запуск из выбранного места (меню справа от ▶)\nShift+F5 — запуск из клетки под курсором\nF6 — поставить тест-точку под курсором\nAlt+1…9 — выбрать тест-точку · Alt+0 — вход карты\n\n"
 	if _active.id == &"water":
 		text += "Вода:\n• ЛКМ по суше — затопить во впадине на выбранном уровне\n• ЛКМ по воде — выбрать водоём\n• Клик по суше вне водоёма или Esc — снять выделение\n• Клик по заблокированной/высокой клетке — снимает выделение без затопления\n• Голубые точки — предпросмотр границ затопления на текущем уровне\n• Shift+колесо или [ ] — размер кисти течения/льда\n• +/− — уровень воды · G — взятие уровня с грунта\n• F — кисть течения · X — кисть стоячей воды (убрать течение) · V/C — направление и сила течения\n• Z/R — кисти заморозки и разморозки"
 	elif _active.id == &"terrain":
@@ -399,7 +452,7 @@ func _update_shortcut_tooltip() -> void:
 	elif _active.id == &"fill":
 		text += "Наполнение:\n• ЛКМ — разместить или выбрать объект\n• Ctrl+ЛКМ — добавить к выделению\n• Shift+ЛКМ — пипетка со всеми свойствами\n• R / Shift+R — повернуть вправо / влево\n• Delete / Shift+ПКМ — удалить\n• Список справа поддерживает Ctrl-выделение и фокусирует камеру"
 	elif _active.id == &"zones":
-		text += "Зоны и точки:\n• Q / W / E — область, точка, маршрут · Tab — роль\n• ЛКМ — создать или выбрать · Shift+ПКМ — стереть\n• F — повернуть точку · Del — удалить выделенное\n• Esc — снять выделение, затем режим выбора\n• Shift+F5 — тест-запуск из клетки под курсором"
+		text += "Зоны и точки:\n• Q / W / E — область, точка, маршрут · Tab — роль\n• ЛКМ — создать или выбрать · Shift+ПКМ — стереть\n• F — повернуть точку · Del — удалить выделенное\n• Esc — снять выделение, затем режим выбора\n• W → роль spawn → «лидер партии» — точка старта отряда"
 	_shortcut_tooltip.shortcuts_text = text
 	var label: Label = _shortcut_tooltip.get_node_or_null("Popup/Margin/Label")
 	if label != null:
@@ -433,6 +486,8 @@ func _connect_ui() -> void:
 	_validate_button.pressed.connect(_validate_map)
 	_test_button.pressed.connect(_test_run)
 	_test_here_button.pressed.connect(_test_run_from_cursor)
+	_test_target_button.get_popup().id_pressed.connect(_on_run_target_selected)
+	_refresh_run_menu()
 	_validate_button.disabled = false
 	_test_button.disabled = false
 	_test_here_button.disabled = false
@@ -466,6 +521,12 @@ func _open_settings() -> void:
 
 
 func _open_start_settings() -> void:
+	# The dialog now edits spawn groups, which live in the zone layer and are
+	# undoable everywhere else. Snapshotting on the way in is what keeps the single
+	# stack (§3.3) honest: without it `Ctrl+Z` after closing the dialog undid the
+	# author's last brush stroke and left the group edits standing.
+	_start_zones_snapshot = document.zones.to_json()
+	_start_section_snapshot = document.meta.start.to_dict()
 	_dialogs.open_start_settings_dialog(document.meta, document)
 
 
@@ -473,7 +534,25 @@ func _open_start_settings() -> void:
 ## caches a header value has to be told, which is the same work switching the
 ## border does.
 func _on_properties_applied() -> void:
+	_record_start_dialog_edit()
 	_apply_header_change("свойства карты обновлены")
+
+
+## One command for a confirmed start dialog, and none for a dialog that changed
+## nothing — an author who opened it to read a value has not made an undo step.
+func _record_start_dialog_edit() -> void:
+	if _start_zones_snapshot.is_empty():
+		return
+	var zones_after := document.zones.to_json()
+	var start_after := document.meta.start.to_dict()
+	var zones_changed := zones_after != _start_zones_snapshot
+	var start_changed := start_after != _start_section_snapshot
+	if zones_changed or start_changed:
+		history.push(MapZoneCommand.with_start(
+			document, _start_zones_snapshot, zones_after,
+			_start_section_snapshot, start_after, "настройки старта"))
+	_start_zones_snapshot = {}
+	_start_section_snapshot = {}
 
 
 ## Re-reads the header everywhere it is consumed: the rule that floods the rim, and
@@ -593,10 +672,22 @@ func _process(delta: float) -> void:
 	# moving the mouse to a panel button would keep painting under it.
 	if _is_pointer_over_view():
 		_active.process(delta)
+		_remember_hovered_cell()
 	else:
 		_active.clear_hover()
 	_update_hover_marker()
 	_status_cell.text = _active.status_text()
+
+
+## Keeps the last cell the cursor was actually over, so a top-bar button can act
+## on "where I was looking" instead of on "where the pointer is now", which is
+## over the button.
+func _remember_hovered_cell() -> void:
+	var brush := _active.hover_brush() if _active != null else null
+	if brush == null or not brush.has_hover:
+		return
+	_last_hovered_cell = brush.hovered_cell
+	_has_last_hovered_cell = true
 
 
 func _update_hover_marker() -> void:
@@ -684,9 +775,22 @@ func _handle_key(event: InputEventKey) -> void:
 			KEY_Y:
 				_redo()
 		return
+	# `Alt` selects a run target; the digits without it still switch modes, which is
+	# the binding an author's fingers already know.
+	if event.alt_pressed:
+		if event.keycode >= KEY_1 and event.keycode <= KEY_9:
+			_select_test_target(event.keycode - KEY_1)
+		elif event.keycode == KEY_0:
+			_select_test_target(RUN_TARGET_MAP_START)
+		return
 	match event.keycode:
 		KEY_F5:
 			_test_run_from_cursor() if event.shift_pressed else _test_run()
+			return
+		KEY_F6:
+			# Putting a point down deserves a key of its own: an author marking three
+			# places to come back to should not open a menu three times.
+			_add_test_point_here()
 			return
 		KEY_G:
 			_cycle_render_mode()
@@ -744,26 +848,236 @@ func _validate_map() -> Dictionary:
 	return result
 
 
-## F5 runs the definition selected in the map header. New and legacy maps default
-## to World Showcase, so authoring terrain never silently creates Settlement.
+## F5 runs the definition selected in the map header, from whatever the run-target
+## menu is aimed at: the map's own entrance, or one of the author's test points.
+## New and legacy maps default to World Showcase, so authoring terrain never
+## silently creates Settlement.
+##
+## One key and one button, both meaning "run what the menu says", is the point.
+## Two buttons that ran two different things, one of which could not work from a
+## button at all, is what this replaces.
 func _test_run() -> void:
-	_launch_test_run(Vector3.INF)
+	var point := test_points.selected_point()
+	if point == null:
+		_launch_test_run(Vector3.INF)
+		return
+	_launch_test_run(_world_position_of_cell(point.cell))
 
 
 ## Shift+F5 — the same run, started at the cell under the cursor (§12). The map's
 ## spawn group is left exactly as the author drew it: checking a far corner used
 ## to mean dragging the party start there and remembering to drag it back, and
 ## the map came out of the check edited.
+##
+## It reads the *remembered* cell, so pressing the button in the top bar works;
+## the cursor is over the button by then, and demanding a live hover is what made
+## `▶⌖` refuse every click it ever got.
 func _test_run_from_cursor() -> void:
-	var brush := _active.hover_brush() if _active != null else null
-	if brush == null or not brush.has_hover:
+	if not _has_last_hovered_cell:
 		_message = "тест-запуск отсюда: наведите курсор на клетку карты"
 		_message_is_error = true
 		_refresh_panels()
 		return
-	var cell := brush.hovered_cell
-	_launch_test_run(MapSpawnService.cell_to_world(
-		cell, float(document.terrain.height_of(cell)), document.meta.cell_size))
+	_launch_test_run(_world_position_of_cell(_last_hovered_cell))
+
+
+## A cell to the place a party appears on it. The level is read from the live
+## terrain rather than from anything remembered: an author digs under their own
+## test point constantly, and a launch two terraces above the ground is a launch
+## into the air.
+func _world_position_of_cell(cell: Vector2i) -> Vector3:
+	return MapSpawnService.cell_to_world(
+		cell, float(document.terrain.height_of(cell)), document.meta.cell_size)
+
+
+# --- Test points --------------------------------------------------------------
+
+## Puts a test point on the remembered cell, or selects the one already there.
+## Placing a second marker on a cell that has one is never what an author means.
+func _add_test_point_here() -> void:
+	if not _has_last_hovered_cell:
+		_message = "тест-точка: наведите курсор на клетку карты"
+		_message_is_error = true
+		_refresh_panels()
+		return
+	var existing := test_points.index_at_cell(_last_hovered_cell)
+	if existing >= 0:
+		test_points.selected = existing
+		_message = "тест-старт: %s" % test_points.selected_point().display_name(existing)
+	else:
+		var point := test_points.add(
+			_last_hovered_cell, document.terrain.height_of(_last_hovered_cell))
+		_message = "тест-точка %d поставлена в клетке %d,%d" % [
+			test_points.points.size(), point.cell.x, point.cell.y]
+	_commit_test_points()
+
+
+func _remove_selected_test_point() -> void:
+	var index := test_points.selected
+	if index < 0:
+		return
+	test_points.remove_at(index)
+	_message = "тест-точка удалена"
+	_commit_test_points()
+
+
+## Aims the run at a target and, for a point, frames the camera on it — an author
+## picking "② северный гребень" wants to look at it, and looking at it is what
+## tells them the terrain under it still makes sense.
+func _select_test_target(index: int) -> void:
+	# `Alt+5` on a map with two points means nothing; clamping it to the last point
+	# would silently aim the run somewhere the author did not press.
+	if index >= test_points.points.size():
+		return
+	test_points.selected = maxi(index, RUN_TARGET_MAP_START)
+	var point := test_points.selected_point()
+	if point != null:
+		camera.focus_on(_world_position_of_cell(point.cell))
+		_message = "тест-старт: %s" % point.display_name(test_points.selected)
+	else:
+		_message = "тест-старт: вход карты"
+	_commit_test_points()
+
+
+## Persists and redraws. A failed write is reported once and does not stop the
+## session: a test point that works now and is gone tomorrow still beats one that
+## refuses to exist because the package sits under `res://`.
+func _commit_test_points() -> void:
+	if not current_path.is_empty() and not test_points.save_to(current_path):
+		_message = "%s · %s" % [_message, test_points.last_error]
+		_message_is_error = true
+	_rebuild_test_point_views()
+	_refresh_run_menu()
+	_refresh_panels()
+
+
+## Opens the name/properties inspector on the aimed point. The cell and the
+## terrain level are read-only — they are where the author put the point — so the
+## only editable field is the name; committing it goes through the same
+## `_commit_test_points` chokepoint, which redraws the marker's label and the
+## run-menu row from the one updated field.
+func _edit_selected_test_point() -> void:
+	var point := test_points.selected_point()
+	if point == null:
+		return
+	if _test_point_dialog == null:
+		_test_point_dialog = EditorTestPointDialog.new()
+		# `name_changed` is a commit, not a confirmation: the author typing a
+		# name and pressing Enter should see the marker relabel without also
+		# having to close the dialog.
+		_test_point_dialog.name_changed.connect(_on_test_point_renamed)
+		add_child(_test_point_dialog)
+	_test_point_dialog.edit_point(test_points.selected, point, "ур. рельефа")
+
+
+func _on_test_point_renamed(index: int, new_name: String) -> void:
+	if index < 0 or index >= test_points.points.size():
+		return
+	test_points.points[index].name = new_name
+	_commit_test_points()
+
+
+## The run target meaning "the map's own entrance". It is the value `selected`
+## takes, not a menu id — `PopupMenu` reads a negative id as "assign one for me",
+## which quietly turned this row into item 0 and made the menu answer with an
+## index into the list of points.
+const RUN_TARGET_MAP_START := -1
+## Menu ids for the rows that are commands rather than targets. Above `MAX_POINTS`
+## so they can never collide with a point's index, which is its own id.
+const MENU_MAP_START := 100
+const MENU_ADD_HERE := 101
+const MENU_REMOVE := 102
+const MENU_EDIT := 103
+
+
+## The run-target menu: what `F5` will do, and the two commands that change it.
+## Rebuilt rather than patched, because every entry's label carries the state
+## (which point is aimed at, what it is called) and a partially updated menu is
+## how an author ends up launching from the wrong corner.
+func _refresh_run_menu() -> void:
+	var popup := _test_target_button.get_popup()
+	popup.clear()
+	popup.add_item("Вход карты", MENU_MAP_START)
+	popup.set_item_as_checkable(popup.item_count - 1, true)
+	popup.set_item_checked(popup.item_count - 1, test_points.selected < 0)
+	for index in test_points.points.size():
+		popup.add_item("%d. %s" % [index + 1, test_points.points[index].display_name(index)], index)
+		popup.set_item_as_checkable(popup.item_count - 1, true)
+		popup.set_item_checked(popup.item_count - 1, index == test_points.selected)
+		# `Alt+1…9` jump to the same targets, so the menu teaches the shortcut
+		# rather than hiding it in a help panel.
+		popup.set_item_accelerator(popup.item_count - 1, KEY_MASK_ALT | (KEY_1 + index))
+	popup.add_separator()
+	popup.add_item("Поставить тест-точку здесь", MENU_ADD_HERE)
+	popup.add_item("Свойства выбранной точки…", MENU_EDIT)
+	popup.set_item_disabled(popup.item_count - 1, test_points.selected < 0)
+	popup.add_item("Удалить выбранную тест-точку", MENU_REMOVE)
+	popup.set_item_disabled(popup.item_count - 1, test_points.selected < 0)
+	var point := test_points.selected_point()
+	_test_target_button.text = point.display_name(test_points.selected) if point != null else "вход карты"
+
+
+func _on_run_target_selected(id: int) -> void:
+	match id:
+		MENU_ADD_HERE:
+			_add_test_point_here()
+		MENU_REMOVE:
+			_remove_selected_test_point()
+		MENU_EDIT:
+			_edit_selected_test_point()
+		MENU_MAP_START:
+			_select_test_target(RUN_TARGET_MAP_START)
+		_:
+			_select_test_target(id)
+
+
+## Markers for every test point, in every mode. Drawn by the editor and not by a
+## mode because that is the whole difference between a test point and a spawn
+## anchor: the author checks the ford while shaping the ford, and a marker that
+## disappears when they switch to terrain is a marker they cannot aim at.
+func _rebuild_test_point_views() -> void:
+	if _test_point_views == null:
+		_test_point_views = Node3D.new()
+		_test_point_views.name = "TestPointViews"
+		terrain_world.add_child(_test_point_views)
+	for child in _test_point_views.get_children():
+		child.free()
+	for index in test_points.points.size():
+		var point := test_points.points[index]
+		var marker := MeshInstance3D.new()
+		var mesh := CylinderMesh.new()
+		mesh.top_radius = 0.0
+		mesh.bottom_radius = 0.45
+		mesh.height = 1.2
+		marker.mesh = mesh
+		# A cone standing on its point, so it reads as "here" rather than as one
+		# more box among the zone markers.
+		marker.rotation.x = PI
+		var material := StandardMaterial3D.new()
+		var selected := index == test_points.selected
+		material.albedo_color = Color(1.0, 0.55, 0.15, 0.85) if selected else Color(0.35, 0.75, 1.0, 0.7)
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		# Visible through the terrain: the point of a marker you keep coming back
+		# to is being findable from any camera angle, including from behind a hill.
+		material.no_depth_test = true
+		marker.material_override = material
+		# `cell_center` already carries the ground height; the marker floats above it
+		# by half its own length so the cone's tip touches the cell.
+		var centre := document.terrain.cell_center(point.cell)
+		marker.position = centre + Vector3(0.0, 0.6, 0.0)
+		_test_point_views.add_child(marker)
+		var label := Label3D.new()
+		label.text = "%d. %s" % [index + 1, point.display_name(index)]
+		label.font_size = 44
+		label.outline_size = 16
+		label.outline_modulate = Color.BLACK
+		label.pixel_size = 0.012
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.no_depth_test = true
+		label.shaded = false
+		label.position = Vector3(0.0, -1.1, 0.0)
+		marker.add_child(label)
 
 
 func _launch_test_run(spawn_override: Vector3) -> void:

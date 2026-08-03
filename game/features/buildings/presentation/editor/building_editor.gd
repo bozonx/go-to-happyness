@@ -57,6 +57,22 @@ var zones_mode: ZonesModeController = null
 ## True when there are unsaved changes. Checked before scene transitions.
 var _dirty: bool = false
 
+## The walk-through (`F5`), built on first use and kept for the session.
+var walkthrough: BuildingWalkthrough = null
+## Where a walk starts, when the author would rather not walk there
+## (`EditorTestPoints`). Editor state in a sidecar beside the blueprint file, the
+## same mechanism and the same file format the map editor uses.
+var test_points := EditorTestPoints.new()
+## Marker cones for the test points, rebuilt whenever the list changes. A child
+## of the editor node rather than `ZonesVisual`, because that is cleared on
+## deactivate and the markers must read in every mode — the map editor hangs
+## them off `terrain_world` for the same reason (`map_editor.gd`).
+var _test_point_views: Node3D = null
+## The name/properties inspector for the aimed test point, built on first use.
+## The map editor reaches it through the run-target menu; this editor has no such
+## menu, so the gesture is the `N` key (the only editable field is the name).
+var _test_point_dialog: EditorTestPointDialog = null
+
 ## Path this document was opened from, or "" when it has none — a new blueprint, or
 ## one detached because this mode cannot write where it came from
 ## (content_packaging.md §6.4). A save with a path goes back to that exact file,
@@ -68,6 +84,9 @@ var _panning: bool = false
 var _orbiting: bool = false
 
 @onready var _camera_controller: CameraController = %CameraController
+## Hidden while walking: the point of the walk-through is to see the building the
+## way a person in it would, and a toolbar over that is exactly what is in the way.
+@onready var _editor_ui: CanvasLayer = $EditorUI
 @onready var _export_mesh_btn: Button = %ExportMeshBtn
 @onready var _navmesh_preview_btn: Button = %NavMeshPreviewBtn
 
@@ -95,6 +114,7 @@ var _orbiting: bool = false
 @onready var _undo_btn: Button = %UndoBtn
 @onready var _redo_btn: Button = %RedoBtn
 @onready var _eyedropper_btn: Button = %EyedropperBtn
+@onready var _walk_btn: Button = %WalkBtn
 @onready var _textures_btn: Button = %TexturesBtn
 
 var _mode_buttons: Dictionary = {}
@@ -198,6 +218,11 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# The walk-through owns every input while it is running, including the ones the
+	# editor would otherwise act on: a click meant to open a door must not place a
+	# block on the wall behind the author's head.
+	if walkthrough != null and walkthrough.handle_input(event):
+		return
 	if event is InputEventMouseButton:
 		_handle_mouse_button(event)
 	elif event is InputEventMouseMotion:
@@ -325,6 +350,28 @@ func _handle_key(event: InputEventKey) -> void:
 			KEY_Y:
 				redo()
 				return
+	# The two test-run keys are the editor's, not a mode's, and share the map
+	# editor's bindings on purpose (§11.1: muscle memory is why the two editors
+	# share a model at all).
+	match event.keycode:
+		KEY_F5:
+			_start_walkthrough()
+			return
+		KEY_F6:
+			_add_test_point_here()
+			return
+	if event.alt_pressed and event.keycode >= KEY_1 and event.keycode <= KEY_9:
+		_select_test_point(event.keycode - KEY_1)
+		return
+	if event.alt_pressed and event.keycode == KEY_0:
+		_select_test_point(-1)
+		return
+	# `N` opens the name/properties inspector on the aimed test point. The map
+	# editor reaches the same dialog from its run-target menu; this editor has no
+	# such menu, so the key stands in for it. `N` is the only field it edits.
+	if event.keycode == KEY_N and not event.alt_pressed and not event.ctrl_pressed:
+		_edit_selected_test_point()
+		return
 	if current_mode == EditMode.FILL:
 		fill_mode.handle_key(event)
 		return
@@ -639,6 +686,10 @@ func _on_new_pressed() -> void:
 	grid_model.clear()
 	blueprint = BuildingBlueprint.new()
 	current_path = ""
+	# A new blueprint inherits nothing, least of all marks pointing into a building
+	# that is no longer on screen.
+	test_points = EditorTestPoints.new()
+	_rebuild_test_point_views()
 	frame_mode.rebuild_all_block_nodes()
 	zones_mode.on_blueprint_changed()
 	_reset_fill_for_new_blueprint()
@@ -655,6 +706,179 @@ func _on_export_mesh_pressed() -> void:
 
 func _on_navmesh_preview_pressed() -> void:
 	_update_status("Предпросмотр навмеша: функция в разработке.")
+
+
+# ---------------------------------------------------------------------------
+# Walk-through (F5)
+# ---------------------------------------------------------------------------
+
+## `F5` — походить по зданию. See `BuildingWalkthrough` for why this is physics
+## and not a game session, and why the entrance is the default start.
+func _start_walkthrough() -> void:
+	if walkthrough != null and walkthrough.is_active():
+		return
+	if grid_model.all_blocks().is_empty():
+		_update_status("Походить не по чему: в чертеже нет ни одного блока.")
+		return
+	if walkthrough == null:
+		walkthrough = BuildingWalkthrough.new()
+		walkthrough.name = "Walkthrough"
+		walkthrough.exited.connect(_on_walkthrough_exited)
+		add_child(walkthrough)
+	var sources: Array[Node] = [get_node_or_null("BlocksRoot"), fill_mode]
+	walkthrough.enter(sources, _walk_start_position())
+	_editor_ui.visible = false
+	if _test_point_views != null:
+		_test_point_views.visible = false
+	_update_status("Прогулка: WASD, мышь — осмотреться, Shift — бегом, Пробел — прыжок, Esc — выход.")
+
+
+func _on_walkthrough_exited() -> void:
+	_editor_ui.visible = true
+	if _test_point_views != null:
+		_test_point_views.visible = true
+	_camera_controller.apply_position()
+	_camera_controller.camera.make_current()
+	_update_status("Прогулка завершена.")
+
+
+## Where the walk starts, in this order:
+##
+## 1. the aimed test point, when the author put one down — that is what they are
+##    for, and the second floor is why they exist;
+## 2. the first `door` anchor, standing just outside it looking in, because that
+##    is where a person arrives from and the doorway is the first thing worth
+##    checking;
+## 3. the middle of the footprint, for a building with neither.
+func _walk_start_position() -> Vector3:
+	var point := test_points.selected_point()
+	if point != null:
+		return Vector3(float(point.cell.x) + 0.5, float(point.level), float(point.cell.y) + 0.5)
+	for anchor: ZoneAnchorRecord in blueprint.anchors:
+		if not anchor.is_door():
+			continue
+		# A step back along the door's bearing: standing *in* the doorway means
+		# spawning inside the door frame's collider.
+		var outward := Vector3(sin(deg_to_rad(anchor.facing)), 0.0, cos(deg_to_rad(anchor.facing)))
+		return Vector3(anchor.pos.x, anchor.pos.y, anchor.pos.z) - outward * 1.5
+	var footprint: Vector2i = blueprint.footprint
+	return Vector3(float(footprint.x) * 0.5, 0.0, float(footprint.y) * 0.5)
+
+
+## Puts a test point on the cell under the cursor, on the layer being edited: a
+## point on the ground floor is useless for checking the roof over the second.
+func _add_test_point_here() -> void:
+	if not cursor_valid:
+		_update_status("Тест-точка: наведите курсор на клетку.")
+		return
+	var cell := Vector2i(cursor_cell.x, cursor_cell.z)
+	var existing := test_points.index_at_cell(cell)
+	if existing >= 0:
+		test_points.selected = existing
+	else:
+		test_points.add(cell, active_layer)
+	persist_test_points()
+	_update_status("Тест-точка %d · F5 — походить отсюда." % (test_points.selected + 1))
+
+
+func _select_test_point(index: int) -> void:
+	if index >= test_points.points.size():
+		return
+	test_points.selected = maxi(index, -1)
+	persist_test_points()
+	var point := test_points.selected_point()
+	_update_status("Старт прогулки: %s · N — свойства" % (
+		point.display_name(test_points.selected) if point != null else "вход здания"))
+
+
+## Opens the name/properties inspector on the aimed point. The cell and the
+## floor are read-only — they are where the author placed the point — so the
+## only editable field is the name; committing it goes through
+## `persist_test_points`, which redraws the marker's label from the one updated
+## field.
+func _edit_selected_test_point() -> void:
+	var point := test_points.selected_point()
+	if point == null:
+		_update_status("Свойства точки: выберите тест-точку (Alt+1…9).")
+		return
+	if _test_point_dialog == null:
+		_test_point_dialog = EditorTestPointDialog.new()
+		_test_point_dialog.name_changed.connect(_on_test_point_renamed)
+		add_child(_test_point_dialog)
+	_test_point_dialog.edit_point(test_points.selected, point, "этаж")
+
+
+func _on_test_point_renamed(index: int, new_name: String) -> void:
+	if index < 0 or index >= test_points.points.size():
+		return
+	test_points.points[index].name = new_name
+	persist_test_points()
+
+
+## Persists the sidecar and redraws the markers. The map editor funnels every
+## test-point gesture through `_commit_test_points`; this is its counterpart —
+## one chokepoint for add/select/remove, so a new call site cannot forget the
+## redraw the way every existing one did.
+func persist_test_points() -> void:
+	if not current_path.is_empty():
+		test_points.save_to(current_path)
+	_rebuild_test_point_views()
+
+
+## Cones for every test point, in every mode. A mirror of the map editor's
+## `_rebuild_test_point_views` (`map_editor.gd`): the same cone, the same colour
+## for the aimed one, the same `Label3D` carrying the point's name. Drawn by the
+## editor and not by a mode because the whole point of a place the author keeps
+## coming back to is being findable while they shape the thing around it.
+func _rebuild_test_point_views() -> void:
+	if _test_point_views == null:
+		_test_point_views = Node3D.new()
+		_test_point_views.name = "TestPointViews"
+		add_child(_test_point_views)
+	# `free` and not `queue_free`: a rename rebuilds immediately after, and a
+	# deferred free would leave the old markers readable for a frame, so the
+	# marker's label read right after a rename would still show the old name.
+	for child in _test_point_views.get_children():
+		child.free()
+	# Hidden during a walk-through: the author is inside the building, and a
+	# cone floating where they are standing is in the way, not a marker.
+	_test_point_views.visible = walkthrough == null or not walkthrough.is_active()
+	for index in test_points.points.size():
+		var point: EditorTestPoints.Point = test_points.points[index]
+		var marker := MeshInstance3D.new()
+		var mesh := CylinderMesh.new()
+		mesh.top_radius = 0.0
+		mesh.bottom_radius = 0.45
+		mesh.height = 1.2
+		marker.mesh = mesh
+		# A cone standing on its point, so it reads as "here" rather than as one
+		# more block among the frame.
+		marker.rotation.x = PI
+		var material := StandardMaterial3D.new()
+		var selected := index == test_points.selected
+		material.albedo_color = Color(1.0, 0.55, 0.15, 0.85) if selected else Color(0.35, 0.75, 1.0, 0.7)
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		# Visible through floors and walls: the point of a marker on the second
+		# floor is being findable from the ground, including through the ceiling.
+		material.no_depth_test = true
+		marker.material_override = material
+		# A building layer is one unit tall and the cell origin is its corner, so
+		# the cone's tip sits on the layer the author placed the point on.
+		marker.position = Vector3(
+			float(point.cell.x) + 0.5, float(point.level) + 0.6, float(point.cell.y) + 0.5)
+		_test_point_views.add_child(marker)
+		var label := Label3D.new()
+		label.text = "%d. %s" % [index + 1, point.display_name(index)]
+		label.font_size = 44
+		label.outline_size = 16
+		label.outline_modulate = Color.BLACK
+		label.pixel_size = 0.012
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.no_depth_test = true
+		label.shaded = false
+		label.position = Vector3(0.0, -1.1, 0.0)
+		marker.add_child(label)
 
 
 ## Lists every source, not just the writable one (content_packaging.md §6.4).
@@ -689,6 +913,11 @@ func _on_load_item_activated(index: int) -> void:
 	# including into a subfolder. A file this mode cannot write detaches instead:
 	# `current_path` stays empty and the next save behaves as Save As.
 	current_path = path if repository.can_write(path) else ""
+	# Test points follow the file, so reopening a blueprint comes back aimed where
+	# the author left it. Read from the real path even when the file is read-only:
+	# the marks in somebody else's building are still worth seeing.
+	test_points = EditorTestPoints.load_for(path)
+	_rebuild_test_point_views()
 	grid_model.load_from_blueprint(blueprint)
 	frame_mode.rebuild_all_block_nodes()
 	zones_mode.on_blueprint_loaded()
@@ -807,6 +1036,7 @@ func _setup_ui() -> void:
 	# twice per click and logged an error on every editor start.
 	if not _eyedropper_btn.pressed.is_connected(_on_eyedropper_pressed):
 		_eyedropper_btn.pressed.connect(_on_eyedropper_pressed)
+	_walk_btn.pressed.connect(_start_walkthrough)
 	_load_list.item_activated.connect(_on_load_item_activated)
 	_save_as_dialog.confirmed.connect(_on_save_as_confirmed)
 	_metadata_panel.confirmed.connect(_on_settings_confirmed)
@@ -832,7 +1062,7 @@ func _update_status(message: String) -> void:
 func _update_shortcut_tooltip() -> void:
 	if _shortcut_tooltip == null:
 		return
-	var text := "Общее\n• ПКМ — камера · СКМ — панорама · Колесо — зум\n• WASD / Q E — перемещение камеры\n• P — пипетка · Esc — отмена / очистить выбор\n• Ctrl+Z / Ctrl+Shift+Z (Ctrl+Y) — отмена / повтор\n• 1–4 — выбор режима\n\n"
+	var text := "Общее\n• ПКМ — камера · СКМ — панорама · Колесо — зум\n• WASD / Q E — перемещение камеры\n• P — пипетка · Esc — отмена / очистить выбор\n• Ctrl+Z / Ctrl+Shift+Z (Ctrl+Y) — отмена / повтор\n• 1–4 — выбор режима\n\nПрогулка по зданию\n• F5 — походить (WASD, мышь, Shift — бегом, Пробел — прыжок, Esc — выход)\n• F6 — тест-точка под курсором на текущем слое\n• Alt+1…9 — выбрать тест-точку · Alt+0 — вход здания\n\n"
 	match current_mode:
 		EditMode.FRAME:
 			text += "Каркас:\n• 🔨 / 🧹 (E) — режим строительства / ластик\n• 📏 (L) — линия · 🔲 (M) — прямоугольник\n• 🔄 (Z / X / C или R) — поворот блока (оси Z, X, Y)\n• ➖ / ➕ (PageDown / PageUp) — смена слоя Y\n• Alt+PageUp / Alt+PageDown — дробный сдвиг Y (0.25 м)\n• Shift+ЛКМ — пипетка блока под курсором\n• Shift+ПКМ — быстрый ластик при зажатии"

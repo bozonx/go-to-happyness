@@ -315,6 +315,9 @@ func _add_area(start: Vector2i, finish: Vector2i) -> void:
 
 func _add_anchor(cell: Vector2i) -> void:
 	var before := context.document.zones.to_json()
+	# The start section travels with the gesture because a party point may build
+	# an entrance as well as a group, and the two must come back together on undo.
+	var start_before := context.document.meta.start.to_dict()
 	var anchor := ZoneAnchorRecord.new()
 	anchor.role = _anchor_role
 	anchor.id = ZoneAuthoring.unique_id(String(_anchor_role),
@@ -336,8 +339,16 @@ func _add_anchor(cell: Vector2i) -> void:
 			anchor.owner_id = area.id
 			break
 	context.document.zones.anchors.append(anchor)
+	# A party appearance point is the one anchor whose meaning implies records the
+	# author cannot otherwise create; §4.2 of `map_start.md` and the file itself
+	# say why this is filling in rather than guessing.
+	var wiring := MapPartyStartAuthoring.wire(context.document, anchor)
 	_select_anchor(anchor.id)
-	_commit(before, "точка")
+	if wiring.changed():
+		_commit_with_start(before, start_before, "точка старта партии")
+		context.set_status_message(wiring.message())
+	else:
+		_commit(before, "точка")
 
 
 func _append_route_stop(cell: Vector2i) -> void:
@@ -414,28 +425,33 @@ func _erase_at_hover() -> void:
 	var anchor := _anchor_at(cell)
 	if anchor != null:
 		var before := context.document.zones.to_json()
-		ZoneAuthoring.remove_anchor_cascade(
+		var start_before := context.document.meta.start.to_dict()
+		var removed := ZoneAuthoring.remove_anchor_cascade(
 			context.document.zones.anchors, context.document.zones.routes, anchor.id)
+		MapPartyStartAuthoring.forget_records(context.document, removed)
 		_clear_selection()
-		_commit(before, "удаление точки")
+		_commit_with_start(before, start_before, "удаление точки")
 		return
 	var area := _area_at(cell)
 	if area == null:
 		return
 	var before_area := context.document.zones.to_json()
+	var area_start_before := context.document.meta.start.to_dict()
 	# Erasing takes one cell out of the area and keeps the rest; the record splits
 	# its rectangles deterministically. An area erased down to nothing goes, and
 	# takes what it owned with it.
 	if area.remove_cell(cell) and area.is_empty():
-		ZoneAuthoring.remove_area_cascade(
+		var removed_by_area := ZoneAuthoring.remove_area_cascade(
 			context.document.zones.areas, context.document.zones.anchors,
 			context.document.zones.routes, area.id)
+		MapPartyStartAuthoring.forget_records(context.document, removed_by_area)
 		_clear_selection()
-	_commit(before_area, "стирание зоны")
+	_commit_with_start(before_area, area_start_before, "стирание зоны")
 
 
 func _delete_selection() -> bool:
 	var before := context.document.zones.to_json()
+	var start_before := context.document.meta.start.to_dict()
 	var removed: Array[StringName] = []
 	if _selected_anchor_id != &"":
 		removed = ZoneAuthoring.remove_anchor_cascade(
@@ -456,8 +472,9 @@ func _delete_selection() -> bool:
 		return true
 	if removed.is_empty():
 		return false
+	MapPartyStartAuthoring.forget_records(context.document, removed)
 	_clear_selection()
-	_commit(before, "удаление зоны")
+	_commit_with_start(before, start_before, "удаление зоны")
 	if removed.size() > 1:
 		context.set_status_message("Удалено вместе с содержимым: %s" % ", ".join(
 			removed.map(func(entry: StringName) -> String: return String(entry))))
@@ -477,6 +494,20 @@ func _rotate_selected_anchor() -> bool:
 func _commit(before: Dictionary, label: String) -> void:
 	context.history.push(MapZoneCommand.of(
 		context.document, before, context.document.zones.to_json(), label))
+	_after_commit()
+
+
+## One gesture that touched both the zone layer and the start section, and
+## therefore one command — see `MapZoneCommand` for why it is one command and not
+## a composite of two.
+func _commit_with_start(before: Dictionary, start_before: Dictionary, label: String) -> void:
+	context.history.push(MapZoneCommand.with_start(
+		context.document, before, context.document.zones.to_json(),
+		start_before, context.document.meta.start.to_dict(), label))
+	_after_commit()
+
+
+func _after_commit() -> void:
 	_revalidate()
 	rebuild_views()
 	notify_ui_changed()
@@ -1046,6 +1077,7 @@ func _audience_flags(mask: Array[StringName]) -> Array:
 
 func apply_inspector_value(property_name: StringName, value: Variant) -> bool:
 	var before := context.document.zones.to_json()
+	var start_before := context.document.meta.start.to_dict()
 	var changed := false
 	var area := _selected_area()
 	var anchor := _selected_anchor()
@@ -1058,6 +1090,15 @@ func apply_inspector_value(property_name: StringName, value: Variant) -> bool:
 		changed = _apply_to_route(route, property_name, value)
 	if not changed:
 		return false
+	# Giving an existing point the party function means the same thing as placing
+	# it with that function armed, so it builds the same structure. Without this
+	# the two ways to author one point produced two different maps, and the one
+	# that came through the inspector did not launch.
+	var wiring := MapPartyStartAuthoring.wire(context.document, _selected_anchor())
+	if wiring.changed():
+		_commit_with_start(before, start_before, "свойство зоны")
+		context.set_status_message(wiring.message())
+		return true
 	_commit(before, "свойство зоны")
 	return true
 
@@ -1234,6 +1275,10 @@ func _rename(from_id: StringName, to_id: StringName) -> bool:
 		for other in zones.anchors:
 			if other.is_queue() and other.target_id == from_id:
 				other.target_id = to_id
+	# A spawn group's slots and a group's clearing are references by id exactly as
+	# the queue targets above are, and an id the rename forgets to move is a
+	# launch error rather than a cosmetic one.
+	MapPartyStartAuthoring.rename_record(context.document, from_id, to_id)
 	var route := zones.route_by_id(from_id)
 	if route != null:
 		route.id = to_id

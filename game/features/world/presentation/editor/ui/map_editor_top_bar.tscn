@@ -95,9 +95,15 @@ tooltip_text = "Проверить карту"
 [node name="TestButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
 text = "▶"
-tooltip_text = "Тест-запуск World Showcase (F5)"
+tooltip_text = "Тест-запуск (F5) — из места, выбранного в меню справа"
+
+[node name="TestTargetButton" type="MenuButton" parent="Margin/Scroll/Row"]
+custom_minimum_size = Vector2(150, 0)
+text = "вход карты"
+tooltip_text = "Откуда начинается тест-запуск: вход карты или одна из тест-точек"
+flat = false
 
 [node name="TestHereButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
 text = "▶⌖"
-tooltip_text = "Тест-запуск из клетки под курсором (Shift+F5). Старт героя на карте не меняется"
+tooltip_text = "Тест-запуск из клетки под курсором (Shift+F5). Старт партии на карте не меняется"
