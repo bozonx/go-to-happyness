@@ -62,15 +62,15 @@ func is_footprint_clear(world_position: Vector3, footprint: Vector2i) -> bool:
 
 
 func footprint_overlaps_terrain_obstacle(center: Vector3, footprint: Vector2i) -> bool:
-	return simulation.building_placement_service.footprint_overlaps_terrain_obstacle(center, footprint) if simulation.building_placement_service != null else false
+	return simulation.building_site_validator.footprint_overlaps_terrain_obstacle(center, footprint) if simulation.building_site_validator != null else false
 
 
 func is_footprint_level(world_position: Vector3, footprint: Vector2i) -> bool:
-	return simulation.building_placement_service.is_footprint_level(world_position, footprint) if simulation.building_placement_service != null else false
+	return simulation.building_site_validator.is_footprint_level(world_position, footprint) if simulation.building_site_validator != null else false
 
 
 func is_clear_of_objects(world_position: Vector3, minimum_distance: float) -> bool:
-	return simulation.building_placement_service.is_clear_of_objects(world_position, minimum_distance) if simulation.building_placement_service != null else false
+	return simulation.building_site_validator.is_clear_of_objects(world_position, minimum_distance) if simulation.building_site_validator != null else false
 
 
 func snapped_build_position(world_position: Vector3) -> Vector3:

@@ -31,7 +31,11 @@ var _catalog_scope: StringName = &""
 func _ready() -> void:
 	_catalog_panel = EditorCatalogPanel.new()
 	_catalog_panel.visible = false
-	_scroll.add_child(_catalog_panel)
+	# Inside the entry column, not beside it: the Fill mode shows a group of
+	# building blueprints ABOVE the asset catalogue (`building_placement.md` §8.1),
+	# and both have to live in one scrolling palette. As a second child of the
+	# ScrollContainer they simply overlapped.
+	_entries.add_child(_catalog_panel)
 	_catalog_panel.asset_selected.connect(func(asset_id: StringName) -> void:
 		entry_selected.emit(asset_id))
 
@@ -46,7 +50,9 @@ func set_title(text: String) -> void:
 ## действие автора.
 func show_catalog(controller: Object, scope: StringName) -> void:
 	_is_catalog_mode = true
-	_entries.visible = false
+	_entries.visible = true
+	_title.visible = true
+	_scroll.visible = true
 	_catalog_panel.visible = true
 	if controller == _catalog_controller and scope == _catalog_scope:
 		return
@@ -67,14 +73,19 @@ func catalog_panel() -> EditorCatalogPanel:
 	return _catalog_panel
 
 
-## `entries` is an array of `MapEditorMode.PaletteEntry`.
+## `entries` is an array of `MapEditorMode.PaletteEntry`. In catalogue mode they
+## are drawn as a group above the catalogue instead of replacing it.
 func set_entries(entries: Array, selected: StringName) -> void:
-	show_standard_entries()
-	var has_entries := not entries.is_empty()
-	_title.visible = has_entries
-	_scroll.visible = has_entries
+	if not _is_catalog_mode:
+		show_standard_entries()
+		var has_entries := not entries.is_empty()
+		_title.visible = has_entries
+		_scroll.visible = has_entries
 	var prev_scroll := _scroll.scroll_vertical if _scroll != null else 0
 	for child in _entries.get_children():
+		if child == _catalog_panel:
+			continue
+		_entries.remove_child(child)
 		child.queue_free()
 	_entry_buttons.clear()
 	for entry in entries:
@@ -99,16 +110,17 @@ func set_entries(entries: Array, selected: StringName) -> void:
 		button.pressed.connect(func() -> void: entry_selected.emit(entry_id))
 		_entries.add_child(button)
 		_entry_buttons[entry_id] = button
+	if _is_catalog_mode and _catalog_panel != null:
+		_entries.move_child(_catalog_panel, _entries.get_child_count() - 1)
 	if _scroll != null:
 		_scroll.scroll_vertical = prev_scroll
 
 
 func set_selected(selected: StringName) -> void:
-	if _is_catalog_mode and _catalog_panel != null:
-		_catalog_panel.select_asset(selected)
-		return
 	for id: StringName in _entry_buttons:
 		(_entry_buttons[id] as Button).button_pressed = id == selected
+	if _is_catalog_mode and _catalog_panel != null:
+		_catalog_panel.select_asset(selected)
 
 
 const MIN_SWATCH_LUMINANCE := 0.45

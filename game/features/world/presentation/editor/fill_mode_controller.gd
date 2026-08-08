@@ -59,6 +59,10 @@ var _placement_stroke_serial := 0
 var _placement_merge_key: StringName = &""
 var _dragging_selection := false
 var _drag_anchor_cell := Vector2i.ZERO
+## Здания живут в этом же режиме отдельным инструментом, а не отдельным режимом
+## (`building_placement.md` §8): палитра, выделение, инспектор и undo общие, а
+## инструмент разный — потому что здание правит рельеф, а объект нет.
+var _placement := BuildingPlacementTool.new()
 
 
 func _init() -> void:
@@ -73,17 +77,20 @@ func configure(next_context: MapEditorContext) -> void:
 		_root = Node3D.new()
 		_root.name = "FillEntityViews"
 		context.terrain_world.add_child(_root)
+	_placement.configure(next_context, context.terrain_world)
 	rebuild_views()
 
 
 func activate() -> void:
 	WorldAssetCatalog.refresh()
+	BuildingBlueprintLibrary.refresh()
 	rebuild_views()
 
 
 func deactivate() -> void:
 	_selected_id = &""
 	_additional_selected.clear()
+	_placement.deselect()
 	_hide_ghost()
 
 
@@ -105,6 +112,12 @@ func hover_brush() -> BaseBrushController:
 
 func process(_delta: float) -> void:
 	context.brush.update_hover(context.camera, context.space_state(), context.mouse_position())
+	if _placement.has_brush():
+		# Одна кисть за раз: призрак здания и призрак ассета над одной клеткой —
+		# это два обещания о том, что случится по клику.
+		_hide_ghost()
+		_placement.refresh_ghost()
+		return
 	_refresh_ghost()
 
 
@@ -119,14 +132,29 @@ func handle_input(event: InputEvent) -> bool:
 			return false
 		match key.keycode:
 			KEY_DELETE:
+				if _placement.has_selection():
+					return _placement.remove(_placement.selected_record())
 				return _delete_selected()
+			KEY_PAGEUP:
+				return _placement.nudge_manual_level(1)
+			KEY_PAGEDOWN:
+				return _placement.nudge_manual_level(-1)
 			KEY_C, KEY_R:
+				if _placement.is_engaged():
+					return _placement.rotate(-1 if key.shift_pressed else 1)
 				return _rotate_selection("y", -1 if key.shift_pressed else 1)
 			KEY_X:
 				return _rotate_selection("x", -1 if key.shift_pressed else 1)
 			KEY_Z:
 				return _rotate_selection("z", -1 if key.shift_pressed else 1)
 			KEY_ESCAPE:
+				if _placement.is_engaged():
+					_placement.clear_brush()
+					_placement.deselect()
+					_placement.rebuild_views()
+					notify_ui_changed()
+					context.set_status_message("Кисть зданий сброшена.")
+					return true
 				if _pending_reference_property != &"":
 					_pending_reference_property = &""
 					context.set_status_message("Выбор ссылки отменён.")
@@ -160,11 +188,22 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 	if event.button_index == MOUSE_BUTTON_RIGHT:
 		if not event.shift_pressed:
 			return false
+		# Здание под курсором сносится тем же жестом, что и объект: жест один,
+		# а инструмент выбирается по тому, что там стоит.
+		if _placement.erase_at(cell):
+			notify_ui_changed()
+			return true
 		return _erase_at(cell)
 	if event.button_index != MOUSE_BUTTON_LEFT:
 		return false
 	if event.shift_pressed:
+		if _placement.pick_at(cell):
+			notify_ui_changed()
+			return true
 		return pick_from_cell()
+	if _placement.click(cell):
+		notify_ui_changed()
+		return true
 	if _pending_reference_property != &"":
 		var reference_target := _entity_at(cell)
 		if reference_target == &"":
@@ -623,6 +662,7 @@ func _commit(before: Array, command_label: String, merge_key: StringName = &"") 
 ## arrive in 2.4.  They make placement/selectability visible without making map
 ## data depend on nodes or requiring every archetype scene to be loaded now.
 func rebuild_views() -> void:
+	_placement.rebuild_views()
 	if _root == null:
 		return
 	for child in _root.get_children():
@@ -781,25 +821,25 @@ func catalog_asset_unavailable_reason(_asset_id: StringName) -> String:
 	return "Для размещения на карте ассету нужен EntityArchetype."
 
 
-## Палитра занята каталогом ассетов; записи остаются для тестов и для случая,
-## когда каталог недоступен.  Инструментов в списке нет намеренно: жест один.
+## Каталог ассетов рисуется панелью каталога; над ним отдельной группой стоят
+## чертежи зданий (`building_placement.md` §8.1) — из всех трёх источников
+## контента, без импорта и конвертации.  Инструментов в списке нет намеренно:
+## жест один.
 func palette_entries() -> Array:
-	var entries: Array = []
-	for archetype: EntityArchetype in EntityArchetypeCatalog.all():
-		var asset := EntityArchetypeCatalog.asset_of(archetype.id)
-		if asset != null and asset.is_in_scope(WorldAssetDef.SCOPE_MAP):
-			entries.append(PaletteEntry.of(archetype.id, archetype.name))
-	return entries
+	return _placement.palette_entries()
 
 
 func selected_palette_entry() -> StringName:
-	return _archetype_id
+	var building := _placement.selected_palette_entry()
+	return building if building != &"" else _archetype_id
 
 
 ## Замена существует вместо «удалить и поставить новый», потому что запись
 ## сохраняет свой **id**, а с ним — ссылки правил, квестов и сейвов на неё
 ## (`map_fill_mode.md` §8.3). Удаление рвёт их молча.
 func tool_options() -> Array:
+	if _placement.is_engaged():
+		return _placement.tool_options()
 	var selected := _selected_ids()
 	if _archetype_id == &"":
 		return []
@@ -822,6 +862,9 @@ func tool_options() -> Array:
 
 
 func activate_option(option_id: StringName) -> void:
+	if _placement.activate_option(option_id):
+		notify_ui_changed()
+		return
 	if option_id == OPTION_REPLACE:
 		_replace_selection()
 
@@ -906,6 +949,14 @@ func _lost_property_count(record: MapEntityRecord, archetype: EntityArchetype) -
 
 
 func select_palette_entry(entry_id: StringName) -> void:
+	if _placement.select_palette_entry(entry_id):
+		# Кисть здания и кисть ассета взаимно исключают друг друга: иначе клик
+		# по пустой клетке означал бы два разных действия сразу.
+		_archetype_id = &""
+		_hide_ghost()
+		notify_ui_changed()
+		return
+	_placement.clear_brush()
 	var previous := _archetype_id
 	if EntityArchetypeCatalog.has_archetype(entry_id):
 		_archetype_id = entry_id
@@ -938,6 +989,8 @@ func _resolve_archetype_for_asset(asset_id: StringName) -> EntityArchetype:
 
 
 func inspector_lines() -> Array[String]:
+	if _placement.is_engaged():
+		return _placement.inspector_lines()
 	var selected := _selected_ids()
 	if selected.size() > 1:
 		var lines: Array[String] = [
@@ -976,6 +1029,11 @@ func inspector_lines() -> Array[String]:
 ## сразу.  Уникальные свойства архетипа правятся по одному объекту: инспектор,
 ## показывающий значение первого и пишущий во все, — это тихая порча данных.
 func inspector_properties() -> Array[EntityPropertyDef]:
+	# У здания одна ручка — уровень площадки (§4.1), и она живёт в опциях
+	# инструмента. Полей позиции и поворота в инспекторе намеренно нет: они бы
+	# обещали свободу, которой у здания не бывает.
+	if _placement.is_engaged():
+		return []
 	var selected := _selected_ids()
 	if not selected.is_empty():
 		# Автор оперирует клеткой и смещением внутри неё — теми же полями, что и в
@@ -1404,10 +1462,12 @@ func _proposed_selection_is_free(proposed_cells: Dictionary) -> bool:
 
 
 func list_title() -> String:
-	return "Сущности карты"
+	return "Здания карты" if _placement.is_engaged() else "Сущности карты"
 
 
 func list_entries() -> Array[String]:
+	if _placement.is_engaged():
+		return _placement.list_entries()
 	var entries: Array[String] = []
 	for record: MapEntityRecord in context.document.entities.entities:
 		var archetype := EntityArchetypeCatalog.get_archetype(record.archetype_id)
@@ -1418,6 +1478,8 @@ func list_entries() -> Array[String]:
 
 
 func selected_list_index() -> int:
+	if _placement.is_engaged():
+		return _placement.selected_list_index()
 	for index in context.document.entities.entities.size():
 		if context.document.entities.entities[index].id == _selected_id:
 			return index
@@ -1438,6 +1500,10 @@ func list_allows_multiple() -> bool:
 
 
 func select_list_entry(index: int) -> void:
+	if _placement.is_engaged():
+		_placement.select_list_index(index)
+		notify_ui_changed()
+		return
 	if index < 0 or index >= context.document.entities.entities.size():
 		return
 	_select(context.document.entities.entities[index].id, false)
@@ -1475,6 +1541,8 @@ func empty_list_hint() -> String:
 
 
 func status_text() -> String:
+	if _placement.is_engaged():
+		return _placement.status_text()
 	if context.brush == null or not context.brush.has_hover:
 		return "Наполнение: выберите ассет в палитре"
 	var cell := context.brush.hovered_cell

@@ -30,6 +30,34 @@ var revision: String = ""
 var construction_style: StringName = &"surface"  ## &"surface" | &"underground"
 var grid_bounds: Vector3i = Vector3i(8, 4, 8)
 
+## What the blueprint expects to stand on (`building_placement.md` §3). It never
+## forbids a placement: a building's only support is the terrain column under it,
+## so a pad below the water line is a pier and not an error. Declaring the
+## expectation only lets the editor paint the ghost yellow when the author is
+## about to do something they probably did not mean.
+const SURFACE_GROUND := &"ground"
+const SURFACE_WATER := &"water"
+const SURFACE_ANY := &"any"
+const EXPECTED_SURFACES: Array[StringName] = [SURFACE_GROUND, SURFACE_WATER, SURFACE_ANY]
+
+var expects_surface: StringName = SURFACE_GROUND
+
+## States a placed instance of this building may be authored in
+## (`building_placement.md` §12). The four below exist for every building; a
+## blueprint may declare more, and a map that names one nobody declared is a
+## typo the validator has to catch rather than a state that silently does nothing.
+const BASE_PLACEMENT_STATES: Array[StringName] = [
+	&"ready", &"construction_site", &"ruin", &"mothballed",
+]
+
+var placement_states: Array[StringName] = []
+
+## The ground the blueprint brings with it, relative to the anchor level
+## (`grid_terrain_system.md` §5.2). Empty means one flat pad, which is what most
+## buildings want; the editor mode that authors anything else is not built yet,
+## and the format carries it regardless so maps made later stay readable.
+var terrain_base: BuildingTerrainBase = BuildingTerrainBase.new()
+
 ## Footprint on the settlement board. Entrances are **not** stored: they are the
 ## `door` anchors, and deriving them keeps one authority (active_zones.md §5.2).
 var footprint: Vector2i = Vector2i(8, 8)
@@ -72,6 +100,15 @@ var manual_costs: Dictionary = {}
 ## Y is a layer height, not an offset, and is never shifted.
 func pivot_offset() -> Vector3:
 	return Vector3(float(footprint.x), 0.0, float(footprint.y)) * 0.5
+
+
+## Every state a placement of this blueprint may declare.
+func known_placement_states() -> Array[StringName]:
+	var states: Array[StringName] = BASE_PLACEMENT_STATES.duplicate()
+	for state: StringName in placement_states:
+		if state not in states:
+			states.append(state)
+	return states
 
 
 func clear_blocks() -> void:
@@ -194,8 +231,11 @@ func to_dict() -> Dictionary:
 		"name": name,
 		"revision": revision,
 		"construction_style": String(construction_style),
+		"expects_surface": String(expects_surface),
+		"placement_states": placement_states.map(func(s: StringName) -> String: return String(s)),
 		"grid_bounds": {"x": grid_bounds.x, "y": grid_bounds.y, "z": grid_bounds.z},
 		"footprint": [footprint.x, footprint.y],
+		"terrain_base": terrain_base.to_dict(),
 		"blocks": block_dicts,
 		"surface_finishes": surface_finishes,
 		"decor_trims": decor_trims,
@@ -226,8 +266,15 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 	bp.name = String(data.get("name", "Новое здание"))
 	bp.revision = String(data.get("revision", ""))
 	bp.construction_style = StringName(data.get("construction_style", "surface"))
+	bp.expects_surface = StringName(data.get("expects_surface", SURFACE_GROUND))
+	var raw_states: Variant = data.get("placement_states", [])
+	if raw_states is Array:
+		for state: Variant in raw_states as Array:
+			bp.placement_states.append(StringName(state))
 	bp.grid_bounds = _vec3i_from(data.get("grid_bounds", {}), Vector3i(8, 4, 8))
 	bp.footprint = _vec2i_from(data.get("footprint", []), Vector2i.ZERO)
+	# Parsed after `footprint`: the layer is validated against it, never resampled.
+	bp.terrain_base = BuildingTerrainBase.from_dict(data.get("terrain_base", {}), bp.footprint)
 
 	var raw_blocks: Variant = data.get("blocks", [])
 	if raw_blocks is Array:
@@ -328,6 +375,8 @@ func validation_errors() -> Array[String]:
 		errors.append("Blueprint name is empty")
 	if construction_style not in [&"surface", &"underground"]:
 		errors.append("Unknown construction_style: %s" % construction_style)
+	if expects_surface not in EXPECTED_SURFACES:
+		errors.append("Unknown expects_surface: %s" % expects_surface)
 	if not _valid_id(String(role)):
 		errors.append("Invalid blueprint role: %s" % role)
 	if not _valid_id(String(style)):

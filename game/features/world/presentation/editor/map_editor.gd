@@ -43,6 +43,7 @@ const PLANNED_MODES: Array = []
 @onready var _scenario_map_back: Button = $UI/Screen/Middle/Workspace/ScenarioMapBar/Margin/BackButton
 @onready var _side_panel: MapEditorSidePanel = $UI/Screen/Middle/SidePanel
 @onready var _palette: MapEditorPalette = $UI/Screen/Middle/Palette
+@onready var _compass: Label = $UI/Screen/Middle/Workspace/Viewport3D/Compass
 @onready var _status_cell: Label = $UI/Screen/StatusBar/Margin/Row/CellLabel
 @onready var _status_message: Label = $UI/Screen/StatusBar/Margin/Row/MessageLabel
 @onready var _shortcut_tooltip: EditorShortcutTooltip = $UI/Screen/StatusBar/Margin/Row/ShortcutTooltip
@@ -86,6 +87,7 @@ var _brush := TerrainBrushController.new()
 var _water_service := WaterService.new()
 var _water_brush := WaterBrushController.new()
 var _coverage_service := CoverageService.new()
+var _placement_service := BuildingPlacementService.new()
 var _coverage_brush := CoverageBrushController.new()
 ## The map seeds routing with what the author paved, and keeps it seeded as they
 ## paint (§5.2.3). Without it a route would ignore a road until the map is saved
@@ -261,6 +263,9 @@ func _build_services() -> void:
 	_context.coverage_brush = _coverage_brush
 	_context.nav_grid = _nav_grid
 	_context.nav_publisher = _nav_publisher
+	_placement_service.configure(
+		document.terrain, document.water, _terrain_service, document.placements, document.entities)
+	_context.placement_service = _placement_service
 	_context.history = history
 	_context.camera = camera
 	_context.terrain_world = terrain_world
@@ -274,6 +279,8 @@ func _build_services() -> void:
 	_context.viewport = get_viewport()
 	if not _context.status_message_changed.is_connected(_on_status_message_changed):
 		_context.status_message_changed.connect(_on_status_message_changed)
+	if not _context.document_change_requested.is_connected(_notify_document_changed):
+		_context.document_change_requested.connect(_notify_document_changed)
 	_context.confirm_handler = Callable(self, "confirm_action")
 	ramp_preview.configure(document.terrain)
 	if water_highlight != null:
@@ -573,8 +580,9 @@ func _rebuild_palette() -> void:
 	_palette.set_title("%s — палитра" % _active.title)
 	if _active.has_method("use_catalog_panel") and _active.call("use_catalog_panel"):
 		_palette.show_catalog(_active, _active.call("catalog_scope"))
-	else:
-		_palette.set_entries(_active.palette_entries(), _active.selected_palette_entry())
+	# A mode may have both: the Fill palette carries the blueprint group above the
+	# asset catalogue (`building_placement.md` §8.1).
+	_palette.set_entries(_active.palette_entries(), _active.selected_palette_entry())
 
 
 ## Where a save would land, and whether this document owns a file. Silent write
@@ -676,7 +684,34 @@ func _process(delta: float) -> void:
 	else:
 		_active.clear_hover()
 	_update_hover_marker()
+	_update_compass()
 	_status_cell.text = _active.status_text()
+
+
+## Where north is, on screen, right now (`building_placement.md` §9).
+##
+## North is defined once, by `SlopeCatalog.DIR_N` = `-Z`, and the editor's job is
+## only to SHOW it: an author asked to turn a building "to the north" is
+## otherwise guessing, because the camera orbits freely. The arrow is the same
+## north the slope catalogue, the placement record and the weather use — there is
+## no second definition anywhere.
+func _update_compass() -> void:
+	if _compass == null:
+		return
+	# Asked of the camera's own basis rather than of its yaw: the arrow then stays
+	# right whatever the camera controller does with its angles.
+	var offset := SlopeCatalog.direction_offset(SlopeCatalog.DIR_N)
+	var north := Vector3(float(offset.x), 0.0, float(offset.y))
+	var basis := camera.global_transform.basis
+	var screen := Vector2(basis.x.dot(north), basis.y.dot(north))
+	if screen.length_squared() < 0.0001:
+		return
+	var clockwise_from_up := fposmod(rad_to_deg(atan2(screen.x, screen.y)), 360.0)
+	_compass.text = "N %s" % _ARROWS[int(round(clockwise_from_up / 45.0)) % _ARROWS.size()]
+
+
+## Clockwise from up, one per 45°.
+const _ARROWS: Array[String] = ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"]
 
 
 ## Keeps the last cell the cursor was actually over, so a top-bar button can act
@@ -1142,6 +1177,14 @@ func _on_terrain_committed(delta: TerrainDelta) -> void:
 	_recording_border_fill = false
 	if flooded:
 		parts.append(WaterServiceCommand.of(_water_service, _water_service.last_delta(), label))
+	# A mode that is assembling one multi-layer action takes the parts instead
+	# (`MapEditorContext.begin_capture`): placing a building moves the ground, the
+	# water and the placement record, and that is one Ctrl+Z, not three.
+	if _context.is_capturing():
+		for part: MapEditorCommand in parts:
+			_context.capture_command(part)
+		document.mark_dirty()
+		return
 	history.push(
 		parts[0] if parts.size() == 1
 		else MapEditorCompositeCommand.of(parts, "%s + вода" % label)
@@ -1160,7 +1203,12 @@ func _on_water_committed(delta: WaterDelta) -> void:
 	# also push one of its own.
 	if _replaying or _recording_border_fill:
 		return
-	history.push(WaterServiceCommand.of(_water_service, delta, _context.pending_edit_label))
+	var command := WaterServiceCommand.of(_water_service, delta, _context.pending_edit_label)
+	if _context.is_capturing():
+		_context.capture_command(command)
+		document.mark_dirty()
+		return
+	history.push(command)
 	document.mark_dirty()
 
 

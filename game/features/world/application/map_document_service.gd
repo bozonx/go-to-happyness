@@ -366,6 +366,11 @@ static func _read_json(path: String) -> Dictionary:
 static func _populate_required_content(document: MapDocument) -> void:
 	var found: Dictionary = {}
 	_collect_content_references(document.sections, found)
+	# `placements[]` used to be walked as a raw section; it has a typed owner now,
+	# and the dependency it creates is the whole reason a record stores a reference
+	# instead of a copy (`building_placement.md` §12).
+	for placement: MapPlacementRecord in document.placements.placements:
+		_collect_content_references(placement.to_dict(), found)
 	for entity: MapEntityRecord in document.entities.entities:
 		if entity.archetype_id == &"":
 			continue

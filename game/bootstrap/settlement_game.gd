@@ -407,7 +407,7 @@ var settlement_daily_rules_service: SettlementDailyRulesService
 var territory_service: TerritoryService
 var citizen_registration_service: CitizenRegistrationService
 var school_service: SchoolService
-var building_placement_service: BuildingPlacementService
+var building_site_validator: BuildingSiteValidator
 var citizen_daily_order_service: CitizenDailyOrderService
 var hero_pocket_service: HeroPocketService
 var hero_interaction_service: HeroInteractionService

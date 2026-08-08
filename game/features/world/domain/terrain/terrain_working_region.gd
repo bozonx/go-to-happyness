@@ -18,6 +18,11 @@ var grid: TerrainGrid = null
 var _heights: Dictionary = {}
 ## cell -> Vector3i(slope_class, slope_dir, slope_index)
 var _slopes: Dictionary = {}
+## cell -> flags. Only a placement merge writes these: cutting the mouth of an
+## underground entrance out of the ground (§6) has to be part of the same
+## transaction as the heights around it, or undo would fill the opening back in
+## and leave the doorway sealed.
+var _flags: Dictionary = {}
 
 
 func _init(target_grid: TerrainGrid) -> void:
@@ -30,8 +35,12 @@ func is_inside(cell: Vector2i) -> bool:
 	return grid.is_inside(cell)
 
 
+func flags_of(cell: Vector2i) -> int:
+	return _flags.get(cell, grid.flags_of(cell))
+
+
 func is_hole(cell: Vector2i) -> bool:
-	return grid.is_hole(cell)
+	return (flags_of(cell) & TerrainCell.FLAG_HOLE) != 0
 
 
 func is_anchor(cell: Vector2i) -> bool:
@@ -75,7 +84,7 @@ func state_of(cell: Vector2i) -> PackedInt32Array:
 		slope_direction_of(cell),
 		slope_index_of(cell),
 		grid.material_index_at(cell),
-		grid.flags_of(cell),
+		flags_of(cell),
 		grid.detail_at(cell),
 	)
 
@@ -88,6 +97,11 @@ func set_height(cell: Vector2i, height: int) -> void:
 
 func set_slope(cell: Vector2i, slope_class: int, slope_dir: int, slope_index: int) -> void:
 	_slopes[cell] = Vector3i(slope_class, slope_dir, slope_index)
+
+
+func set_hole(cell: Vector2i, enabled: bool) -> void:
+	var flags := flags_of(cell)
+	_flags[cell] = (flags | TerrainCell.FLAG_HOLE) if enabled else (flags & ~TerrainCell.FLAG_HOLE)
 
 
 func clear_slope(cell: Vector2i) -> void:
@@ -156,6 +170,8 @@ func touched_cells() -> Array[Vector2i]:
 	for cell: Vector2i in _heights:
 		seen[cell] = true
 	for cell: Vector2i in _slopes:
+		seen[cell] = true
+	for cell: Vector2i in _flags:
 		seen[cell] = true
 	var cells: Array[Vector2i] = []
 	for cell: Vector2i in seen:

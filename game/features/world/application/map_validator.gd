@@ -28,9 +28,53 @@ static func validate(document: MapDocument, terrain: TerrainGrid, water: WaterGr
 		_validate_anchor_place(anchor, terrain, water, errors)
 	_validate_coverage(document, terrain, water, errors)
 	_validate_entities(document, terrain, errors)
+	_validate_placements(document, terrain, nav_grid, errors)
 	_validate_scenario(document, errors)
 	_validate_starts(document, errors)
 	return errors
+
+
+## Buildings standing on the map (`building_placement.md` §14).
+##
+## Everything here is a launch blocker, and each of them is a map that opens fine
+## in the editor: a footprint half off the board, two buildings on one column, a
+## blueprint that is no longer installed, an entrance nobody can walk to. The last
+## one is the reason this check exists at all — a walled-in door is invisible, the
+## building looks placed and works as scenery.
+static func _validate_placements(
+	document: MapDocument, terrain: TerrainGrid, nav_grid: NavGrid, errors: Array[String],
+) -> void:
+	var ids: Dictionary = {}
+	var claimed: Array[Dictionary] = []
+	for record: MapPlacementRecord in document.placements.placements:
+		if record.id == &"" or ids.has(record.id):
+			errors.append("дубликат или пустой id размещения: %s" % record.id)
+			continue
+		ids[record.id] = true
+		var blueprint := BuildingPlacementService.blueprint_of(record)
+		if blueprint == null:
+			errors.append("размещение %s ссылается на отсутствующий чертёж %s (роль %s)" % [
+				record.id, record.blueprint_id(), record.blueprint_role()])
+			continue
+		if record.state not in blueprint.known_placement_states():
+			errors.append("размещение %s объявляет состояние %s, которого нет у чертежа" % [
+				record.id, record.state])
+		var footprint := BuildingFootprint.of(blueprint, record.cell, record.orientation)
+		if terrain != null:
+			for cell: Vector2i in footprint.cells():
+				if not terrain.is_inside(cell):
+					errors.append("здание %s выходит за пределы доски" % record.id)
+					break
+				if terrain.is_hole(cell) and not footprint.is_cut_out(cell):
+					errors.append("пятно здания %s попадает в вырез террейна" % record.id)
+					break
+		for previous: Dictionary in claimed:
+			if (previous["rect"] as Rect2i).intersects(footprint.rect()):
+				errors.append("здания %s и %s занимают общие клетки" % [previous["id"], record.id])
+		claimed.append({"id": record.id, "rect": footprint.rect()})
+		for warning: String in BuildingPlacementService.entrance_warnings(
+				footprint, nav_grid, "здание %s" % record.id):
+			errors.append(warning)
 
 
 ## Dangling references between the three things a start option ties together
@@ -256,8 +300,10 @@ static func warnings(document: MapDocument, nav_grid: NavGrid) -> Array[String]:
 	# that can never fire is answerable from the document alone.
 	_warn_about_scenario(document, warnings)
 	_warn_about_starts(document, warnings)
+	_warn_about_placements(document, warnings)
 	if nav_grid == null:
 		return warnings
+	_warn_about_separated_buildings(document, nav_grid, warnings)
 	# An anchor standing on an impassable cell is reachable only by teleport.
 	# A spawn there is already an error in `validate` (hole/water); this catches
 	# the navigation-blocked case — a waypoint on a cliff, a slot behind a wall.
@@ -316,6 +362,75 @@ static func _warn_about_starts(document: MapDocument, warnings: Array[String]) -
 		if group.area_id == &"" and group.slots.size() < group.capacity:
 			warnings.append("группа %s без области вмещает %d из объявленных %d" % [
 				group.id, group.slots.size(), group.capacity])
+
+
+## Placement findings a map still launches with (`building_placement.md` §14).
+## The document carries its own grids, so these need no published navigation and
+## run on the save path too.
+static func _warn_about_placements(document: MapDocument, warnings: Array[String]) -> void:
+	var terrain := document.terrain
+	var water := document.water
+	for record: MapPlacementRecord in document.placements.placements:
+		var blueprint := BuildingPlacementService.blueprint_of(record)
+		if blueprint == null:
+			continue
+		if not record.blueprint_revision().is_empty() \
+				and record.blueprint_revision() != blueprint.revision_id():
+			warnings.append("чертёж здания %s изменился с момента постановки" % record.id)
+		var footprint := BuildingFootprint.of(blueprint, record.cell, record.orientation)
+		if terrain == null:
+			continue
+		var submerged := false
+		var walled := false
+		for cell: Vector2i in footprint.cells():
+			if not terrain.is_inside(cell):
+				continue
+			if water != null and water.is_wet(terrain, cell):
+				submerged = true
+			walled = walled or _edge_is_walled(terrain, footprint, cell)
+		if submerged and blueprint.expects_surface == BuildingBlueprint.SURFACE_GROUND:
+			warnings.append("здание %s стоит в воде вопреки объявленной опоре чертежа" % record.id)
+		if walled:
+			warnings.append("у здания %s есть граница без выезда" % record.id)
+
+
+## An edge of a pad that drops to lower ground with no ramp climbing back up to
+## it is a retaining wall — normal in a town, and the absence of a way out.
+static func _edge_is_walled(terrain: TerrainGrid, footprint: BuildingFootprint, cell: Vector2i) -> bool:
+	for direction: int in SlopeCatalog.ORTHOGONAL_DIRECTIONS:
+		var neighbour := cell + SlopeCatalog.direction_offset(direction)
+		if footprint.contains(neighbour) or not terrain.is_inside(neighbour) or terrain.is_hole(neighbour):
+			continue
+		if terrain.height_of(cell) <= terrain.height_of(neighbour):
+			continue
+		var climbs_here := terrain.is_ramp_cell(neighbour) \
+			and terrain.slope_direction_of(neighbour) == SlopeCatalog.opposite_direction(direction)
+		if not climbs_here:
+			return true
+	return false
+
+
+## A building that cuts the only way to another one (§14). Checked as one
+## question — are all the entrances on this map on one connected component of the
+## routing field — because that is what an author means by "the settlement is cut
+## in two", and it is n-1 queries instead of n².
+static func _warn_about_separated_buildings(
+	document: MapDocument, nav_grid: NavGrid, warnings: Array[String],
+) -> void:
+	var reference := Vector2i.MIN
+	var reference_id: StringName = &""
+	for record: MapPlacementRecord in document.placements.placements:
+		var footprint := BuildingPlacementService.footprint_of(record)
+		for approach: Vector2i in footprint.door_approach_cells():
+			if not nav_grid.is_board_cell(approach) or not nav_grid.is_walkable(approach):
+				continue
+			if reference == Vector2i.MIN:
+				reference = approach
+				reference_id = record.id
+				break
+			if not nav_grid.are_cells_connected(reference, approach):
+				warnings.append("к зданию %s нет прохода от здания %s" % [record.id, reference_id])
+			break
 
 
 static func _warn_if_anchor_unreachable(anchor: ZoneAnchorRecord, nav_grid: NavGrid, warnings: Array[String]) -> void:

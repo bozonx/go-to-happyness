@@ -36,12 +36,17 @@ const MAX_CHAIN_CELLS := 64
 
 ## Assigns slopes around `seed_cells` (the columns an operation moved). Returns
 ## the number of boundaries that got a ramp; the rest stay cliffs.
+## `blocked` is ground this pass may not reshape even though the operation
+## disturbed it — the pad of a building being placed (`building_placement.md`
+## §5). Keeping it out is what puts the skirt on the untouched ground **behind**
+## the footprint instead of carving a ramp through the building's own floor.
 static func assign_slopes(
 	region: TerrainWorkingRegion, seed_cells: Array[Vector2i],
 	requested_class: int = RampConnectionPlan.AUTO_CLASS,
+	blocked: Dictionary = {},
 ) -> int:
 	var assigner := SlopeAssigner.new()
-	return assigner._assign(region, seed_cells, requested_class)
+	return assigner._assign(region, seed_cells, requested_class, blocked)
 
 
 var _region: TerrainWorkingRegion = null
@@ -51,9 +56,9 @@ var _claimed: Dictionary = {}
 var _requested_class := RampConnectionPlan.AUTO_CLASS
 
 
-func _assign(region: TerrainWorkingRegion, seed_cells: Array[Vector2i], requested_class: int) -> int:
+func _assign(region: TerrainWorkingRegion, seed_cells: Array[Vector2i], requested_class: int, blocked: Dictionary = {}) -> int:
 	_region = region
-	_claimed = {}
+	_claimed = blocked.duplicate()
 	_requested_class = requested_class if SlopeCatalog.is_ramp_class(requested_class) else RampConnectionPlan.AUTO_CLASS
 	var placed := 0
 	for cell: Vector2i in _candidates(seed_cells):

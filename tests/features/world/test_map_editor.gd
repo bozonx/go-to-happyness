@@ -43,6 +43,7 @@ func _run() -> void:
 	await _test_terrain_editing_and_shared_undo(editor)
 	_test_ramp_connection_and_shared_undo(editor)
 	_test_fill_placement_and_shared_undo(editor)
+	_test_building_placement_and_shared_undo(editor)
 	_test_surface_painting_moves_no_geometry(editor)
 	await _test_water_mode(editor)
 	_test_snow_paint_respects_water_and_slope(editor)
@@ -827,6 +828,67 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 
 ## The claim that makes surface a separate mode rather than a terrain brush: a
 ## material stroke moves a navigation weight and rebuilds no geometry.
+## Buildings are a tool of the Fill mode, not a mode of their own
+## (`building_placement.md` §8), and the whole of one placement — the pad, the
+## anchors, the record — has to be ONE entry on the shared stack (§11.1). Only
+## the real scene proves that: the parts travel through three services and are
+## folded together by the editor.
+func _test_building_placement_and_shared_undo(editor: Node) -> void:
+	editor._select_mode(&"fill")
+	var fill: FillModeController = editor._active as FillModeController
+	var blueprint_entry: StringName = &""
+	for entry in fill.palette_entries():
+		if not entry.is_header:
+			blueprint_entry = entry.id
+			break
+	assert(blueprint_entry != &"", "палитра наполнения показывает группу чертежей")
+	fill.select_palette_entry(blueprint_entry)
+	assert(fill.selected_palette_entry() == blueprint_entry, "чертёж стал кистью")
+
+	var terrain: TerrainGrid = editor.document.terrain
+	# Uneven ground, so the merge has something to level and the pad is provably
+	# the blueprint's and not the terrain's.
+	editor._terrain_service.apply_operation(TerrainEditOperation.offset(
+		[Vector2i(12, 12), Vector2i(13, 12)], 2, TerrainEditOperation.Mode.TERRACE))
+	var undo_before: int = editor.history.undo_depth()
+
+	editor._brush.hovered_cell = Vector2i(13, 13)
+	editor._brush.has_hover = true
+	fill.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	fill.handle_input(_click(MOUSE_BUTTON_LEFT, false))
+	assert(editor.document.placements.placements.size() == 1,
+		"клик кистью чертежа поставил здание")
+	var record: MapPlacementRecord = editor.document.placements.placements[0]
+	var footprint := BuildingPlacementService.footprint_of(record)
+	assert(footprint.contains(Vector2i(13, 13)), "здание встало под курсором")
+	for cell: Vector2i in footprint.cells():
+		assert(terrain.height_of(cell) == record.level_value + footprint.relative_height(cell),
+			"колонка %s выровнена по площадке" % cell)
+		assert(terrain.is_anchor(cell), "клетка %s закреплена якорем" % cell)
+	assert(editor.history.undo_depth() == undo_before + 1,
+		"постановка — один шаг отмены, а не три; получено %d" % (editor.history.undo_depth() - undo_before))
+
+	editor._undo()
+	assert(editor.document.placements.placements.is_empty(), "отмена убрала запись")
+	assert(terrain.height_of(Vector2i(12, 12)) == 2, "и вернула рельеф тем же шагом")
+	assert(not terrain.is_anchor(Vector2i(12, 12)), "и отпустила якоря")
+	editor._redo()
+	assert(editor.document.placements.placements.size() == 1, "повтор вернул здание")
+
+	# Снос не возвращает рельеф (§11.4), но и не оставляет землю закреплённой.
+	editor._brush.hovered_cell = Vector2i(13, 13)
+	fill.handle_input(_click(MOUSE_BUTTON_RIGHT, true, true))
+	assert(editor.document.placements.placements.is_empty(), "Shift+ПКМ снёс здание")
+	assert(terrain.height_of(Vector2i(12, 12)) == record.level_value,
+		"снос оставляет площадку спланированной")
+	assert(not terrain.is_anchor(Vector2i(12, 12)), "и снимает якорь")
+	editor._undo()
+	editor._undo()
+	editor._undo()
+	fill.select_palette_entry(&"")
+	print("  building placement + shared undo ok")
+
+
 func _test_surface_painting_moves_no_geometry(editor: Node) -> void:
 	var terrain: TerrainGrid = editor.document.terrain
 	editor._select_mode(&"surface")

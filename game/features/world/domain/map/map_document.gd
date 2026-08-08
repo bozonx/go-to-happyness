@@ -14,10 +14,11 @@ extends RefCounted
 ## touched, and the author would not find out until the map stopped working.
 
 ## Sections the format defines but this phase does not interpret. They round-trip
-## byte-for-byte through the editor.
-const PASSTHROUGH_SECTIONS: Array[String] = [
-	"placements",
-]
+## byte-for-byte through the editor. `placements` has left this list: it now has a
+## typed owner (`MapPlacementLayer`), like the zone and scenario layers before it.
+const PASSTHROUGH_SECTIONS: Array[String] = []
+
+const PLACEMENTS_SECTION := "placements"
 
 ## Sections written as an object rather than an ordered list. Writing one as `[]`
 ## would produce a file that does not match the format its consumer reads.
@@ -50,6 +51,11 @@ var zones: MapZoneLayer = MapZoneLayer.new()
 
 ## Named authored entities; anonymous scatter remains a later binary layer.
 var entities: MapEntityLayer = MapEntityLayer.new()
+
+## Buildings standing on the map (`building_placement.md` §12). Interpreted, not
+## carried: a record references a blueprint and names the level that was applied,
+## and the ground it produced lives in `terrain.bin` like all other ground.
+var placements: MapPlacementLayer = MapPlacementLayer.new()
 
 ## Declared flags, the rule table and the win/lose expressions (§10). Like the
 ## zone layer and unlike `placements`, this one is interpreted: it is parsed on
@@ -105,12 +111,14 @@ static func from_json(source: Dictionary) -> MapDocument:
 	# expands it, so an old map that still carries it silently drops that grass
 	# and forage. Everything natural lives as explicit `entities[]` records now.
 	for key: String in source:
-		if _is_meta_key(key) or key == WATER_SECTION or key in MapScenario.SECTIONS \
+		if _is_meta_key(key) or key == WATER_SECTION or key == PLACEMENTS_SECTION \
+				or key in MapScenario.SECTIONS \
 				or key in ["areas", "anchors", "routes", "spawn_groups", "entities", "natural_scatter"]:
 			continue
 		document.sections[key] = _duplicated(source[key])
 	document.zones.from_json(source)
 	document.entities.from_json(source.get("entities", []))
+	document.placements.from_json(source.get(PLACEMENTS_SECTION, []))
 	document.scenario = MapScenario.from_json(source)
 	document._read_water_registry(source.get(WATER_SECTION, []))
 	return document
@@ -123,6 +131,7 @@ func to_json() -> Dictionary:
 	for key: String in zones.to_json():
 		result[key] = zones.to_json()[key]
 	result["entities"] = entities.to_json()
+	result[PLACEMENTS_SECTION] = placements.to_json()
 	var scenario_json := scenario.to_json()
 	for key: String in scenario_json:
 		result[key] = scenario_json[key]

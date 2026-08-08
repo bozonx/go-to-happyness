@@ -2,6 +2,10 @@ class_name MapEditorContext
 extends RefCounted
 
 signal status_message_changed(message: String, is_error: bool)
+## Raised by a mode that changed the document outside the usual service commits —
+## a captured multi-layer action (see `begin_capture`). The editor answers it by
+## telling every mode to rebuild, which is what it does after undo anyway.
+signal document_change_requested()
 
 ## Everything a mode is allowed to reach (map_editor.md §3.5).
 ##
@@ -30,6 +34,10 @@ var coverage_service: CoverageService = null
 var coverage_brush: CoverageBrushController = null
 var nav_grid: NavGrid = null
 var nav_publisher: TerrainNavigationPublisher = null
+## The one owner of "put a blueprint on the ground" (`building_placement.md` §2).
+## The tool in the Fill mode drives it; a session drives the same object with a
+## different policy.
+var placement_service: BuildingPlacementService = null
 
 var history: MapEditorHistory = null
 var camera: MapEditorCamera = null
@@ -56,6 +64,49 @@ var viewport: Viewport = null
 ## twenty deltas, and a mode that pushed once per click would leave nineteen of
 ## them unreachable from undo.
 var pending_edit_label := "правка"
+
+
+## One author action that touches several layers, collected into one undo entry.
+##
+## The editor records a command per committed delta, which is right for a brush:
+## a drag across twenty columns is twenty deltas and twenty commands. Placing a
+## building is the opposite case — the heights, the cut-outs, the water that
+## reflows behind them, the anchors and the placement record are ONE thing the
+## author did (`building_placement.md` §11.1), and one Ctrl+Z has to take all of
+## it back.
+##
+## While a capture is open the editor appends the commands it would have pushed
+## here instead. The mode closes it, adds its own record command and pushes a
+## single composite. Deliberately generic: this is not "the placement hook", it is
+## the same mechanism the border-ocean fill already needs.
+var _capturing := false
+var _captured: Array[MapEditorCommand] = []
+
+
+func begin_capture() -> void:
+	_capturing = true
+	_captured.clear()
+
+
+func is_capturing() -> bool:
+	return _capturing
+
+
+## Called by the editor for every command produced while a capture is open.
+func capture_command(command: MapEditorCommand) -> void:
+	if command != null:
+		_captured.append(command)
+
+
+func end_capture() -> Array[MapEditorCommand]:
+	_capturing = false
+	var parts := _captured.duplicate()
+	_captured.clear()
+	return parts
+
+
+func request_document_refresh() -> void:
+	document_change_requested.emit()
 
 
 ## Mouse position in the viewport the 3D view is rendered into.

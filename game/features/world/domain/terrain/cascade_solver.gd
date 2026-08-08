@@ -46,6 +46,11 @@ var _pending: Dictionary = {}
 var _moved: Dictionary = {}
 var _processed := 0
 var _requested_slope_class := RampConnectionPlan.AUTO_CLASS
+## Columns the wave may read but never move (§5 of `building_placement.md`): the
+## pad of a building being placed. Reaching one is not a rejection the way an
+## anchor is — the pad is what the operation is *for* — the wave simply stops
+## there, and the auto-skirt lays its ramp on the ground outside instead.
+var _held: Dictionary = {}
 
 
 ## Convenience for callers that only care about the outcome (§14: `(grid, op) -> delta | null`).
@@ -62,12 +67,16 @@ func solve(grid: TerrainGrid, operation: TerrainEditOperation) -> TerrainDelta:
 	_pending = {}
 	_moved = {}
 	_processed = 0
+	_held = {}
 	_requested_slope_class = RampConnectionPlan.AUTO_CLASS
 	if grid == null or operation == null or operation.cells.is_empty():
 		rejection_reason = REASON_NOTHING_TO_DO
 		return null
 	_requested_slope_class = operation.slope_class if SlopeCatalog.is_ramp_class(operation.slope_class) else RampConnectionPlan.AUTO_CLASS
 	_region = TerrainWorkingRegion.new(grid)
+
+	if operation.mode == TerrainEditOperation.Mode.PLACEMENT and not _cut_out_holes(operation):
+		return null
 
 	var raised: Array[Vector2i] = []
 	var lowered: Array[Vector2i] = []
@@ -82,9 +91,26 @@ func solve(grid: TerrainGrid, operation: TerrainEditOperation) -> TerrainDelta:
 		# Terrace mode wants the bare vertical face and says so (§4.1); every
 		# other mode gets the gentlest slope that fits (§3.2), which for Level is
 		# exactly the auto-skirt of §4.5.
-		SlopeAssigner.assign_slopes(_region, _moved_cells(), _requested_slope_class)
+		SlopeAssigner.assign_slopes(_region, _moved_cells(), _requested_slope_class, _held)
 
 	return _build_delta()
+
+
+## Carves the openings a blueprint declares before anything is levelled, so the
+## cascade already sees them as holes and neither relaxes into them nor lays a
+## ramp across one.
+func _cut_out_holes(operation: TerrainEditOperation) -> bool:
+	for cell: Vector2i in operation.hole_cells:
+		if not _region.is_inside(cell):
+			rejection_reason = REASON_OUT_OF_BOUNDS
+			return false
+		if _region.is_anchor(cell):
+			rejection_reason = REASON_ANCHOR
+			return false
+		_region.dissolve_ramps_touching(cell)
+		_region.set_hole(cell, true)
+		_held[cell] = true
+	return true
 
 
 # --- Brush ------------------------------------------------------------------
@@ -107,6 +133,10 @@ func _apply_brush(operation: TerrainEditOperation, raised: Array[Vector2i], lowe
 		# where the step it is asked for falls below half a step, not shave one off
 		# every cell that is not exactly at full strength.
 		var target := current + int(round(float(operation.height_delta) * weight))
+		if operation.mode == TerrainEditOperation.Mode.PLACEMENT:
+			# The pad is authored, cell by cell, and the wave must not touch it.
+			target = operation.target_height_at(index)
+			_held[cell] = true
 		if operation.mode == TerrainEditOperation.Mode.LEVEL:
 			# Levelling with a falloff pulls the column PART of the way to the
 			# plateau. At full strength that is the plateau itself, so an unweighted
@@ -114,8 +144,11 @@ func _apply_brush(operation: TerrainEditOperation, raised: Array[Vector2i], lowe
 			target = current + int(round(float(operation.target_height - current) * weight))
 		if target == current:
 			# A ramp cell levelled to the height it already has still loses its
-			# slope: the brush asked for flat ground.
-			if _region.is_ramp_cell(cell):
+			# slope: the brush asked for flat ground. A pad cell is registered as
+			# moved regardless, because the skirt around the building is laid from
+			# the cells the operation touched and an edge that happened to already
+			# be at the right height is still an edge of the pad.
+			if _region.is_ramp_cell(cell) or operation.mode == TerrainEditOperation.Mode.PLACEMENT:
 				_move_column(cell, target)
 			continue
 		if target < TerrainGrid.MIN_HEIGHT or target > TerrainGrid.MAX_HEIGHT:
@@ -175,6 +208,10 @@ func _relax_neighbours(cell: Vector2i, direction: int) -> bool:
 	for neighbour_direction: int in SlopeCatalog.ORTHOGONAL_DIRECTIONS:
 		var neighbour := cell + SlopeCatalog.direction_offset(neighbour_direction)
 		if not _region.is_inside(neighbour) or _region.is_hole(neighbour):
+			continue
+		# The pad of the building being placed is authored ground, not ground the
+		# wave is free to relax into.
+		if _held.has(neighbour):
 			continue
 		var repose := (
 			SlopeCatalog.steps_per_cell_of_class(_requested_slope_class)

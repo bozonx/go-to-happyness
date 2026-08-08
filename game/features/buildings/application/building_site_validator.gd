@@ -1,8 +1,15 @@
-class_name BuildingPlacementService
+class_name BuildingSiteValidator
 extends RefCounted
 
 ## Handles building placement validation: slope checks, terrain obstacle checks,
 ## dig site overlaps, and distance clearance checks.
+##
+## This is the session's **site clearance** check, not the owner of placement.
+## Putting a blueprint on the ground — the anchor level, the merge with the
+## terrain, the entrance check, the record — belongs to `BuildingPlacementService`
+## (`building_placement.md` §2), and player construction moves onto it in §13.
+## Until then this answers the narrower question the current build asks: is this
+## spot free and flat enough to start a site on.
 
 var _dig_sites: Array = []
 var _terrain_blocked_cells: Dictionary = {}

@@ -684,7 +684,7 @@ static func _test_building_placement_rejects_open_and_frozen_water() -> void:
 	port.water_grid = water
 	port.terrain_height_at = func(_x: float, _z: float, _fallback: float) -> float: return 0.0
 	port.max_build_slope = 0.5
-	var placement := BuildingPlacementService.new()
+	var placement := BuildingSiteValidator.new()
 	placement.configure(port)
 	var centre := Vector3(0.5, 0.0, 0.5)
 	assert(placement.footprint_overlaps_terrain_obstacle(centre, Vector2i.ONE))

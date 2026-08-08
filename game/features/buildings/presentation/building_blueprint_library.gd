@@ -37,6 +37,22 @@ static func refresh() -> void:
 			_register_definition(blueprint.role, blueprint)
 
 
+## Puts a blueprint that does not come from a file into the index, under the
+## runtime key it would have had. It exists because a blueprint reference has to
+## resolve for anything downstream to work — a map placement, a required-content
+## entry, a footprint — and a caller holding a blueprint in memory (a test, a tool
+## generating content) otherwise has no way to make it resolvable without writing
+## it to disk first.
+static func register_blueprint(source: StringName, blueprint: BuildingBlueprint) -> String:
+	if blueprint == null:
+		return ""
+	_index_built = true
+	var key := runtime_key(source, blueprint.id)
+	_index[key] = {"path": "", "source": source, "id": blueprint.id}
+	_cache[key] = blueprint
+	return key
+
+
 static func set_world_style(style: StringName) -> void:
 	_world_style = style if not String(style).is_empty() else &"generic"
 
@@ -71,6 +87,20 @@ static func get_blueprint(building_type: String) -> BuildingBlueprint:
 	var bp := BuildingBlueprint.from_json(text)
 	_cache[building_type] = bp
 	return bp
+
+
+## Which content source a blueprint already in hand came from. Used when a
+## reference has to name the exact file the author picked rather than whatever
+## the style resolver would choose for its role (`building_placement.md` §12).
+static func source_of(blueprint: BuildingBlueprint) -> StringName:
+	_ensure_index()
+	for key: String in _index:
+		if _cache.get(key) == blueprint:
+			return StringName(_index[key]["source"])
+	for key: String in _index:
+		if StringName(_index[key]["id"]) == blueprint.id:
+			return StringName(_index[key]["source"])
+	return SOURCE_BUILTIN
 
 
 static func runtime_key(source: StringName, blueprint_id: StringName) -> String:
@@ -171,7 +201,7 @@ static func _resolved_key(building_type: String) -> String:
 	# them verbatim for save restore and map placement.
 	if _index.has(building_type):
 		return building_type
-	if ":" in building_type:
+	if ":" in building_type or _content_index == null:
 		return ""
 	var resolver := StyleResolver.new(_content_index)
 	var requested_variant := &"default"
@@ -198,7 +228,13 @@ static func footprint(building_type: String) -> Vector2i:
 ## the building sits correctly around the placed cell, and sorted bottom-up so
 ## the frame grows from the ground as construction advances.
 static func ordered_modules(building_type: String) -> Array:
-	var bp := get_blueprint(building_type)
+	return modules_of(get_blueprint(building_type))
+
+
+## The same list for a blueprint already in hand — what the map editor's
+## placement ghost draws, so the author previews the real building and not a box
+## the editor invented (`building_placement.md` §8.3).
+static func modules_of(bp: BuildingBlueprint) -> Array:
 	if bp == null:
 		return []
 	var center := bp.pivot_offset()

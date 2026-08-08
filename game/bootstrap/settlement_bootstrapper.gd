@@ -589,7 +589,7 @@ func _setup_citizen_registration_and_school() -> void:
 	game.citizen_registration_service.configure(registration_port)
 	game.school_service = SchoolService.new()
 	game.school_service.configure(game.school_positions, game.citizens)
-	game.building_placement_service = BuildingPlacementService.new()
+	game.building_site_validator = BuildingSiteValidator.new()
 	var placement_port := BuildingPlacementRuntimePort.new()
 	placement_port.dig_sites = game.dig_sites
 	placement_port.terrain_blocked_cells = game.terrain_blocked_cells
@@ -602,7 +602,7 @@ func _setup_citizen_registration_and_school() -> void:
 	# and water constraints from its first call without depending on presentation.
 	placement_port.terrain_grid = game.launch_config.map_document.terrain
 	placement_port.water_grid = game.launch_config.map_document.water
-	game.building_placement_service.configure(placement_port)
+	game.building_site_validator.configure(placement_port)
 
 
 func _setup_citizen_needs_and_orders() -> void:
