@@ -33,8 +33,8 @@ const BODY_RADIUS := 0.3
 const EYE_HEIGHT := 0.75
 const WALK_SPEED := 3.2
 const RUN_SPEED := 6.0
-const GRAVITY := 18.0
-const JUMP_SPEED := 4.5
+static var GRAVITY: float = HumanoidMobility.GRAVITY
+static var JUMP_SPEED: float = HumanoidMobility.JUMP_VELOCITY
 const MOUSE_SENSITIVITY := 0.0022
 ## How far above the start cell the body is dropped in. A person standing exactly
 ## on the floor spawns intersecting it and gets pushed through; half a metre of
@@ -73,6 +73,11 @@ func exit() -> void:
 	_active = false
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	set_physics_process(false)
+	# Relinquish the viewport before this camera is deleted at the end of the
+	# frame. Otherwise its queued removal can clear the camera which the editor
+	# makes current from the `exited` callback, leaving a blank viewport.
+	if _camera != null:
+		_camera.current = false
 	if _body != null:
 		_body.queue_free()
 		_body = null

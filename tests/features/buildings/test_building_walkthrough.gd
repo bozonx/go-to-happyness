@@ -91,6 +91,14 @@ func _test_walking_a_room(editor: BuildingEditor) -> void:
 	await process_frame
 	assert(walk.get_node_or_null("WalkCollision") == null,
 		"colliders are thrown away rather than left to go stale under the next edit")
+	assert(editor._camera_controller.camera.current,
+		"the editor camera remains current after the walk camera is actually freed")
+	assert(is_equal_approx(BuildingWalkthrough.JUMP_SPEED, HumanoidMobility.JUMP_VELOCITY),
+		"the editor walk uses the same standard jump as gameplay")
+	var jump_height := BuildingWalkthrough.JUMP_SPEED * BuildingWalkthrough.JUMP_SPEED \
+		/ (2.0 * BuildingWalkthrough.GRAVITY)
+	assert(jump_height > 1.0,
+		"the standard jump clears one full authored block, got %.2f m" % jump_height)
 	print("  walking a room ok")
 
 

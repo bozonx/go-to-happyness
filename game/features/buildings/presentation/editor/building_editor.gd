@@ -750,9 +750,19 @@ func _on_walkthrough_exited() -> void:
 	_editor_ui.visible = true
 	if _test_point_views != null:
 		_test_point_views.visible = true
+	_restore_editor_camera()
+	# WalkBody is queue-freed by the walkthrough. Reassert the editor camera once
+	# that deletion has actually reached the scene tree: removing the previous
+	# current camera must not leave the returned editor with a blank viewport.
+	_restore_editor_camera.call_deferred()
+	_update_status("Прогулка завершена.")
+
+
+func _restore_editor_camera() -> void:
+	if _camera_controller == null or _camera_controller.camera == null:
+		return
 	_camera_controller.apply_position()
 	_camera_controller.camera.make_current()
-	_update_status("Прогулка завершена.")
 
 
 ## Where the walk starts, in this order:

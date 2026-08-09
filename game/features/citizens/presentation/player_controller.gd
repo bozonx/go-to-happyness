@@ -7,8 +7,8 @@ const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.
 
 const PLAYER_SPEED := 6.5
 const PLAYER_SPRINT_MULTIPLIER := 1.7
-const PLAYER_JUMP_VELOCITY := 4.8
-const PLAYER_GRAVITY := 14.0
+static var PLAYER_JUMP_VELOCITY: float = HumanoidMobility.JUMP_VELOCITY
+static var PLAYER_GRAVITY: float = HumanoidMobility.GRAVITY
 const PLAYER_EYE_HEIGHT := 1.48
 const INTERACTION_RANGE := 4.5
 const HARVEST_DURATION := 2.0
