@@ -575,8 +575,16 @@ func _refresh_undo_redo_buttons() -> void:
 		_redo_btn.disabled = _redo_stack.is_empty()
 
 
-func set_status(message: String) -> void:
-	_update_status(message)
+func set_status(message: String, severity: int = -1) -> void:
+	_update_status(message, _infer_status_severity(message) if severity < 0 else severity)
+
+
+func set_warning(message: String) -> void:
+	_update_status(message, EditorStatusMessage.Severity.WARNING)
+
+
+func set_error(message: String) -> void:
+	_update_status(message, EditorStatusMessage.Severity.ERROR)
 
 
 func select_mode(mode: int) -> void:
@@ -627,7 +635,7 @@ func _select_mode(mode: int) -> void:
 		frame_mode.deactivate()
 		zones_mode.deactivate()
 		fill_mode.activate()
-		_update_status("Наполнение: ЛКМ — поставить или выбрать, Ctrl+ЛКМ — добавить к выделению, Shift+ЛКМ — пипетка, Shift+ПКМ — удалить, Esc — снять выделение.")
+		_update_status("Режим наполнения.")
 	else:
 		fill_mode.deactivate()
 		if mode == EditMode.ZONES:
@@ -743,7 +751,7 @@ func _start_walkthrough(from_cursor := false) -> void:
 	_editor_ui.visible = false
 	if _test_point_views != null:
 		_test_point_views.visible = false
-	_update_status("Прогулка: WASD, мышь — осмотреться, Shift — бегом, Пробел — прыжок, Esc — выход.")
+	_update_status("Прогулка запущена.")
 
 
 func _on_walkthrough_exited() -> void:
@@ -813,7 +821,7 @@ func _add_test_point_here() -> void:
 	else:
 		test_points.add(cell, active_layer)
 	persist_test_points()
-	_update_status("Тест-точка %d · F5 — походить отсюда." % (test_points.selected + 1))
+	_update_status("Выбрана тест-точка %d." % (test_points.selected + 1))
 
 
 func _select_test_point(index: int) -> void:
@@ -822,7 +830,7 @@ func _select_test_point(index: int) -> void:
 	test_points.selected = maxi(index, -1)
 	persist_test_points()
 	var point := test_points.selected_point()
-	_update_status("Старт прогулки: %s · Shift+F6 — свойства" % (
+	_update_status("Старт прогулки: %s" % (
 		point.display_name(test_points.selected) if point != null else "вход здания"))
 
 
@@ -1062,9 +1070,17 @@ func _setup_ui() -> void:
 # UI sync helpers
 # ---------------------------------------------------------------------------
 
-func _update_status(message: String) -> void:
+func _update_status(message: String, severity: int = -1) -> void:
 	if _status_label != null:
-		_status_label.text = message
+		var resolved := _infer_status_severity(message) if severity < 0 else severity
+		_status_label.text = EditorStatusMessage.text(message, resolved)
+		_status_label.add_theme_color_override("font_color", EditorStatusMessage.color(resolved))
+
+
+func _infer_status_severity(message: String) -> int:
+	if "потеряно" in message.to_lower():
+		return EditorStatusMessage.Severity.WARNING
+	return EditorStatusMessage.infer(message)
 
 
 func _update_shortcut_tooltip() -> void:

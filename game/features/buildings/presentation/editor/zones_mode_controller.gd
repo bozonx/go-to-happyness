@@ -203,7 +203,7 @@ func activate() -> void:
 	_inspector_panel.visible = true
 	_apply_xray()
 	_refresh_all()
-	_editor.set_status("Режим зон: Q — область, W — точка, Esc — снять выделение / холостой режим.")
+	_editor.set_status("Режим зон.")
 
 
 func deactivate() -> void:
@@ -737,7 +737,7 @@ func _start_linking() -> void:
 		route.stops.append(anchor.id)
 	_link_route_id = route.id
 	_linking = true
-	_editor.set_status("Маршрут «%s»: кликайте по точкам, чтобы добавить. Esc — готово." % route.id)
+	_editor.set_status("Редактируется маршрут «%s»." % route.id)
 	_editor.mark_dirty()
 	_refresh_all()
 
@@ -1456,7 +1456,7 @@ func _build_route_rows(route: ZoneRouteRecord) -> void:
 		_link_route_id = route.id
 		_selected_route_id = route.id
 		_linking = true
-		_editor.set_status("Маршрут «%s»: кликайте по точкам, чтобы добавить. Esc — готово." % route.id))
+		_editor.set_status("Редактируется маршрут «%s»." % route.id))
 	_anchor_props.add_child(add_stop_btn)
 
 

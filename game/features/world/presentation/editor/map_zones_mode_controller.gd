@@ -389,7 +389,7 @@ func _start_linking() -> void:
 		_link_route_id = route.id
 		_commit(before, "маршрут")
 	_linking = true
-	context.set_status_message("Маршрут %s: кликайте по точкам, Esc — закончить" % _link_route_id)
+	context.set_status_message("Редактируется маршрут %s" % _link_route_id)
 
 
 func _link_click(cell: Vector2i) -> void:

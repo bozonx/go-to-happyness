@@ -32,7 +32,7 @@ func build(modes: Array) -> void:
 		button.custom_minimum_size = Vector2(38, 0)
 		button.toggle_mode = true
 		button.focus_mode = Control.FOCUS_NONE
-		button.tooltip_text = "%d. %s (клавиша %d)" % [slot, mode.title, slot]
+		button.tooltip_text = mode.title
 		var mode_id: StringName = mode.id
 		button.pressed.connect(func() -> void: mode_selected.emit(mode_id))
 		add_child(button)

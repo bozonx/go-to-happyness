@@ -23,7 +23,7 @@ theme_override_constants/separation = 10
 [node name="BackButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
 text = "←"
-tooltip_text = "Вернуться в меню (Esc)"
+tooltip_text = "Вернуться в меню"
 
 [node name="NewButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
@@ -38,7 +38,7 @@ tooltip_text = "Открыть карту"
 [node name="SaveButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
 text = "💾"
-tooltip_text = "Сохранить карту (Ctrl+S)"
+tooltip_text = "Сохранить карту"
 
 [node name="SaveAsButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
@@ -60,18 +60,18 @@ tooltip_text = "Настройки старта на карте"
 [node name="UndoButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
 text = "↩"
-tooltip_text = "Отменить (Ctrl+Z)"
+tooltip_text = "Отменить"
 
 [node name="RedoButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
 text = "↪"
-tooltip_text = "Повторить (Ctrl+Shift+Z)"
+tooltip_text = "Повторить"
 
 [node name="EyedropperButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
 toggle_mode = true
 text = "🧪"
-tooltip_text = "Пипетка: включить выбор свойств с карты (P)"
+tooltip_text = "Пипетка: включить выбор свойств с карты"
 
 [node name="RenderModeButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(100, 0)
@@ -95,15 +95,15 @@ tooltip_text = "Проверить карту"
 [node name="TestButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
 text = "▶"
-tooltip_text = "Тест-запуск (F5) — из места, выбранного в меню справа"
+tooltip_text = "Тест-запуск из места, выбранного в меню справа"
 
 [node name="TestTargetButton" type="MenuButton" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(150, 0)
 text = "вход карты"
-tooltip_text = "Откуда начинается тест-запуск: вход карты (или один из вариантов старта) либо тест-точка. F6 — поставить точку, Shift+F6 — свойства, Ctrl+F6 — удалить"
+tooltip_text = "Откуда начинается тест-запуск: вход карты, один из вариантов старта или тест-точка"
 flat = false
 
 [node name="TestHereButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
 text = "▶⌖"
-tooltip_text = "Тест-запуск из клетки под курсором (Shift+F5). Старт партии на карте не меняется"
+tooltip_text = "Тест-запуск из клетки под курсором. Старт партии на карте не меняется"

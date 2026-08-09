@@ -132,14 +132,14 @@ unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(38, 0)
 text = "↩"
-tooltip_text = "Отменить (Ctrl+Z)"
+tooltip_text = "Отменить"
 
 [node name="RedoBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(38, 0)
 text = "↪"
-tooltip_text = "Повторить (Ctrl+Shift+Z)"
+tooltip_text = "Повторить"
 
 [node name="EyedropperBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
 unique_name_in_owner = true
@@ -147,14 +147,14 @@ layout_mode = 2
 custom_minimum_size = Vector2(38, 0)
 toggle_mode = true
 text = "🧪"
-tooltip_text = "Пипетка: включить выбор элемента под курсором (P)"
+tooltip_text = "Пипетка: включить выбор элемента под курсором"
 
 [node name="WalkBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(38, 0)
 text = "▶"
-tooltip_text = "Походить по зданию (F5) — от входа или от выбранной тест-точки. Shift+F5 — от клетки под курсором. Тест-точки: F6 — поставить, Shift+F6 — свойства, Ctrl+F6 — удалить, Alt+1…9 — выбрать"
+tooltip_text = "Походить по зданию от входа, выбранной тест-точки или клетки под курсором"
 
 
 [node name="ModeFrameBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
@@ -207,7 +207,7 @@ unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 text = "🧹"
-tooltip_text = "Стереть (E)"
+tooltip_text = "Стереть"
 
 [node name="VSepTools" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 layout_mode = 2
@@ -217,14 +217,14 @@ unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 text = "📏"
-tooltip_text = "Линия (L)"
+tooltip_text = "Линия"
 
 [node name="BrushRectBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 text = "🔲"
-tooltip_text = "Прямоугольник (M)"
+tooltip_text = "Прямоугольник"
 
 [node name="VSepBrush" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 layout_mode = 2
@@ -233,7 +233,7 @@ layout_mode = 2
 unique_name_in_owner = true
 layout_mode = 2
 text = "🔄X"
-tooltip_text = "Поворот вокруг оси X (X)"
+tooltip_text = "Поворот вокруг оси X"
 
 [node name="RotBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 unique_name_in_owner = true
@@ -245,7 +245,7 @@ tooltip_text = "Поворот вокруг оси Y (C / R)"
 unique_name_in_owner = true
 layout_mode = 2
 text = "🔄Z"
-tooltip_text = "Поворот вокруг оси Z (Z)"
+tooltip_text = "Поворот вокруг оси Z"
 
 [node name="LayerLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 unique_name_in_owner = true
@@ -256,13 +256,13 @@ text = "Слой 0"
 unique_name_in_owner = true
 layout_mode = 2
 text = "➖"
-tooltip_text = "Слой ниже (PageDown)"
+tooltip_text = "Слой ниже"
 
 [node name="LayerUpBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "➕"
-tooltip_text = "Слой выше (PageUp)"
+tooltip_text = "Слой выше"
 
 [node name="VSepTextures" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 layout_mode = 2
@@ -286,7 +286,7 @@ unique_name_in_owner = true
 layout_mode = 2
 disabled = true
 text = "🗑"
-tooltip_text = "Удалить выбранный объект (Delete)"
+tooltip_text = "Удалить выбранный объект"
 
 [node name="VSepFillActions" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 layout_mode = 2
@@ -295,7 +295,7 @@ layout_mode = 2
 unique_name_in_owner = true
 layout_mode = 2
 text = "🔄X"
-tooltip_text = "Поворот вокруг оси X (X)"
+tooltip_text = "Поворот вокруг оси X"
 
 [node name="FillRotYBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 unique_name_in_owner = true
@@ -307,7 +307,7 @@ tooltip_text = "Поворот вокруг оси Y (C / R)"
 unique_name_in_owner = true
 layout_mode = 2
 text = "🔄Z"
-tooltip_text = "Поворот вокруг оси Z (Z)"
+tooltip_text = "Поворот вокруг оси Z"
 
 [node name="VSepFillLayer" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 layout_mode = 2
@@ -321,13 +321,13 @@ text = "Слой 0"
 unique_name_in_owner = true
 layout_mode = 2
 text = "➖"
-tooltip_text = "Слой ниже (PageDown)"
+tooltip_text = "Слой ниже"
 
 [node name="FillLayerUpBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "➕"
-tooltip_text = "Слой выше (PageUp)"
+tooltip_text = "Слой выше"
 
 [node name="VSepFillOverlay" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
 layout_mode = 2
@@ -372,14 +372,14 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "▣  Область    Q"
 toggle_mode = true
-tooltip_text = "Область (Q)"
+tooltip_text = "Область"
 
 [node name="ToolPointBtn" type="Button" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "◆  Точка       W"
 toggle_mode = true
-tooltip_text = "Точка (W)"
+tooltip_text = "Точка"
 
 [node name="RoleTitle" type="Label" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
 layout_mode = 2
@@ -446,13 +446,13 @@ text = "Слой Y: 0"
 unique_name_in_owner = true
 layout_mode = 2
 text = "−"
-tooltip_text = "Слой ниже (PageDown)"
+tooltip_text = "Слой ниже"
 
 [node name="ZoneLayerUpBtn" type="Button" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows/LayerRow"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "+"
-tooltip_text = "Слой выше (PageUp)"
+tooltip_text = "Слой выше"
 
 [node name="DisplayTitle" type="Label" parent="EditorUI/Root/ZonesToolbar/Scroll/Rows"]
 layout_mode = 2
@@ -508,7 +508,7 @@ unique_name_in_owner = true
 layout_mode = 2
 disabled = true
 text = "🗑 Удалить выбранное"
-tooltip_text = "Удалить выделенную зону (Delete)"
+tooltip_text = "Удалить выделенную зону"
 
 [node name="Spacer" type="Control" parent="EditorUI/Root/TopBar/Margin/HBox"]
 layout_mode = 2
@@ -1239,29 +1239,41 @@ custom_minimum_size = Vector2(0, 130)
 layout_mode = 2
 
 [node name="StatusBar" type="PanelContainer" parent="EditorUI/Root"]
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 30)
 z_index = 10
 layout_mode = 1
 anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = -40.0
+offset_top = -30.0
 grow_horizontal = 2
 grow_vertical = 0
 
 [node name="HBox" type="HBoxContainer" parent="EditorUI/Root/StatusBar"]
 layout_mode = 2
-theme_override_constants/separation = 20
+theme_override_constants/separation = 16
+
+[node name="LeftMargin" type="Control" parent="EditorUI/Root/StatusBar/HBox"]
+custom_minimum_size = Vector2(2, 0)
+layout_mode = 2
+
+[node name="CountLabel" type="Label" parent="EditorUI/Root/StatusBar/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 12
 
 [node name="StatusLabel" type="Label" parent="EditorUI/Root/StatusBar/HBox"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-
-[node name="CountLabel" type="Label" parent="EditorUI/Root/StatusBar/HBox"]
-unique_name_in_owner = true
-layout_mode = 2
+horizontal_alignment = 2
+vertical_alignment = 1
+clip_text = true
+text_overrun_behavior = 3
+theme_override_font_sizes/font_size = 12
 
 [node name="ShortcutTooltip" parent="EditorUI/Root/StatusBar/HBox" instance=ExtResource("4_shortcuts")]
 unique_name_in_owner = true

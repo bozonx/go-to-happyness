@@ -105,7 +105,7 @@ var _context := MapEditorContext.new()
 var _modes: Array[MapEditorMode] = []
 var _active: MapEditorMode = null
 var _message := ""
-var _message_is_error := false
+var _message_severity: int = EditorStatusMessage.Severity.INFO
 var dev_mode := false
 ## True while the history is replaying a command, so the commits that replay emits
 ## are not recorded as new commands.
@@ -294,7 +294,7 @@ func _build_services() -> void:
 
 func _on_status_message_changed(message: String, is_error: bool) -> void:
 	_message = message
-	_message_is_error = is_error
+	_message_severity = EditorStatusMessage.Severity.ERROR if is_error else EditorStatusMessage.Severity.INFO
 	_refresh_panels()
 
 
@@ -638,8 +638,12 @@ func _refresh_panels() -> void:
 	# fill buttons do.
 	_undo_button.disabled = not history.can_undo()
 	_redo_button.disabled = not history.can_redo()
-	_status_message.text = _message
-	_status_message.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3) if _message_is_error else Color.WHITE)
+	# Most messages originate in mode controllers, while save/load and validation
+	# live here. Resolve their presentation at this single UI boundary so a prior
+	# error cannot leave the next successful action red.
+	_message_severity = EditorStatusMessage.infer(_message)
+	_status_message.text = EditorStatusMessage.text(_message, _message_severity)
+	_status_message.add_theme_color_override("font_color", EditorStatusMessage.color(_message_severity))
 
 
 func _update_workspace_visibility() -> void:
@@ -894,10 +898,13 @@ func _validate_map() -> Dictionary:
 	var warnings: Array = result["warnings"]
 	if not errors.is_empty():
 		_message = "ошибки: %s" % "; ".join(errors)
+		_message_severity = EditorStatusMessage.Severity.ERROR
 	elif warnings.is_empty():
 		_message = "карта проверена: ошибок и предупреждений нет"
+		_message_severity = EditorStatusMessage.Severity.INFO
 	else:
 		_message = "карта проверена · предупреждения: %s" % "; ".join(warnings)
+		_message_severity = EditorStatusMessage.Severity.WARNING
 	_refresh_panels()
 	return result
 
@@ -929,7 +936,7 @@ func _test_run() -> void:
 func _test_run_from_cursor() -> void:
 	if not _has_last_hovered_cell:
 		_message = "тест-запуск отсюда: наведите курсор на клетку карты"
-		_message_is_error = true
+		_message_severity = EditorStatusMessage.Severity.ERROR
 		_refresh_panels()
 		return
 	_launch_test_run(_world_position_of_cell(_last_hovered_cell))
@@ -951,7 +958,7 @@ func _world_position_of_cell(cell: Vector2i) -> Vector3:
 func _add_test_point_here() -> void:
 	if not _has_last_hovered_cell:
 		_message = "тест-точка: наведите курсор на клетку карты"
-		_message_is_error = true
+		_message_severity = EditorStatusMessage.Severity.ERROR
 		_refresh_panels()
 		return
 	var existing := test_points.index_at_cell(_last_hovered_cell)
@@ -1006,7 +1013,7 @@ func _write_test_points(announce_errors: bool) -> void:
 		return
 	if announce_errors:
 		_message = "%s · %s" % [_message, test_points.last_error]
-		_message_is_error = true
+		_message_severity = EditorStatusMessage.Severity.ERROR
 
 
 ## Persists and redraws — every add, select, rename and delete goes through here.
@@ -1194,7 +1201,7 @@ func _launch_test_run(spawn_override: Vector3) -> void:
 		document, definition_key, spawn_override != Vector3.INF, test_start_option)
 	if not session_errors.is_empty():
 		_message = "тест-запуск невозможен: %s" % "; ".join(session_errors)
-		_message_is_error = true
+		_message_severity = EditorStatusMessage.Severity.ERROR
 		_refresh_panels()
 		return
 	if launch_manager.has_method("launch_editor_test"):
@@ -1295,7 +1302,7 @@ func _on_coverage_committed(delta: CoverageDelta) -> void:
 func _undo() -> void:
 	if not history.can_undo():
 		_message = "нечего отменять"
-		_message_is_error = false
+		_message_severity = EditorStatusMessage.Severity.INFO
 		_refresh_panels()
 		return
 	var label := history.undo_label()
@@ -1303,21 +1310,21 @@ func _undo() -> void:
 	var ok := history.undo()
 	_replaying = false
 	_message = "отменено: %s" % label if ok else "отмена не удалась"
-	_message_is_error = not ok
+	_message_severity = EditorStatusMessage.Severity.INFO if ok else EditorStatusMessage.Severity.ERROR
 	_after_history_change()
 
 
 func _redo() -> void:
 	if not history.can_redo():
 		_message = "нечего повторять"
-		_message_is_error = false
+		_message_severity = EditorStatusMessage.Severity.INFO
 		_refresh_panels()
 		return
 	_replaying = true
 	var ok := history.redo()
 	_replaying = false
 	_message = "повторено" if ok else "повтор не удался"
-	_message_is_error = not ok
+	_message_severity = EditorStatusMessage.Severity.INFO if ok else EditorStatusMessage.Severity.ERROR
 	_after_history_change()
 
 
