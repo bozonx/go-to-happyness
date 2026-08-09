@@ -26,6 +26,21 @@ func _run() -> void:
 
 	var fill = editor.fill_mode
 	assert(fill != null, "controller exists")
+	var top_bar := editor.get_node("EditorUI/Root/TopBar") as Control
+	var top_scroll := editor.get_node("EditorUI/Root/TopBar/Margin/Scroll") as ScrollContainer
+	var palette := editor.get_node("%FillPanel") as Control
+	var inspector := editor.get_node("%FillInspectorPanel") as Control
+	assert(top_bar.get_combined_minimum_size().y <= 55.0, "building top bar keeps its compact height")
+	assert(top_scroll.horizontal_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED,
+		"building top bar preserves access to overflowing actions")
+	assert(palette.custom_minimum_size.x + inspector.custom_minimum_size.x + 16.0 <= 1280.0,
+		"building palettes and inspector fit the supported 1280 px viewport")
+	editor._orbiting = true
+	editor._release_pointer_capture(MOUSE_BUTTON_RIGHT)
+	assert(not editor._orbiting, "release over UI ends camera orbit")
+	editor._panning = true
+	editor._release_pointer_capture(MOUSE_BUTTON_MIDDLE)
+	assert(not editor._panning, "release over UI ends camera pan")
 
 	# Shared schema inspector debounces each field independently and cancels
 	# timers when selection rebuilds its controls.

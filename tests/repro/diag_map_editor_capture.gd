@@ -1,9 +1,8 @@
 extends SceneTree
 
-## Captures a screenshot of the map editor HUD to user://map_editor_hud.png and
-## prints the minimum size every panel demands, which is what decides whether the
-## chrome fits a small window.
-## Diagnostic only: run with a display server, not --headless.
+## Prints the minimum size every panel demands, which is what decides whether the
+## chrome fits a small window. With a display server it also captures the HUD;
+## headless runs deliberately report layout only, so CI diagnostics stay clean.
 
 const EDITOR := "res://game/features/world/presentation/editor/map_editor.tscn"
 
@@ -46,6 +45,9 @@ func _settle() -> void:
 
 
 func _save(name: String) -> void:
+	if DisplayServer.get_name() == "headless":
+		print("capture skipped in headless mode: ", name)
+		return
 	var path := "user://%s.png" % name
 	root.get_texture().get_image().save_png(path)
 	print("saved to ", ProjectSettings.globalize_path(path))

@@ -249,7 +249,44 @@ func _unhandled_input(event: InputEvent) -> void:
 			if event.keycode == KEY_ESCAPE and _eyedropper_active:
 				_set_eyedropper_active(false)
 				return
-			_handle_key(event)
+				_handle_key(event)
+
+
+## Controls consume their own mouse-up events before `_unhandled_input` sees
+## them.  A drag that begins in the 3D view and ends over a panel must still
+## release camera and paint state, otherwise the next movement keeps orbiting or
+## extends a completed stroke.
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var button := event as InputEventMouseButton
+		if not button.pressed and _pointer_over_ui():
+			_release_pointer_capture(button.button_index)
+
+
+func _release_pointer_capture(button_index: MouseButton) -> void:
+	match button_index:
+		MOUSE_BUTTON_RIGHT:
+			_orbiting = false
+			frame_mode.shift_erasing = false
+		MOUSE_BUTTON_MIDDLE:
+			_panning = false
+		MOUSE_BUTTON_LEFT:
+			if current_mode == EditMode.FRAME and frame_mode.is_painting():
+				frame_mode.end_paint_stroke()
+				end_history_group()
+			else:
+				frame_mode.painting = false
+			if current_mode == EditMode.FILL:
+				fill_mode.on_left_released()
+			elif current_mode == EditMode.ZONES and zones_mode.is_painting():
+				zones_mode.handle_mouse_button(_mouse_release_event(MOUSE_BUTTON_LEFT))
+
+
+func _mouse_release_event(button_index: MouseButton) -> InputEventMouseButton:
+	var event := InputEventMouseButton.new()
+	event.button_index = button_index
+	event.pressed = false
+	return event
 
 
 func _handle_mouse_button(event: InputEventMouseButton) -> void:

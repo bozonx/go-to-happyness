@@ -1,7 +1,7 @@
 [gd_scene format=3]
 
 [node name="EditorTopBar" type="PanelContainer"]
-custom_minimum_size = Vector2(0, 52)
+custom_minimum_size = Vector2(0, 55)
 clip_contents = true
 
 [node name="Margin" type="MarginContainer" parent="."]
