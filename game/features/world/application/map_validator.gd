@@ -193,7 +193,13 @@ static func validate_party_capacity(
 		errors.append("вариант старта %s ссылается на несуществующую группу появления %s" % [
 			option.id, option.spawn_group])
 		return errors
-	var plan := MapSpawnService.new().plan_party(document.zones, group, population, document.meta.cell_size)
+	var service := MapSpawnService.new()
+	# The document's own grids, so the check answers the question it claims to:
+	# while nothing configured the service, "does the party fit" ignored holes,
+	# lava, deep water and the rim of the board entirely, and the first thing the
+	# author saw was settlers standing in a lake.
+	service.configure(null, document.terrain, document.water)
+	var plan := service.plan_party(document.zones, group, population, document.meta.cell_size)
 	if not plan.ok:
 		errors.append(plan.reason)
 	return errors
@@ -269,18 +275,33 @@ static func _validate_scenario(document: MapDocument, errors: Array[String]) -> 
 			errors.append("правило ссылается на несуществующую область %s" % zone_id)
 
 
-## An anchor must stand on real, dry, passable ground — a spawn in a hole, under
-## deep water, or on lava is a map that cannot start (§8.1, §11).
+## An anchor a unit stands on must stand on real, dry, passable ground — a spawn
+## in a hole, under deep water, or on lava is a map that cannot start (§8.1, §11).
+##
+## **`poi` is exempt, and that is the whole point of the role.** `core:camera_start`
+## is authored as a `poi` precisely so an establishing shot may look from over the
+## water, off a cliff or past the rim of the board (`map_start.md` §4.1) — while
+## this rule applied to every role indiscriminately, the design's own example was
+## an error the author could not clear.
+##
+## Off the board is an error rather than a silent pass, for the same reason: a
+## spawn nobody can reach is exactly what "outside the board" means, and returning
+## early was how it left the check unnoticed.
 static func _validate_anchor_place(anchor: ZoneAnchorRecord, terrain: TerrainGrid, water: WaterGrid, errors: Array[String]) -> void:
+	if anchor.role == ZoneAnchorRecord.ROLE_POI:
+		return
 	# Coordinates are centred on the world origin, exactly like TerrainGrid and
 	# NavGrid. Never reintroduce a 0..N editor coordinate check here.
 	var cell := anchor.cell()
-	if terrain == null or not terrain.is_inside(cell):
+	if terrain == null:
 		return
-	if terrain != null and terrain.is_hole(cell):
+	if not terrain.is_inside(cell):
+		errors.append("точка %s стоит за краем доски" % anchor.id)
+		return
+	if terrain.is_hole(cell):
 		errors.append("точка %s стоит в вырезе террейна" % anchor.id)
 		return
-	if water != null and terrain != null:
+	if water != null:
 		if water.is_wet(terrain, cell) and water.is_lava(cell):
 			errors.append("точка %s стоит в лаве" % anchor.id)
 			return
@@ -434,6 +455,10 @@ static func _warn_about_separated_buildings(
 
 
 static func _warn_if_anchor_unreachable(anchor: ZoneAnchorRecord, nav_grid: NavGrid, warnings: Array[String]) -> void:
+	# A `poi` is not stood on (see `_validate_anchor_place`): warning that the
+	# start camera hangs over impassable water is noise about the intended case.
+	if anchor.role == ZoneAnchorRecord.ROLE_POI:
+		return
 	var cell := anchor.cell()
 	if not nav_grid.is_board_cell(cell):
 		return

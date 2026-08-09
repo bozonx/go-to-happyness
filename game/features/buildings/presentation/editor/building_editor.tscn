@@ -154,7 +154,7 @@ unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(38, 0)
 text = "▶"
-tooltip_text = "Походить по зданию (F5). Старт — от входа или от выбранной тест-точки (F6, Alt+1…9, N — свойства)"
+tooltip_text = "Походить по зданию (F5) — от входа или от выбранной тест-точки. Shift+F5 — от клетки под курсором. Тест-точки: F6 — поставить, Shift+F6 — свойства, Ctrl+F6 — удалить, Alt+1…9 — выбрать"
 
 
 [node name="ModeFrameBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]

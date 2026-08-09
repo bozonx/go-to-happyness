@@ -3,19 +3,18 @@ extends RefCounted
 
 ## Resolves where a unit appears on the map (active_zones.md §15).
 ##
-## Spawn is authored either as a `spawn`-role anchor or as a `region` whose pack
-## function declares it an appearance area. The engine gives **one** operation —
-## "give me a free place among these addresses" — and decides nothing about what
-## appears, how often, or why: those are rules.
+## Spawn is authored as a `spawn`-role anchor, and a spawn group (`map_start.md`
+## §4.3) is what the runtime looks up: `plan_party` lays out a whole party at
+## once, in the author's order, and a member that does not fit refuses the
+## *launch* rather than the placement.
 ##
-## Two levels of API, and the difference matters:
-##
-## * `claim` is the §15 operation: it filters candidates by passability, access
-##   rights and occupancy and hands out a place, remembering that it did. A wave,
-##   a respawn or a drop zone goes through this one.
-## * `plan_party` lays out a whole group at once (`map_start.md` §4.3). It is not
-##   `claim` in a loop: a party is placed as a unit, in the author's order, and a
-##   member that does not fit refuses the *launch* rather than the placement.
+## There used to be a second entry point here — `claim`, "one free place among
+## these addresses", the §15 operation for waves, respawns and drop zones — plus
+## `spawn_positions` and the occupancy ledger both needed. Nothing in the game
+## ever called them: no rule engine exists to ask, and the two readers rotted
+## quietly (the passability check inside them was dead for want of a configured
+## nav grid). They come back with their first caller, from a design that knows
+## what that caller needs, rather than being maintained as a guess.
 ##
 ## What used to be here — `hero_spawn_position` and `companion_spawn_positions`,
 ## read one anchor per party member — is gone. That pair is what made the map's
@@ -36,8 +35,9 @@ extends RefCounted
 const PARTY_LEADER := &"core:party_leader"
 const PARTY_SLOT := &"core:party_slot"
 ## Where the first frame looks from. Deliberately a `poi` and not a `spawn`: the
-## validator demands dry passable ground of every spawn, and a good establishing
-## camera stands over water, over a cliff or past the rim of the board (§4.1).
+## validator demands dry passable ground of every role a unit stands on, and a
+## good establishing camera stands over water, over a cliff or past the rim of the
+## board (§4.1) — which is exactly the exemption `poi` buys it.
 const CAMERA_START := &"core:camera_start"
 
 ## v7 names, read for one release (§16). They are resolved on load by
@@ -55,59 +55,22 @@ static func canonical_function(function: StringName) -> StringName:
 	return FUNCTION_ALIASES.get(function, function)
 
 
-## Outcome of a §15 placement request: a world position, or a refusal that says
-## why. A refusal is a normal answer — a full drop zone is not an error — so it
-## carries a reason instead of pushing one.
-class SpawnPlacement:
-	extends RefCounted
-
-	var ok := false
-	var position := Vector3.INF
-	## Address the place came from: an anchor id, or the region id it was picked
-	## inside. Callers hold this to release the claim later.
-	var address: StringName = &""
-	var reason := ""
-
-	static func granted(at: Vector3, from: StringName) -> SpawnPlacement:
-		var placement := SpawnPlacement.new()
-		placement.ok = true
-		placement.position = at
-		placement.address = from
-		return placement
-
-	static func refused(why: String) -> SpawnPlacement:
-		var placement := SpawnPlacement.new()
-		placement.reason = why
-		return placement
-
-
-## Passability source; null means "do not check", which is what a headless
-## placement test and an early bootstrap both want.
+## What makes a cell standable. All three are optional because a headless
+## placement test has none of them; a caller that *has* them and does not pass
+## them is the bug this pair of fields replaced — the nav grid was never once
+## configured, so every passability check in this file silently passed.
 var _nav_grid: NavGrid = null
-## Addresses handed out and not yet released, so two units never land on one
-## authored point. Keyed by address; a region address counts one claim per cell.
-var _claimed: Dictionary = {}
+var _terrain: TerrainGrid = null
+var _water: WaterGrid = null
 
 
-func configure(nav_grid: NavGrid) -> void:
+## Ground sources for placement. `terrain`/`water` answer "is this real dry
+## ground inside the board", which the editor can ask of a document alone;
+## `nav_grid` adds cliffs and obstacles and exists only where the world is built.
+func configure(nav_grid: NavGrid, terrain: TerrainGrid = null, water: WaterGrid = null) -> void:
 	_nav_grid = nav_grid
-
-
-func release(address: StringName) -> void:
-	_claimed.erase(address)
-
-
-func release_all() -> void:
-	_claimed.clear()
-
-
-## World positions of every `spawn` anchor on the layer, in authoring order.
-func spawn_positions(zones: MapZoneLayer, cell_size := 1.0) -> Array[Vector3]:
-	var positions: Array[Vector3] = []
-	for anchor in zones.anchors:
-		if anchor.is_spawn():
-			positions.append(world_position_of(anchor, cell_size))
-	return positions
+	_terrain = terrain
+	_water = water
 
 
 ## The anchor carrying a function, or null. Alias-aware, so a document that still
@@ -138,50 +101,6 @@ static func cell_to_world(cell: Vector2i, level: float, cell_size := 1.0) -> Vec
 		(float(cell.x) + 0.5) * cell_size,
 		level * TerrainGrid.HEIGHT_STEP,
 		(float(cell.y) + 0.5) * cell_size)
-
-
-## The §15 operation: a free place among the addresses carrying `function`,
-## checked for passability, access rights and occupancy.
-##
-## Candidates are the authored `spawn` anchors with that function first, then the
-## cells of every `region` whose function matches — an author who wants exact
-## placement puts points down, an author who wants "somewhere in this clearing"
-## draws an area, and neither needs a different call. `agent_tags` are the
-## acting unit's audiences (§12); an empty set is treated as a plain visitor,
-## which is the default every acting entity carries.
-func claim(
-	zones: MapZoneLayer,
-	function: StringName,
-	cell_size := 1.0,
-	agent_tags: Array[StringName] = [],
-) -> SpawnPlacement:
-	var tags: Array[StringName] = agent_tags.duplicate()
-	if tags.is_empty():
-		tags.append(ZoneAccess.AUDIENCE_VISITOR)
-	var refused_reason := "нет точек появления с функцией %s" % function
-	for anchor in zones.anchors:
-		if not anchor.is_spawn() or canonical_function(anchor.function) != function:
-			continue
-		refused_reason = "все точки появления %s заняты или недоступны" % function
-		if _claimed.has(anchor.id):
-			continue
-		if not _cell_is_free(zones, anchor.cell(), tags):
-			continue
-		_claimed[anchor.id] = true
-		return SpawnPlacement.granted(world_position_of(anchor, cell_size), anchor.id)
-	for area in zones.areas:
-		if area.role != ZoneAreaRecord.ROLE_REGION or area.function != function:
-			continue
-		refused_reason = "все точки появления %s заняты или недоступны" % function
-		for cell in area.footprint_cells():
-			var address := StringName("%s@%d,%d" % [area.id, cell.x, cell.y])
-			if _claimed.has(address):
-				continue
-			if not _cell_is_free(zones, cell, tags):
-				continue
-			_claimed[address] = true
-			return SpawnPlacement.granted(cell_to_world(cell, float(area.y_min), cell_size), address)
-	return SpawnPlacement.refused(refused_reason)
 
 
 ## --- Party placement (`map_start.md` §4.3) -------------------------------------
@@ -245,8 +164,13 @@ func plan_party(
 	var leader_slot := group.slot_with_tag(MapSpawnGroup.TAG_LEADER)
 	if leader_slot != null:
 		var leader := _placement_at_slot(zones, group, leader_slot, cell_size, tags, taken)
-		if leader != null:
-			plan.placements.append(leader)
+		if leader == null:
+			# A refusal, not a shuffle. Silently letting the next slot become
+			# `placements[0]` put the hero on a companion's place and gave the whole
+			# party that place's bearing — a group that reads as authored and is not.
+			plan.reason = "место лидера в группе %s занято или непроходимо" % group.id
+			return plan
+		plan.placements.append(leader)
 	for slot in group.ordered_slots():
 		if plan.placements.size() >= count:
 			break
@@ -365,16 +289,52 @@ func _formation_offsets(group: MapSpawnGroup, needed: int) -> Array[Vector2]:
 	return offsets
 
 
-## Passability plus rights. Rights are read off the overlays directly rather than
+## Can a unit with these audiences stand on this cell — the same test the party
+## layout applies, exposed for a caller that lays a party out itself (the
+## editor's "test from here", `map_start.md` §4.5). Cells are board cells.
+func cell_is_standable(
+	zones: MapZoneLayer, cell: Vector2i, agent_tags: Array[StringName] = [],
+) -> bool:
+	var tags: Array[StringName] = agent_tags.duplicate()
+	if tags.is_empty():
+		tags.append(ZoneAccess.AUDIENCE_VISITOR)
+	return _cell_is_free(zones, cell, tags)
+
+
+## Ground plus rights. Rights are read off the overlays directly rather than
 ## through `ZoneOverlayIndex`: spawning happens a handful of times per session,
 ## and the exact §4.1 rule — any matching audience denies — is worth more here
 ## than an O(1) lookup that only knows about visitors.
 func _cell_is_free(zones: MapZoneLayer, cell: Vector2i, tags: Array[StringName]) -> bool:
-	if _nav_grid != null and _nav_grid.is_board_cell(cell) and not _nav_grid.is_walkable(cell):
+	if not _cell_is_ground(cell):
 		return false
 	for area in zones.areas:
 		if not area.is_overlay() or not area.contains_cell(cell):
 			continue
 		if not ZoneAccess.permits_tags(area.allow, area.deny, tags):
 			return false
+	return true
+
+
+## Real, dry, standable ground inside the board — the same rule `MapValidator`
+## applies to an authored spawn anchor, applied here to every cell a party
+## actually lands on. The grown cells of a formation and the cells of a region
+## are not authored anywhere, so this is the only place that can check them.
+##
+## **Outside the board is not free.** It read as free while the only check was
+## `is_board_cell(cell) and not is_walkable(cell)`, which is how a group with no
+## clearing grew its formation off the rim of the map.
+func _cell_is_ground(cell: Vector2i) -> bool:
+	if _terrain != null:
+		if not _terrain.is_inside(cell) or _terrain.is_hole(cell):
+			return false
+		if _water != null and _water.is_wet(_terrain, cell):
+			if _water.is_lava(cell):
+				return false
+			# Frozen water is walkable (ice); open water deeper than a ford is not.
+			if not _water.is_frozen(cell) \
+					and _water.depth_steps_at(_terrain, cell) > WaterGrid.FORD_MAX_DEPTH_STEPS:
+				return false
+	if _nav_grid != null and (not _nav_grid.is_board_cell(cell) or not _nav_grid.is_walkable(cell)):
+		return false
 	return true

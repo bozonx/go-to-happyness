@@ -23,14 +23,20 @@ func create_citizens() -> void:
 	var cell_size := map_document.meta.cell_size
 	var starts: Array[Vector3] = []
 	var facing := 0.0
+	var spawn_service := MapSpawnService.new()
+	# Every ground source the session has. Without this the service's passability
+	# check was dead code — it was never configured anywhere — and a clearing the
+	# author flooded still reported a party that fits.
+	spawn_service.configure(game.nav_grid, map_document.terrain, map_document.water)
 	if game.launch_config.has_spawn_override():
 		# Editor test run "from here" (map_start.md §4.5): the override replaces the
 		# whole spawn group, so the party is laid out around the requested cell and
 		# the map's authored places are neither used nor required.
-		starts = _party_ring(game.launch_config.spawn_override, cell_size, game.POPULATION)
+		starts = _party_ring(spawn_service, map_document, game.launch_config.spawn_override,
+			cell_size, game.POPULATION)
 	else:
 		var group := map_document.zones.spawn_group_by_id(game.launch_config.spawn_group)
-		var plan := MapSpawnService.new().plan_party(
+		var plan := spawn_service.plan_party(
 			map_document.zones, group, game.POPULATION, cell_size)
 		if not plan.ok:
 			# A party that does not fit blocks the launch (§4.3). Placing fewer
@@ -59,20 +65,48 @@ func create_citizens() -> void:
 
 
 ## Party layout for a spawn override: the hero on the requested cell, everyone
-## else on the ring of cells around it. Deliberately trivial — a test run is a
-## look at the map, not a scenario, and an authored map still places every member
-## by hand.
-func _party_ring(centre: Vector3, cell_size: float, population: int) -> Array[Vector3]:
+## else on the nearest standable cells around it. A test run is a look at the map,
+## not a scenario — but "somewhere near this cell" still has to mean dry ground
+## inside the board, or a `Shift+F5` on the shore drops half the party into the
+## lake and the author debugs the water instead of the thing they came to see.
+##
+## Rings are walked outward and unusable cells are skipped rather than counted.
+## When even eight laps hold nothing (a one-cell islet, a map that is mostly
+## water), the remainder stacks on the centre and says so: the author asked to
+## start *here*, and refusing the run they explicitly requested helps nobody.
+func _party_ring(
+	service: MapSpawnService,
+	document: MapDocument,
+	centre: Vector3,
+	cell_size: float,
+	population: int,
+) -> Array[Vector3]:
 	const RING: Array[Vector2i] = [
 		Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1),
 		Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(-1, -1),
 	]
+	const MAX_LAPS := 8
+	var centre_cell := Vector2i(floori(centre.x / cell_size), floori(centre.z / cell_size))
 	var starts: Array[Vector3] = []
-	for index in range(population):
-		var offset := RING[index % RING.size()]
-		var lap := index / RING.size() + 1
-		starts.append(centre + Vector3(
-			float(offset.x) * cell_size * lap, 0.0, float(offset.y) * cell_size * lap))
+	var seen: Dictionary = {}
+	for lap in range(MAX_LAPS):
+		for offset: Vector2i in RING:
+			if starts.size() >= population:
+				break
+			var cell := centre_cell + offset * (lap + 1)
+			if seen.has(cell):
+				continue
+			seen[cell] = true
+			if not service.cell_is_standable(document.zones, cell):
+				continue
+			starts.append(MapSpawnService.cell_to_world(
+				cell, float(document.terrain.height_of(cell)), cell_size))
+	if starts.is_empty():
+		starts.append(centre)
+	if starts.size() < population:
+		push_warning("[spawn] тест-запуск отсюда: рядом мало проходимых клеток, часть отряда стоит вместе")
+		while starts.size() < population:
+			starts.append(starts[0])
 	return starts
 
 

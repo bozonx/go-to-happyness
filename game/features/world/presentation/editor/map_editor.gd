@@ -218,6 +218,9 @@ func _adopt_path(path: String) -> void:
 	# real path either way, so opening a read-only package still shows the places
 	# the author marked in it.
 	test_points = EditorTestPoints.load_for(path)
+	# The aimed entrance belongs to the document that declared it, not to the
+	# editor: carrying it into another map aims the run at an id that map never had.
+	test_start_option = &""
 
 
 func _build_services() -> void:
@@ -324,7 +327,7 @@ func _save() -> void:
 	else:
 		current_path = path
 		_message = "сохранено в %s" % path
-		_persist_test_points()
+		_write_test_points(false)
 	_refresh_panels()
 
 
@@ -335,6 +338,7 @@ func _open_save_as() -> void:
 
 func _on_save_as_requested(id: StringName) -> void:
 	document.meta.id = id
+	var previous_path := current_path
 	var path := _service.save_map(document, &"", null)
 	if path.is_empty():
 		_message = "не сохранено: %s" % _service.last_error
@@ -343,17 +347,12 @@ func _on_save_as_requested(id: StringName) -> void:
 		_message = "сохранено в %s" % path
 		# Save As gives the map a file for the first time, or a different one. The
 		# points the author has been launching from follow it, rather than staying
-		# beside a package that no longer exists.
-		_persist_test_points()
+		# beside a package that no longer exists — and the sidecar they left behind
+		# goes with them.
+		if previous_path != path and not previous_path.is_empty():
+			EditorTestPoints.discard_for(previous_path)
+		_write_test_points(false)
 	_refresh_panels()
-
-
-## Writes the sidecar for whatever file the document is bound to now, quietly:
-## a save that reports "сохранено" and then a second line about a sidecar is a
-## save that reads as having half failed.
-func _persist_test_points() -> void:
-	if not current_path.is_empty() and not test_points.points.is_empty():
-		test_points.save_to(current_path)
 
 
 func _on_new_pressed() -> void:
@@ -399,6 +398,10 @@ func _replace_document(next: MapDocument, path: String) -> void:
 	_build_services()
 	for mode: MapEditorMode in _modes:
 		mode.configure(_context)
+	# The new document brought its own test points and its own entrances; the
+	# markers and the run menu still show the previous map's.
+	_rebuild_test_point_views()
+	_refresh_run_menu()
 	_refresh_panels()
 
 
@@ -449,7 +452,7 @@ func _select_mode(mode_id: StringName) -> void:
 func _update_shortcut_tooltip() -> void:
 	if _shortcut_tooltip == null or _active == null:
 		return
-	var text := "Общее\nЛКМ — применить · Shift+ПКМ — обратное действие\nПКМ — камера · СКМ — панорама · Колесо — зум\nWASD/QE — движение камеры · Home — показать всю карту\nCtrl+S — сохранить · Ctrl+Z / Ctrl+Shift+Z — отменить / повторить\n1–6 — режим редактора · Esc — снять выделение / в меню\n\nТест-запуск\nF5 — запуск из выбранного места (меню справа от ▶)\nShift+F5 — запуск из клетки под курсором\nF6 — поставить тест-точку под курсором\nAlt+1…9 — выбрать тест-точку · Alt+0 — вход карты\n\n"
+	var text := "Общее\nЛКМ — применить · Shift+ПКМ — обратное действие\nПКМ — камера · СКМ — панорама · Колесо — зум\nWASD/QE — движение камеры · Home — показать всю карту\nCtrl+S — сохранить · Ctrl+Z / Ctrl+Shift+Z — отменить / повторить\n1–6 — режим редактора · Esc — снять выделение / в меню\n\nТест-запуск\nF5 — запуск из выбранного места (меню справа от ▶)\nShift+F5 — запуск из клетки под курсором\nF6 — тест-точка здесь · Shift+F6 — свойства · Ctrl+F6 — удалить\nAlt+1…9 — выбрать тест-точку · Alt+0 — вход карты\n\n"
 	if _active.id == &"water":
 		text += "Вода:\n• ЛКМ по суше — затопить во впадине на выбранном уровне\n• ЛКМ по воде — выбрать водоём\n• Клик по суше вне водоёма или Esc — снять выделение\n• Клик по заблокированной/высокой клетке — снимает выделение без затопления\n• Голубые точки — предпросмотр границ затопления на текущем уровне\n• Shift+колесо или [ ] — размер кисти течения/льда\n• +/− — уровень воды · G — взятие уровня с грунта\n• F — кисть течения · X — кисть стоячей воды (убрать течение) · V/C — направление и сила течения\n• Z/R — кисти заморозки и разморозки"
 	elif _active.id == &"terrain":
@@ -560,6 +563,12 @@ func _record_start_dialog_edit() -> void:
 			_start_section_snapshot, start_after, "настройки старта"))
 	_start_zones_snapshot = {}
 	_start_section_snapshot = {}
+	# Entrances are run targets. A dialog that renamed, added or removed one has
+	# just changed what the run menu may aim at, and an aim at an entrance that no
+	# longer exists must fall back to the default rather than launch nothing.
+	if document.meta.start.start_by_id(test_start_option) == null:
+		test_start_option = &""
+	_refresh_run_menu()
 
 
 ## Re-reads the header everywhere it is consumed: the rule that floods the rim, and
@@ -809,6 +818,8 @@ func _handle_key(event: InputEventKey) -> void:
 				_save()
 			KEY_Y:
 				_redo()
+			KEY_F6:
+				_remove_selected_test_point()
 		return
 	# `Alt` selects a run target; the digits without it still switch modes, which is
 	# the binding an author's fingers already know.
@@ -816,7 +827,13 @@ func _handle_key(event: InputEventKey) -> void:
 		if event.keycode >= KEY_1 and event.keycode <= KEY_9:
 			_select_test_target(event.keycode - KEY_1)
 		elif event.keycode == KEY_0:
-			_select_test_target(RUN_TARGET_MAP_START)
+			# On a map with several entrances `Alt+0` means the first of them, which
+			# is the row the menu puts the accelerator on; on a map with one it means
+			# the entrance, full stop.
+			if document.meta.start.starts.size() > 1:
+				_select_start_option(0)
+			else:
+				_select_test_target(RUN_TARGET_MAP_START)
 		return
 	match event.keycode:
 		KEY_F5:
@@ -824,8 +841,10 @@ func _handle_key(event: InputEventKey) -> void:
 			return
 		KEY_F6:
 			# Putting a point down deserves a key of its own: an author marking three
-			# places to come back to should not open a menu three times.
-			_add_test_point_here()
+			# places to come back to should not open a menu three times. The whole
+			# family is one key with modifiers, identical in the building editor
+			# (§11.1): F6 — поставить, Shift+F6 — свойства, Ctrl+F6 — удалить.
+			_edit_selected_test_point() if event.shift_pressed else _add_test_point_here()
 			return
 		KEY_G:
 			_cycle_render_mode()
@@ -974,13 +993,25 @@ func _select_test_target(index: int) -> void:
 	_commit_test_points()
 
 
-## Persists and redraws. A failed write is reported once and does not stop the
-## session: a test point that works now and is gone tomorrow still beats one that
-## refuses to exist because the package sits under `res://`.
-func _commit_test_points() -> void:
-	if not current_path.is_empty() and not test_points.save_to(current_path):
+## The one place the sidecar is written. `announce_errors` is the only difference
+## between the two callers: a test-point gesture that could not be saved has to
+## say so, while a save that reports "сохранено" and then a second line about a
+## sidecar reads as having half failed.
+##
+## A failed write never stops the session: a test point that works now and is gone
+## tomorrow still beats one that refuses to exist because the package sits under
+## `res://`.
+func _write_test_points(announce_errors: bool) -> void:
+	if current_path.is_empty() or test_points.save_to(current_path):
+		return
+	if announce_errors:
 		_message = "%s · %s" % [_message, test_points.last_error]
 		_message_is_error = true
+
+
+## Persists and redraws — every add, select, rename and delete goes through here.
+func _commit_test_points() -> void:
+	_write_test_points(true)
 	_rebuild_test_point_views()
 	_refresh_run_menu()
 	_refresh_panels()
@@ -1023,18 +1054,39 @@ const MENU_MAP_START := 100
 const MENU_ADD_HERE := 101
 const MENU_REMOVE := 102
 const MENU_EDIT := 103
+## Ids of the map's own entrances, one row per `starts[]` option. Above the
+## commands for the same reason the commands are above `MAX_POINTS`: three id
+## spaces share one menu and none of them may collide.
+const MENU_START_OPTION_BASE := 200
 
 
-## The run-target menu: what `F5` will do, and the two commands that change it.
+## The run-target menu: what `F5` will do, and the commands that change it.
 ## Rebuilt rather than patched, because every entry's label carries the state
 ## (which point is aimed at, what it is called) and a partially updated menu is
 ## how an author ends up launching from the wrong corner.
+##
+## A map with several entrances (`map_start.md` §3) lists them all. Without that
+## row the editor could only ever test `default_start`: `test_start_option` was
+## passed to both the preflight and the launch and never assigned, so the second
+## entrance an author drew was unreachable from the editor that drew it.
 func _refresh_run_menu() -> void:
 	var popup := _test_target_button.get_popup()
 	popup.clear()
-	popup.add_item("Вход карты", MENU_MAP_START)
-	popup.set_item_as_checkable(popup.item_count - 1, true)
-	popup.set_item_checked(popup.item_count - 1, test_points.selected < 0)
+	var starts: Array[MapStartOption] = document.meta.start.starts
+	if starts.size() > 1:
+		for index in starts.size():
+			var option: MapStartOption = starts[index]
+			popup.add_item("Вход: %s" % _start_option_label(option), MENU_START_OPTION_BASE + index)
+			popup.set_item_as_checkable(popup.item_count - 1, true)
+			popup.set_item_checked(popup.item_count - 1,
+				test_points.selected < 0 and _aimed_start_option().id == option.id)
+			if index == 0:
+				popup.set_item_accelerator(popup.item_count - 1, KEY_MASK_ALT | KEY_0)
+	else:
+		popup.add_item("Вход карты", MENU_MAP_START)
+		popup.set_item_as_checkable(popup.item_count - 1, true)
+		popup.set_item_checked(popup.item_count - 1, test_points.selected < 0)
+		popup.set_item_accelerator(popup.item_count - 1, KEY_MASK_ALT | KEY_0)
 	for index in test_points.points.size():
 		popup.add_item("%d. %s" % [index + 1, test_points.points[index].display_name(index)], index)
 		popup.set_item_as_checkable(popup.item_count - 1, true)
@@ -1043,13 +1095,52 @@ func _refresh_run_menu() -> void:
 		# rather than hiding it in a help panel.
 		popup.set_item_accelerator(popup.item_count - 1, KEY_MASK_ALT | (KEY_1 + index))
 	popup.add_separator()
-	popup.add_item("Поставить тест-точку здесь", MENU_ADD_HERE)
-	popup.add_item("Свойства выбранной точки…", MENU_EDIT)
+	# The keys are written into the labels rather than set as accelerators: the
+	# editor already handles them, and a row that both fires an accelerator and
+	# receives the same key deletes two points for one `Ctrl+F6`. Selecting a
+	# target twice is harmless, which is why those rows keep theirs.
+	popup.add_item("Поставить тест-точку здесь (F6)", MENU_ADD_HERE)
+	popup.add_item("Свойства выбранной точки… (Shift+F6)", MENU_EDIT)
 	popup.set_item_disabled(popup.item_count - 1, test_points.selected < 0)
-	popup.add_item("Удалить выбранную тест-точку", MENU_REMOVE)
+	popup.add_item("Удалить выбранную тест-точку (Ctrl+F6)", MENU_REMOVE)
 	popup.set_item_disabled(popup.item_count - 1, test_points.selected < 0)
 	var point := test_points.selected_point()
-	_test_target_button.text = point.display_name(test_points.selected) if point != null else "вход карты"
+	if point != null:
+		_test_target_button.text = point.display_name(test_points.selected)
+	elif starts.size() > 1:
+		_test_target_button.text = "вход: %s" % _start_option_label(_aimed_start_option())
+	else:
+		_test_target_button.text = "вход карты"
+
+
+## The entrance `F5` will use: the one the author aimed at, or the map's default.
+## Never null on a map with entrances; `MapStartOption.new()` stands in for a map
+## that declares none, so the label has something to say before the validator
+## refuses the launch for exactly that reason.
+func _aimed_start_option() -> MapStartOption:
+	var start := document.meta.start
+	var option := start.start_by_id(test_start_option) if test_start_option != &"" else null
+	if option == null:
+		option = start.default_option(start.game_definition)
+	return option if option != null else MapStartOption.new()
+
+
+static func _start_option_label(option: MapStartOption) -> String:
+	var label := MapLocalizedText.read(option.name)
+	return label if not label.strip_edges().is_empty() else String(option.id)
+
+
+## Aims the run at one of the map's entrances. Clearing the test point is the
+## whole gesture: "run from the north camp" and "run from my third marker" are
+## two answers to one question.
+func _select_start_option(index: int) -> void:
+	var starts: Array[MapStartOption] = document.meta.start.starts
+	if index < 0 or index >= starts.size():
+		return
+	test_start_option = starts[index].id
+	test_points.selected = RUN_TARGET_MAP_START
+	_message = "тест-старт: вход «%s»" % _start_option_label(starts[index])
+	_commit_test_points()
 
 
 func _on_run_target_selected(id: int) -> void:
@@ -1063,7 +1154,10 @@ func _on_run_target_selected(id: int) -> void:
 		MENU_MAP_START:
 			_select_test_target(RUN_TARGET_MAP_START)
 		_:
-			_select_test_target(id)
+			if id >= MENU_START_OPTION_BASE:
+				_select_start_option(id - MENU_START_OPTION_BASE)
+			else:
+				_select_test_target(id)
 
 
 ## Markers for every test point, in every mode. Drawn by the editor and not by a
@@ -1075,44 +1169,12 @@ func _rebuild_test_point_views() -> void:
 		_test_point_views = Node3D.new()
 		_test_point_views.name = "TestPointViews"
 		terrain_world.add_child(_test_point_views)
-	for child in _test_point_views.get_children():
-		child.free()
-	for index in test_points.points.size():
-		var point := test_points.points[index]
-		var marker := MeshInstance3D.new()
-		var mesh := CylinderMesh.new()
-		mesh.top_radius = 0.0
-		mesh.bottom_radius = 0.45
-		mesh.height = 1.2
-		marker.mesh = mesh
-		# A cone standing on its point, so it reads as "here" rather than as one
-		# more box among the zone markers.
-		marker.rotation.x = PI
-		var material := StandardMaterial3D.new()
-		var selected := index == test_points.selected
-		material.albedo_color = Color(1.0, 0.55, 0.15, 0.85) if selected else Color(0.35, 0.75, 1.0, 0.7)
-		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		# Visible through the terrain: the point of a marker you keep coming back
-		# to is being findable from any camera angle, including from behind a hill.
-		material.no_depth_test = true
-		marker.material_override = material
-		# `cell_center` already carries the ground height; the marker floats above it
-		# by half its own length so the cone's tip touches the cell.
-		var centre := document.terrain.cell_center(point.cell)
-		marker.position = centre + Vector3(0.0, 0.6, 0.0)
-		_test_point_views.add_child(marker)
-		var label := Label3D.new()
-		label.text = "%d. %s" % [index + 1, point.display_name(index)]
-		label.font_size = 44
-		label.outline_size = 16
-		label.outline_modulate = Color.BLACK
-		label.pixel_size = 0.012
-		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		label.no_depth_test = true
-		label.shaded = false
-		label.position = Vector3(0.0, -1.1, 0.0)
-		marker.add_child(label)
+	# The live terrain, not the level remembered when the point was placed: an
+	# author digs under their own test point constantly, and a cone left hanging
+	# two terraces up is a marker they stop trusting.
+	EditorTestPointMarkers.rebuild(_test_point_views, test_points,
+		func(point: EditorTestPoints.Point) -> Vector3:
+			return document.terrain.cell_center(point.cell))
 
 
 func _launch_test_run(spawn_override: Vector3) -> void:

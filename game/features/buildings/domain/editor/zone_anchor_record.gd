@@ -39,8 +39,16 @@ const ROLES: Array[StringName] = [
 ]
 
 ## Roles a building author uses; the map editor offers the rest.
+##
+## `spawn` is deliberately **not** here. A blueprint's anchors reach the runtime
+## through `runtime_zone_definitions` (slots, queues, storage) and
+## `routing_anchor_definitions` (navigation) — neither carries a spawn, and no
+## building is a party's entrance until placed buildings are baked into the map's
+## zone layer. Offering the role meant the function list offered `core:party_leader`
+## inside a house: an author could place "место лидера отряда" on a floor, save it,
+## and have the game ignore it entirely.
 const BUILDING_ROLES: Array[StringName] = [
-	ROLE_DOOR, ROLE_SLOT, ROLE_QUEUE, ROLE_STORAGE, ROLE_WAYPOINT, ROLE_POI, ROLE_SPAWN,
+	ROLE_DOOR, ROLE_SLOT, ROLE_QUEUE, ROLE_STORAGE, ROLE_WAYPOINT, ROLE_POI,
 ]
 
 # Poses of a `slot` — what the occupant's body does there.

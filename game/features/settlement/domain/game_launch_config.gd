@@ -37,6 +37,12 @@ var spawn_override := Vector3.INF
 ## bound to another entrance are filtered by `includes_map_entity`.
 var start_option: StringName = &""
 var spawn_group: StringName = &""
+## Where the overview camera looks from on the first frame — the world position of
+## the entrance's `core:camera_start` anchor (`map_start.md` §4.1), or
+## `Vector3.INF` when the entrance names no camera and the camera falls back to
+## the party. Resolved on the module boundary, like `spawn_group`, so the
+## settlement never reads the zone layer itself.
+var camera_start := Vector3.INF
 var starting_money: int = 500
 var starting_wellbeing: int = 75
 var starting_population: int = 4
@@ -59,6 +65,10 @@ static func for_tent_era() -> GameLaunchConfig:
 
 func has_spawn_override() -> bool:
 	return spawn_override != Vector3.INF
+
+
+func has_camera_start() -> bool:
+	return camera_start != Vector3.INF
 
 
 ## Board size of this session. It is authored by the selected map.

@@ -864,6 +864,7 @@ func _setup_controllers_and_world() -> void:
 func _setup_citizens_and_ai() -> void:
 	game.citizen_factory.create_citizens()
 	game.citizen_factory.create_party_stash()
+	_aim_overview_camera()
 	game.simulation_tick_controller.refresh_living_statuses()
 	if not game.citizen_ai.configure(
 		SettlementAIWorldFacade.new(game),
@@ -874,3 +875,15 @@ func _setup_citizens_and_ai() -> void:
 	game.update_workers()
 	game.update_interface("Build a simple store, then gather materials for the first campfire and tents.")
 	game.player_controller.enter_first_person(game.hero_citizen, "Hero view enabled.")
+
+
+## Where the overview camera looks when the player leaves the hero's eyes. The map
+## may say (`core:camera_start` on the entrance, `map_start.md` §4.1); a map that
+## does not keeps the default, which is the party. A saved game overrides this
+## from its own camera state, so this runs before the loader by construction —
+## it is part of starting a new session, not of restoring one.
+func _aim_overview_camera() -> void:
+	var launch := game.launch_config
+	if launch == null or not launch.has_camera_start():
+		return
+	game.camera_target = launch.camera_start

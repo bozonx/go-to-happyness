@@ -6,67 +6,26 @@ extends RefCounted
 
 
 static func run_all() -> void:
-	_test_spawn_anchors_become_positions()
 	_test_launch_roles_are_explicit()
-	_test_non_spawn_anchors_are_ignored()
 	_test_board_cells_become_world_space()
 	_test_a_party_larger_than_its_slots_grows_into_the_area()
 	_test_a_party_that_does_not_fit_refuses()
-	_test_claim_hands_out_each_address_once()
-	_test_claim_refuses_a_cell_its_own_audience_may_not_enter()
-	_test_claim_falls_back_to_a_region()
+	_test_a_blocked_leader_refuses()
+	_test_rights_deny_a_place()
+	_test_the_formation_stays_on_dry_ground_inside_the_board()
 	print("    [PASS] Map Spawn Service Tests")
-
-
-## `spawn` anchors surface in authoring order, so two authored points land where
-## the author drew them.
-static func _test_spawn_anchors_become_positions() -> void:
-	var zones := MapZoneLayer.new()
-	var first := ZoneAnchorRecord.new()
-	first.id = &"hero_start"
-	first.role = ZoneAnchorRecord.ROLE_SPAWN
-	first.pos = Vector3(2.5, 0.0, 3.5)
-	first.function = MapSpawnService.PARTY_LEADER
-	zones.anchors.append(first)
-	var second := ZoneAnchorRecord.new()
-	second.id = &"reinforcements"
-	second.role = ZoneAnchorRecord.ROLE_SPAWN
-	second.pos = Vector3(10.5, 0.0, 8.5)
-	second.function = MapSpawnService.PARTY_SLOT
-	zones.anchors.append(second)
-
-	var service := MapSpawnService.new()
-	var positions := service.spawn_positions(zones)
-	assert(positions.size() == 2)
-	assert(positions[0] == Vector3(2.5, 0.0, 3.5))
-	assert(positions[1] == Vector3(10.5, 0.0, 8.5))
-	# The v7 names still answer, for one release (§16): a document held in memory
-	# from before the migration must not read as a map with no party at all.
-	assert(MapSpawnService.canonical_function(&"core:hero_start") == MapSpawnService.PARTY_LEADER)
-	assert(MapSpawnService.canonical_function(&"core:companion_start") == MapSpawnService.PARTY_SLOT)
 
 
 ## Missing roles have no hidden fallback at launch.
 static func _test_launch_roles_are_explicit() -> void:
 	var zones := MapZoneLayer.new()
 	var service := MapSpawnService.new()
-	assert(service.spawn_positions(zones).is_empty())
 	assert(service.anchor_with_function(zones, MapSpawnService.PARTY_LEADER) == null)
 	assert(service.camera_position(zones, &"nowhere") == Vector3.INF)
-
-
-## A `waypoint` or a `poi` is not a spawn point and must not surface here — the
-## engine reads only `role`, never `function` (§2), so the filter is on the role.
-static func _test_non_spawn_anchors_are_ignored() -> void:
-	var zones := MapZoneLayer.new()
-	var waypoint := ZoneAnchorRecord.new()
-	waypoint.id = &"post_a"
-	waypoint.role = ZoneAnchorRecord.ROLE_WAYPOINT
-	waypoint.pos = Vector3(5.0, 0.0, 5.0)
-	zones.anchors.append(waypoint)
-
-	var service := MapSpawnService.new()
-	assert(service.spawn_positions(zones).is_empty(), "waypoints are not spawn points")
+	# The v7 names still answer, for one release (§16): a document held in memory
+	# from before the migration must not read as a map with no party at all.
+	assert(MapSpawnService.canonical_function(&"core:hero_start") == MapSpawnService.PARTY_LEADER)
+	assert(MapSpawnService.canonical_function(&"core:companion_start") == MapSpawnService.PARTY_SLOT)
 
 
 ## Zone geometry is authored in board cells and `pos.y` is a terrain level (§6);
@@ -170,39 +129,56 @@ static func _test_a_party_that_does_not_fit_refuses() -> void:
 	assert(not over_capacity.ok, "the author's ceiling is enforced before anything is placed")
 
 
-## The §15 operation: one address, one occupant. Without it a wave of three would
-## put all three on the single point the author drew.
-static func _test_claim_hands_out_each_address_once() -> void:
+## A leader slot the party cannot use refuses the plan instead of promoting the
+## next member. Letting `placements[0]` become a companion put the hero on someone
+## else's place and gave the whole party that place's bearing.
+static func _test_a_blocked_leader_refuses() -> void:
 	var zones := MapZoneLayer.new()
-	for index in 2:
-		var spawn := ZoneAnchorRecord.new()
-		spawn.id = StringName("drop_%d" % index)
-		spawn.role = ZoneAnchorRecord.ROLE_SPAWN
-		spawn.function = &"pack:drop"
-		spawn.pos = Vector3(float(index) + 0.5, 0.0, 0.5)
-		zones.anchors.append(spawn)
+	var leader := ZoneAnchorRecord.new()
+	leader.id = &"leader_point"
+	leader.role = ZoneAnchorRecord.ROLE_SPAWN
+	leader.function = MapSpawnService.PARTY_LEADER
+	leader.pos = Vector3(4.5, 0.0, 4.5)
+	zones.anchors.append(leader)
+	var second := ZoneAnchorRecord.new()
+	second.id = &"slot_point"
+	second.role = ZoneAnchorRecord.ROLE_SPAWN
+	second.function = MapSpawnService.PARTY_SLOT
+	second.pos = Vector3(6.5, 0.0, 4.5)
+	zones.anchors.append(second)
+	var sealed := ZoneAreaRecord.new()
+	sealed.id = &"keep_out"
+	sealed.role = ZoneAreaRecord.ROLE_OVERLAY
+	sealed.deny = [&"visitor"]
+	sealed.add_rect(Rect2i(4, 4, 1, 1))
+	zones.areas.append(sealed)
 
-	var service := MapSpawnService.new()
-	var first := service.claim(zones, &"pack:drop")
-	var second := service.claim(zones, &"pack:drop")
-	var third := service.claim(zones, &"pack:drop")
-	assert(first.ok and second.ok, "two authored points serve two claims")
-	assert(first.address != second.address, "a claimed address is not handed out twice")
-	assert(not third.ok, "a full drop zone refuses rather than stacking units")
-	assert(not third.reason.is_empty(), "a refusal says why")
+	var group := MapSpawnGroup.new()
+	group.id = &"camp"
+	var leader_slot := MapSpawnGroup.Slot.new()
+	leader_slot.id = &"leader"
+	leader_slot.anchor_id = &"leader_point"
+	leader_slot.tags = [MapSpawnGroup.TAG_LEADER]
+	group.slots.append(leader_slot)
+	var slot := MapSpawnGroup.Slot.new()
+	slot.id = &"slot_1"
+	slot.anchor_id = &"slot_point"
+	slot.order = 1
+	group.slots.append(slot)
 
-	service.release(first.address)
-	assert(service.claim(zones, &"pack:drop").ok, "a released address comes back into rotation")
+	var plan := MapSpawnService.new().plan_party(zones, group, 1)
+	assert(not plan.ok, "a party whose leader has nowhere to stand does not launch")
+	assert(plan.reason.contains("camp"), "the refusal names the group: %s" % plan.reason)
 
 
-## Rights are part of the operation, not an afterthought: a point sealed off for
-## the audience being spawned is not a place that unit may appear (§4.1, §15).
-static func _test_claim_refuses_a_cell_its_own_audience_may_not_enter() -> void:
+## Rights are part of placement, not an afterthought: a place sealed off for the
+## audience being placed is not a place that party may appear (§4.1).
+static func _test_rights_deny_a_place() -> void:
 	var zones := MapZoneLayer.new()
 	var spawn := ZoneAnchorRecord.new()
 	spawn.id = &"gate"
 	spawn.role = ZoneAnchorRecord.ROLE_SPAWN
-	spawn.function = &"pack:drop"
+	spawn.function = MapSpawnService.PARTY_LEADER
 	spawn.pos = Vector3(4.5, 0.0, 4.5)
 	zones.anchors.append(spawn)
 	var overlay := ZoneAreaRecord.new()
@@ -212,28 +188,50 @@ static func _test_claim_refuses_a_cell_its_own_audience_may_not_enter() -> void:
 	overlay.add_rect(Rect2i(4, 4, 1, 1))
 	zones.areas.append(overlay)
 
-	var service := MapSpawnService.new()
-	assert(not service.claim(zones, &"pack:drop").ok, "a visitor may not appear where visitors are denied")
+	var group := MapSpawnGroup.new()
+	group.id = &"gate_party"
+	group.fallback = MapSpawnGroup.FALLBACK_FAIL
+	var slot := MapSpawnGroup.Slot.new()
+	slot.id = &"leader"
+	slot.anchor_id = &"gate"
+	slot.tags = [MapSpawnGroup.TAG_LEADER]
+	group.slots.append(slot)
+
+	assert(not MapSpawnService.new().plan_party(zones, group, 1).ok,
+		"a visitor may not appear where visitors are denied")
 	var staff: Array[StringName] = [&"staff"]
-	assert(service.claim(zones, &"pack:drop", 1.0, staff).ok, "staff may")
+	assert(MapSpawnService.new().plan_party(zones, group, 1, 1.0, staff).ok, "staff may")
 
 
-## §15 allows a `region` whose pack function declares it an appearance area, so an
-## author who wants "somewhere in this clearing" draws instead of dotting points.
-static func _test_claim_falls_back_to_a_region() -> void:
+## A formation grows onto standable cells only. While nothing configured the
+## service, "outside the board" and "under two metres of water" both read as free
+## and a party of six walked off the rim of a map with no clearing drawn.
+static func _test_the_formation_stays_on_dry_ground_inside_the_board() -> void:
+	const BOARD := 8
+	var terrain := TerrainGrid.new()
+	terrain.configure(1.0, BOARD)
 	var zones := MapZoneLayer.new()
-	var region := ZoneAreaRecord.new()
-	region.id = &"clearing"
-	region.role = ZoneAreaRecord.ROLE_REGION
-	region.function = &"pack:drop"
-	region.add_rect(Rect2i(-3, -3, 2, 2))
-	region.y_min = 1
-	region.y_max = 1
-	zones.areas.append(region)
+	var leader := ZoneAnchorRecord.new()
+	leader.id = &"leader_point"
+	leader.role = ZoneAnchorRecord.ROLE_SPAWN
+	leader.function = MapSpawnService.PARTY_LEADER
+	# The far corner of the board: every ring around it leaves the map.
+	leader.pos = Vector3(3.5, 0.0, 3.5)
+	zones.anchors.append(leader)
+
+	var group := MapSpawnGroup.new()
+	group.id = &"rim"
+	group.spacing = 1.0
+	var slot := MapSpawnGroup.Slot.new()
+	slot.id = &"leader"
+	slot.anchor_id = &"leader_point"
+	slot.tags = [MapSpawnGroup.TAG_LEADER]
+	group.slots.append(slot)
 
 	var service := MapSpawnService.new()
-	var first := service.claim(zones, &"pack:drop")
-	assert(first.ok, "a region with the function is a spawn address: %s" % first.reason)
-	assert(first.position.y == 1.0 * TerrainGrid.HEIGHT_STEP, "the region's level becomes metres")
-	var second := service.claim(zones, &"pack:drop")
-	assert(second.ok and second.address != first.address, "a region serves one claim per cell")
+	service.configure(null, terrain, null)
+	var plan := service.plan_party(zones, group, 4)
+	assert(plan.ok, "the corner still seats four from the cells inside: %s" % plan.reason)
+	for placement: MapSpawnService.PartyPlacement in plan.placements:
+		var cell := Vector2i(floori(placement.position.x), floori(placement.position.z))
+		assert(terrain.is_inside(cell), "member placed off the board at %s" % cell)

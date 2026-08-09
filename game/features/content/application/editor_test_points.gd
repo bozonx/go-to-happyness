@@ -45,9 +45,13 @@ class Point:
 
 	var name := ""
 	var cell := Vector2i.ZERO
-	## Terrain level at the moment it was placed. Kept so the marker draws at the
-	## right height before the terrain is queried, and re-read from the live grid
-	## at launch: the author digs under their own test point all the time.
+	## Which floor the point is on. In a building this is authoritative — it *is*
+	## the layer the author was editing, and one layer is one metre. On a map it is
+	## the terrain level at the moment of placement and nothing reads it back: both
+	## the marker and the launch take the live height, because an author digs under
+	## their own test point all the time. It is written and loaded so a map whose
+	## terrain is untouched comes back looking the same, and so the two editors
+	## share one record.
 	var level := 0
 
 	static func from_dict(source: Dictionary) -> Point:
@@ -122,6 +126,15 @@ func save_to(package_path: String) -> bool:
 	}, "\t"))
 	file.close()
 	return true
+
+
+## Removes the sidecar of a package the points no longer belong to — the file the
+## author just renamed away from with Save As. Without it the old package keeps a
+## sidecar naming cells of a map nobody will open again.
+static func discard_for(package_path: String) -> void:
+	var path := sidecar_path(package_path)
+	if not path.is_empty() and FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
 
 
 ## Adds a point, or moves the selected one when the list is full: the author

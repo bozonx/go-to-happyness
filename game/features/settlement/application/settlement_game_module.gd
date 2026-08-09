@@ -82,6 +82,12 @@ func _launch_config(session: GameSessionConfig) -> GameLaunchConfig:
 	var option := session.start_option_record()
 	if option != null:
 		launch.spawn_group = option.spawn_group
+		# The entrance's establishing shot (§4.1). It was authorable, validated and
+		# then read by nobody — a map could name a camera and the first overview
+		# frame still hung over the party.
+		if option.camera != &"" and session.map_document != null:
+			launch.camera_start = MapSpawnService.new().camera_position(
+				session.map_document.zones, option.camera, session.map_document.meta.cell_size)
 	# World style is map-owned. Starting resources and equipment are map-owned too:
 	# they live on the backpack entity. Everything else arrives through the
 	# recursively merged game/map/session parameters.

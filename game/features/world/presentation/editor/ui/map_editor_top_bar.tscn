@@ -100,7 +100,7 @@ tooltip_text = "Тест-запуск (F5) — из места, выбранно
 [node name="TestTargetButton" type="MenuButton" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(150, 0)
 text = "вход карты"
-tooltip_text = "Откуда начинается тест-запуск: вход карты или одна из тест-точек"
+tooltip_text = "Откуда начинается тест-запуск: вход карты (или один из вариантов старта) либо тест-точка. F6 — поставить точку, Shift+F6 — свойства, Ctrl+F6 — удалить"
 flat = false
 
 [node name="TestHereButton" type="Button" parent="Margin/Scroll/Row"]

@@ -67,11 +67,22 @@ func _init() -> void:
 	assert(simulation.is_first_person)
 	assert(simulation.player_citizen == simulation.hero_citizen)
 	assert(SimHelper.player_can_command_labor(simulation))
-	# Every member of the starting party comes from its own authored map anchor
-	# and is snapped to the live terrain field — no entrance-sign or y=0 fallback.
+	# The whole party is laid out by the map's spawn group, in the author's order,
+	# and snapped to the live terrain field — no entrance-sign or y=0 fallback.
+	# Asking the service the same question the bootstrap asked it is the point:
+	# the pair of readers this used to call (`hero_spawn_position` /
+	# `companion_spawn_positions`) is what made the map's geometry own the party
+	# size, and they are gone.
+	var document: MapDocument = simulation.launch_config.map_document
 	var spawn_service := MapSpawnService.new()
-	var expected_starts: Array[Vector3] = [spawn_service.hero_spawn_position(simulation.launch_config.map_document.zones)]
-	expected_starts.append_array(spawn_service.companion_spawn_positions(simulation.launch_config.map_document.zones).slice(0, simulation.POPULATION - 1))
+	spawn_service.configure(simulation.nav_grid, document.terrain, document.water)
+	var group := document.zones.spawn_group_by_id(simulation.launch_config.spawn_group)
+	var plan := spawn_service.plan_party(
+		document.zones, group, simulation.POPULATION, document.meta.cell_size)
+	assert(plan.ok, "the shipped map seats its own party: %s" % plan.reason)
+	var expected_starts: Array[Vector3] = []
+	for placement: MapSpawnService.PartyPlacement in plan.placements:
+		expected_starts.append(placement.position)
 	assert(expected_starts.size() == simulation.POPULATION)
 	for index in simulation.POPULATION:
 		var expected := expected_starts[index]

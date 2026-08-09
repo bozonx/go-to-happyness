@@ -525,6 +525,37 @@ func _test_test_points_aim_the_run(editor: Node) -> void:
 	editor._remove_selected_test_point()
 	assert(editor.test_points.points.is_empty(), "the point was removed")
 	assert(editor._test_point_views.get_child_count() == 0, "and its marker with it")
+
+	# A map with several entrances offers each of them as a run target. Without
+	# these rows the editor could only ever launch `default_start` — the field it
+	# passes to the preflight and the launch was assigned nowhere.
+	#
+	# The document is put back *before* the assertions: an entrance with no spawn
+	# group is a map that will not save, and a failed assertion here would leave
+	# one behind and fail the save test three tests later instead.
+	var start: MapStart = editor.document.meta.start
+	var entrances: Array[MapStartOption] = []
+	for entrance_id: StringName in [&"river_camp", &"north_camp"]:
+		var entrance := MapStartOption.new()
+		entrance.id = entrance_id
+		entrance.name = MapLocalizedText.of(String(entrance_id))
+		entrances.append(entrance)
+		start.starts.append(entrance)
+	editor._refresh_run_menu()
+	var multi: PopupMenu = editor._test_target_button.get_popup()
+	var first_row := multi.get_item_id(0)
+	var second_row := multi.get_item_id(1) if multi.get_item_count() > 1 else -1
+	editor._on_run_target_selected(editor.MENU_START_OPTION_BASE + 1)
+	var aimed_entrance: StringName = editor.test_start_option
+	var aimed_point: int = editor.test_points.selected
+	start.starts.clear()
+	editor.test_start_option = &""
+	editor._refresh_run_menu()
+
+	assert(first_row == editor.MENU_START_OPTION_BASE, "the first entrance takes the first row")
+	assert(second_row == editor.MENU_START_OPTION_BASE + 1, "and the second entrance the next")
+	assert(aimed_entrance == entrances[1].id, "the run is aimed at the chosen entrance")
+	assert(aimed_point < 0, "aiming at an entrance clears the aimed point")
 	print("  test points ok")
 
 

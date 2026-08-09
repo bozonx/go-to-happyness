@@ -47,10 +47,12 @@ func _test_catalog_loads_from_pack() -> void:
 	assert(room_functions.any(func(e: Dictionary) -> bool: return e["id"] == KITCHEN))
 	assert(ZoneFunctionCatalog.activities().any(func(e: Dictionary) -> bool:
 		return e["id"] == &"core:cook"))
+	# The party functions are `spawn`-scoped and were renamed with the start
+	# redesign (`map_start.md` §16); the catalogue ships the new names only.
 	assert(ZoneFunctionCatalog.for_anchor_role(ZoneAnchorRecord.ROLE_SPAWN).any(
-		func(e: Dictionary) -> bool: return e["id"] == &"core:hero_start"))
+		func(e: Dictionary) -> bool: return e["id"] == MapSpawnService.PARTY_LEADER))
 	assert(not ZoneFunctionCatalog.supports_anchor_role(
-		&"core:hero_start", ZoneAnchorRecord.ROLE_DOOR))
+		MapSpawnService.PARTY_LEADER, ZoneAnchorRecord.ROLE_DOOR))
 	print("  catalog loads from pack ok")
 
 

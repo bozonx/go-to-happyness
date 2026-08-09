@@ -145,6 +145,22 @@ func _test_test_points_aim_the_start(editor: BuildingEditor) -> void:
 	editor._select_test_point(-1)
 	assert(editor.test_points.selected == -1)
 	assert(editor._walk_start_position() != start, "the entrance is a different place")
+
+	# `Shift+F5` walks from the cell under the cursor without putting a point down —
+	# the same "just this once" gesture the map editor has.
+	editor.cursor_cell = Vector3i(1, 0, 1)
+	editor.active_layer = 0
+	var from_cursor := editor._cursor_walk_position()
+	assert(is_equal_approx(from_cursor.x, 1.5) and is_equal_approx(from_cursor.z, 1.5)
+		and is_equal_approx(from_cursor.y, 0.0),
+		"a walk from here starts in the middle of the hovered cell, got %s" % from_cursor)
+
+	# And a point can be removed (`Ctrl+F6`). Without it the ninth point was the end
+	# of the list and `add` silently started moving the aimed one instead.
+	editor._select_test_point(0)
+	editor._remove_selected_test_point()
+	assert(editor.test_points.points.is_empty(), "the point is gone")
+	assert(editor._test_point_views.get_child_count() == 0, "and so is its marker")
 	print("  building test points ok")
 
 
