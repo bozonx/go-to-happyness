@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://game/features/buildings/presentation/editor/building_editor.gd" id="1_editor"]
 [ext_resource type="Theme" path="res://game/features/ui/presentation/theme/ui_theme.tres" id="2_theme"]
@@ -7,6 +7,10 @@
 [ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor_shortcut_tooltip.tscn" id="4_shortcuts"]
 [ext_resource type="Script" path="res://game/features/ui/presentation/editor_property_inspector.gd" id="5_property_inspector"]
 [ext_resource type="Script" path="res://game/features/ui/presentation/editor_fill_transform_inspector.gd" id="6_transform_inspector"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor/editor_top_bar.tscn" id="7_top_bar"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor/editor_mode_bar.tscn" id="8_mode_bar"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor/editor_document_actions.tscn" id="9_document_actions"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor/editor_history_actions.tscn" id="10_history_actions"]
 
 [sub_resource type="PlaneMesh" id="mesh_ground"]
 size = Vector2(64, 64)
@@ -69,79 +73,38 @@ grow_vertical = 2
 mouse_filter = 2
 theme = ExtResource("2_theme")
 
-[node name="TopBar" type="PanelContainer" parent="EditorUI/Root"]
-custom_minimum_size = Vector2(0, 52)
+[node name="TopBar" parent="EditorUI/Root" instance=ExtResource("7_top_bar")]
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
 offset_bottom = 52.0
 grow_horizontal = 2
 
-[node name="Margin" type="MarginContainer" parent="EditorUI/Root/TopBar"]
+[node name="DocumentActions" parent="EditorUI/Root/TopBar/Margin/Scroll/Row" instance=ExtResource("9_document_actions")]
 layout_mode = 2
-theme_override_constants/margin_left = 8
-theme_override_constants/margin_top = 8
-theme_override_constants/margin_right = 8
-theme_override_constants/margin_bottom = 8
 
-[node name="HBox" type="HBoxContainer" parent="EditorUI/Root/TopBar/Margin"]
-layout_mode = 2
-theme_override_constants/separation = 10
-
-[node name="BackBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "← В меню"
-
-[node name="NewBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "📄"
+[node name="NewButton" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/DocumentActions" index="1"]
 tooltip_text = "Создать новый чертёж"
 
-[node name="LoadBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "📂"
+[node name="LoadButton" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/DocumentActions" index="2"]
 tooltip_text = "Открыть существующий чертёж"
 
-[node name="SaveBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "💾"
+[node name="SaveButton" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/DocumentActions" index="3"]
 tooltip_text = "Сохранить текущий чертёж"
 
-[node name="SaveAsBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "💾+"
+[node name="SaveAsButton" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/DocumentActions" index="4"]
 tooltip_text = "Сохранить как новый чертёж"
 
-[node name="SettingsBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
-unique_name_in_owner = true
-layout_mode = 2
-custom_minimum_size = Vector2(38, 0)
-text = "⚙"
+[node name="SettingsButton" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/DocumentActions" index="5"]
 tooltip_text = "Параметры здания"
 
-[node name="VSep1" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox"]
+[node name="VSep1" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/Scroll/Row"]
 layout_mode = 2
 
-[node name="UndoBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
-unique_name_in_owner = true
+[node name="HistoryActions" parent="EditorUI/Root/TopBar/Margin/Scroll/Row" instance=ExtResource("10_history_actions")]
 layout_mode = 2
-custom_minimum_size = Vector2(38, 0)
-text = "↩"
-tooltip_text = "Отменить"
 
-[node name="RedoBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
-unique_name_in_owner = true
-layout_mode = 2
-custom_minimum_size = Vector2(38, 0)
-text = "↪"
-tooltip_text = "Повторить"
-
-[node name="EyedropperBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+[node name="EyedropperBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(38, 0)
@@ -149,7 +112,7 @@ toggle_mode = true
 text = "🧪"
 tooltip_text = "Пипетка: включить выбор элемента под курсором"
 
-[node name="WalkBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+[node name="WalkBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(38, 0)
@@ -157,117 +120,91 @@ text = "▶"
 tooltip_text = "Походить по зданию от входа, выбранной тест-точки или клетки под курсором"
 
 
-[node name="ModeFrameBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+[node name="ModeBar" parent="EditorUI/Root/TopBar/Margin/Scroll/Row" instance=ExtResource("8_mode_bar")]
 unique_name_in_owner = true
 layout_mode = 2
-toggle_mode = true
-text = "🏗️"
-tooltip_text = "Режим 1: Каркас (1)"
 
-[node name="ModeFinishesBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
-unique_name_in_owner = true
-layout_mode = 2
-toggle_mode = true
-disabled = true
-text = "🎨"
-tooltip_text = "Режим 2: Отделка (2)"
-
-[node name="ModeFillBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
-unique_name_in_owner = true
-layout_mode = 2
-toggle_mode = true
-text = "🪑"
-tooltip_text = "Режим 3: Наполнение (3)"
-
-
-[node name="ModeZonesBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
-unique_name_in_owner = true
-layout_mode = 2
-toggle_mode = true
-text = "🗺️"
-tooltip_text = "Режим 4: Зоны (4)"
-
-[node name="VSep2" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox"]
+[node name="VSep2" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/Scroll/Row"]
 layout_mode = 2
 
-[node name="FrameToolbar" type="HBoxContainer" parent="EditorUI/Root/TopBar/Margin/HBox"]
+[node name="FrameToolbar" type="HBoxContainer" parent="EditorUI/Root/TopBar/Margin/Scroll/Row"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="ToolPlaceBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+[node name="ToolPlaceBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 text = "🔨"
 tooltip_text = "Режим строительства"
 
-[node name="ToolEraseBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+[node name="ToolEraseBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 text = "🧹"
 tooltip_text = "Стереть"
 
-[node name="VSepTools" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+[node name="VSepTools" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar"]
 layout_mode = 2
 
-[node name="BrushLineBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+[node name="BrushLineBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 text = "📏"
 tooltip_text = "Линия"
 
-[node name="BrushRectBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+[node name="BrushRectBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 text = "🔲"
 tooltip_text = "Прямоугольник"
 
-[node name="VSepBrush" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+[node name="VSepBrush" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar"]
 layout_mode = 2
 
-[node name="RotXBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+[node name="RotXBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "🔄X"
 tooltip_text = "Поворот вокруг оси X"
 
-[node name="RotBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+[node name="RotBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "🔄Y"
 tooltip_text = "Поворот вокруг оси Y (C / R)"
 
-[node name="RotZBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+[node name="RotZBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "🔄Z"
 tooltip_text = "Поворот вокруг оси Z"
 
-[node name="LayerLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+[node name="LayerLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Слой 0"
 
-[node name="LayerDownBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+[node name="LayerDownBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "➖"
 tooltip_text = "Слой ниже"
 
-[node name="LayerUpBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+[node name="LayerUpBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "➕"
 tooltip_text = "Слой выше"
 
-[node name="VSepTextures" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+[node name="VSepTextures" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar"]
 layout_mode = 2
 
-[node name="TexturesBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+[node name="TexturesBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
@@ -275,64 +212,64 @@ button_pressed = true
 text = "🧱"
 tooltip_text = "Показать текстуры материалов блоков"
 
-[node name="FillToolbar" type="HBoxContainer" parent="EditorUI/Root/TopBar/Margin/HBox"]
+[node name="FillToolbar" type="HBoxContainer" parent="EditorUI/Root/TopBar/Margin/Scroll/Row"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="FillDeleteSelectionBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
+[node name="FillDeleteSelectionBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 disabled = true
 text = "🗑"
 tooltip_text = "Удалить выбранный объект"
 
-[node name="VSepFillActions" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
+[node name="VSepFillActions" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FillToolbar"]
 layout_mode = 2
 
-[node name="FillRotXBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
+[node name="FillRotXBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "🔄X"
 tooltip_text = "Поворот вокруг оси X"
 
-[node name="FillRotYBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
+[node name="FillRotYBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "🔄Y"
 tooltip_text = "Поворот вокруг оси Y (C / R)"
 
-[node name="FillRotZBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
+[node name="FillRotZBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "🔄Z"
 tooltip_text = "Поворот вокруг оси Z"
 
-[node name="VSepFillLayer" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
+[node name="VSepFillLayer" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FillToolbar"]
 layout_mode = 2
 
-[node name="FillLayerLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
+[node name="FillLayerLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Слой 0"
 
-[node name="FillLayerDownBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
+[node name="FillLayerDownBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "➖"
 tooltip_text = "Слой ниже"
 
-[node name="FillLayerUpBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
+[node name="FillLayerUpBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "➕"
 tooltip_text = "Слой выше"
 
-[node name="VSepFillOverlay" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
+[node name="VSepFillOverlay" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FillToolbar"]
 layout_mode = 2
 
-[node name="FillCollisionOverlayBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FillToolbar"]
+[node name="FillCollisionOverlayBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
@@ -510,7 +447,7 @@ disabled = true
 text = "🗑 Удалить выбранное"
 tooltip_text = "Удалить выделенную зону"
 
-[node name="Spacer" type="Control" parent="EditorUI/Root/TopBar/Margin/HBox"]
+[node name="Spacer" type="Control" parent="EditorUI/Root/TopBar/Margin/Scroll/Row"]
 layout_mode = 2
 size_flags_horizontal = 3
 
@@ -1514,27 +1451,25 @@ unique_name_in_owner = true
 layout_mode = 2
 placeholder_text = "my_building_id"
 
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/BackBtn" to="." method="_confirm_back_to_menu"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/ModeFrameBtn" to="." method="_on_mode_frame_pressed"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/ModeFinishesBtn" to="." method="_on_mode_finishes_pressed"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/ModeFillBtn" to="." method="_on_mode_fill_pressed"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/ModeZonesBtn" to="." method="_on_mode_zones_pressed"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/NewBtn" to="." method="_on_new_pressed"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/LoadBtn" to="." method="_on_load_pressed"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/SaveBtn" to="." method="_on_save_pressed"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/SaveAsBtn" to="." method="_on_save_as_pressed"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/SettingsBtn" to="." method="_on_settings_pressed"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/UndoBtn" to="." method="_on_undo_pressed"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/RedoBtn" to="." method="_on_redo_pressed"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/EyedropperBtn" to="." method="_on_eyedropper_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/Scroll/Row/DocumentActions/BackButton" to="." method="_confirm_back_to_menu"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/Scroll/Row/DocumentActions/NewButton" to="." method="_on_new_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/Scroll/Row/DocumentActions/LoadButton" to="." method="_on_load_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/Scroll/Row/DocumentActions/SaveButton" to="." method="_on_save_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/Scroll/Row/DocumentActions/SaveAsButton" to="." method="_on_save_as_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/Scroll/Row/DocumentActions/SettingsButton" to="." method="_on_settings_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/Scroll/Row/HistoryActions/UndoButton" to="." method="_on_undo_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/Scroll/Row/HistoryActions/RedoButton" to="." method="_on_redo_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/Scroll/Row/EyedropperBtn" to="." method="_on_eyedropper_pressed"]
 
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/ToolPlaceBtn" to="." method="_on_tool_place_pressed"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/ToolEraseBtn" to="." method="_on_tool_erase_pressed"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/BrushLineBtn" to="." method="_on_brush_line_pressed"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/BrushRectBtn" to="." method="_on_brush_rect_pressed"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/RotXBtn" to="." method="_cycle_rotation_x"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/RotBtn" to="." method="_cycle_rotation"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/RotZBtn" to="." method="_cycle_rotation_z"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/LayerDownBtn" to="." method="_on_layer_down_pressed"]
-[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/LayerUpBtn" to="." method="_on_layer_up_pressed"]
-[connection signal="toggled" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/TexturesBtn" to="." method="_on_textures_toggled"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar/ToolPlaceBtn" to="." method="_on_tool_place_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar/ToolEraseBtn" to="." method="_on_tool_erase_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar/BrushLineBtn" to="." method="_on_brush_line_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar/BrushRectBtn" to="." method="_on_brush_rect_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar/RotXBtn" to="." method="_cycle_rotation_x"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar/RotBtn" to="." method="_cycle_rotation"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar/RotZBtn" to="." method="_cycle_rotation_z"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar/LayerDownBtn" to="." method="_on_layer_down_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar/LayerUpBtn" to="." method="_on_layer_up_pressed"]
+[connection signal="toggled" from="EditorUI/Root/TopBar/Margin/Scroll/Row/FrameToolbar/TexturesBtn" to="." method="_on_textures_toggled"]
+
+[editable path="EditorUI/Root/TopBar/Margin/Scroll/Row/DocumentActions"]

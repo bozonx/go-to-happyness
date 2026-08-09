@@ -16,8 +16,6 @@ extends Node3D
 ## Modes reach the document and the services through `MapEditorContext`, never
 ## through this node.
 
-const MapEditorModeBarScript = preload("res://game/features/world/presentation/editor/ui/map_editor_mode_bar.gd")
-
 ## Phases that own the modes not yet built. They are listed so the author can see
 ## what the editor is going to be, and disabled so they cannot pretend to work.
 ##
@@ -36,7 +34,7 @@ const PLANNED_MODES: Array = []
 @onready var camera: MapEditorCamera = $Camera3D
 
 @onready var _top_bar: Control = $UI/Screen/TopBar
-@onready var _mode_bar: MapEditorModeBar = $UI/Screen/TopBar/Margin/Scroll/Row/ModeBar
+@onready var _mode_bar: EditorModeBar = $UI/Screen/TopBar/Margin/Scroll/Row/ModeBar
 @onready var _viewport_area: Control = $UI/Screen/Middle/Workspace/Viewport3D
 @onready var _scenario_workspace: MapScenarioWorkspace = $UI/Screen/Middle/Workspace/ScenarioWorkspace
 @onready var _scenario_map_bar: PanelContainer = $UI/Screen/Middle/Workspace/ScenarioMapBar
@@ -47,15 +45,15 @@ const PLANNED_MODES: Array = []
 @onready var _status_cell: Label = $UI/Screen/StatusBar/Margin/Row/CellLabel
 @onready var _status_message: Label = $UI/Screen/StatusBar/Margin/Row/MessageLabel
 @onready var _shortcut_tooltip: EditorShortcutTooltip = $UI/Screen/StatusBar/Margin/Row/ShortcutTooltip
-@onready var _back_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/BackButton
-@onready var _new_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/NewButton
-@onready var _load_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/LoadButton
-@onready var _save_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/SaveButton
-@onready var _save_as_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/SaveAsButton
-@onready var _settings_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/SettingsButton
+@onready var _back_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/DocumentActions/BackButton
+@onready var _new_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/DocumentActions/NewButton
+@onready var _load_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/DocumentActions/LoadButton
+@onready var _save_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/DocumentActions/SaveButton
+@onready var _save_as_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/DocumentActions/SaveAsButton
+@onready var _settings_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/DocumentActions/SettingsButton
 @onready var _start_settings_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/StartSettingsButton
-@onready var _undo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/UndoButton
-@onready var _redo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/RedoButton
+@onready var _undo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/HistoryActions/UndoButton
+@onready var _redo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/HistoryActions/RedoButton
 @onready var _eyedropper_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/EyedropperButton
 @onready var _render_mode_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/RenderModeButton
 @onready var _validate_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/ValidateButton
@@ -416,13 +414,22 @@ func _build_modes() -> void:
 		mode.configure(_context)
 		mode.ui_changed.connect(_refresh_panels)
 
-	var bar_entries: Array = _modes.duplicate()
+	var bar_entries: Array = []
+	for mode: MapEditorMode in _modes:
+		bar_entries.append({
+			"id": mode.id,
+			"title": mode.title,
+			"icon": mode.icon,
+			"tooltip": mode.title,
+		})
 	for planned: Dictionary in PLANNED_MODES:
-		var placeholder := MapEditorMode.new()
-		placeholder.id = planned["id"]
-		placeholder.title = planned["title"]
-		placeholder.icon = planned.get("icon", "")
-		bar_entries.append(placeholder)
+		bar_entries.append({
+			"id": planned["id"],
+			"title": planned["title"],
+			"icon": planned.get("icon", ""),
+			"tooltip": planned["title"],
+			"enabled": false,
+		})
 	_mode_bar.build(bar_entries)
 	for planned: Dictionary in PLANNED_MODES:
 		_mode_bar.set_enabled(planned["id"], false, planned["reason"])

@@ -1,0 +1,35 @@
+[gd_scene format=3]
+
+[node name="DocumentActions" type="HBoxContainer"]
+theme_override_constants/separation = 4
+
+[node name="BackButton" type="Button" parent="."]
+custom_minimum_size = Vector2(38, 0)
+focus_mode = 0
+text = "←"
+tooltip_text = "Вернуться в меню"
+
+[node name="NewButton" type="Button" parent="."]
+custom_minimum_size = Vector2(38, 0)
+focus_mode = 0
+text = "📄"
+
+[node name="LoadButton" type="Button" parent="."]
+custom_minimum_size = Vector2(38, 0)
+focus_mode = 0
+text = "📂"
+
+[node name="SaveButton" type="Button" parent="."]
+custom_minimum_size = Vector2(38, 0)
+focus_mode = 0
+text = "💾"
+
+[node name="SaveAsButton" type="Button" parent="."]
+custom_minimum_size = Vector2(38, 0)
+focus_mode = 0
+text = "💾+"
+
+[node name="SettingsButton" type="Button" parent="."]
+custom_minimum_size = Vector2(38, 0)
+focus_mode = 0
+text = "⚙"

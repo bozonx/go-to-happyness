@@ -1,0 +1,16 @@
+[gd_scene format=3]
+
+[node name="HistoryActions" type="HBoxContainer"]
+theme_override_constants/separation = 4
+
+[node name="UndoButton" type="Button" parent="."]
+custom_minimum_size = Vector2(38, 0)
+focus_mode = 0
+text = "↩"
+tooltip_text = "Отменить"
+
+[node name="RedoButton" type="Button" parent="."]
+custom_minimum_size = Vector2(38, 0)
+focus_mode = 0
+text = "↪"
+tooltip_text = "Повторить"

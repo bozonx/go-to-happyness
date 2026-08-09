@@ -1,86 +1,55 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=5 format=3]
 
-[ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_mode_bar.tscn" id="1_mode_bar"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor/editor_top_bar.tscn" id="1_top_bar"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor/editor_document_actions.tscn" id="2_document"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor/editor_history_actions.tscn" id="3_history"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor/editor_mode_bar.tscn" id="4_modes"]
 
-[node name="TopBar" type="PanelContainer"]
-custom_minimum_size = Vector2(0, 52)
-clip_contents = true
+[node name="TopBar" instance=ExtResource("1_top_bar")]
 
-[node name="Margin" type="MarginContainer" parent="."]
-theme_override_constants/margin_left = 8
-theme_override_constants/margin_top = 8
-theme_override_constants/margin_right = 8
-theme_override_constants/margin_bottom = 8
+[node name="DocumentActions" parent="Margin/Scroll/Row" instance=ExtResource("2_document")]
 
-[node name="Scroll" type="ScrollContainer" parent="Margin"]
-vertical_scroll_mode = 0
-horizontal_scroll_mode = 1
-
-[node name="Row" type="HBoxContainer" parent="Margin/Scroll"]
-size_flags_horizontal = 3
-theme_override_constants/separation = 10
-
-[node name="BackButton" type="Button" parent="Margin/Scroll/Row"]
-custom_minimum_size = Vector2(38, 0)
-text = "←"
-tooltip_text = "Вернуться в меню"
-
-[node name="NewButton" type="Button" parent="Margin/Scroll/Row"]
-custom_minimum_size = Vector2(38, 0)
-text = "📄"
+[node name="NewButton" parent="Margin/Scroll/Row/DocumentActions" index="1"]
 tooltip_text = "Создать новую карту"
 
-[node name="LoadButton" type="Button" parent="Margin/Scroll/Row"]
-custom_minimum_size = Vector2(38, 0)
-text = "📂"
+[node name="LoadButton" parent="Margin/Scroll/Row/DocumentActions" index="2"]
 tooltip_text = "Открыть карту"
 
-[node name="SaveButton" type="Button" parent="Margin/Scroll/Row"]
-custom_minimum_size = Vector2(38, 0)
-text = "💾"
+[node name="SaveButton" parent="Margin/Scroll/Row/DocumentActions" index="3"]
 tooltip_text = "Сохранить карту"
 
-[node name="SaveAsButton" type="Button" parent="Margin/Scroll/Row"]
-custom_minimum_size = Vector2(38, 0)
-text = "💾+"
+[node name="SaveAsButton" parent="Margin/Scroll/Row/DocumentActions" index="4"]
 tooltip_text = "Сохранить как новую карту"
 
-[node name="SettingsButton" type="Button" parent="Margin/Scroll/Row"]
-custom_minimum_size = Vector2(38, 0)
-text = "⚙"
+[node name="SettingsButton" parent="Margin/Scroll/Row/DocumentActions" index="5"]
 tooltip_text = "Настройки карты"
 
 [node name="StartSettingsButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
+focus_mode = 0
 text = "▶⚙"
 tooltip_text = "Настройки старта на карте"
 
 [node name="VSep1" type="VSeparator" parent="Margin/Scroll/Row"]
 
-[node name="UndoButton" type="Button" parent="Margin/Scroll/Row"]
-custom_minimum_size = Vector2(38, 0)
-text = "↩"
-tooltip_text = "Отменить"
-
-[node name="RedoButton" type="Button" parent="Margin/Scroll/Row"]
-custom_minimum_size = Vector2(38, 0)
-text = "↪"
-tooltip_text = "Повторить"
+[node name="HistoryActions" parent="Margin/Scroll/Row" instance=ExtResource("3_history")]
 
 [node name="EyedropperButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
 toggle_mode = true
+focus_mode = 0
 text = "🧪"
 tooltip_text = "Пипетка: включить выбор свойств с карты"
 
 [node name="RenderModeButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(100, 0)
+focus_mode = 0
 text = "🌿 Полный"
 tooltip_text = "Режим ландшафта: Полный / Текстуры / Матовый / Простой"
 
 [node name="VSep2" type="VSeparator" parent="Margin/Scroll/Row"]
 
-[node name="ModeBar" parent="Margin/Scroll/Row" instance=ExtResource("1_mode_bar")]
+[node name="ModeBar" parent="Margin/Scroll/Row" instance=ExtResource("4_modes")]
 
 [node name="Spacer" type="Control" parent="Margin/Scroll/Row"]
 size_flags_horizontal = 3
@@ -89,21 +58,27 @@ mouse_filter = 2
 
 [node name="ValidateButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
+focus_mode = 0
 text = "✔"
 tooltip_text = "Проверить карту"
 
 [node name="TestButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
+focus_mode = 0
 text = "▶"
 tooltip_text = "Тест-запуск из места, выбранного в меню справа"
 
 [node name="TestTargetButton" type="MenuButton" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(150, 0)
+focus_mode = 0
 text = "вход карты"
-tooltip_text = "Откуда начинается тест-запуск: вход карты, один из вариантов старта или тест-точка"
+tooltip_text = "Откуда начинается тест-запуск"
 flat = false
 
 [node name="TestHereButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
+focus_mode = 0
 text = "▶⌖"
-tooltip_text = "Тест-запуск из клетки под курсором. Старт партии на карте не меняется"
+tooltip_text = "Тест-запуск из клетки под курсором"
+
+[editable path="Margin/Scroll/Row/DocumentActions"]

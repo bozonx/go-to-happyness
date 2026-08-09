@@ -105,19 +105,15 @@ var _orbiting: bool = false
 @onready var _save_as_id_edit: LineEdit = %SaveAsIdEdit
 @onready var _save_as_hint: Label = %SaveAsHint
 
-@onready var _mode_frame_btn: Button = %ModeFrameBtn
-@onready var _mode_finishes_btn: Button = %ModeFinishesBtn
-@onready var _mode_fill_btn: Button = %ModeFillBtn
-@onready var _mode_zones_btn: Button = %ModeZonesBtn
+@onready var _mode_bar: EditorModeBar = %ModeBar
 
-@onready var _back_btn: Button = %BackBtn
-@onready var _undo_btn: Button = %UndoBtn
-@onready var _redo_btn: Button = %RedoBtn
+@onready var _back_btn: Button = $EditorUI/Root/TopBar/Margin/Scroll/Row/DocumentActions/BackButton
+@onready var _undo_btn: Button = $EditorUI/Root/TopBar/Margin/Scroll/Row/HistoryActions/UndoButton
+@onready var _redo_btn: Button = $EditorUI/Root/TopBar/Margin/Scroll/Row/HistoryActions/RedoButton
 @onready var _eyedropper_btn: Button = %EyedropperBtn
 @onready var _walk_btn: Button = %WalkBtn
 @onready var _textures_btn: Button = %TexturesBtn
 
-var _mode_buttons: Dictionary = {}
 ## Prevent value_changed callbacks from overwriting one footprint dimension
 ## with the stale value of the other while a loaded blueprint updates both UI
 ## fields.
@@ -624,12 +620,10 @@ func is_cell_in_bounds(cell: Vector3i) -> bool:
 func _select_mode(mode: int) -> void:
 	if mode == EditMode.FINISHES:
 		_update_status("Этот режим подготовлен в формате и будет реализован следующим срезом.")
-		if _mode_buttons.has(current_mode):
-			(_mode_buttons[current_mode] as Button).button_pressed = true
+		_mode_bar.set_active(_mode_id(current_mode))
 		return
 	current_mode = mode
-	for m in _mode_buttons.keys():
-		(_mode_buttons[m] as Button).button_pressed = m == mode
+	_mode_bar.set_active(_mode_id(mode))
 	_update_shortcut_tooltip()
 	if mode == EditMode.FILL:
 		frame_mode.deactivate()
@@ -1029,10 +1023,13 @@ func _pick_from_cursor() -> bool:
 # ---------------------------------------------------------------------------
 
 func _setup_ui() -> void:
-	_mode_buttons[EditMode.FRAME] = _mode_frame_btn
-	_mode_buttons[EditMode.FINISHES] = _mode_finishes_btn
-	_mode_buttons[EditMode.FILL] = _mode_fill_btn
-	_mode_buttons[EditMode.ZONES] = _mode_zones_btn
+	_mode_bar.build([
+		{"id": &"frame", "title": "Каркас", "icon": "🏗️", "tooltip": "Режим 1: Каркас (1)"},
+		{"id": &"finishes", "title": "Отделка", "icon": "🎨", "tooltip": "Режим 2: Отделка (2)", "enabled": false},
+		{"id": &"fill", "title": "Наполнение", "icon": "🪑", "tooltip": "Режим 3: Наполнение (3)"},
+		{"id": &"zones", "title": "Зоны", "icon": "🗺️", "tooltip": "Режим 4: Зоны (4)"},
+	])
+	_mode_bar.mode_selected.connect(_on_mode_selected)
 
 	frame_mode.setup(self)
 	zones_mode.setup(self)
@@ -1064,6 +1061,22 @@ func _setup_ui() -> void:
 	frame_mode.set_brush(Brush.LINE)
 	_set_layer(0)
 	_select_mode(EditMode.FRAME)
+
+
+func _on_mode_selected(mode_id: StringName) -> void:
+	match mode_id:
+		&"frame": _select_mode(EditMode.FRAME)
+		&"finishes": _select_mode(EditMode.FINISHES)
+		&"fill": _select_mode(EditMode.FILL)
+		&"zones": _select_mode(EditMode.ZONES)
+
+
+func _mode_id(mode: int) -> StringName:
+	match mode:
+		EditMode.FINISHES: return &"finishes"
+		EditMode.FILL: return &"fill"
+		EditMode.ZONES: return &"zones"
+		_: return &"frame"
 
 
 # ---------------------------------------------------------------------------
