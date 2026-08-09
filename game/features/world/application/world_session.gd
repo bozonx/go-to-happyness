@@ -122,15 +122,17 @@ func _configure_environment(p_seed: int) -> void:
 
 
 ## Skipping a night does not skip the snow that fell during it (§13.1).
-func _on_time_jumped(skipped_minutes: float) -> void:
-	environment_accumulation.catch_up(environment.snapshot(), skipped_minutes)
+func _on_time_jumped(samples: Array[Dictionary]) -> void:
+	environment_accumulation.catch_up_samples(samples, environment.snapshot())
 
 
 ## Advances the environment and everything it drives. One call per frame from the
 ## host: nothing downstream advances time, it only reads the snapshot.
 func tick_environment(delta: float) -> void:
 	environment.tick(delta)
-	environment_accumulation.tick(environment.snapshot())
+	var current := environment.snapshot()
+	environment_accumulation.tick(current)
+	environment_scenario.publish_state(current)
 
 
 func publish_navigation() -> void:

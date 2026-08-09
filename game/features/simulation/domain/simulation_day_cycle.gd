@@ -14,8 +14,12 @@ const MEAL_HOURS := [9, 13, 19]
 
 var clock: SimulationClock
 var current_day: int:
-	get: return clock.calendar.day_of_session
-	set(value): clock.calendar.day_of_session = value
+	get: return clock.day_of_session()
+	set(value):
+		if clock.is_bound_to_session():
+			push_error("SimulationDayCycle is read-only while bound; write through EnvironmentDirector")
+			return
+		clock.calendar.day_of_session = value
 var _active_meal_hour := -1
 
 
@@ -67,8 +71,7 @@ func events_for_minute(clock_minute: int, workday_hours: int) -> Array[Simulatio
 	return events
 
 
-func set_to_workday_start() -> void:
-	clock.set_time(8 * 60)
+func reset_for_workday_start() -> void:
 	_active_meal_hour = -1
 
 

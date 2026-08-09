@@ -18,32 +18,46 @@ extends RefCounted
 const MINUTES_PER_DAY := 24 * 60
 
 var calendar := WorldCalendar.new()
+var _director: EnvironmentDirector = null
 var minutes: float:
-	get: return calendar.minute_of_day
+	get: return _director.snapshot().minute_of_day if _director != null else calendar.minute_of_day
 	set(value):
+		if _bound_to_session:
+			push_error("SimulationClock is read-only while bound; write through EnvironmentDirector")
+			return
 		calendar.minute_of_day = fposmod(value, MINUTES_PER_DAY)
 		# Placing the clock is not living through the interval: forget the last
 		# minute seen so a restore does not replay half a day of meal events.
 		_previous_minute = int(calendar.minute_of_day)
 
 var _previous_minute := -1
+var _bound_to_session := false
 
 
 ## Points this clock at the session's calendar. Called when the settlement scene
 ## is bound to a world session; until then the clock reads its own calendar so
 ## tests and tools work without a session.
-func bind(next_calendar: WorldCalendar) -> void:
-	if next_calendar == null:
+func bind(director: EnvironmentDirector) -> void:
+	if director == null:
 		return
-	calendar = next_calendar
-	_previous_minute = int(calendar.minute_of_day)
+	_director = director
+	_bound_to_session = true
+	_previous_minute = int(minutes)
+
+
+func day_of_session() -> int:
+	return _director.snapshot().day_of_session if _director != null else calendar.day_of_session
+
+
+func is_bound_to_session() -> bool:
+	return _bound_to_session
 
 
 ## The whole game minutes crossed since the previous call, in order. Works across
 ## a jump for the same reason it works across midnight: it walks from the last
 ## minute seen to the current one rather than trusting a delta.
 func elapsed_minutes() -> PackedInt32Array:
-	var current_minute := int(calendar.minute_of_day)
+	var current_minute := int(minutes)
 	var elapsed := PackedInt32Array()
 	if _previous_minute >= 0 and _previous_minute != current_minute:
 		var minute_to_process := posmod(_previous_minute + 1, MINUTES_PER_DAY)
@@ -59,16 +73,19 @@ func elapsed_minutes() -> PackedInt32Array:
 ## a *scripted* jump goes through `EnvironmentDirector.set_time_of_day`, which
 ## crosses midnight properly and lets accumulation catch up (§13.1).
 func set_time(minute_of_day: int) -> void:
+	if _bound_to_session:
+		push_error("SimulationClock is read-only while bound; write through EnvironmentDirector")
+		return
 	calendar.minute_of_day = fposmod(float(minute_of_day), MINUTES_PER_DAY)
 	_previous_minute = int(calendar.minute_of_day)
 
 
 func hour() -> int:
-	return int(calendar.minute_of_day) / 60
+	return int(minutes) / 60
 
 
 func minute() -> int:
-	return int(calendar.minute_of_day) % 60
+	return int(minutes) % 60
 
 
 ## Night as the settlement schedules it — bedtime, not the sun. Daylight questions

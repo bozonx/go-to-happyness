@@ -23,8 +23,13 @@ static func run_tests() -> void:
 	_test_temperature_decides_snow_not_a_cold_flag()
 	_test_pattern_is_not_settlement_vocabulary()
 	_test_director_override_and_release()
+	_test_forced_precipitation_expires()
+	_test_airless_climate_has_no_fog()
+	_test_cloud_caption_respects_the_storm_axis()
+	_test_scenario_flags_follow_the_current_snapshot()
 	_test_save_round_trip()
 	_test_accumulation_catches_up_on_skipped_time()
+	_test_chunk_cursor_accounts_for_each_slices_elapsed_time()
 	print("test_domain_environment: OK")
 
 
@@ -177,6 +182,48 @@ static func _test_director_override_and_release() -> void:
 	assert(is_equal_approx(frozen.snapshot().minute_of_day, 8.0 * 60.0))
 
 
+static func _test_forced_precipitation_expires() -> void:
+	var director := EnvironmentDirector.new()
+	director.configure(&"temperate", 100, 8 * 60, 54.0, &"clear", 11)
+	director.minutes_per_second = 60.0
+	director.force_precipitation(60.0, 0.0)
+	director.tick(0.01)
+	assert(director.snapshot().is_precipitating())
+	director.tick(1.1)
+	director.tick(EnvironmentDirector.DEFAULT_TRANSITION_SECONDS + 0.1)
+	assert(not director.snapshot().is_precipitating())
+	assert(not director.is_scripted())
+
+
+static func _test_airless_climate_has_no_fog() -> void:
+	var airless := _state(&"airless", 120, 5 * 60, 4, &"vacuum")
+	assert(is_equal_approx(airless.visibility_at(5 * 60), EnvironmentState.CLEAR_VISIBILITY))
+
+
+static func _test_cloud_caption_respects_the_storm_axis() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 8
+	var model := WeatherModel.new()
+	var dense := WeatherPattern.from_dict({"id": "dense", "cloud_base": 1.0, "cloud_variation": 0.0})
+	model.new_day(dense, rng)
+	assert(model.storm_influence_at(720.0) == 0.0)
+	assert(model.cloud_phase_at(720.0) == WeatherModel.CloudPhase.OVERCAST)
+
+
+static func _test_scenario_flags_follow_the_current_snapshot() -> void:
+	var director := EnvironmentDirector.new()
+	director.configure(&"temperate", 100, 12 * 60, 54.0, &"clear", 22)
+	var runtime := MapScenarioRuntime.new()
+	runtime.configure(MapScenario.new())
+	var vocabulary := EnvironmentScenarioVocabulary.new()
+	vocabulary.install(director, runtime)
+	assert(not bool(runtime.flag_value(EnvironmentScenarioVocabulary.FLAG_IS_NIGHT)))
+	director.set_time_of_day(23 * 60)
+	vocabulary.publish_state(director.snapshot())
+	assert(bool(runtime.flag_value(EnvironmentScenarioVocabulary.FLAG_IS_NIGHT)))
+	assert(int(runtime.flag_value(EnvironmentScenarioVocabulary.FLAG_MINUTE_OF_DAY)) == 23 * 60)
+
+
 static func _test_save_round_trip() -> void:
 	var director := EnvironmentDirector.new()
 	director.configure(&"temperate", 210, 14 * 60, 61.0, &"rain", 5150)
@@ -228,6 +275,27 @@ static func _test_accumulation_catches_up_on_skipped_time() -> void:
 	thaw.solar_height = 0.6
 	accumulation.catch_up(thaw, 12.0 * 60.0)
 	assert(terrain.snow_depth_at(probe) < deep)
+
+
+static func _test_chunk_cursor_accounts_for_each_slices_elapsed_time() -> void:
+	var terrain := TerrainGrid.new()
+	terrain.configure(2.0, 32)
+	var terrain_service := TerrainService.new()
+	terrain_service.configure(terrain)
+	var accumulation := EnvironmentAccumulationService.new()
+	accumulation.configure(terrain_service, null, terrain, null)
+	var snapshot := EnvironmentSnapshot.new()
+	snapshot.precipitation = EnvironmentSnapshot.Precipitation.SNOW
+	snapshot.precipitation_intensity = 1.0
+	snapshot.temperature = -5.0
+	# Initialise the per-slice clocks, then run two full cursor rounds. Every slice
+	# receives the time since its own previous visit, not merely the latest frame.
+	accumulation.tick(snapshot)
+	for index in range(9):
+		snapshot.elapsed_minutes += 22.5
+		accumulation.tick(snapshot)
+	assert(terrain.snow_depth_at(Vector2i(-15, -15)) > 0)
+	assert(terrain.snow_depth_at(Vector2i(15, 15)) > 0)
 
 
 static func _state(

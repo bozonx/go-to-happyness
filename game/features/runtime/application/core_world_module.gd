@@ -32,6 +32,9 @@ func start(runtime: GameRuntime, session: GameSessionConfig) -> bool:
 	if session.map_document == null or session.map_ref.is_empty():
 		push_error("[launch] core.world requires a resolved map")
 		return false
+	var environment_errors := EnvironmentContentLoader.register_all()
+	for problem: String in environment_errors:
+		push_warning("[environment] %s" % problem)
 	runtime.world_session = WorldSession.new(
 		session.map_document, WorldSession.DEFAULT_CELL_SIZE,
 		session.start_option, session.start_flags(), session.seed)

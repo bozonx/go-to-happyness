@@ -127,6 +127,7 @@ func _ready() -> void:
 		# Module parameters belong to the game's modules, so changing the game
 		# changes which controls exist at all.
 		_rebuild_module_parameters())
+	_start_climate_option.item_selected.connect(func(_index: int) -> void: _update_start_day_limit())
 	_starts_list.item_selected.connect(_on_start_option_selected)
 	_add_start_button.pressed.connect(_add_start_option)
 	_remove_start_button.pressed.connect(_remove_start_option)
@@ -943,6 +944,7 @@ static func _split_names(text: String) -> Array[StringName]:
 ## rather than typing an id is what keeps a misspelled climate from silently
 ## becoming the temperate default at launch.
 func _fill_climate_options(current: StringName) -> void:
+	EnvironmentContentLoader.register_all()
 	_start_climate_option.clear()
 	var ids := ClimateCatalog.ids()
 	for index in range(ids.size()):
@@ -951,3 +953,10 @@ func _fill_climate_options(current: StringName) -> void:
 			_start_climate_option.select(index)
 	if _start_climate_option.selected < 0 and not ids.is_empty():
 		_start_climate_option.select(0)
+	_update_start_day_limit()
+
+
+func _update_start_day_limit() -> void:
+	var selected_id := StringName(_start_climate_option.get_item_text(_start_climate_option.selected)) if _start_climate_option.selected >= 0 else ClimateProfile.DEFAULT_ID
+	_start_day_spin.max_value = ClimateCatalog.profile(selected_id).days_per_year
+	_start_day_spin.value = minf(_start_day_spin.value, _start_day_spin.max_value)

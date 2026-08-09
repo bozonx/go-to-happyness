@@ -8,8 +8,7 @@ func _init() -> void:
 
 	var worker: Citizen = simulation.citizens[2]
 	worker.set_player_controlled(false)
-	simulation.day_cycle.current_day = 1
-	simulation.clock.set_time(12 * 60)
+	simulation.world_session.environment.restore_legacy_clock(12 * 60, 1)
 	SimHelper.assign_daily_order(simulation, worker, "gather_branches")
 	assert(SimHelper.activate_citizen_overtime(simulation, worker, "personal"))
 	assert(worker.daily_order_workday_id == 1)
@@ -25,21 +24,18 @@ func _init() -> void:
 	worker.deactivate_overtime("personal")
 	assert(worker.has_overtime_source("settlement", 1))
 
-	simulation.day_cycle.current_day = 2
-	simulation.clock.set_time(8 * 60)
+	simulation.world_session.environment.restore_legacy_clock(8 * 60, 2)
 	SimHelper.handle_day_cycle_event(simulation, SimulationDayEvent.new(SimulationDayEvent.Kind.WORKDAY_STARTED, 8))
 	assert(worker.daily_order_workday_id == 2)
 	assert(worker.has_active_overtime(2))
 
 	# A selected shift length applies at the next start, never retroactively.
 	simulation.settlement.workday_hours = 8
-	simulation.day_cycle.current_day = 2
-	simulation.clock.set_time(12 * 60)
+	simulation.world_session.environment.restore_legacy_clock(12 * 60, 2)
 	SimHelper.set_workday_hours(simulation, 6)
 	assert(simulation.settlement.workday_hours == 8)
 	assert(simulation.settlement.pending_workday_hours == 6)
-	simulation.day_cycle.current_day = 3
-	simulation.clock.set_time(8 * 60)
+	simulation.world_session.environment.restore_legacy_clock(8 * 60, 3)
 	SimHelper.handle_day_cycle_event(simulation, SimulationDayEvent.new(SimulationDayEvent.Kind.WORKDAY_STARTED, 8))
 	assert(simulation.settlement.workday_hours == 6)
 	assert(simulation.settlement.pending_workday_hours == 0)

@@ -9,8 +9,7 @@ func _init() -> void:
 
 	var staying_worker: Citizen = simulation.citizens[1]
 	var staying_position: Vector3 = simulation.entrance_stone.global_position + Vector3(8.0, 0.0, 3.0)
-	simulation.day_cycle.current_day = 2
-	simulation.clock.set_time(2 * 60 + 30)
+	simulation.world_session.environment.restore_legacy_clock(2 * 60 + 30, 2)
 	simulation.settlement.wellbeing = 100
 	staying_worker.global_position = staying_position
 	simulation.last_citizen_positions[staying_worker.get_instance_id()] = staying_position
@@ -35,9 +34,8 @@ func _init() -> void:
 
 	# Outside worker lifecycle: departure, skip-night preservation, return.
 	var outside_worker: Citizen = simulation.citizens[3]
-	simulation.day_cycle.current_day = 1
+	simulation.world_session.environment.restore_legacy_clock(21 * 60, 1)
 	simulation.settlement_survival_service.last_survival_hour = -1
-	simulation.clock.set_time(21 * 60)
 	staying_position = simulation.entrance_stone.global_position + Vector3(12.0, 0.0, 2.0)
 	staying_worker.global_position = staying_position
 	simulation.last_citizen_positions[staying_worker.get_instance_id()] = staying_position
@@ -54,7 +52,7 @@ func _init() -> void:
 	assert(outside_worker.daily_order_role == "courier")
 	assert(not outside_worker.is_player_controlled)
 	var money_before_outside_work: int = simulation.settlement.money
-	simulation.clock.set_time(9 * 60)
+	simulation.world_session.environment.restore_legacy_clock(9 * 60, simulation.day_cycle.current_day)
 	SimHelper.send_selected_resident_to_outside_work(simulation)
 	var outside_task: CourierTask = null
 	for task: CourierTask in simulation.courier_dispatcher.available_tasks():
@@ -74,7 +72,7 @@ func _init() -> void:
 	outside_worker.overtime_mode = false
 	outside_worker.overtime_until_workday_id = 0
 	outside_worker.daily_order_workday_id = simulation.day_cycle.current_day + 1
-	simulation.clock.set_time(21 * 60)
+	simulation.world_session.environment.restore_legacy_clock(21 * 60, simulation.day_cycle.current_day)
 	SimHelper.skip_night(simulation)
 	assert(simulation.clock.hour() == 6 and simulation.clock.minute() == 0)
 	assert(not simulation.skip_night_button.visible)
@@ -86,7 +84,7 @@ func _init() -> void:
 	assert(simulation.settlement.money == money_before_outside_work)
 
 	# Return outside workers and collect reward.
-	simulation.clock.set_time(9 * 60)
+	simulation.world_session.environment.restore_legacy_clock(9 * 60, simulation.day_cycle.current_day)
 	SimHelper.return_outside_workers(simulation)
 	assert(not simulation.outside_workers.has(outside_worker.get_stable_id()))
 	assert(outside_worker.visible)

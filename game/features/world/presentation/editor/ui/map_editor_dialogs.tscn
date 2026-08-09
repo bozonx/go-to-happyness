@@ -377,7 +377,7 @@ text = "День года:"
 unique_name_in_owner = true
 layout_mode = 2
 min_value = 1.0
-max_value = 365.0
+max_value = 10000.0
 value = 120.0
 
 [node name="LatitudeLbl" type="Label" parent="StartSettingsDialog/Body/Scroll/Grid"]

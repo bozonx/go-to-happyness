@@ -123,6 +123,8 @@ func precipitation_type_at(minute: float) -> int:
 ## widest, burns off toward noon, and grows in precipitation and under a front.
 ## Ground fog tied to water and hollows needs locality and is stage 3.
 func visibility_at(minute: float) -> float:
+	if not climate.has_atmosphere:
+		return CLEAR_VISIBILITY
 	var cover := weather.cloud_cover_at(minute)
 	var storm := weather.storm_influence_at(minute)
 	var intensity := weather.intensity_at(minute)

@@ -302,14 +302,6 @@ static func restore_warehouses(settlement: RefCounted, data: Variant, types: Var
 	settlement.warehouse_ever_built = ever_built
 
 
-## Restores simulation clock and day-cycle state.
-static func restore_clock(clock: RefCounted, day_cycle: RefCounted, clock_state: Dictionary) -> void:
-	if clock_state.is_empty():
-		return
-	clock.minutes = float(clock_state.get("minutes", 0.0))
-	day_cycle.current_day = maxi(1, int(clock_state.get("current_day", 1)))
-
-
 ## Extracts camera state into a dictionary with Vector3 target and scalar
 ## distance/yaw/pitch. Returns an empty dict if camera_state is empty.
 static func restore_camera(camera_state: Dictionary) -> Dictionary:

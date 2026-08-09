@@ -34,6 +34,8 @@ const SUNLIT_MELT_FACTOR := 1.6
 ## flickering between states across a single cold night.
 const FREEZE_TEMPERATURE := -2.0
 const THAW_TEMPERATURE := 1.5
+const MINUTES_PER_ICE_STEP := 180.0
+const MINUTES_PER_ICE_THAW_STEP := 120.0
 ## The longest stretch a catch-up will simulate. A save resumed after a very long
 ## jump settles to the same steady state as one resumed after this, so paying for
 ## more is paying for nothing.
@@ -50,8 +52,9 @@ var cursor := 0
 ## Fractional depth carried between ticks, so a slow snowfall still accumulates
 ## instead of rounding away to nothing every frame.
 var _snow_progress: Dictionary = {}
-var _minutes_since_sweep := 0.0
 var _previous_minutes := -1.0
+var _slice_last_minutes: Dictionary = {}
+var _ice_progress: Dictionary = {}
 
 
 func configure(
@@ -66,6 +69,8 @@ func configure(
 	water_grid = p_water_grid
 	cursor = 0
 	_snow_progress.clear()
+	_slice_last_minutes.clear()
+	_ice_progress.clear()
 	_previous_minutes = -1.0
 
 
@@ -78,10 +83,15 @@ func tick(snapshot: EnvironmentSnapshot) -> void:
 	var elapsed := 0.0
 	if _previous_minutes >= 0.0:
 		elapsed = maxf(snapshot.elapsed_minutes - _previous_minutes, 0.0)
+	else:
+		_seed_slice_times(snapshot.elapsed_minutes)
 	_previous_minutes = snapshot.elapsed_minutes
 	if elapsed <= 0.0:
 		return
-	_advance(snapshot, elapsed)
+	var slice_start := cursor
+	var slice_elapsed := maxf(snapshot.elapsed_minutes - float(_slice_last_minutes.get(slice_start, snapshot.elapsed_minutes - elapsed)), 0.0)
+	_slice_last_minutes[slice_start] = snapshot.elapsed_minutes
+	_advance(snapshot, slice_elapsed)
 
 
 ## Applies an interval that was skipped rather than lived — a skipped night, a
@@ -92,20 +102,47 @@ func catch_up(snapshot: EnvironmentSnapshot, skipped_minutes: float) -> void:
 		return
 	_previous_minutes = snapshot.elapsed_minutes
 	_advance(snapshot, minf(skipped_minutes, MAX_CATCH_UP_MINUTES), true)
+	_seed_slice_times(snapshot.elapsed_minutes)
+
+
+func catch_up_samples(samples: Array[Dictionary], final_snapshot: EnvironmentSnapshot) -> void:
+	if terrain_grid == null or samples.is_empty():
+		return
+	var total := 0.0
+	for sample: Dictionary in samples:
+		var minutes := float(sample.get("minutes", 0.0))
+		var value: Variant = sample.get("snapshot", null)
+		if value is EnvironmentSnapshot and minutes > 0.0:
+			_advance(value as EnvironmentSnapshot, minutes, true)
+			total += minutes
+			if total >= MAX_CATCH_UP_MINUTES:
+				break
+	_previous_minutes = final_snapshot.elapsed_minutes
+	_seed_slice_times(final_snapshot.elapsed_minutes)
 
 
 func save_state() -> Dictionary:
-	return {"cursor": cursor}
+	return {"cursor": cursor, "snow_progress": _snow_progress.duplicate(true), "ice_progress": _ice_progress.duplicate(true)}
 
 
 func restore_state(state: Dictionary) -> void:
 	cursor = int(state.get("cursor", 0))
 	_snow_progress.clear()
+	var saved_snow: Variant = state.get("snow_progress", {})
+	if saved_snow is Dictionary:
+		for key: Variant in saved_snow:
+			_snow_progress[int(key)] = float(saved_snow[key])
+	_ice_progress.clear()
+	var saved_ice: Variant = state.get("ice_progress", {})
+	if saved_ice is Dictionary:
+		for key: Variant in saved_ice:
+			_ice_progress[int(key)] = float(saved_ice[key])
+	_slice_last_minutes.clear()
 	_previous_minutes = -1.0
 
 
 func _advance(snapshot: EnvironmentSnapshot, minutes: float, whole_board := false) -> void:
-	_update_ice(snapshot)
+	_update_ice(snapshot, minutes)
 	var cells := _next_cells(whole_board)
 	if cells.is_empty():
 		return
@@ -168,7 +205,7 @@ func _snow_can_rest_on(cell: Vector2i) -> bool:
 ## Freezing and thawing are an ordinary `WaterService` transaction, per body and
 ## by the body's own `freezes` flag — a lava lake and a fast current stay open
 ## whatever the temperature (§13).
-func _update_ice(snapshot: EnvironmentSnapshot) -> void:
+func _update_ice(snapshot: EnvironmentSnapshot, minutes: float) -> void:
 	if water_service == null or water_grid == null:
 		return
 	var freezing := snapshot.temperature <= FREEZE_TEMPERATURE
@@ -176,16 +213,23 @@ func _update_ice(snapshot: EnvironmentSnapshot) -> void:
 	if not freezing and not thawing:
 		return
 	for body: WaterBody in water_grid.bodies():
+		var cells := water_service.cells_of_body(body.id)
+		if cells.is_empty():
+			continue
+		var thickness := water_grid.ice_thickness_at(cells[0])
+		var progress := float(_ice_progress.get(body.id, 0.0))
 		if freezing and body.freezes:
-			var cells := water_service.cells_of_body(body.id)
-			if cells.is_empty() or water_grid.is_frozen(cells[0]):
-				continue
-			water_service.set_body_frozen(body.id, true)
-		elif thawing:
-			var cells := water_service.cells_of_body(body.id)
-			if cells.is_empty() or not water_grid.is_frozen(cells[0]):
-				continue
-			water_service.set_body_frozen(body.id, false)
+			progress += minutes * maxf(-snapshot.temperature / 2.0, 1.0) / MINUTES_PER_ICE_STEP
+		elif thawing and thickness > 0:
+			progress -= minutes * maxf(snapshot.temperature / THAW_TEMPERATURE, 1.0) / MINUTES_PER_ICE_THAW_STEP
+		if absf(progress) < 1.0:
+			_ice_progress[body.id] = progress
+			continue
+		var steps := int(progress)
+		var next_thickness := clampi(thickness + steps, 0, WaterGrid.MAX_ICE_THICKNESS)
+		_ice_progress[body.id] = progress - float(steps)
+		if next_thickness != thickness:
+			water_service.set_body_frozen(body.id, next_thickness > 0, next_thickness)
 
 
 ## The next slice of the board, advancing the cursor. A catch-up takes the whole
@@ -214,3 +258,14 @@ func _column_position(cell: Vector2i) -> Vector3:
 
 func _key_of(cell: Vector2i) -> int:
 	return cell.x * 100003 + cell.y
+
+
+func _seed_slice_times(elapsed_minutes: float) -> void:
+	_slice_last_minutes.clear()
+	if terrain_grid == null:
+		return
+	var total := terrain_grid.board_cells * terrain_grid.board_cells
+	var start := 0
+	while start < total:
+		_slice_last_minutes[start] = elapsed_minutes
+		start += CELLS_PER_TICK

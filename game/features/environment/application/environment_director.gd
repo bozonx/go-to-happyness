@@ -23,11 +23,11 @@ signal day_rolled(day_of_session: int, pattern: StringName)
 signal season_changed(season: StringName)
 signal weather_changed(pattern: StringName)
 ## Re-emitted from the calendar so accumulation catches up on skipped time (§13).
-signal time_jumped(skipped_minutes: float)
+signal time_jumped(samples: Array[Dictionary])
 
 const DEFAULT_TRANSITION_SECONDS := 2.5
 
-var state := EnvironmentState.new()
+var _state := EnvironmentState.new()
 ## Game minutes per real second the host runs time at. The director owns it
 ## because changing the flow of time is a write to the environment (§14).
 var minutes_per_second := 12.0
@@ -45,11 +45,13 @@ var _override_storm := -1.0
 var _override_precipitation := -1.0
 var _last_season: StringName = &""
 var _last_pattern: StringName = &""
+var _transition_from: EnvironmentSnapshot = null
+var _forced_until_elapsed := -1.0
+var _weather_before_script: Dictionary = {}
 
 
 func _init() -> void:
-	state.calendar.day_started.connect(_on_day_started)
-	state.calendar.time_jumped.connect(func(minutes: float) -> void: time_jumped.emit(minutes))
+	_state.calendar.day_started.connect(_on_day_started)
 
 
 ## Starts the environment from resolved session values (§15). The resolution
@@ -64,19 +66,19 @@ func configure(
 	seed: int,
 	dynamic := true,
 ) -> void:
-	state.configure(climate_id, day_of_year, minute_of_day, latitude, pattern_id, seed)
-	_last_season = state.climate.season_at(day_of_year)
-	_last_pattern = state.weather.pattern.id
+	_state.configure(climate_id, day_of_year, minute_of_day, latitude, pattern_id, seed)
+	_last_season = _state.climate.season_at(day_of_year)
+	_last_pattern = _state.weather.pattern.id
 	_snapshot = null
 	# `dynamic: false` from map_start.md §7 is not a separate mechanism: it is a
 	# session that begins SCRIPTED and is never released.
 	if dynamic:
 		_mode = EnvironmentSnapshot.Mode.SIMULATED
-		state.calendar.time_scale = 1.0
+		_state.calendar.time_scale = 1.0
 	else:
 		_mode = EnvironmentSnapshot.Mode.SCRIPTED
-		state.calendar.time_scale = 0.0
-		state.pinned_pattern = state.weather.pattern.id
+		_state.calendar.time_scale = 0.0
+		_state.pinned_pattern = _state.weather.pattern.id
 
 
 # --- Reading -------------------------------------------------------------------
@@ -97,16 +99,36 @@ func is_scripted() -> bool:
 	return _mode == EnvironmentSnapshot.Mode.SCRIPTED
 
 
+func day_of_year() -> int:
+	return _state.calendar.day_of_year
+
+
+func minute_of_day() -> float:
+	return _state.calendar.minute_of_day
+
+
+func season_ids() -> Array[StringName]:
+	var result: Array[StringName] = []
+	for entry: Dictionary in _state.climate.seasons:
+		result.append(StringName(entry.get("id", "")))
+	return result
+
+
 # --- The frame -----------------------------------------------------------------
 
 ## Advances time and rebuilds the snapshot. The host calls this once per frame
 ## and then only reads; no consumer advances anything.
 func tick(delta: float) -> void:
-	state.calendar.advance(delta, minutes_per_second)
+	_state.calendar.advance(delta, minutes_per_second)
 	if _override_blend != _override_target:
 		_override_blend = move_toward(_override_blend, _override_target, delta * _override_rate)
 		if is_equal_approx(_override_blend, 0.0) and _override_target == 0.0:
 			_clear_override_values()
+	if _forced_until_elapsed >= 0.0 and _state.calendar.elapsed_minutes >= _forced_until_elapsed:
+		_state.weather.clear_precipitation()
+		_override_precipitation = -1.0
+		_forced_until_elapsed = -1.0
+		release(DEFAULT_TRANSITION_SECONDS)
 	_snapshot = _build()
 
 
@@ -118,35 +140,49 @@ func set_time_of_day(minute: int) -> void:
 	# Built before the jump on purpose: accumulation hears `time_jumped` while the
 	# calendar is mid-operation, and the weather it should apply over the skipped
 	# interval is the weather that prevailed, not tomorrow's.
-	snapshot()
-	state.calendar.set_time_of_day(minute)
+	var before := _state.save_state()
+	var elapsed_before := _state.calendar.elapsed_minutes
+	_state.calendar.set_time_of_day(minute)
 	_snapshot = null
+	_emit_jump_samples(before, _state.calendar.elapsed_minutes - elapsed_before)
 
 
 func set_day_of_year(day: int) -> void:
-	snapshot()
-	state.calendar.set_day_of_year(day)
+	var before := _state.save_state()
+	var elapsed_before := _state.calendar.elapsed_minutes
+	_state.calendar.set_day_of_year(day)
 	_snapshot = null
+	_emit_jump_samples(before, _state.calendar.elapsed_minutes - elapsed_before)
 
 
 ## Skips forward, the operation behind "skip the night". Accumulation hears about
 ## it through `time_jumped` and catches up in one step.
 func skip_minutes(minutes: float) -> void:
-	snapshot()
-	state.calendar.jump_minutes(minutes)
+	var before := _state.save_state()
+	_state.calendar.jump_minutes(minutes)
 	_snapshot = null
+	_emit_jump_samples(before, minutes)
 
 
 ## Scrubs the clock in either direction, for the laboratory (§17). It is the one
 ## write that skips accumulation, and it is allowed to exist only because a lab
 ## has no world to accumulate in — a game must use `skip_minutes`.
 func scrub_minutes(minutes: float) -> void:
-	state.calendar.scrub(minutes)
+	_state.calendar.scrub(minutes)
 	_snapshot = null
 
 
 func set_time_scale(scale: float) -> void:
-	state.calendar.time_scale = maxf(scale, 0.0)
+	_state.calendar.time_scale = maxf(scale, 0.0)
+	_snapshot = null
+
+
+## Compatibility entry for the settlement's old module clock section. New saves
+## restore the complete environment section; only the director may pose legacy
+## values onto its calendar.
+func restore_legacy_clock(minute: float, session_day: int) -> void:
+	_state.calendar.minute_of_day = fposmod(minute, float(WorldCalendar.MINUTES_PER_DAY))
+	_state.calendar.day_of_session = maxi(session_day, 1)
 	_snapshot = null
 
 
@@ -154,8 +190,8 @@ func set_time_scale(scale: float) -> void:
 ## vocabulary onto a pattern name and calls this; the environment never learns
 ## what "потепление" is (§7).
 func set_pattern(pattern_id: StringName, announcement_minute := -1) -> void:
-	var minute := announcement_minute if announcement_minute >= 0 else int(state.calendar.minute_of_day)
-	state.roll_day(pattern_id, minute)
+	var minute := announcement_minute if announcement_minute >= 0 else int(_state.calendar.minute_of_day)
+	_state.roll_day(pattern_id, minute)
 	_snapshot = null
 	_emit_weather_changed()
 
@@ -163,7 +199,9 @@ func set_pattern(pattern_id: StringName, announcement_minute := -1) -> void:
 ## Holds a pattern across day boundaries until `release()`. This is the cutscene's
 ## "and it stays a storm", as opposed to "make today a storm".
 func pin_pattern(pattern_id: StringName, transition_seconds := DEFAULT_TRANSITION_SECONDS) -> void:
-	state.pinned_pattern = pattern_id
+	_transition_from = snapshot()
+	_remember_simulated_weather()
+	_state.pinned_pattern = pattern_id
 	set_pattern(pattern_id)
 	_enter_scripted(transition_seconds)
 
@@ -171,15 +209,21 @@ func pin_pattern(pattern_id: StringName, transition_seconds := DEFAULT_TRANSITIO
 ## Forces precipitation regardless of what the day rolled. `duration_minutes`
 ## bounds it so a forgotten override still ends.
 func force_precipitation(duration_minutes := 240.0, transition_seconds := DEFAULT_TRANSITION_SECONDS) -> void:
-	var start := state.calendar.minute_of_day
-	state.weather.force_precipitation(start, start + duration_minutes)
+	_transition_from = snapshot()
+	_remember_simulated_weather()
+	var start := _state.calendar.minute_of_day
+	_state.weather.force_precipitation(start, minf(start + duration_minutes, 1440.0))
 	_override_precipitation = 1.0
+	_forced_until_elapsed = _state.calendar.elapsed_minutes + maxf(duration_minutes, 0.0)
 	_enter_scripted(transition_seconds)
 
 
 func stop_precipitation(transition_seconds := DEFAULT_TRANSITION_SECONDS) -> void:
-	state.weather.clear_precipitation()
+	_transition_from = snapshot()
+	_remember_simulated_weather()
+	_state.weather.clear_precipitation()
 	_override_precipitation = 0.0
+	_forced_until_elapsed = -1.0
 	_enter_scripted(transition_seconds)
 
 
@@ -187,6 +231,8 @@ func stop_precipitation(transition_seconds := DEFAULT_TRANSITION_SECONDS) -> voi
 ## (§8): pinning cloudiness must not grey the sky, and pinning the front must not
 ## invent cumulus.
 func set_sky(cloud_cover := -1.0, storm_influence := -1.0, transition_seconds := DEFAULT_TRANSITION_SECONDS) -> void:
+	_transition_from = snapshot()
+	_remember_simulated_weather()
 	_override_cloud_cover = cloud_cover
 	_override_storm = storm_influence
 	_enter_scripted(transition_seconds)
@@ -196,10 +242,14 @@ func set_sky(cloud_cover := -1.0, storm_influence := -1.0, transition_seconds :=
 ## every scripted consumer when it is done — and safe to call when nothing was
 ## overridden.
 func release(transition_seconds := DEFAULT_TRANSITION_SECONDS) -> void:
-	state.pinned_pattern = &""
+	_transition_from = snapshot()
+	_state.pinned_pattern = &""
+	if not _weather_before_script.is_empty():
+		_state.weather.restore_state(_weather_before_script)
+		_weather_before_script.clear()
 	_mode = EnvironmentSnapshot.Mode.SIMULATED
-	if state.calendar.time_scale == 0.0:
-		state.calendar.time_scale = 1.0
+	if _state.calendar.time_scale == 0.0:
+		_state.calendar.time_scale = 1.0
 	_override_target = 0.0
 	_override_rate = 1.0 / maxf(transition_seconds, 0.001)
 	_snapshot = null
@@ -208,7 +258,7 @@ func release(transition_seconds := DEFAULT_TRANSITION_SECONDS) -> void:
 # --- Persistence (§16) ---------------------------------------------------------
 
 func save_state() -> Dictionary:
-	var data := state.save_state()
+	var data := _state.save_state()
 	data["mode"] = _mode
 	data["override"] = {
 		"blend": _override_blend,
@@ -216,6 +266,8 @@ func save_state() -> Dictionary:
 		"cloud_cover": _override_cloud_cover,
 		"storm": _override_storm,
 		"precipitation": _override_precipitation,
+		"forced_until_elapsed": _forced_until_elapsed,
+		"weather_before_script": _weather_before_script.duplicate(true),
 	}
 	return data
 
@@ -223,7 +275,7 @@ func save_state() -> Dictionary:
 func restore_state(data: Dictionary) -> bool:
 	if data.is_empty():
 		return false
-	state.restore_state(data)
+	_state.restore_state(data)
 	_mode = int(data.get("mode", EnvironmentSnapshot.Mode.SIMULATED))
 	var override: Variant = data.get("override", {})
 	if override is Dictionary:
@@ -233,8 +285,11 @@ func restore_state(data: Dictionary) -> bool:
 		_override_cloud_cover = float(values.get("cloud_cover", -1.0))
 		_override_storm = float(values.get("storm", -1.0))
 		_override_precipitation = float(values.get("precipitation", -1.0))
-	_last_season = state.climate.season_at(state.calendar.day_of_year)
-	_last_pattern = state.weather.pattern.id
+		_forced_until_elapsed = float(values.get("forced_until_elapsed", -1.0))
+		var remembered: Variant = values.get("weather_before_script", {})
+		_weather_before_script = (remembered as Dictionary).duplicate(true) if remembered is Dictionary else {}
+	_last_season = _state.climate.season_at(_state.calendar.day_of_year)
+	_last_pattern = _state.weather.pattern.id
 	_snapshot = null
 	return true
 
@@ -242,7 +297,10 @@ func restore_state(data: Dictionary) -> bool:
 # --- Internals -----------------------------------------------------------------
 
 func _build() -> EnvironmentSnapshot:
-	var snapshot := state.build_snapshot(_mode)
+	var snapshot := _state.build_snapshot(_mode)
+	if _transition_from != null and (_override_target <= 0.0 or _override_blend < 1.0):
+		var transition_weight := _override_blend if _override_target > 0.0 else 1.0 - _override_blend
+		_blend_weather(snapshot, _transition_from, transition_weight)
 	if _override_blend <= 0.0:
 		return snapshot
 	# The override is a blend over the rules rather than a replacement, which is
@@ -257,7 +315,7 @@ func _build() -> EnvironmentSnapshot:
 		if snapshot.precipitation_intensity <= 0.0:
 			snapshot.precipitation = EnvironmentSnapshot.Precipitation.NONE
 		elif snapshot.precipitation == EnvironmentSnapshot.Precipitation.NONE:
-			snapshot.precipitation = state.precipitation_type_at(snapshot.minute_of_day)
+			snapshot.precipitation = _state.precipitation_type_at(snapshot.minute_of_day)
 			if snapshot.precipitation == EnvironmentSnapshot.Precipitation.NONE:
 				snapshot.precipitation = (
 					EnvironmentSnapshot.Precipitation.SNOW if snapshot.snow_chance >= 0.5
@@ -277,23 +335,57 @@ func _clear_override_values() -> void:
 	_override_cloud_cover = -1.0
 	_override_storm = -1.0
 	_override_precipitation = -1.0
+	_transition_from = null
+
+
+func _remember_simulated_weather() -> void:
+	if _weather_before_script.is_empty():
+		_weather_before_script = _state.weather.save_state()
 
 
 func _on_day_started(day_of_session: int) -> void:
 	# Rolling here rather than in a game's tick is what makes the daily forecast
 	# happen for every game on the engine, not only for the one that remembered.
-	state.roll_day(&"", 0)
+	_state.roll_day(&"", 0)
 	_snapshot = null
-	day_rolled.emit(day_of_session, state.weather.pattern.id)
+	day_rolled.emit(day_of_session, _state.weather.pattern.id)
 	_emit_weather_changed()
-	var season := state.climate.season_at(state.calendar.day_of_year)
+	var season := _state.climate.season_at(_state.calendar.day_of_year)
 	if season != _last_season:
 		_last_season = season
 		season_changed.emit(season)
 
 
 func _emit_weather_changed() -> void:
-	if state.weather.pattern.id == _last_pattern:
+	if _state.weather.pattern.id == _last_pattern:
 		return
-	_last_pattern = state.weather.pattern.id
+	_last_pattern = _state.weather.pattern.id
 	weather_changed.emit(_last_pattern)
+
+
+func _blend_weather(target: EnvironmentSnapshot, source: EnvironmentSnapshot, weight: float) -> void:
+	var t := clampf(weight, 0.0, 1.0)
+	for field: StringName in [&"cloud_cover", &"storm_influence", &"wind_strength", &"precipitation_intensity", &"visibility_range", &"temperature", &"felt_temperature"]:
+		target.set(field, lerpf(float(source.get(field)), float(target.get(field)), t))
+	target.wind_vector = source.wind_vector.lerp(target.wind_vector, t)
+	target.wind_displacement = source.wind_displacement.lerp(target.wind_displacement, t)
+	if t < 0.5:
+		target.pattern = source.pattern
+		target.pattern_name = source.pattern_name
+		target.precipitation = source.precipitation
+
+
+func _emit_jump_samples(before: Dictionary, skipped_minutes: float) -> void:
+	if skipped_minutes <= 0.0:
+		return
+	var sampler := EnvironmentState.new()
+	sampler.restore_state(before)
+	sampler.calendar.day_started.connect(func(_day: int) -> void: sampler.roll_day(&"", 0))
+	var samples: Array[Dictionary] = []
+	var remaining := skipped_minutes
+	while remaining > 0.0:
+		var step := minf(30.0, remaining)
+		sampler.calendar.advance(step, 1.0)
+		samples.append({"snapshot": sampler.build_snapshot(_mode), "minutes": step})
+		remaining -= step
+	time_jumped.emit(samples)

@@ -35,7 +35,6 @@ var day_cycle := SimulationDayCycle.new()
 var clock: SimulationClock = day_cycle.clock
 var game_minutes: float:
 	get: return clock.minutes
-	set(value): clock.minutes = value
 const GAME_DAY_REAL_SECONDS = SettlementConstants.GAME_DAY_REAL_SECONDS
 const GAME_MINUTES_PER_SECOND = SettlementConstants.GAME_MINUTES_PER_SECOND
 var time_multiplier := 1.0

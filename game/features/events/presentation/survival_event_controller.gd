@@ -232,7 +232,11 @@ func skip_to_workday_start() -> void:
 	if not can_skip_to_workday_start():
 		update_skip_night_button()
 		return
-	simulation.day_cycle.set_to_workday_start()
+	if simulation.world_session != null:
+		simulation.world_session.environment.set_time_of_day(8 * 60)
+	else:
+		simulation.clock.set_time(8 * 60)
+	simulation.day_cycle.reset_for_workday_start()
 	if simulation.simulation_event_dispatcher != null:
 		simulation.simulation_event_dispatcher.dispatch_event(SimulationDayEvent.new(SimulationDayEvent.Kind.WORKDAY_STARTED, 8), simulation.day_cycle.current_day)
 	if simulation.citizen_ai != null:

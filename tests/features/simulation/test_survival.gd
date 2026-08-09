@@ -10,7 +10,7 @@ func _init() -> void:
 
 	simulation.settlement.wellbeing = 1
 	simulation.settlement_survival_service.last_survival_hour = -1
-	simulation.clock.set_time(21 * 60)
+	simulation.world_session.environment.restore_legacy_clock(21 * 60, simulation.day_cycle.current_day)
 	var citizen_count_before_zero_wellbeing_skip: int = simulation.citizens.size()
 	SimHelper.skip_night(simulation)
 	assert(simulation.citizens.size() == citizen_count_before_zero_wellbeing_skip - 1)

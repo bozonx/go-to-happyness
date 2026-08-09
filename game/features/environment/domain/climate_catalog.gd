@@ -58,6 +58,7 @@ const BUILT_IN: Dictionary = {
 		"snow_temperature": -300.0,
 		"growth_optimum": 0.0,
 		"growth_span": 0.01,
+		"has_atmosphere": false,
 		"weather_patterns": ["vacuum"],
 	},
 }

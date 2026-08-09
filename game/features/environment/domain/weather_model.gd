@@ -143,9 +143,7 @@ func cloud_phase_at(current_minute: float) -> int:
 		return CloudPhase.PARTLY_CLOUDY
 	if cover < 0.67:
 		return CloudPhase.CLOUDY
-	if cover < 0.88:
-		return CloudPhase.OVERCAST
-	return CloudPhase.STORM
+	return CloudPhase.OVERCAST
 
 
 func wind_direction_at(current_minute: float) -> float:

@@ -255,7 +255,7 @@ func _process(delta: float) -> void:
 	# One lab clock drives daylight, stars, cloud evolution and wind. Space proves
 	# that every sky animation freezes when game time does.
 	director.scrub_minutes(delta * WEATHER_PASSIVE_RATE * weather_time_scale)
-	game_minutes = director.state.calendar.minute_of_day
+	game_minutes = director.minute_of_day()
 	_handle_input(delta)
 	_apply_state()
 	_aim_tracking_camera()
@@ -293,7 +293,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 func _step_day(days: int) -> void:
 	director.scrub_minutes(float(days) * 1440.0)
-	day_of_year = director.state.calendar.day_of_year
+	day_of_year = director.day_of_year()
 	_update_status()
 
 
@@ -317,7 +317,7 @@ func _handle_input(delta: float) -> void:
 	if Input.is_key_pressed(KEY_PAGEDOWN):
 		storm_influence -= delta * 0.5
 		changed = true
-	game_minutes = director.state.calendar.minute_of_day
+	game_minutes = director.minute_of_day()
 	overcast = clampf(overcast, 0.0, 1.0)
 	storm_influence = clampf(storm_influence, 0.0, 1.0)
 	if changed:

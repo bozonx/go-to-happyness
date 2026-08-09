@@ -100,8 +100,8 @@ static func season_flag(season: StringName) -> StringName:
 ## saved after a test run.
 func _declare_flags() -> void:
 	_season_flags.clear()
-	for entry: Dictionary in director.state.climate.seasons:
-		var flag := season_flag(StringName(entry.get("id", "")))
+	for season_id: StringName in director.season_ids():
+		var flag := season_flag(season_id)
 		_season_flags.append(flag)
 		runtime.register_flag(MapFlagDef.create(flag, MapFlagDef.TYPE_BOOL))
 	for flag: StringName in [FLAG_IS_RAINING, FLAG_IS_SNOWING, FLAG_IS_NIGHT]:
@@ -117,7 +117,7 @@ func _on_set_time(action: Dictionary, _scenario: MapScenarioRuntime, _payload: D
 
 
 func _on_set_day(action: Dictionary, _scenario: MapScenarioRuntime, _payload: Dictionary) -> void:
-	director.set_day_of_year(int(action.get("day", director.state.calendar.day_of_year)))
+	director.set_day_of_year(int(action.get("day", director.day_of_year())))
 
 
 func _on_skip(action: Dictionary, _scenario: MapScenarioRuntime, _payload: Dictionary) -> void:

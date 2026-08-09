@@ -182,7 +182,7 @@ func _setup_ai_and_navigation() -> void:
 	# One clock for the world (`world_environment.md` §4). The settlement reads the
 	# session's calendar rather than running a second one, which is what keeps the
 	# hour the citizens work by and the hour the sun is drawn from the same number.
-	game.clock.bind(game.world_session.environment.state.calendar)
+	game.clock.bind(game.world_session.environment)
 	game.world_session.environment.minutes_per_second = game.GAME_MINUTES_PER_SECOND
 	game.nav_grid = game.world_session.nav_grid
 	# Adopted, not created: the world session already seeded it from the map's

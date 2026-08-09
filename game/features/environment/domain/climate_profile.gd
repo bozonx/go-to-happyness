@@ -46,6 +46,8 @@ var snow_transition := 2.5
 ## it. Stage 2 consumes this; stage 1 only has to publish it (§19).
 var growth_optimum := 19.0
 var growth_span := 17.0
+## An airless profile has no fog or atmospheric precipitation effects.
+var has_atmosphere := true
 ## Season boundaries as `[{"id": StringName, "start_day": int}, ...]`. The profile
 ## declares them because a tropical climate has two and not four.
 var seasons: Array[Dictionary] = [
@@ -74,6 +76,7 @@ static func from_dict(source: Dictionary) -> ClimateProfile:
 	profile.snow_transition = maxf(0.01, float(source.get("snow_transition", profile.snow_transition)))
 	profile.growth_optimum = float(source.get("growth_optimum", profile.growth_optimum))
 	profile.growth_span = maxf(0.01, float(source.get("growth_span", profile.growth_span)))
+	profile.has_atmosphere = bool(source.get("has_atmosphere", profile.has_atmosphere))
 	var raw_seasons: Variant = source.get("seasons", null)
 	if raw_seasons is Array and not (raw_seasons as Array).is_empty():
 		var parsed: Array[Dictionary] = []
@@ -111,6 +114,7 @@ func to_dict() -> Dictionary:
 		"snow_transition": snow_transition,
 		"growth_optimum": growth_optimum,
 		"growth_span": growth_span,
+		"has_atmosphere": has_atmosphere,
 		"seasons": seasons.duplicate(true),
 		"weather_patterns": weather_patterns.map(func(entry: StringName) -> String: return String(entry)),
 	}

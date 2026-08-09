@@ -62,7 +62,9 @@ const LEGACY_START_ID := &"default"
 static func from_dict(source: Dictionary) -> MapStart:
 	var start := MapStart.new()
 	start.style = StringName(source.get("style", start.style))
-	start.day_of_year = clampi(int(source.get("day_of_year", start.day_of_year)), 1, 365)
+	# The upper bound belongs to the selected climate, whose year is not required
+	# to have 365 days. WorldCalendar wraps it after the climate is resolved.
+	start.day_of_year = maxi(int(source.get("day_of_year", start.day_of_year)), 1)
 	start.latitude = clampf(float(source.get("latitude", start.latitude)), -90.0, 90.0)
 	start.time_of_day = clampi(int(source.get("time_of_day", start.time_of_day)), 0, 1439)
 	start.weather_preset = StringName(source.get("weather_preset", start.weather_preset))

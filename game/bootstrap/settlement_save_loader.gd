@@ -89,7 +89,10 @@ func restore(p_game: SettlementGame, section: Dictionary) -> bool:
 	SaveGameService.restore_research(game.settlement, s_dict.get("research", {}))
 
 	# 4. Restore Simulation Clock
-	SaveGameService.restore_clock(game.clock, game.day_cycle, clock_state)
+	if game.world_session != null and not clock_state.is_empty():
+		game.world_session.environment.restore_legacy_clock(
+			float(clock_state.get("minutes", 0.0)),
+			maxi(1, int(clock_state.get("current_day", 1))))
 
 	# 5. Restore Camera State
 	var cam_state := SaveGameService.restore_camera(camera_state)
