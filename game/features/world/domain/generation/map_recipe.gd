@@ -39,8 +39,13 @@ const HYPSOMETRY_ALPINE := &"alpine"
 
 const SIDES: Array[StringName] = [&"north", &"east", &"south", &"west"]
 
+## The board sizes the generator accepts are the board sizes a map can HAVE:
+## `MapMeta.BOARD_PRESETS` runs 64…512, and a recipe that refuses the largest
+## preset means the editor offers a size the generator cannot fill. The lower
+## bound is below the smallest preset on purpose — the laboratory works on small
+## boards where a change of algorithm is visible in one screen.
 const MIN_BOARD := 32
-const MAX_BOARD := 256
+const MAX_BOARD := 512
 
 ## Per composition preset: the default land share and the band it may be moved
 ## inside. `inland` has no sea at all, `archipelago` stops being an archipelago
@@ -117,11 +122,16 @@ var roughness := 0.3
 var terrace_bias := 0.5
 ## Debug knob of the laboratory only (§2.3): settles the WHOLE board at the angle
 ## of repose of one material, so a shape can be compared against itself under soft
-## soil and under rock. It says nothing about what the map is made of — that is
-## `base_material` and the surface stage below. The two used to be one field, and
-## because the commit wrote it into every column, a knob for comparing shapes was
-## also the only thing deciding the ground of every generated map.
-var repose_override: StringName = TerrainMaterialCatalog.STONE
+## soil and under rock. Empty — the default — leaves the angle to `GroundMask`,
+## which gives rock to the ranges and soil to the plains.
+##
+## It says nothing about what the map is made of; that is `base_material` and the
+## surface stage. The two used to be one field, and because the commit wrote it
+## into every column, a knob for comparing shapes was also the only thing deciding
+## the ground of every generated map. Then it stopped writing the material and
+## still decided it, one level deeper: forcing rock's angle everywhere left plains
+## that only stone could stand on.
+var repose_override: StringName = &""
 
 ## Surface layer (§5.2, layer 3). `paint_surface` off leaves the whole board as
 ## `base_material`, which is what the shape-only laboratory wants.
@@ -176,6 +186,17 @@ var flat_fraction_min := 0.35
 var largest_land_component_min := 0.9
 var cliff_fraction_max := 0.12
 var land_fraction_tolerance := 0.03
+## How far the finished map may sit from the two height promises of §3.4. They
+## are solved exactly on the continuous field and then moved by quantisation, by
+## the settling pass and by river incision, so the condition is a band. The mean
+## is measured over the PLAINS — the ranges have their own height budget (§3.5).
+var land_mean_height_tolerance := 2.0
+var land_max_height_tolerance := 4
+## The share of the walkable land a CART can reach in one piece. Reported always,
+## required only when a recipe says so, and zero by default — see §6: a one-step
+## boundary on soil is a 45° face by the catalog's own budget rule, so cart routes
+## are the business of roads and the Ramp Tool, not of natural ground.
+var cart_reach_min := 0.0
 ## Share of the desert that may stand under a LAKE (§11.1.3). Rivers and the sea
 ## are exempt on purpose: a Nile crossing a desert and a lagoon on its coast are
 ## both real, a chain of ponds in the dunes is not.
@@ -289,6 +310,9 @@ func to_dictionary() -> Dictionary:
 			"largest_land_component_min": largest_land_component_min,
 			"cliff_fraction_max": cliff_fraction_max,
 			"land_fraction_tolerance": land_fraction_tolerance,
+			"land_mean_height_tolerance": land_mean_height_tolerance,
+			"land_max_height_tolerance": land_max_height_tolerance,
+			"cart_reach_min": cart_reach_min,
 			"desert_lake_fraction_max": desert_lake_fraction_max,
 		},
 	}
@@ -380,9 +404,9 @@ func _parse_elevation(source: Dictionary) -> void:
 	roughness = clampf(float(source.get("roughness", roughness)), 0.0, 1.0)
 	terrace_bias = clampf(float(source.get("terrace_bias", terrace_bias)), 0.0, 1.0)
 	repose_override = StringName(source.get("repose_override", repose_override))
-	if TerrainMaterialCatalog.index_of(repose_override) < 0:
+	if not String(repose_override).is_empty() and TerrainMaterialCatalog.index_of(repose_override) < 0:
 		errors.append("elevation.repose_override: unknown material \"%s\"" % repose_override)
-		repose_override = TerrainMaterialCatalog.STONE
+		repose_override = &""
 	paint_surface = bool(source.get("paint_surface", paint_surface))
 	base_material = StringName(source.get("base_material", base_material))
 	if TerrainMaterialCatalog.index_of(base_material) < 0:
@@ -461,6 +485,9 @@ func _parse_targets(source: Dictionary) -> void:
 	largest_land_component_min = float(source.get("largest_land_component_min", largest_land_component_min))
 	cliff_fraction_max = float(source.get("cliff_fraction_max", cliff_fraction_max))
 	land_fraction_tolerance = float(source.get("land_fraction_tolerance", land_fraction_tolerance))
+	land_mean_height_tolerance = maxf(0.0, float(source.get("land_mean_height_tolerance", land_mean_height_tolerance)))
+	land_max_height_tolerance = maxi(0, int(source.get("land_max_height_tolerance", land_max_height_tolerance)))
+	cart_reach_min = clampf(float(source.get("cart_reach_min", cart_reach_min)), 0.0, 1.0)
 	desert_lake_fraction_max = float(source.get("desert_lake_fraction_max", desert_lake_fraction_max))
 
 
@@ -485,8 +512,13 @@ func _validate() -> void:
 		errors.append("format_version %d is not supported (expected %d)" % [format_version, FORMAT_VERSION])
 	if board_size < MIN_BOARD or board_size > MAX_BOARD:
 		errors.append("board.size %d is outside %d…%d" % [board_size, MIN_BOARD, MAX_BOARD])
-	if board_size % 2 != 0:
-		errors.append("board.size must be even so the board stays centred on the origin")
+	# Whole chunks, like every board the editor can create (`map_editor.md` §6.2).
+	# "Even" was the old rule and it was too weak: a board of 100 is even, centres
+	# on the origin and still leaves the mesher a partial chunk on two sides.
+	if board_size % TerrainGrid.CHUNK_CELLS != 0:
+		errors.append("board.size %d must be a multiple of %d so the board is whole chunks" % [
+			board_size, TerrainGrid.CHUNK_CELLS,
+		])
 
 	var preset: Dictionary = SHAPE_PRESETS.get(shape, SHAPE_PRESETS[SHAPE_CONTINENT])
 	if land_fraction < float(preset["min"]) - 0.0001 or land_fraction > float(preset["max"]) + 0.0001:

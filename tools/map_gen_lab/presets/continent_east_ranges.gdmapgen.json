@@ -34,20 +34,25 @@
 		"shelf_width": 4
 	},
 	"elevation": {
-		"land_mean_height": 5,
+		"land_mean_height": 8,
 		"land_max_height": 30,
 		"hypsometry": "plains_with_peaks",
 		"roughness": 0.3,
-		"terrace_bias": 0.5,
-		"repose_override": "stone"
+		"terrace_bias": 0.5
 	},
 	"climate": {
 		"latitude": "temperate",
-		"land_mean_temperature": 12.0, "temperature_span": 6.0, "lapse_rate": 0.6,
+		"land_mean_temperature": 12.0,
+		"temperature_span": 6.0,
+		"lapse_rate": 0.6,
 		"land_mean_moisture": 0.52,
-		"wind_direction": 270, "rain_shadow": 0.65, "coastal_reach": 12
+		"wind_direction": 270,
+		"rain_shadow": 0.65,
+		"coastal_reach": 12
 	},
-	"biomes": { "origin": "earth" },
+	"biomes": {
+		"origin": "earth"
+	},
 	"mountains": {
 		"ranges": [
 			{
@@ -105,6 +110,6 @@
 	"targets": {
 		"flat_fraction_min": 0.3,
 		"largest_land_component_min": 0.9,
-		"cliff_fraction_max": 0.45
+		"cliff_fraction_max": 0.15
 	}
 }

@@ -28,7 +28,7 @@ const COMPOSITION_PASSES := 3
 
 const STAGES: Array[StringName] = [
 	&"border_plan", &"landmass", &"relief", &"mountains", &"hypsometry", &"border",
-	&"quantize", &"climate", &"passes", &"flow", &"rivers", &"repose", &"reflow",
+	&"quantize", &"climate", &"passes", &"flow", &"rivers", &"ground", &"repose", &"reflow",
 	&"lakes", &"reclimate", &"biomes", &"surface",
 ]
 
@@ -68,6 +68,11 @@ static func run(recipe: MapRecipe, seeds: GenerationSeed, land_fraction_bias := 
 	_timed(context, &"passes", func() -> void: PassCarver.carve(context))
 	_timed(context, &"flow", func() -> void: FlowField.build(context))
 	_timed(context, &"rivers", func() -> void: RiverCarver.carve(context))
+	# Which columns are rock and which are soil, decided from the ranges and the
+	# climate rather than from the biome mask that does not exist yet. Without it
+	# the whole board settles at one angle and every plain ends up too steep for
+	# anything but stone to be painted on (§2.3).
+	_timed(context, &"ground", func() -> void: GroundMask.build(context))
 	_timed(context, &"repose", func() -> void: ReposePass.apply(context))
 	# Lakes are chosen LAST, on the ground nothing will move again. A basin is only
 	# a basin because of its rim, and both the river channels and the repose pass

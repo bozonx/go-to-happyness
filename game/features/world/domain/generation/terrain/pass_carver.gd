@@ -180,3 +180,9 @@ static func _press_corridor(context: GenerationContext, route: Array[Vector2i]) 
 				# above run its whole budget without ever joining the halves.
 				context.heights[index] = profile[step]
 				context.is_land[index] = 1 if profile[step] > context.recipe.ocean_level else 0
+				# A saddle is AUTHORED ground, like a river channel: the recipe asked
+				# for a way through, and letting the next settling sweep relax it
+				# closes the pass again. It also means the corridor may legitimately
+				# stand steeper than the soil around it, which is what the corridor
+				# is for.
+				context.carved_cells[cell] = true

@@ -44,6 +44,10 @@ var peaks: Array[Dictionary] = []
 var ridges: Array[PackedVector2Array] = []
 ## Saddles pushed through the crests so a range never seals the map (§3.5).
 var passes: Array[Vector2] = []
+## Every column a saddle corridor was pressed through, as a set. Authored ground:
+## the settling pass leaves it alone the way it leaves a river channel alone, or
+## the pass the recipe asked for closes again on the next sweep.
+var carved_cells: Dictionary = {}
 
 ## Stage 4/5 — the continuous height field in steps, before quantisation.
 var height_field := PackedFloat32Array()
@@ -53,6 +57,12 @@ var height_field := PackedFloat32Array()
 ## them, and the metrics exclude them from the land — a frame around the map is
 ## not ground the recipe was describing.
 var border_locked := PackedByteArray()
+## The subset of `border_locked` that is a `mountain_wall` — the sides that
+## promised to be impassable. A `plateau` is locked too, because it is frame and
+## not the ground the recipe described, but it is a SHELF: the slope assigner is
+## allowed to lay a ramp up it and the verdict does not require the flood to stop
+## at it. A plateau nobody can climb is a wall by another name.
+var border_wall := PackedByteArray()
 ## Cells the border stage will drown whatever the composition says. Known before
 ## stage 1 so the land-fraction solver can count them as sea instead of being
 ## surprised by them afterwards.
@@ -100,6 +110,13 @@ var moisture := PackedFloat32Array()
 ## mask when they exist.
 var biomes := PackedByteArray()
 
+## Stage 10a — how steep each column may stand, in whole height steps per cell
+## (`GroundMask`). Rock where the map is rocky, soil everywhere else. Without it
+## the whole board settles at one angle, and the only angle that keeps a mountain
+## a mountain leaves every plain too steep for anything but stone to be painted
+## on — which is exactly what used to happen (§2.3).
+var repose_limit := PackedByteArray()
+
 ## Stage 14 — what the ground is made of (`SurfacePainter`). One catalog index and
 ## one packed detail byte per column, exactly as `TerrainGrid` stores them, so the
 ## commit copies rather than decides. Material was a single recipe-wide constant
@@ -125,6 +142,7 @@ func configure(next_recipe: MapRecipe, next_seeds: GenerationSeed) -> void:
 	uplift = _new_floats()
 	height_field = _new_floats()
 	border_locked = _new_bytes()
+	border_wall = _new_bytes()
 	border_sea = _new_bytes()
 	heights = _new_ints()
 	flow_dir = _new_bytes()
@@ -134,6 +152,8 @@ func configure(next_recipe: MapRecipe, next_seeds: GenerationSeed) -> void:
 	temperature = _new_floats()
 	moisture = _new_floats()
 	biomes = _new_bytes()
+	repose_limit = _new_bytes()
+	repose_limit.fill(GroundMask.SOIL_STEPS)
 	river_stats = {"traced": 0, "terminated": 0}
 
 

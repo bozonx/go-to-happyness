@@ -28,6 +28,12 @@ static func run_all() -> void:
 	_test_navigation_is_published_once()
 	_test_surface_is_painted_and_always_stands()
 	_test_surface_can_be_turned_off()
+	_test_a_generated_world_is_not_made_of_stone()
+	_test_soil_holds_the_plains_and_rock_holds_the_ranges()
+	_test_repose_belongs_to_the_upper_column()
+	_test_a_plateau_border_can_be_walked_onto()
+	_test_board_sizes_are_the_ones_a_map_can_have()
+	_test_generation_fills_a_map_document()
 	_test_climate_means_are_targets()
 	_test_rain_shadow_follows_the_wind()
 	_test_biomes_cover_the_board_and_follow_the_climate()
@@ -89,6 +95,33 @@ static func _recipe(overrides: Dictionary = {}) -> MapRecipe:
 	for key: String in overrides:
 		source[key] = overrides[key]
 	return MapRecipe.from_dictionary(source)
+
+
+## A settled country rather than the test's default alpine postage stamp: one
+## short range and no walls, on the same small board. The default recipe packs two
+## ranges, a solitary peak and two four-cell walls onto 64 cells, which is a fine
+## stress case for slopes and a useless one for asking what a world is MADE of —
+## most of it is legitimately rock.
+static func _settled_recipe() -> MapRecipe:
+	return _recipe({
+		"border": {
+			"north": {"kind": "ocean"}, "west": {"kind": "ocean"},
+			"east": {"kind": "open"}, "south": {"kind": "open"},
+			"ocean_level": -2,
+		},
+		"mountains": {
+			"ranges": [{
+				"count": 1, "length": 0.3, "orientation": 55, "orientation_jitter": 20,
+				"peak_height": [12, 18], "peaks_per_range": 2,
+				"flank_steepness": 0.7, "foothills": 6, "passes": 2,
+			}],
+			"solitary_peaks": {"count": 0, "height": [12, 18], "flank_steepness": 0.9},
+		},
+		"elevation": {
+			"land_mean_height": 4, "land_max_height": 18,
+			"hypsometry": "plains_with_peaks", "roughness": 0.3, "terrace_bias": 0.5,
+		},
+	})
 
 
 static func _generated(seed_value: int = 12345, recipe: MapRecipe = null) -> Array:
@@ -351,18 +384,24 @@ static func _test_surface_is_painted_and_always_stands() -> void:
 			var cell := Vector2i(x, z)
 			var index := grid.material_index_at(cell)
 			seen[index] = true
+			# The drop the column stands ABOVE — repose is about ground sliding
+			# downhill, so a meadow at the foot of a cliff owes nothing to the cliff.
 			var drop := 0
 			for offset: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 				var neighbour := cell + offset
 				if grid.is_inside(neighbour):
-					drop = maxi(drop, absi(grid.height_of(neighbour) - grid.height_of(cell)))
+					drop = maxi(drop, grid.height_of(cell) - grid.height_of(neighbour))
 			# A border wall is an AUTHORED face (§3.2) and the repose pass exempts it,
 			# so some columns are steeper than anything in the catalog holds. The
 			# promise is therefore the one the painter can actually keep: where a
 			# material would collapse, it fell back to the most stable one there is.
 			assert(
 				TerrainMaterialCatalog.holds_height_difference(index, drop)
-				or grid.material_of(cell) == TerrainMaterialCatalog.STONE,
+				or grid.material_of(cell) == TerrainMaterialCatalog.STONE
+				# A ramp is SHAPED ground and repose is about ground that slumps:
+				# the slope assigner lifted this column on purpose, and reading the
+				# lift back as a face is what used to turn every hillside to rock.
+				or grid.is_ramp_cell(cell),
 				"%s at %s cannot hold a drop of %d and is not the fallback" % [grid.material_of(cell), cell, drop],
 			)
 			# Variants must address the palette of the material they landed on.
@@ -391,6 +430,207 @@ static func _test_surface_can_be_turned_off() -> void:
 	for z in range(minimum.y, maximum.y + 1):
 		for x in range(minimum.x, maximum.x + 1):
 			assert(grid.material_of(Vector2i(x, z)) == TerrainMaterialCatalog.STONE)
+
+
+## The regression this whole layer exists to prevent, stated as a number.
+##
+## Between 58 % and 73 % of the land of every shipped preset used to be `stone`,
+## and none of the surface tests noticed, because each of them asked a local
+## question — does this column hold, is the palette addressed correctly — and the
+## answer to all of those was yes. A map made of rock is a global property, so it
+## takes a global assertion.
+##
+## The two thirds that were stone came from three rules, each defensible alone:
+## the whole board settled at rock's angle, a material had to hold the drop on
+## EITHER side of it, and the ramps the slope assigner laid were re-read as faces.
+static func _test_a_generated_world_is_not_made_of_stone() -> void:
+	for seed_value: int in [4242, 31337]:
+		var generated := _generated(seed_value, _settled_recipe())
+		var harness: Harness = generated[0]
+		var result: GenerationResult = generated[1]
+		var context := result.context
+		var grid := harness.grid
+		var counts: Dictionary = {}
+		var land := 0
+		var minimum := grid.min_cell()
+		var maximum := grid.max_cell()
+		for z in range(minimum.y, maximum.y + 1):
+			for x in range(minimum.x, maximum.x + 1):
+				var cell := Vector2i(x, z)
+				# The frame of the map is rock by construction and is not the ground
+				# the recipe was describing (§3.2).
+				if context.border_locked[context.cell_index(cell)] != 0:
+					continue
+				if harness.water.has_water(cell) or grid.height_of(cell) <= context.recipe.ocean_level:
+					continue
+				land += 1
+				var id := grid.material_of(cell)
+				counts[id] = int(counts.get(id, 0)) + 1
+		assert(land > 0, "seed %d produced no land at all" % seed_value)
+		var stone := float(int(counts.get(TerrainMaterialCatalog.STONE, 0))) / float(land)
+		var soft := 0
+		for id: StringName in [
+			TerrainMaterialCatalog.GRASS, TerrainMaterialCatalog.GRASS_TALL,
+			TerrainMaterialCatalog.DIRT, TerrainMaterialCatalog.MUD, TerrainMaterialCatalog.SAND,
+		]:
+			soft += int(counts.get(id, 0))
+		assert(stone <= 0.45, "seed %d: %.0f%% of the land is stone" % [seed_value, stone * 100.0])
+		assert(float(soft) / float(land) >= 0.35,
+			"seed %d: only %.0f%% of the land is soil" % [seed_value, float(soft) * 100.0 / float(land)])
+
+
+## §2.3, resolved: the angle of repose is a property of a PLACE, so the ranges get
+## rock's four steps per cell and everything else gets soil's one. The mask is
+## what makes the previous test's number achievable at all — no palette can put
+## grass on ground that stands four steps above its neighbour.
+static func _test_soil_holds_the_plains_and_rock_holds_the_ranges() -> void:
+	var generated := _generated(4242, _settled_recipe())
+	var context: GenerationContext = (generated[1] as GenerationResult).context
+	var rock := 0
+	var soil := 0
+	var steep_soil := 0
+	for index in context.cell_count:
+		if int(context.repose_limit[index]) >= GroundMask.ROCK_STEPS:
+			rock += 1
+			continue
+		soil += 1
+		var cell := context.cell_of_index(index)
+		# Authored cuts and their banks are exempt. A channel is incised on purpose,
+		# and the ground beside it therefore stands above it by however deep the cut
+		# is — including the outflow the lake stage carves after this pass has run.
+		# That is a bank, not a slope that failed to settle.
+		if context.border_locked[index] != 0 or _beside_authored_cut(context, cell):
+			continue
+		var lowest := TerrainGrid.MAX_HEIGHT
+		for offset: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var neighbour := cell + offset
+			if context.contains(neighbour.x, neighbour.y):
+				lowest = mini(lowest, context.heights[context.cell_index(neighbour)])
+		if context.heights[index] > context.recipe.ocean_level:
+			lowest = maxi(lowest, context.recipe.ocean_level)
+		if context.heights[index] - lowest > GroundMask.SOIL_STEPS:
+			steep_soil += 1
+	assert(rock > 0, "a recipe with two ranges and a walled border produced no rock at all")
+	assert(soil > rock, "the ranges cover more of the board than everything else does")
+	# Not zero, and the difference matters. The lake stage carves an outflow AFTER
+	# the settling pass has run (§10.1.4 — lakes are chosen last, on ground nothing
+	# else will move), so a handful of banks around a fresh channel stand above
+	# what soil holds. A handful is a bank; a percent is a settling pass that is
+	# not doing its job, which is what this number was before the mask existed.
+	assert(float(steep_soil) / float(maxi(soil, 1)) < 0.005,
+		"%d of %d soil columns stand steeper than soil holds" % [steep_soil, soil])
+
+
+static func _beside_authored_cut(context: GenerationContext, cell: Vector2i) -> bool:
+	for offset: Vector2i in [
+		Vector2i.ZERO, Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
+	]:
+		var probe := cell + offset
+		if context.river_cells.has(probe) or context.carved_cells.has(probe):
+			return true
+	return false
+
+
+## The rule the fix turns on, checked directly rather than through a whole map:
+## ground slides downhill, so the drop below a column constrains it and the wall
+## above it does not.
+static func _test_repose_belongs_to_the_upper_column() -> void:
+	var grass := TerrainMaterialCatalog.index_of(TerrainMaterialCatalog.GRASS)
+	assert(TerrainMaterialCatalog.holds_height_difference(grass, 1))
+	assert(not TerrainMaterialCatalog.holds_height_difference(grass, 2),
+		"grass holds one step per cell, so a two-step brow is authored collapse")
+	assert(TerrainMaterialCatalog.holds_height_difference(grass, -6),
+		"a meadow at the foot of a six-step cliff holds nothing up")
+
+
+## §3.2: `mountain_wall` promises to be impassable and `plateau` promises a shelf.
+## Both are frame rather than map, but only one of them is a wall — a plateau
+## nobody can climb onto is a wall spelled differently, and the verdict used to
+## require exactly that.
+static func _test_a_plateau_border_can_be_walked_onto() -> void:
+	var recipe := _recipe({
+		"border": {
+			"north": {"kind": "plateau", "height": 6, "thickness": 4},
+			"east": {"kind": "plateau", "height": 6, "thickness": 4},
+			"south": {"kind": "plateau", "height": 6, "thickness": 4},
+			"west": {"kind": "plateau", "height": 6, "thickness": 4},
+			"ocean_level": -2,
+		},
+		"landmass": {"shape": "inland", "land_fraction": 1.0, "island_count": 0},
+	})
+	assert(recipe.is_valid(), "; ".join(recipe.errors))
+	var generated := _generated(5150, recipe)
+	var result: GenerationResult = generated[1]
+	assert(bool(result.report.metrics["walls_sealed"]),
+		"a board with no mountain_wall side has no wall to seal, so the check must pass trivially")
+	var context := result.context
+	var walls := 0
+	for index in context.cell_count:
+		walls += int(context.border_wall[index])
+	assert(walls == 0, "a plateau side is not a wall and must not be counted as one")
+
+
+## The generator and the editor have to agree about what sizes a board comes in
+## (`map_editor.md` §6.2), or the editor offers a preset the generator refuses.
+static func _test_board_sizes_are_the_ones_a_map_can_have() -> void:
+	for cells: int in MapMeta.BOARD_PRESETS:
+		var recipe := _recipe({"board": {"size": cells}})
+		assert(recipe.is_valid(), "board preset %d refused: %s" % [cells, "; ".join(recipe.errors)])
+	var ragged := _recipe({"board": {"size": 100}})
+	assert(not ragged.is_valid(), "a board of 100 is not whole chunks and must be refused")
+
+
+## Layer 6: generation as an operation on a MAP, not on two bare grids.
+##
+## The three things `MapGenerationService` exists for, because none of them can be
+## the pipeline's business: the rim of the map is one header field where the
+## recipe has four sides, the document has to come out dirty, and a map with no
+## start option has to say so instead of being discovered unlaunchable later.
+static func _test_generation_fills_a_map_document() -> void:
+	var document := MapDocument.create(&"generated", "Сгенерированная", BOARD)
+	var harness := Harness.new()
+	harness.grid = document.terrain
+	harness.water = document.water
+	document.terrain.configure(1.0, BOARD)
+	document.water.configure(1.0, BOARD)
+	harness.terrain_service.configure(document.terrain)
+	harness.water_service.configure(document.water, document.terrain)
+	harness.publisher.configure(
+		document.terrain, harness.nav, harness.terrain_service, document.water, harness.water_service)
+	harness.service.configure(
+		document.terrain, document.water, harness.terrain_service, harness.water_service,
+		harness.publisher, harness.nav)
+	var service := MapGenerationService.new()
+	service.configure(harness.service)
+
+	var result := service.generate_into(document, _recipe(), 4242)
+	assert(result.report != null and not result.report.is_rejected_recipe(), result.failure_summary())
+	assert(document.dirty, "a generated map is an unsaved map")
+	# Two ocean sides in the reference recipe, so the world continues as sea past
+	# the rim — at the level the generator poured, or `BorderOceanService` will
+	# re-flood the coastline at a different one on the author's first stroke.
+	assert(document.meta.border_kind == MapMeta.BORDER_OCEAN)
+	assert(document.meta.border_level == _recipe().ocean_level)
+	assert(not document.meta.biomes.is_empty(), "the header says what kind of world this is")
+	assert(result.report.notes.has(MapGenerationService.MISSING_START_NOTE),
+		"a map with no start option has to say so")
+
+	# The size of a map is chosen once, at creation (map_editor.md §6.2): a recipe
+	# for another board is refused rather than quietly resizing the document.
+	var mismatched := service.generate_into(document, _recipe({"board": {"size": 128}}), 1)
+	assert(mismatched.report.is_rejected_recipe(), "a recipe for another board must be refused")
+
+	# A board walled or open on every side ends where it ends.
+	var walled := MapMeta.new()
+	MapGenerationService.apply_border(walled, _recipe({
+		"border": {
+			"north": {"kind": "mountain_wall", "height": 20, "thickness": 4},
+			"east": {"kind": "open"}, "south": {"kind": "open"}, "west": {"kind": "open"},
+			"ocean_level": -2,
+		},
+		"landmass": {"shape": "inland", "land_fraction": 1.0, "island_count": 0},
+	}))
+	assert(walled.border_kind == MapMeta.BORDER_NOTHING)
 
 
 # --- Climate (layer 2) --------------------------------------------------------

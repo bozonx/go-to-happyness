@@ -91,6 +91,13 @@ var _coverage_brush := CoverageBrushController.new()
 var _road_network := RoadNetworkService.new()
 var _coverage_publisher := CoverageNavigationPublisher.new()
 var _border_ocean := BorderOceanService.new()
+## Procedural generation of a NEW map (`procedural_map_generation.md` §11.4). It
+## is configured lazily, in `generate_map`, because it needs the grids of the
+## document that is being created — and it is deliberately not reachable from a
+## mode: generation replaces the ground, so it is a file action beside "New",
+## never a brush.
+var _terrain_generation := TerrainGenerationService.new()
+var _map_generation := MapGenerationService.new()
 var _test_run_service := MapTestRunService.new()
 ## State of the two sections the start dialog may rewrite, captured when it opens.
 ## Empty means no dialog is open; a confirmed dialog turns them into one command.
@@ -360,6 +367,54 @@ func _on_new_pressed() -> void:
 func _on_create_requested(id: StringName, display_name: String, board_cells: int) -> void:
 	_replace_document(MapDocument.create(id, display_name, board_cells), "")
 	_message = "новая карта: %s (%d×%d)" % [id, board_cells, board_cells]
+
+
+## Creates a map and fills it from a recipe (`map_editor.md` §6.2,
+## `procedural_map_generation.md` §11.4, layer 6).
+##
+## Generation is offered at creation and nowhere else, which is not a limitation
+## of the implementation but the shape of the operation: it reconfigures the board
+## and rewrites every column, so on an existing map it would move the ground out
+## from under placements, zones and entities while leaving their coordinates
+## behind. "New map, generated" is a different document; "generate over this one"
+## is data loss with a friendly button.
+##
+## Returns the run so a caller — the dialog, or a test — can show the verdict.
+## A rejected map is still returned and still shown: the author gets to look at
+## the best attempt and decide, which is exactly what the laboratory does.
+func generate_map(id: StringName, display_name: String, recipe_path: String, seed_value: int) -> GenerationResult:
+	var next := MapDocument.create(id, display_name, MapMeta.DEFAULT_BOARD_CELLS)
+	var recipe := MapRecipeLibrary.load_for_board(recipe_path, next.meta.board_cells)
+	_replace_document(next, "")
+	return generate_into_current(recipe, seed_value)
+
+
+## Generates into the document that is already open. Only meaningful right after
+## it was created — see `generate_map`, which is the entry point authors use.
+func generate_into_current(recipe: MapRecipe, seed_value: int) -> GenerationResult:
+	_terrain_generation.configure(
+		document.terrain, document.water, _terrain_service, _water_service, _nav_publisher, _nav_grid)
+	_map_generation.configure(_terrain_generation)
+	var result := _map_generation.generate_into(document, recipe, seed_value)
+	# The generator cleared the terrain and water histories itself; the editor's
+	# stack has to go with them, or an undo replays a stroke onto a board that no
+	# longer means the same thing.
+	history.clear()
+	# The header may have gained an ocean rim, and everything bound to the header
+	# has to hear about it before the first stroke does.
+	_border_ocean.configure(_water_service, document.terrain, document.water, document.meta)
+	water_world.configure_border(document.meta.border_kind, document.meta.border_level)
+	terrain_world.rebuild_pending_now()
+	water_world.rebuild_pending_now()
+	for mode: MapEditorMode in _modes:
+		mode.configure(_context)
+	_refresh_camera_framing()
+	_message = "сгенерировано: %s" % (
+		result.report.verdict() if result.report != null else "нет отчёта")
+	if not result.failure_summary().is_empty():
+		_message += " — %s" % result.failure_summary()
+	_refresh_panels()
+	return result
 
 
 func _on_load_pressed() -> void:

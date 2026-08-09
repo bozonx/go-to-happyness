@@ -124,12 +124,21 @@ static func _pick_sources(context: GenerationContext, rng: RandomNumberGenerator
 		return chosen
 	var recipe := context.recipe
 	var threshold := _source_height_threshold(context, tributary)
+	# `source: "lakes"` means the rivers of this map start where water already
+	# collects, so the heads are the floors of the hollows stage 7 found rather
+	# than any high ground. Without this the value parsed, validated and then
+	# behaved exactly like `springs`, which is the worst of the three outcomes: a
+	# recipe field that says something the generator never did.
+	var basin_floors := _basin_floors(context) if recipe.river_source == MapRecipe.RIVER_SOURCE_LAKES else {}
 	var candidates: Array[int] = []
 	var too_dry := 0
 	for index in context.cell_count:
 		if context.is_land[index] == 0 or context.border_locked[index] != 0:
 			continue
-		if context.heights[index] < threshold:
+		if recipe.river_source == MapRecipe.RIVER_SOURCE_LAKES:
+			if not basin_floors.has(index):
+				continue
+		elif context.heights[index] < threshold:
 			continue
 		if context.flow_accum[index] < MIN_SOURCE_ACCUMULATION:
 			continue
@@ -167,6 +176,18 @@ static func _pick_sources(context: GenerationContext, rng: RandomNumberGenerator
 		chosen[position] = chosen[swap]
 		chosen[swap] = kept
 	return chosen
+
+
+## Buffer indices of the cells a hollow drains through — the outlet of every basin
+## stage 7 found, plus the ring of channel around it. A river that starts at a
+## lake starts at its outflow, not in the middle of the water.
+static func _basin_floors(context: GenerationContext) -> Dictionary:
+	var floors: Dictionary = {}
+	for basin: Dictionary in context.basins:
+		var outlet: Vector2i = basin["outlet"]
+		if context.contains(outlet.x, outlet.y):
+			floors[context.cell_index(outlet)] = true
+	return floors
 
 
 static func _source_height_threshold(context: GenerationContext, tributary: bool) -> int:

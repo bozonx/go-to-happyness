@@ -277,13 +277,22 @@ static func repose_steps_per_cell_of(material_id: StringName) -> float:
 	return repose_steps_per_cell_of_index(index_of(material_id))
 
 
-## True when this surface can hold a direct orthogonal height difference without
+## True when this surface can stand above a drop of this many steps without
 ## settling. Terrain sculpting resolves an excess through the cascade; a surface
 ## repaint deliberately does not move ground, so the editor must refuse a paint
 ## that would leave this column mechanically impossible.
-static func holds_height_difference(material_index: int, height_difference_steps: int) -> bool:
+##
+## The argument is the drop the column stands ABOVE — how far the ground falls
+## away from it. A negative number means the neighbour is higher, which costs this
+## column nothing: repose is about ground sliding downhill, and the ground that
+## would slide is the ground on top. This used to take the absolute difference,
+## and so refused a meadow at the foot of a cliff exactly as loudly as sand on the
+## brow of one.
+static func holds_height_difference(material_index: int, drop_steps: int) -> bool:
+	if drop_steps <= 0:
+		return true
 	var repose := repose_steps_per_cell_of_index(material_index)
-	return is_inf(repose) or abs(height_difference_steps) <= repose + 0.0001
+	return is_inf(repose) or float(drop_steps) <= repose + 0.0001
 
 
 # --- Navigation weight (§2) ---------------------------------------------------

@@ -140,6 +140,14 @@ static func settle_grid(grid: TerrainGrid) -> int:
 	for z in range(minimum.y, maximum.y + 1):
 		for x in range(minimum.x, maximum.x + 1):
 			var cell := Vector2i(x, z)
+			# A ramp is SHAPED ground, and repose is about ground that slumps. The
+			# assigner lifts the cells under the near links of a chain — that is what
+			# building a slope up a bank is — and reading those lifted columns as a
+			# face turned every ramp the generator laid, and the ground around it,
+			# into stone. A grass hillside is the ordinary result of a grass cascade;
+			# it is not a cliff just because it climbs.
+			if grid.is_ramp_cell(cell):
+				continue
 			var current := grid.material_index_at(cell)
 			var settled := _settle(TerrainMaterialCatalog.id_of_index(current), _grid_drop(grid, cell))
 			if settled == current:
@@ -156,7 +164,7 @@ static func _grid_drop(grid: TerrainGrid, cell: Vector2i) -> int:
 	for offset: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 		var neighbour := cell + offset
 		if grid.is_inside(neighbour):
-			drop = maxi(drop, absi(grid.height_of(neighbour) - own))
+			drop = maxi(drop, own - grid.height_of(neighbour))
 	return drop
 
 
@@ -275,8 +283,14 @@ static func _distance_to_water(context: GenerationContext, water_depth: PackedIn
 	return distance
 
 
-## Largest orthogonal height difference to a neighbour, in steps — the number a
-## material's angle of repose has to hold (`terrain_materials.md` §2).
+## How far this column drops AWAY to an orthogonal neighbour, in steps — the
+## number its angle of repose has to hold (`terrain_materials.md` §2).
+##
+## Downwards only, and that is the fix to the second half of the stone problem.
+## Measured as an absolute difference, a meadow at the foot of a rock face had to
+## hold the face — so every mountain, every terrace and every river bank painted
+## stone on BOTH of its sides. The ground that would slide is the ground on top of
+## the drop; the flat below it holds nothing up.
 static func _local_drop(context: GenerationContext, cell: Vector2i) -> int:
 	var own := context.heights[context.cell_index(cell)]
 	var drop := 0
@@ -284,7 +298,7 @@ static func _local_drop(context: GenerationContext, cell: Vector2i) -> int:
 		var neighbour := cell + offset
 		if not context.contains(neighbour.x, neighbour.y):
 			continue
-		drop = maxi(drop, absi(context.heights[context.cell_index(neighbour)] - own))
+		drop = maxi(drop, own - context.heights[context.cell_index(neighbour)])
 	return drop
 
 

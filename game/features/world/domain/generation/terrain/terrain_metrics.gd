@@ -53,6 +53,11 @@ static func measure(context: GenerationContext, grid: TerrainGrid, water: WaterG
 				continue
 			land.append(cell)
 			land_index[cell] = true
+			# Measured over ALL the land inside the frame, ranges included, because
+			# that is the number `Hypsometry` solves for. Measuring it over the
+			# plains alone would compare the finished map against a target nobody
+			# aimed at — the ranges are most of the height budget on a mountainous
+			# recipe, and leaving them out reads 1 where the solver aimed at 5.
 			height_sum += height
 			if grid.slope_class_at(cell) == SlopeCatalog.CLASS_FLAT:
 				flat += 1
@@ -61,7 +66,7 @@ static func measure(context: GenerationContext, grid: TerrainGrid, water: WaterG
 	var metrics: Dictionary = {
 		"board_cells": grid.board_cells,
 		"land_fraction": float(land_count) / float(maxi(total, 1)),
-		"land_mean_height": float(height_sum) / float(maxi(land_count, 1)),
+		"land_mean_height": float(height_sum) / float(maxi(land.size(), 1)),
 		"land_max_height": _max_land_height(grid, land),
 		"height_min": height_min,
 		"height_max": height_max,
@@ -97,6 +102,21 @@ static func failures(recipe: MapRecipe, metrics: Dictionary) -> Array[String]:
 		broken.append("land fraction %.3f is more than %.3f away from %.3f" % [
 			land_fraction, recipe.land_fraction_tolerance, recipe.land_fraction,
 		])
+	# The two height promises of §3.4, kept to a tolerance rather than to the digit.
+	# The solver hits them exactly on the continuous field, and then quantisation,
+	# the settling pass and river incision each move a column or two — so the
+	# honest condition is a band, and a band that is checked beats a promise of
+	# exactness that nothing enforced.
+	var mean_error := absf(float(metrics["land_mean_height"]) - float(recipe.land_mean_height))
+	if mean_error > recipe.land_mean_height_tolerance:
+		broken.append("mean height of the plains %.2f is more than %.1f from %d" % [
+			metrics["land_mean_height"], recipe.land_mean_height_tolerance, recipe.land_mean_height,
+		])
+	var max_error := absi(int(metrics["land_max_height"]) - recipe.land_max_height)
+	if max_error > recipe.land_max_height_tolerance:
+		broken.append("highest point %d is more than %d from %d" % [
+			metrics["land_max_height"], recipe.land_max_height_tolerance, recipe.land_max_height,
+		])
 	if float(metrics["largest_land_component"]) < recipe.largest_land_component_min:
 		broken.append("largest land component %.3f is under %.3f" % [
 			metrics["largest_land_component"], recipe.largest_land_component_min,
@@ -111,6 +131,10 @@ static func failures(recipe: MapRecipe, metrics: Dictionary) -> Array[String]:
 		])
 	if float(metrics["pedestrian_reach"]) < recipe.largest_land_component_min:
 		broken.append("the walkable land is in pieces — the largest holds %.3f of it" % metrics["pedestrian_reach"])
+	if float(metrics["cart_reach"]) < recipe.cart_reach_min:
+		broken.append("carts reach %.3f of the walkable land, under %.3f" % [
+			metrics["cart_reach"], recipe.cart_reach_min,
+		])
 	if not bool(metrics["walls_sealed"]):
 		broken.append("a border wall is passable — the flood from the centre reached it")
 	if int(metrics["rivers_terminated"]) < int(metrics["rivers_traced"]):
@@ -255,11 +279,16 @@ static func _walkable_share(nav: NavGrid, land: Array[Vector2i], profile: String
 
 
 ## §3.2's promise, checked instead of assumed: a flood from the centre of the
-## board must never reach a column the border stage locked as a wall.
+## board must never reach a column the border stage raised as a `mountain_wall`.
+##
+## A `plateau` side is excluded. It is locked ground like a wall — frame, not the
+## map — but the recipe asked for a shelf, and a shelf the author cannot walk onto
+## is a wall spelled differently. Only the side that promised to be impassable is
+## held to it.
 static func _walls_sealed(context: GenerationContext, grid: TerrainGrid, nav: NavGrid) -> bool:
 	var has_wall := false
 	for index in context.cell_count:
-		if context.border_locked[index] != 0:
+		if context.border_wall[index] != 0:
 			has_wall = true
 			break
 	if not has_wall or not nav.has_terrain_field():
@@ -274,7 +303,7 @@ static func _walls_sealed(context: GenerationContext, grid: TerrainGrid, nav: Na
 	while head < queue.size():
 		var cell: Vector2i = queue[head]
 		head += 1
-		if context.contains(cell.x, cell.y) and context.border_locked[context.cell_index(cell)] != 0:
+		if context.contains(cell.x, cell.y) and context.border_wall[context.cell_index(cell)] != 0:
 			return false
 		for direction in NavTerrainField.DIRECTION_COUNT:
 			var neighbour: Vector2i = cell + NavTerrainField.DIRECTION_OFFSETS[direction]

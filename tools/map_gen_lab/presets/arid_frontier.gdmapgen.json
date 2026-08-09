@@ -4,12 +4,24 @@
 	"id": "arid_frontier",
 	"generator_version": 1,
 	"seed": 1,
-	"board": { "size": 96 },
+	"board": {
+		"size": 96
+	},
 	"border": {
-		"north": { "kind": "mountain_wall", "height": 30, "thickness": 5 },
-		"east": { "kind": "open" },
-		"south": { "kind": "ocean" },
-		"west": { "kind": "open" },
+		"north": {
+			"kind": "mountain_wall",
+			"height": 30,
+			"thickness": 5
+		},
+		"east": {
+			"kind": "open"
+		},
+		"south": {
+			"kind": "ocean"
+		},
+		"west": {
+			"kind": "open"
+		},
 		"ocean_level": -2
 	},
 	"landmass": {
@@ -24,37 +36,78 @@
 		"land_max_height": 28,
 		"hypsometry": "plains_with_peaks",
 		"roughness": 0.35,
-		"terrace_bias": 0.45,
-		"repose_override": "stone"
+		"terrace_bias": 0.45
 	},
 	"climate": {
 		"latitude": "subtropical",
-		"land_mean_temperature": 24.0, "temperature_span": 5.0, "lapse_rate": 0.6,
+		"land_mean_temperature": 24.0,
+		"temperature_span": 5.0,
+		"lapse_rate": 0.6,
 		"land_mean_moisture": 0.2,
-		"wind_direction": 180, "rain_shadow": 0.85, "coastal_reach": 7
+		"wind_direction": 180,
+		"rain_shadow": 0.85,
+		"coastal_reach": 7
 	},
-	"biomes": { "origin": "earth" },
+	"biomes": {
+		"origin": "earth"
+	},
 	"mountains": {
 		"ranges": [
 			{
-				"count": 1, "length": 0.55, "orientation": 95, "orientation_jitter": 12,
-				"peak_height": [16, 24], "peaks_per_range": 3,
-				"flank_steepness": 0.55, "foothills": 12, "passes": 3
+				"count": 1,
+				"length": 0.55,
+				"orientation": 95,
+				"orientation_jitter": 12,
+				"peak_height": [
+					16,
+					24
+				],
+				"peaks_per_range": 3,
+				"flank_steepness": 0.55,
+				"foothills": 12,
+				"passes": 3
 			}
 		],
-		"solitary_peaks": { "count": 2, "height": [10, 16], "flank_steepness": 0.8 }
+		"solitary_peaks": {
+			"count": 2,
+			"height": [
+				10,
+				16
+			],
+			"flank_steepness": 0.8
+		}
 	},
 	"rivers": {
-		"count": 2, "width": [1, 3], "meander": 0.45, "incision": 2,
-		"source": "mountains", "delta": true, "tributaries": 1
+		"count": 2,
+		"width": [
+			1,
+			3
+		],
+		"meander": 0.45,
+		"incision": 2,
+		"source": "mountains",
+		"delta": true,
+		"tributaries": 1
 	},
 	"lakes": {
-		"count": [1, 3], "size": [10, 300], "depth": [1, 5],
-		"prefer": "basins", "connect_to_rivers": true
+		"count": [
+			1,
+			3
+		],
+		"size": [
+			10,
+			300
+		],
+		"depth": [
+			1,
+			5
+		],
+		"prefer": "basins",
+		"connect_to_rivers": true
 	},
 	"targets": {
 		"flat_fraction_min": 0.3,
 		"largest_land_component_min": 0.9,
-		"cliff_fraction_max": 0.45
+		"cliff_fraction_max": 0.15
 	}
 }

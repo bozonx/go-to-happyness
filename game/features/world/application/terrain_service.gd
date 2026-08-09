@@ -403,6 +403,16 @@ func _reject(reason: StringName) -> bool:
 	return false
 
 
+## Whether this surface can stand on this column without the ground moving.
+##
+## Only the drops the column stands ABOVE constrain it. The angle of repose is a
+## statement about ground sliding downhill, so it belongs to the upper column of a
+## boundary: sand on the brow of a two-step face is authored collapse, while a
+## meadow at the foot of a cliff holds nothing up and is the most ordinary
+## landscape there is. Comparing the absolute difference refused the second case
+## as loudly as the first — the brush would not paint grass anywhere near a
+## mountain, and the generator, which uses the same rule, turned three quarters of
+## every map to stone (`terrain_materials.md` §2).
 func _material_is_stable_at(cell: Vector2i, material_index: int) -> bool:
 	if _grid.is_hole(cell):
 		return false
@@ -412,7 +422,7 @@ func _material_is_stable_at(cell: Vector2i, material_index: int) -> bool:
 		if not _grid.is_inside(neighbour) or _grid.is_hole(neighbour):
 			continue
 		if not TerrainMaterialCatalog.holds_height_difference(
-			material_index, _grid.height_of(neighbour) - height,
+			material_index, height - _grid.height_of(neighbour),
 		):
 			return false
 	return true

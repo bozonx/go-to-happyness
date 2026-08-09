@@ -53,12 +53,15 @@ static func classify(context: GenerationContext) -> void:
 				elif kind == MapRecipe.BORDER_MOUNTAIN_WALL or kind == MapRecipe.BORDER_PLATEAU:
 					if distance < recipe.border_thickness(side):
 						context.border_locked[index] = 1
+						if kind == MapRecipe.BORDER_MOUNTAIN_WALL:
+							context.border_wall[index] = 1
 	# Where the two meet the sea wins by the width of its own shelf: the wall runs
 	# to the corner and dives, which is what makes a headland instead of a
 	# staircase into deep water (§3.2).
 	for index in context.cell_count:
 		if context.border_sea[index] != 0:
 			context.border_locked[index] = 0
+			context.border_wall[index] = 0
 
 
 static func apply(context: GenerationContext) -> void:
