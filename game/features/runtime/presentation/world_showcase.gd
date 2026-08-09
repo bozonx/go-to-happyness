@@ -15,8 +15,26 @@ func start_session(session: GameSessionConfig) -> bool:
 		return false
 	var active_world_session := world_session if world_session != null else WorldSession.new(session.map_document)
 	world_setup = active_world_session.build(self, camera_controller.camera, CELL_SIZE, session.map_document.board_cells())
+	_apply_initial_camera_target(session)
 	_update_editor_hint()
 	return world_setup.terrain_grid != null and world_setup.water_grid != null
+
+
+## A showcase has no party actor to consume an editor test point, so its camera
+## is the visible proof that the requested place reached the runtime. An explicit
+## "test from here" target wins over the entrance's authored establishing shot.
+func _apply_initial_camera_target(session: GameSessionConfig) -> void:
+	var target := session.spawn_override
+	if not session.has_spawn_override():
+		var option := session.start_option_record()
+		if option == null or option.camera == &"":
+			return
+		target = MapSpawnService.new().camera_position(
+			session.map_document.zones, option.camera, session.map_document.meta.cell_size)
+	if target == Vector3.INF:
+		return
+	camera_controller.camera_target = target
+	camera_controller.apply_position()
 
 
 ## The hint is only relevant for a test run from an editor; a Showcase launched

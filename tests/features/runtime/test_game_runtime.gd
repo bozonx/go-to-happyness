@@ -64,7 +64,10 @@ func _assert_world_showcase(launch_manager: Node) -> void:
 	assert(definition.module_ids == [&"core.world", &"gth.world_showcase"])
 	var map := MapDocumentService.new().load_map(definition.default_map)
 	assert(map != null)
-	launch_manager.set("active_session", GameSessionConfig.create(definition, definition.default_map, map))
+	var session := GameSessionConfig.create(definition, definition.default_map, map)
+	var test_spawn := Vector3(17.0, 2.0, -11.0)
+	session.spawn_override = test_spawn
+	launch_manager.set("active_session", session)
 	var runtime := GameRuntimeScene.instantiate() as GameRuntime
 	root.add_child(runtime)
 	for _frame in range(4):
@@ -79,6 +82,8 @@ func _assert_world_showcase(launch_manager: Node) -> void:
 	assert(showcase.world_setup != null)
 	assert(showcase.world_setup.terrain_grid == map.terrain)
 	assert(showcase.world_session.nav_grid.terrain_field() != null)
+	assert(showcase.camera_controller.camera_target == test_spawn,
+		"a showcase test run must aim the camera at the editor's spawn override")
 	showcase.camera_controller.camera_yaw = 17.0
 	assert(SessionSaveCoordinator.save_quicksave(runtime))
 	var save := SaveData.new()
