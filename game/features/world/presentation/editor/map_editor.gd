@@ -1182,7 +1182,7 @@ func _launch_test_run(spawn_override: Vector3) -> void:
 	if not (result["errors"] as Array).is_empty():
 		return
 	var launch_manager: Node = get_node_or_null("/root/GameLaunchManager")
-	var definition_key := document.meta.start.game_definition
+	var definition_key := _test_definition_key(spawn_override)
 	# Map-level validation only checks the world (anchor placement, entity
 	# bounds). A settlement map also needs a start option whose spawn group can
 	# hold the starting party; that gate lives in the module and used to fail
@@ -1204,6 +1204,17 @@ func _launch_test_run(spawn_override: Vector3) -> void:
 		launch_manager.call("launch_editor_test", definition_key, document,
 			RuntimeLaunchManager.MAP_EDITOR_SCENE, &"editor:preview", spawn_override,
 			{"current_path": current_path}, test_start_option)
+
+
+## The generic showcase deliberately has no actors. A point-targeted run is an
+## explicit request to inspect party appearance, so use the shipped settlement
+## game for that one launch instead of presenting an empty overhead world. Maps
+## authored for any real game keep their own definition.
+func _test_definition_key(spawn_override: Vector3) -> StringName:
+	var authored := document.meta.start.game_definition
+	if spawn_override != Vector3.INF and authored == &"core:world_showcase":
+		return &"core:settlement"
+	return authored
 
 
 ## Every committed ground edit becomes exactly one command, recorded here rather

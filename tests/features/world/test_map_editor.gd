@@ -505,6 +505,10 @@ func _test_test_points_aim_the_run(editor: Node) -> void:
 		Vector2i(11, -7), float(editor.document.terrain.height_of(Vector2i(11, -7))),
 		editor.document.meta.cell_size)
 	assert(editor._world_position_of_cell(Vector2i(11, -7)) == expected, "the run starts on the ground")
+	assert(editor._test_definition_key(expected) == &"core:settlement",
+		"a point-targeted generic preview must launch the actor-owning settlement game")
+	assert(editor._test_definition_key(Vector3.INF) == &"core:world_showcase",
+		"a plain generic preview must remain a world-only showcase")
 
 	# The menu shows what F5 will do; the map's own entrance is always the first row.
 	editor._refresh_run_menu()

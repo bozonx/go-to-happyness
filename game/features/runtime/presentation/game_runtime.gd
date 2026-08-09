@@ -97,5 +97,9 @@ func _restore_pending_save() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Esc may replace this scene inside the host handler. Keep the root viewport
+	# before that happens; asking this Node3D for it after change_scene_to_file()
+	# has detached us produces `!is_inside_tree()` and can leave a grey frame.
+	var active_viewport := get_viewport()
 	if host_input.handle_unhandled_input(event, self):
-		get_viewport().set_input_as_handled()
+		active_viewport.set_input_as_handled()
