@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://game/features/world/presentation/editor/ui/map_editor_side_panel.gd" id="1_side_panel"]
 [ext_resource type="Script" path="res://game/features/ui/presentation/editor_property_inspector.gd" id="2_inspector"]
 [ext_resource type="Script" path="res://game/features/ui/presentation/editor_fill_transform_inspector.gd" id="3_transform"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor/editor_searchable_list.tscn" id="4_searchable_list"]
 
 [node name="SidePanel" type="PanelContainer"]
 custom_minimum_size = Vector2(280, 0)
@@ -57,14 +58,4 @@ script = ExtResource("2_inspector")
 text = "Объекты"
 theme_override_font_sizes/font_size = 14
 
-[node name="ListSearch" type="LineEdit" parent="Margin/Scroll/Rows"]
-placeholder_text = "Поиск по списку…"
-clear_button_enabled = true
-
-[node name="ListFilters" type="HFlowContainer" parent="Margin/Scroll/Rows"]
-size_flags_horizontal = 3
-theme_override_constants/h_separation = 4
-theme_override_constants/v_separation = 4
-
-[node name="List" type="ItemList" parent="Margin/Scroll/Rows"]
-custom_minimum_size = Vector2(0, 190)
+[node name="SearchableList" parent="Margin/Scroll/Rows" instance=ExtResource("4_searchable_list")]

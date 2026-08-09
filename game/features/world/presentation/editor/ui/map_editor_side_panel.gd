@@ -35,19 +35,12 @@ signal reference_pick_requested(property_name: StringName, reference_type: Strin
 @onready var _inspector_fields: EditorPropertyInspector = $Margin/Scroll/Rows/InspectorFields
 @onready var _separator: HSeparator = $Margin/Scroll/Rows/Separator
 @onready var _list_title: Label = $Margin/Scroll/Rows/ListTitle
-@onready var _list_search: LineEdit = $Margin/Scroll/Rows/ListSearch
-@onready var _list_filters: HFlowContainer = $Margin/Scroll/Rows/ListFilters
-@onready var _list: ItemList = $Margin/Scroll/Rows/List
+@onready var _searchable_list: EditorSearchableList = $Margin/Scroll/Rows/SearchableList
 
 var _has_inspector_lines: bool = false
 var _has_inspector_properties: bool = false
 var _has_fill_transform: bool = false
 var _has_list: bool = false
-var _all_entries: Array[String] = []
-var _source_indices: Array[int] = []
-var _selected_source_index := -1
-var _filters: Array[String] = []
-var _active_filter := ""
 
 
 func _ready() -> void:
@@ -61,10 +54,8 @@ func _ready() -> void:
 		property_reset_requested.emit(property_name))
 	_inspector_fields.reference_pick_requested.connect(func(property_name: StringName, reference_type: StringName) -> void:
 		reference_pick_requested.emit(property_name, reference_type))
-	_list.item_selected.connect(_on_list_item_selected)
-	_list.multi_selected.connect(_on_list_multi_selected)
-	_list.item_activated.connect(_on_list_item_selected)
-	_list_search.text_changed.connect(func(_text: String) -> void: _rebuild_filtered_entries())
+	_searchable_list.entry_activated.connect(func(index: int) -> void: entry_activated.emit(index))
+	_searchable_list.entries_selection_changed.connect(func(indices: Array[int]) -> void: entries_selection_changed.emit(indices))
 
 
 func set_map_info(lines: Array[String]) -> void:
@@ -105,77 +96,9 @@ func set_entries(
 	allow_multiple := false,
 ) -> void:
 	_list_title.text = title
-	_all_entries = entries.duplicate()
-	_selected_source_index = selected_index
-	_list.select_mode = ItemList.SELECT_MULTI if allow_multiple else ItemList.SELECT_SINGLE
-	_list.set_meta("selected_indices", selected_indices)
-	_filters = filters.duplicate()
-	if not _filters.has(_active_filter):
-		_active_filter = ""
 	_has_list = not title.is_empty() and (not entries.is_empty() or not empty_hint.is_empty())
-	_list_search.visible = _has_list and not entries.is_empty() and _filters.is_empty()
-	_list_search.set_meta("empty_hint", empty_hint)
-	_rebuild_filter_buttons()
-	_rebuild_filtered_entries()
+	_searchable_list.set_entries(entries, empty_hint, selected_index, filters, selected_indices, allow_multiple)
 	_update_section_visibilities()
-
-
-func _rebuild_filtered_entries() -> void:
-	_list.clear()
-	_source_indices.clear()
-	var query := _list_search.text.strip_edges().to_lower()
-	for source_index in _all_entries.size():
-		var entry := _all_entries[source_index]
-		if not _active_filter.is_empty() and not entry.begins_with(_active_filter):
-			continue
-		if not query.is_empty() and not entry.to_lower().contains(query):
-			continue
-		var visible_index := _list.add_item(entry)
-		_source_indices.append(source_index)
-		var selected_indices: Array = _list.get_meta("selected_indices", [])
-		if source_index == _selected_source_index or source_index in selected_indices:
-			_list.select(visible_index)
-	if _all_entries.is_empty():
-		var hint := String(_list_search.get_meta("empty_hint", ""))
-		if not hint.is_empty():
-			var index := _list.add_item(hint)
-			_list.set_item_disabled(index, true)
-
-
-func _rebuild_filter_buttons() -> void:
-	for child in _list_filters.get_children():
-		child.queue_free()
-	_list_filters.visible = _has_list and not _all_entries.is_empty() and not _filters.is_empty()
-	if not _list_filters.visible:
-		return
-	for filter in ["Все"] + _filters:
-		var button := Button.new()
-		button.text = filter
-		button.toggle_mode = true
-		button.focus_mode = Control.FOCUS_NONE
-		button.button_pressed = (_active_filter.is_empty() and filter == "Все") or filter == _active_filter
-		var target_filter: String = "" if filter == "Все" else filter
-		button.pressed.connect(func() -> void:
-			_active_filter = target_filter
-			_rebuild_filter_buttons()
-			_rebuild_filtered_entries())
-		_list_filters.add_child(button)
-
-
-func _on_list_item_selected(index: int) -> void:
-	if index >= 0 and index < _source_indices.size():
-		if _list.select_mode == ItemList.SELECT_SINGLE:
-			entry_activated.emit(_source_indices[index])
-
-
-func _on_list_multi_selected(_index: int, _selected: bool) -> void:
-	if _list.select_mode != ItemList.SELECT_MULTI:
-		return
-	var indices: Array[int] = []
-	for visible_index: int in _list.get_selected_items():
-		if visible_index >= 0 and visible_index < _source_indices.size():
-			indices.append(_source_indices[visible_index])
-	entries_selection_changed.emit(indices)
 
 
 func _update_section_visibilities() -> void:
@@ -185,8 +108,6 @@ func _update_section_visibilities() -> void:
 	_fill_transform_fields.visible = _has_fill_transform
 	_inspector_fields.visible = _has_inspector_properties
 	_list_title.visible = _has_list
-	_list_search.visible = _has_list and not _all_entries.is_empty() and _filters.is_empty()
-	_list_filters.visible = _has_list and not _all_entries.is_empty() and not _filters.is_empty()
-	_list.visible = _has_list
+	_searchable_list.visible = _has_list
 	_map_separator.visible = has_inspector or _has_list
 	_separator.visible = has_inspector and _has_list

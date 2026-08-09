@@ -160,6 +160,23 @@ func handle_mouse_button(event: InputEventMouseButton) -> bool:
 	return false
 
 
+## Releases a drag even when its mouse-up happened over editor chrome instead of
+## the 3D view.  The editor receives this from `_input`, before a Control can
+## consume the event.  Without that path, starting an orbit over the map and
+## releasing over a panel left the camera rotating on the next mouse move.
+func release_pointer_button(button_index: MouseButton) -> bool:
+	match button_index:
+		MOUSE_BUTTON_MIDDLE:
+			var was_panning := _panning
+			_panning = false
+			return was_panning
+		MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_LEFT:
+			var was_orbiting := _orbiting
+			_orbiting = false
+			return was_orbiting
+	return false
+
+
 func handle_mouse_motion(event: InputEventMouseMotion) -> bool:
 	if not _orbiting:
 		if not _panning:

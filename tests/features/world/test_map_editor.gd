@@ -31,6 +31,7 @@ func _run() -> void:
 	await process_frame
 
 	_test_scene_came_up(editor)
+	_test_camera_drag_ends_over_editor_chrome(editor)
 	_test_validation(editor)
 	_test_mode_switching(editor)
 	_test_scenario_workspace_replaces_the_map(editor)
@@ -65,7 +66,30 @@ func _test_scene_came_up(editor: Node) -> void:
 	# The camera frames the whole board rather than a fixed distance: a 512 m map
 	# must not open with the author inside a hill.
 	assert(editor.camera.distance > editor.document.meta.board_metres() * 0.5, "camera framed the board")
+	var top_row := editor.get_node("UI/Screen/TopBar/Margin/Scroll/Row") as Control
+	var screen := editor.get_node("UI/Screen") as Control
+	assert(top_row.get_combined_minimum_size().x <= 1280.0, "top bar fits the supported 1280 px viewport")
+	assert(screen.get_combined_minimum_size().x <= 1280.0, "editor chrome fits the supported 1280 px viewport")
 	print("  scene up: board %d, camera at %.1f" % [editor.document.board_cells(), editor.camera.distance])
+
+
+## A camera drag begins in the 3D view but may end over a panel.  GUI controls
+## consume that release before `_unhandled_input`, so the root `_input` path must
+## still clear the camera state.
+func _test_camera_drag_ends_over_editor_chrome(editor: Node) -> void:
+	var orbit_press := _click(MOUSE_BUTTON_RIGHT, true)
+	assert(editor.camera.handle_mouse_button(orbit_press), "right mouse starts orbiting")
+	assert(editor.camera.is_orbiting(), "camera recorded the drag")
+	editor._input(_click(MOUSE_BUTTON_RIGHT, false))
+	assert(not editor.camera.is_orbiting(), "release over editor chrome ends orbiting")
+
+	var pan_press := _click(MOUSE_BUTTON_MIDDLE, true)
+	assert(editor.camera.handle_mouse_button(pan_press), "middle mouse starts panning")
+	editor._input(_click(MOUSE_BUTTON_MIDDLE, false))
+	var motion := InputEventMouseMotion.new()
+	motion.relative = Vector2(12.0, 8.0)
+	assert(not editor.camera.handle_mouse_motion(motion), "release over editor chrome ends panning")
+	print("  camera drag release ok")
 
 
 ## The coverage half of the same palette. Selecting a surface arms the coverage
@@ -704,11 +728,11 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 		"копия несёт архетип образца")
 	editor._active.handle_input(_key(KEY_R))
 	assert(is_equal_approx(editor.document.entities.entities[1].yaw_degrees, 15.0), "R повернул поставленную копию")
-	var side_list := editor._side_panel.get_node("Margin/Scroll/Rows/List") as ItemList
+	var side_list := editor._side_panel.get_node("Margin/Scroll/Rows/SearchableList/List") as ItemList
 	side_list.select(0, true)
 	side_list.multi_selected.emit(0, true)
 	assert(editor._active.selected_list_index() == 0, "side list selects the corresponding map entity")
-	var side_search := editor._side_panel.get_node("Margin/Scroll/Rows/ListSearch") as LineEdit
+	var side_search := editor._side_panel.get_node("Margin/Scroll/Rows/SearchableList/Search") as LineEdit
 	side_search.text = "entity_2"
 	side_search.text_changed.emit(side_search.text)
 	assert(side_list.item_count == 1, "side-list search filters entities")

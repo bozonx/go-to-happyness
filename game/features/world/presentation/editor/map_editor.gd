@@ -882,6 +882,16 @@ func _handle_key(event: InputEventKey) -> void:
 		_refresh_panels()
 
 
+## Mouse-up must reach the camera even when a toolbar, list or text field owns
+## the pointer at release time. `_unhandled_input` deliberately ignores panel
+## input, but GUI controls consume their own release events before it gets there.
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var button := event as InputEventMouseButton
+		if not button.pressed:
+			camera.release_pointer_button(button.button_index)
+
+
 func _on_eyedropper_pressed() -> void:
 	_set_eyedropper_active(_eyedropper_button.button_pressed)
 
