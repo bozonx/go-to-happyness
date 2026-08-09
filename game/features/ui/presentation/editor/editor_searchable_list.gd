@@ -6,6 +6,7 @@ extends VBoxContainer
 
 signal entry_activated(index: int)
 signal entries_selection_changed(indices: Array[int])
+signal entry_selection_toggled(index: int, selected: bool)
 
 @onready var _search: LineEdit = $Search
 @onready var _filters_row: HFlowContainer = $Filters
@@ -46,6 +47,10 @@ func set_entries(entries: Array[String], empty_hint := "", selected_index := -1,
 
 func has_content() -> bool:
 	return _has_content
+
+
+func item_count() -> int:
+	return _list.item_count
 
 
 func _rebuild_entries() -> void:
@@ -100,3 +105,5 @@ func _on_multi_selected(_index: int, _selected: bool) -> void:
 		if visible_index >= 0 and visible_index < _source_indices.size():
 			indices.append(_source_indices[visible_index])
 	entries_selection_changed.emit(indices)
+	if _index >= 0 and _index < _source_indices.size():
+		entry_selection_toggled.emit(_source_indices[_index], _selected)

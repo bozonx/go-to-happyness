@@ -164,11 +164,17 @@ func _run() -> void:
 	# Filter object list by zone — should show only 1 object.
 	fill._zone_filter_option.select(1)
 	fill._on_zone_filter_selected(1)
-	assert(fill._object_list.item_count == 1, "zone filter shows only objects in zone")
+	assert(fill._object_list.item_count() == 1, "zone filter shows only objects in zone")
 	# Reset filter.
 	fill._zone_filter_option.select(0)
 	fill._on_zone_filter_selected(0)
-	assert(fill._object_list.item_count == 2, "all zones filter shows all objects")
+	assert(fill._object_list.item_count() == 2, "all zones filter shows all objects")
+	var object_search := fill._object_list.get_node("Search") as LineEdit
+	object_search.text = fill.selected_object_id
+	object_search.text_changed.emit(object_search.text)
+	assert(fill._object_list.item_count() == 1, "shared object list searches by stable object id")
+	object_search.text = ""
+	object_search.text_changed.emit("")
 	# Delete the zone — on_zone_deleted should clear owner_zone_id.
 	fill.on_zone_deleted(&"test_zone_1")
 	assert(fill.find_record(fill.selected_object_id).owner_zone_id == &"", "zone deletion clears owner_zone_id")

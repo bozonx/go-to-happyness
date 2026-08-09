@@ -41,7 +41,6 @@ var _ghost_material: StandardMaterial3D = null
 var _selection_markers: Dictionary = {}  ## object id (String) -> MeshInstance3D
 var _hover_marker: MeshInstance3D = null
 var _hovered_object_id: String = ""
-var _object_search_edit: LineEdit = null
 var _id_label: Label = null
 var _asset_label: Label = null
 var _badges_label: Label = null
@@ -60,7 +59,8 @@ var _panel: PanelContainer = null
 var _inspector_panel: PanelContainer = null
 var _toolbar: HBoxContainer = null
 var _inspector_title: Label = null
-var _object_list: ItemList = null
+var _object_list: EditorSearchableList = null
+var _visible_object_ids: Array[String] = []
 var _controls_vbox: EditorPropertyInspector = null
 var _transform_inspector: EditorFillTransformInspector = null
 var _pos_x_spin: SpinBox = null
@@ -103,7 +103,6 @@ func setup(editor: Node) -> void:
 	_zone_option = editor.get_node("%FillZoneOption")
 	_badges_label = editor.get_node("%FillBadgesLabel")
 	_zone_out_of_bounds_label = editor.get_node("%FillZoneWarningLabel")
-	_object_search_edit = editor.get_node("%FillObjectSearchEdit")
 	_zone_filter_option = editor.get_node("%FillZoneFilterOption")
 	_object_list = editor.get_node("%FillObjectList")
 	_controls_vbox = editor.get_node("%FillControlsVBox")
@@ -142,10 +141,7 @@ func setup(editor: Node) -> void:
 	add_child(_collision_overlay)
 	_collision_overlay_btn.toggled.connect(_on_collision_overlay_toggled)
 
-	_object_search_edit.text_changed.connect(_on_object_search_changed)
-	_object_list.select_mode = ItemList.SELECT_MULTI
-	_object_list.item_selected.connect(_on_object_list_selected)
-	_object_list.multi_selected.connect(_on_object_list_multi_selected)
+	_object_list.entry_selection_toggled.connect(_on_object_list_selection_toggled)
 	_zone_option.item_selected.connect(_on_zone_selected)
 	_zone_filter_option.item_selected.connect(_on_zone_filter_selected)
 	_toolbar_delete_btn.pressed.connect(delete_selection)
@@ -985,66 +981,52 @@ func selected_records() -> Array:
 func _after_selection_changed() -> void:
 	_inspector_panel.visible = is_active()
 	_toolbar_delete_btn.disabled = selected_object_id.is_empty()
-	_sync_object_list_selection()
+	_refresh_object_list()
 	_refresh_inspector()
 	_update_selection_marker()
 
 
-func _on_object_list_selected(index: int) -> void:
-	if _syncing_ui:
-		return
-	select_object(String(_object_list.get_item_metadata(index)))
-
-
 func _refresh_object_list() -> void:
 	_syncing_ui = true
-	_object_list.clear()
-	var search_text := _object_search_edit.text.strip_edges().to_lower() if _object_search_edit != null else ""
+	_visible_object_ids.clear()
+	var entries: Array[String] = []
 	var zone_filter := _get_zone_filter_selection()
 	for record: FillObjectRecord in _editor.blueprint.objects:
 		var asset := WorldAssetCatalog.get_asset(record.asset_id)
 		var label := asset.name if asset != null else "%s (нет ассета)" % record.asset_id
-		if not search_text.is_empty():
-			if not String(label).to_lower().contains(search_text) and not record.id.to_lower().contains(search_text):
-				continue
 		if zone_filter != &"" and record.owner_zone_id != zone_filter:
 			continue
-		var index := _object_list.add_item("%s  ·  %.1f, %.1f, %.1f" % [label, record.pos.x, record.pos.y, record.pos.z])
-		_object_list.set_item_metadata(index, record.id)
-	_syncing_ui = false
-	_sync_object_list_selection()
-
-
-func _sync_object_list_selection() -> void:
-	_syncing_ui = true
-	_object_list.deselect_all()
-	var selected := selected_object_ids()
-	for i in _object_list.item_count:
-		if String(_object_list.get_item_metadata(i)) in selected:
-			_object_list.select(i, false)
+		entries.append("%s  ·  %s  ·  %.1f, %.1f, %.1f" % [label, record.id, record.pos.x, record.pos.y, record.pos.z])
+		_visible_object_ids.append(record.id)
+	var selected_indices: Array[int] = []
+	for object_id: String in selected_object_ids():
+		var index := _visible_object_ids.find(object_id)
+		if index >= 0:
+			selected_indices.append(index)
+	_object_list.set_entries(entries, "Нет объектов в выбранной зоне", -1, [], selected_indices, true)
 	_syncing_ui = false
 
 
 ## The list mirrors the 3D selection, multiple rows included. The clicked row
 ## becomes the primary one so the inspector follows the pointer.
-func _on_object_list_multi_selected(index: int, _selected: bool) -> void:
+func _on_object_list_selection_toggled(index: int, selected: bool) -> void:
 	if _syncing_ui:
 		return
+	if index < 0 or index >= _visible_object_ids.size():
+		return
+	var clicked := _visible_object_ids[index]
 	var ids: Array[String] = []
-	for i in _object_list.item_count:
-		if _object_list.is_selected(i):
-			ids.append(String(_object_list.get_item_metadata(i)))
-	var clicked := String(_object_list.get_item_metadata(index))
-	selected_object_id = clicked if clicked in ids else (ids[0] if not ids.is_empty() else "")
+	for object_id: String in selected_object_ids():
+		if object_id != clicked:
+			ids.append(object_id)
+	if selected:
+		ids.append(clicked)
+	selected_object_id = clicked if selected else (ids[0] if not ids.is_empty() else "")
 	additional_selected_ids.clear()
 	for object_id: String in ids:
 		if object_id != selected_object_id:
 			additional_selected_ids.append(object_id)
 	_after_selection_changed()
-
-
-func _on_object_search_changed(_new_text: String) -> void:
-	_refresh_object_list()
 
 
 ## Returns the currently selected zone filter value (&"" = all zones).
