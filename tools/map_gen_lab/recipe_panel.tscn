@@ -822,3 +822,145 @@ step = 0.02
 value = 0.12
 allow_greater = false
 allow_lesser = false
+
+[node name="Section62" type="Label" parent="Margin/Scroll/Rows"]
+theme_override_colors/font_color = Color(0.98, 0.85, 0.42, 1)
+text = "Climate"
+
+[node name="Row63" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row63"]
+custom_minimum_size = Vector2(170, 0)
+text = "latitude"
+
+[node name="Latitude" type="OptionButton" parent="Margin/Scroll/Rows/Row63"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+
+[node name="Row64" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row64"]
+custom_minimum_size = Vector2(170, 0)
+text = "mean temperature °C"
+
+[node name="MeanTemperature" type="SpinBox" parent="Margin/Scroll/Rows/Row64"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = -40.0
+max_value = 45.0
+step = 0.5
+value = 12.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row65" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row65"]
+custom_minimum_size = Vector2(170, 0)
+text = "south→north span °C"
+
+[node name="TemperatureSpan" type="SpinBox" parent="Margin/Scroll/Rows/Row65"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 40.0
+step = 1.0
+value = 14.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row66" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row66"]
+custom_minimum_size = Vector2(170, 0)
+text = "lapse °C per step"
+
+[node name="LapseRate" type="SpinBox" parent="Margin/Scroll/Rows/Row66"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 4.0
+step = 0.05
+value = 0.6
+allow_greater = false
+allow_lesser = false
+
+[node name="Row67" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row67"]
+custom_minimum_size = Vector2(170, 0)
+text = "mean moisture"
+
+[node name="MeanMoisture" type="SpinBox" parent="Margin/Scroll/Rows/Row67"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 1.0
+step = 0.05
+value = 0.5
+allow_greater = false
+allow_lesser = false
+
+[node name="Row68" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row68"]
+custom_minimum_size = Vector2(170, 0)
+text = "wind from °"
+
+[node name="WindDirection" type="SpinBox" parent="Margin/Scroll/Rows/Row68"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 359.0
+step = 5.0
+value = 270.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row69" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row69"]
+custom_minimum_size = Vector2(170, 0)
+text = "rain shadow"
+
+[node name="RainShadow" type="SpinBox" parent="Margin/Scroll/Rows/Row69"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 1.0
+step = 0.05
+value = 0.6
+allow_greater = false
+allow_lesser = false
+
+[node name="Row70" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row70"]
+custom_minimum_size = Vector2(170, 0)
+text = "coastal reach"
+
+[node name="CoastalReach" type="SpinBox" parent="Margin/Scroll/Rows/Row70"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 64.0
+step = 1.0
+value = 12.0
+allow_greater = false
+allow_lesser = false
+
+[node name="Row71" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+
+[node name="Label" type="Label" parent="Margin/Scroll/Rows/Row71"]
+custom_minimum_size = Vector2(170, 0)
+text = "desert lakes max"
+
+[node name="DesertLakeMax" type="SpinBox" parent="Margin/Scroll/Rows/Row71"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 1.0
+step = 0.01
+value = 0.02
+allow_greater = false
+allow_lesser = false

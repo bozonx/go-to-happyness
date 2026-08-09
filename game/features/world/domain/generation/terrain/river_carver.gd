@@ -28,6 +28,12 @@ const MIN_TRACE_CELLS := 4
 const MAX_TRACE_STEPS := 4096
 ## Accumulated drainage a cell needs before it can be a river head at all.
 const MIN_SOURCE_ACCUMULATION := 8.0
+## Moisture a river head needs (§11.1.3). A spring is rain that fell upstream, so
+## a head in a rain shadow or in the middle of a desert is not a river — and the
+## count the recipe asked for is not silently rescaled to hide it: fewer rivers
+## are carved and the report says how many the climate refused. An author who
+## wants three rivers on an arid map moves the wind, not the count.
+const MIN_SOURCE_MOISTURE := 0.28
 ## `_incise` normally derives the starting bed from the head's own ground; a lake
 ## outflow overrides it so the stream leaves at the lake's spill level (§3.7).
 const NO_INITIAL_BED := -100000
@@ -119,6 +125,7 @@ static func _pick_sources(context: GenerationContext, rng: RandomNumberGenerator
 	var recipe := context.recipe
 	var threshold := _source_height_threshold(context, tributary)
 	var candidates: Array[int] = []
+	var too_dry := 0
 	for index in context.cell_count:
 		if context.is_land[index] == 0 or context.border_locked[index] != 0:
 			continue
@@ -128,7 +135,12 @@ static func _pick_sources(context: GenerationContext, rng: RandomNumberGenerator
 			continue
 		if recipe.river_source == MapRecipe.RIVER_SOURCE_MOUNTAINS and context.uplift[index] <= 0.0 and not tributary:
 			continue
+		if context.moisture[index] < MIN_SOURCE_MOISTURE:
+			too_dry += 1
+			continue
 		candidates.append(index)
+	if too_dry > 0 and candidates.size() < count:
+		context.note("rivers: %d candidate head(s) rejected as too dry for a spring" % too_dry)
 	if candidates.is_empty():
 		return chosen
 	var accumulation := context.flow_accum

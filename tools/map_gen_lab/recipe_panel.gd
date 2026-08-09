@@ -31,6 +31,7 @@ const RIVER_SOURCES: Array[StringName] = [
 const LAKE_PREFER: Array[StringName] = [
 	MapRecipe.LAKE_PREFER_BASINS, MapRecipe.LAKE_PREFER_MOUNTAINS, MapRecipe.LAKE_PREFER_COAST,
 ]
+const LATITUDES: Array[StringName] = MapRecipe.LATITUDE_IDS
 
 ## Materials worth comparing an angle of repose against (§2.3). Stone is the one
 ## content recipes use; the others exist so the same map can be seen slumping.
@@ -51,15 +52,25 @@ func _ready() -> void:
 	_fill_options(%ReposeOverride, REPOSE_MATERIALS)
 	_fill_options(%RiverSource, RIVER_SOURCES)
 	_fill_options(%LakePrefer, LAKE_PREFER)
+	_fill_options(%Latitude, LATITUDES)
 	for side: String in ["BorderNorth", "BorderEast", "BorderSouth", "BorderWest"]:
 		_fill_options(get_node("%%%s" % side), BORDER_KINDS)
 	for control: Node in _value_controls():
+		# The latitude picker has its own handler below: it has to move the numbers
+		# it stands for BEFORE anything regenerates, and the blanket connection here
+		# would fire first with the old ones.
+		if control == %Latitude:
+			continue
 		if control is SpinBox:
 			(control as SpinBox).value_changed.connect(func(_value: float) -> void: _emit_changed())
 		elif control is OptionButton:
 			(control as OptionButton).item_selected.connect(func(_index: int) -> void: _emit_changed())
 		elif control is CheckBox:
 			(control as CheckBox).toggled.connect(func(_pressed: bool) -> void: _emit_changed())
+	# Picking a band moves the two numbers it stands for. Without this, changing
+	# "temperate" to "tropical" leaves 12 °C in the box and the recipe refuses
+	# itself — correct (§3.3) and useless as an interaction.
+	%Latitude.item_selected.connect(_on_latitude_selected)
 	%SeedField.text_submitted.connect(func(text: String) -> void: seed_changed.emit(int(text)))
 	%SeedRandom.pressed.connect(func() -> void: seed_changed.emit(randi() % 1000000))
 	%SeedNext.pressed.connect(func() -> void: seed_changed.emit(int(%SeedField.text) + 1))
@@ -75,6 +86,15 @@ func set_presets(paths: Array[String]) -> void:
 	%PresetPicker.clear()
 	for path: String in paths:
 		%PresetPicker.add_item(path.get_file().replace(".gdmapgen.json", ""))
+
+
+## Points the picker at a preset without asking for it to be loaded again. The
+## batch run needs it: a photograph whose panel names a different preset than the
+## map in it is worse than no caption at all.
+func show_preset(path: String) -> void:
+	var index := _preset_paths.find(path)
+	if index >= 0:
+		%PresetPicker.selected = index
 
 
 func show_seed(value: int) -> void:
@@ -142,6 +162,16 @@ func load_recipe(recipe: MapRecipe) -> void:
 	%FlatFractionMin.value = recipe.flat_fraction_min
 	%LandComponentMin.value = recipe.largest_land_component_min
 	%CliffFractionMax.value = recipe.cliff_fraction_max
+
+	%Latitude.selected = maxi(LATITUDES.find(recipe.latitude), 0)
+	%MeanTemperature.value = recipe.land_mean_temperature
+	%TemperatureSpan.value = recipe.temperature_span
+	%LapseRate.value = recipe.lapse_rate
+	%MeanMoisture.value = recipe.land_mean_moisture
+	%WindDirection.value = recipe.wind_direction
+	%RainShadow.value = recipe.rain_shadow
+	%CoastalReach.value = recipe.coastal_reach
+	%DesertLakeMax.value = recipe.desert_lake_fraction_max
 	_loading = false
 
 
@@ -190,6 +220,16 @@ func build_recipe(id: String, seed_value: int) -> MapRecipe:
 			"terrace_bias": float(%TerraceBias.value),
 			"repose_override": String(REPOSE_MATERIALS[%ReposeOverride.selected]),
 		},
+		"climate": {
+			"latitude": String(LATITUDES[%Latitude.selected]),
+			"land_mean_temperature": float(%MeanTemperature.value),
+			"temperature_span": float(%TemperatureSpan.value),
+			"lapse_rate": float(%LapseRate.value),
+			"land_mean_moisture": float(%MeanMoisture.value),
+			"wind_direction": float(%WindDirection.value),
+			"rain_shadow": float(%RainShadow.value),
+			"coastal_reach": float(%CoastalReach.value),
+		},
 		"mountains": {
 			"ranges": ranges,
 			"solitary_peaks": {
@@ -218,6 +258,7 @@ func build_recipe(id: String, seed_value: int) -> MapRecipe:
 			"flat_fraction_min": float(%FlatFractionMin.value),
 			"largest_land_component_min": float(%LandComponentMin.value),
 			"cliff_fraction_max": float(%CliffFractionMax.value),
+			"desert_lake_fraction_max": float(%DesertLakeMax.value),
 		},
 	})
 
@@ -254,6 +295,15 @@ func _emit_changed() -> void:
 	if _loading:
 		return
 	recipe_changed.emit()
+
+
+func _on_latitude_selected(index: int) -> void:
+	var band: Dictionary = MapRecipe.LATITUDE_PRESETS[LATITUDES[clampi(index, 0, LATITUDES.size() - 1)]]
+	_loading = true
+	%MeanTemperature.value = float(band["temperature"])
+	%TemperatureSpan.value = float(band["span"])
+	_loading = false
+	_emit_changed()
 
 
 func _on_preset_selected(index: int) -> void:

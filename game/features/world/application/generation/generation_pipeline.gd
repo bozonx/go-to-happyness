@@ -28,8 +28,8 @@ const COMPOSITION_PASSES := 3
 
 const STAGES: Array[StringName] = [
 	&"border_plan", &"landmass", &"relief", &"mountains", &"hypsometry", &"border",
-	&"quantize", &"passes", &"flow", &"rivers", &"repose", &"reflow", &"lakes",
-	&"surface",
+	&"quantize", &"climate", &"passes", &"flow", &"rivers", &"repose", &"reflow",
+	&"lakes", &"reclimate", &"biomes", &"surface",
 ]
 
 
@@ -61,6 +61,10 @@ static func run(recipe: MapRecipe, seeds: GenerationSeed, land_fraction_bias := 
 			break
 		if pass_index + 1 < COMPOSITION_PASSES:
 			context.land_fraction_bias += error
+	# Climate comes before the hydrology because the hydrology needs it: a spring
+	# needs rain over it and a basin in a desert holds no lake (§11.1.3). It is
+	# re-run further down for the same reason the drainage tree is.
+	_timed(context, &"climate", func() -> void: ClimateField.build(context))
 	_timed(context, &"passes", func() -> void: PassCarver.carve(context))
 	_timed(context, &"flow", func() -> void: FlowField.build(context))
 	_timed(context, &"rivers", func() -> void: RiverCarver.carve(context))
@@ -71,9 +75,15 @@ static func run(recipe: MapRecipe, seeds: GenerationSeed, land_fraction_bias := 
 	# it, and the flood that fills it at write time escapes across the whole map.
 	_timed(context, &"reflow", func() -> void: FlowField.build(context))
 	_timed(context, &"lakes", func() -> void: LakeFiller.fill(context))
-	# The surface is chosen from ground nothing will move again, and after the water
-	# plan exists — a lake bed is silt because there is a lake over it, and the
-	# angle a material has to hold is the angle the finished column actually has.
+	# Temperature is mostly altitude, and the river channels and the repose pass
+	# have both moved altitude since the first climate pass. The biomes describe
+	# the ground that ships, so they are computed from the climate of that ground.
+	_timed(context, &"reclimate", func() -> void: ClimateField.build(context))
+	_timed(context, &"biomes", func() -> void: BiomeField.build(context))
+	# The surface is chosen from ground nothing will move again, after the water
+	# plan exists and after the biome mask does — a lake bed is silt because there
+	# is a lake over it, sand because the biome around it is desert, and the angle
+	# a material has to hold is the angle the finished column actually has.
 	_timed(context, &"surface", func() -> void: SurfacePainter.apply(context))
 	return context
 

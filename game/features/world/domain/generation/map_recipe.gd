@@ -62,6 +62,29 @@ const BORDER_KINDS: Array[StringName] = [
 	BORDER_OCEAN, BORDER_MOUNTAIN_WALL, BORDER_PLATEAU, BORDER_OPEN,
 ]
 
+const LATITUDE_POLAR := &"polar"
+const LATITUDE_BOREAL := &"boreal"
+const LATITUDE_TEMPERATE := &"temperate"
+const LATITUDE_SUBTROPICAL := &"subtropical"
+const LATITUDE_TROPICAL := &"tropical"
+
+## Per latitude band: the mean temperature of the land it stands for, how much
+## colder its northern edge is than its southern one, and how far an author may
+## move the mean before the band stops being that band. The last column is what
+## makes "tropical at −20 °C" a refusal rather than a clamp (§3.3): a name that
+## can mean anything is not a parameter.
+const LATITUDE_PRESETS: Dictionary = {
+	LATITUDE_POLAR: {"temperature": -8.0, "span": 5.0, "tolerance": 8.0},
+	LATITUDE_BOREAL: {"temperature": 3.0, "span": 6.0, "tolerance": 8.0},
+	LATITUDE_TEMPERATE: {"temperature": 12.0, "span": 6.0, "tolerance": 9.0},
+	LATITUDE_SUBTROPICAL: {"temperature": 20.0, "span": 5.0, "tolerance": 8.0},
+	LATITUDE_TROPICAL: {"temperature": 26.0, "span": 3.0, "tolerance": 7.0},
+}
+
+const LATITUDE_IDS: Array[StringName] = [
+	LATITUDE_POLAR, LATITUDE_BOREAL, LATITUDE_TEMPERATE, LATITUDE_SUBTROPICAL, LATITUDE_TROPICAL,
+]
+
 const RIVER_SOURCE_MOUNTAINS := &"mountains"
 const RIVER_SOURCE_LAKES := &"lakes"
 const RIVER_SOURCE_SPRINGS := &"springs"
@@ -105,6 +128,31 @@ var repose_override: StringName = TerrainMaterialCatalog.STONE
 var paint_surface := true
 var base_material: StringName = TerrainMaterialCatalog.GRASS
 
+## Climate (layer 2, §11.1). Every field is a property of the finished map: the
+## two means are targets the solver hits on any seed, and the rest describe where
+## the weather comes from. `land_mean_temperature` is measured over the land
+## inside the frame, at whatever height it happens to be — not "at sea level",
+## which is not a number anyone can read off a map.
+var latitude: StringName = LATITUDE_TEMPERATE
+var land_mean_temperature := 12.0
+## °C between the southern edge of the board and the northern one.
+var temperature_span := 6.0
+## °C lost per height step. The treeline, the bare rock on a summit and the snow
+## on top of it are all consequences of this one number.
+var lapse_rate := 0.6
+var land_mean_moisture := 0.5
+## Bearing the prevailing wind blows FROM, in degrees; 0 is a northerly.
+var wind_direction := 270.0
+## 0…1 — how thoroughly a range dries the ground behind it.
+var rain_shadow := 0.6
+## Cells over which the sea wets the land behind the coast.
+var coastal_reach := 12.0
+
+## Biomes (layer 3, §11.2). Only Earth biomes exist; the field is here so a lunar
+## or martian palette can be added without the generator learning what a planet
+## is, and so a recipe that asks for one gets a refusal instead of a green Mars.
+var biome_origin: StringName = BiomeCatalog.ORIGIN_EARTH
+
 ## Each entry: count, length, orientation, orientation_jitter, peak_height (Array
 ## of two), peaks_per_range, flank_steepness, foothills, passes.
 var mountain_ranges: Array[Dictionary] = []
@@ -128,6 +176,10 @@ var flat_fraction_min := 0.35
 var largest_land_component_min := 0.9
 var cliff_fraction_max := 0.12
 var land_fraction_tolerance := 0.03
+## Share of the desert that may stand under a LAKE (§11.1.3). Rivers and the sea
+## are exempt on purpose: a Nile crossing a desert and a lagoon on its coast are
+## both real, a chain of ponds in the dunes is not.
+var desert_lake_fraction_max := 0.02
 
 var errors: Array[String] = []
 
@@ -198,7 +250,20 @@ func to_dictionary() -> Dictionary:
 			"roughness": roughness,
 			"terrace_bias": terrace_bias,
 			"repose_override": String(repose_override),
+			"paint_surface": paint_surface,
+			"base_material": String(base_material),
 		},
+		"climate": {
+			"latitude": String(latitude),
+			"land_mean_temperature": land_mean_temperature,
+			"temperature_span": temperature_span,
+			"lapse_rate": lapse_rate,
+			"land_mean_moisture": land_mean_moisture,
+			"wind_direction": wind_direction,
+			"rain_shadow": rain_shadow,
+			"coastal_reach": coastal_reach,
+		},
+		"biomes": {"origin": String(biome_origin)},
 		"mountains": {
 			"ranges": mountain_ranges.duplicate(true),
 			"solitary_peaks": solitary_peaks.duplicate(true),
@@ -224,6 +289,7 @@ func to_dictionary() -> Dictionary:
 			"largest_land_component_min": largest_land_component_min,
 			"cliff_fraction_max": cliff_fraction_max,
 			"land_fraction_tolerance": land_fraction_tolerance,
+			"desert_lake_fraction_max": desert_lake_fraction_max,
 		},
 	}
 
@@ -268,6 +334,8 @@ func _parse(source: Dictionary) -> void:
 	_parse_border(source.get("border", {}))
 	_parse_landmass(source.get("landmass", {}))
 	_parse_elevation(source.get("elevation", {}))
+	_parse_climate(source.get("climate", {}))
+	_parse_biomes(source.get("biomes", {}))
 	_parse_mountains(source.get("mountains", {}))
 	_parse_rivers(source.get("rivers", {}))
 	_parse_lakes(source.get("lakes", {}))
@@ -322,6 +390,28 @@ func _parse_elevation(source: Dictionary) -> void:
 		base_material = TerrainMaterialCatalog.GRASS
 
 
+## The latitude band seeds the two temperature fields the way `landmass.shape`
+## seeds the land share: name the climate and get a coherent one, or state the
+## numbers and have them checked against the name.
+func _parse_climate(source: Dictionary) -> void:
+	latitude = StringName(source.get("latitude", latitude))
+	if not LATITUDE_PRESETS.has(latitude):
+		errors.append("climate.latitude: unknown band \"%s\"" % latitude)
+		latitude = LATITUDE_TEMPERATE
+	var preset: Dictionary = LATITUDE_PRESETS[latitude]
+	land_mean_temperature = float(source.get("land_mean_temperature", preset["temperature"]))
+	temperature_span = maxf(0.0, float(source.get("temperature_span", preset["span"])))
+	lapse_rate = clampf(float(source.get("lapse_rate", lapse_rate)), 0.0, 4.0)
+	land_mean_moisture = clampf(float(source.get("land_mean_moisture", land_mean_moisture)), 0.0, 1.0)
+	wind_direction = fposmod(float(source.get("wind_direction", wind_direction)), 360.0)
+	rain_shadow = clampf(float(source.get("rain_shadow", rain_shadow)), 0.0, 1.0)
+	coastal_reach = maxf(1.0, float(source.get("coastal_reach", coastal_reach)))
+
+
+func _parse_biomes(source: Dictionary) -> void:
+	biome_origin = StringName(source.get("origin", biome_origin))
+
+
 func _parse_mountains(source: Dictionary) -> void:
 	mountain_ranges.clear()
 	var raw_ranges: Array = source.get("ranges", [])
@@ -371,6 +461,7 @@ func _parse_targets(source: Dictionary) -> void:
 	largest_land_component_min = float(source.get("largest_land_component_min", largest_land_component_min))
 	cliff_fraction_max = float(source.get("cliff_fraction_max", cliff_fraction_max))
 	land_fraction_tolerance = float(source.get("land_fraction_tolerance", land_fraction_tolerance))
+	desert_lake_fraction_max = float(source.get("desert_lake_fraction_max", desert_lake_fraction_max))
 
 
 static func _int_pair(raw: Variant) -> Array[int]:
@@ -419,6 +510,14 @@ func _validate() -> void:
 			errors.append("border.%s.thickness %d does not fit on a %d board" % [side, border_thickness(side), board_size])
 		if land_mean_height + border_height(side) > TerrainGrid.MAX_HEIGHT:
 			errors.append("border.%s crest would exceed the height range" % side)
+
+	var band: Dictionary = LATITUDE_PRESETS.get(latitude, LATITUDE_PRESETS[LATITUDE_TEMPERATE])
+	if absf(land_mean_temperature - float(band["temperature"])) > float(band["tolerance"]) + 0.0001:
+		errors.append("climate.land_mean_temperature %.1f is more than %.0f °C from the \"%s\" band (%.1f)" % [
+			land_mean_temperature, band["tolerance"], latitude, band["temperature"],
+		])
+	if biome_origin != BiomeCatalog.ORIGIN_EARTH:
+		errors.append("biomes.origin \"%s\": only Earth biomes exist" % biome_origin)
 
 	if river_count > 0 and river_incision > land_mean_height - ocean_level:
 		errors.append("rivers.incision %d cuts below the sea over the whole land" % river_incision)

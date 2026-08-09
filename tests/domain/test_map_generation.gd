@@ -28,6 +28,11 @@ static func run_all() -> void:
 	_test_navigation_is_published_once()
 	_test_surface_is_painted_and_always_stands()
 	_test_surface_can_be_turned_off()
+	_test_climate_means_are_targets()
+	_test_rain_shadow_follows_the_wind()
+	_test_biomes_cover_the_board_and_follow_the_climate()
+	_test_surface_follows_the_biome()
+	_test_arid_climate_holds_no_lakes()
 	print("    [PASS] Map Generation Tests")
 
 
@@ -386,3 +391,197 @@ static func _test_surface_can_be_turned_off() -> void:
 	for z in range(minimum.y, maximum.y + 1):
 		for x in range(minimum.x, maximum.x + 1):
 			assert(grid.material_of(Vector2i(x, z)) == TerrainMaterialCatalog.STONE)
+
+
+# --- Climate (layer 2) --------------------------------------------------------
+
+## §11.1: the two means are TARGETS, not outcomes. An author who typed 24 °C gets
+## 24 °C on any seed, exactly as with `land_fraction` — otherwise the metric that
+## reports the climate is reporting something other than what was asked for. The
+## band names are checked the same way the composition presets are: a request that
+## contradicts itself is refused with a reason (§3.3).
+static func _test_climate_means_are_targets() -> void:
+	for wanted: Array in [[24.0, 0.2, "subtropical"], [3.0, 0.7, "boreal"]]:
+		var recipe := _recipe({"climate": {
+			"latitude": wanted[2],
+			"land_mean_temperature": wanted[0],
+			"land_mean_moisture": wanted[1],
+		}})
+		assert(recipe.is_valid(), "; ".join(recipe.errors))
+		var generated := _generated(3131, recipe)
+		var metrics: Dictionary = (generated[1] as GenerationResult).report.metrics
+		assert(absf(float(metrics["mean_temperature"]) - float(wanted[0])) < 0.5,
+			"asked for %.1f °C, measured %.1f" % [wanted[0], metrics["mean_temperature"]])
+		assert(absf(float(metrics["mean_moisture"]) - float(wanted[1])) < 0.03,
+			"asked for %.2f moisture, measured %.2f" % [wanted[1], metrics["mean_moisture"]])
+
+	var contradiction := _recipe({"climate": {"latitude": "tropical", "land_mean_temperature": -5.0}})
+	assert(not contradiction.is_valid(), "a tropical band at −5 °C has to be refused, not clamped")
+	var unknown := _recipe({"climate": {"latitude": "mediterranean"}})
+	assert(not unknown.is_valid(), "an unknown latitude band is a refusal")
+	var off_earth := _recipe({"biomes": {"origin": "mars"}})
+	assert(not off_earth.is_valid(), "only Earth biomes exist, and asking for others is refused")
+
+
+## §11.1.2: the rain shadow is the payoff for building mountains as structures.
+## The test is the one thing that proves the mechanism rather than the field: turn
+## the wind around and the dry side has to change sides. Both halves are measured
+## on the SAME ground — only `wind_direction` differs — so nothing but the wind
+## can explain the difference.
+static func _test_rain_shadow_follows_the_wind() -> void:
+	var westerly := _moisture_halves(270.0)
+	var easterly := _moisture_halves(90.0)
+	assert(westerly[0] > westerly[1] + 0.03,
+		"with a westerly the windward (west) side of the range must be the wetter one: %.3f vs %.3f" % westerly)
+	assert(easterly[1] > easterly[0] + 0.03,
+		"with an easterly the east side must be the wetter one: %.3f vs %.3f" % easterly)
+
+
+## Mean moisture of the western and the eastern half of the land, for one wind.
+##
+## The board is deliberately landlocked with a single north–south range down the
+## middle: a coastline would wet one side of the map whatever the wind does, and
+## then the test would be measuring the sea. Here the wind is the only asymmetry
+## there is, so the sides must swap when it turns round.
+static func _moisture_halves(wind_direction: float) -> Array:
+	var recipe := _recipe({
+		"border": {
+			"north": {"kind": "open"}, "east": {"kind": "open"},
+			"south": {"kind": "open"}, "west": {"kind": "open"}, "ocean_level": -2,
+		},
+		"landmass": {"shape": "inland", "land_fraction": 1.0, "island_count": 0, "shelf_width": 0},
+		"mountains": {
+			"ranges": [{
+				"count": 1, "length": 0.9, "orientation": 0, "orientation_jitter": 0,
+				"peak_height": [18, 24], "peaks_per_range": 3,
+				"flank_steepness": 0.8, "foothills": 6, "passes": 2,
+			}],
+			"solitary_peaks": {"count": 0},
+		},
+		"climate": {"wind_direction": wind_direction, "rain_shadow": 1.0},
+	})
+	assert(recipe.is_valid(), "; ".join(recipe.errors))
+	var context := GenerationPipeline.run(recipe, GenerationSeed.new(555))
+	# Split at the crest the generator actually placed, not at the origin: the range
+	# is dropped at a random offset, and halving the board instead of the range
+	# would put a strip of the lee side into the windward figure.
+	var crest := 0.0
+	var crest_points := 0
+	for ridge: PackedVector2Array in context.ridges:
+		for point: Vector2 in ridge:
+			crest += point.x
+			crest_points += 1
+	crest /= float(maxi(crest_points, 1))
+
+	var totals := [0.0, 0.0]
+	var counts := [0, 0]
+	for index in context.cell_count:
+		if context.border_locked[index] != 0 or context.is_land[index] == 0:
+			continue
+		var half := 0 if float(context.cell_of_index(index).x) < crest else 1
+		totals[half] += context.moisture[index]
+		counts[half] += 1
+	return [
+		float(totals[0]) / float(maxi(int(counts[0]), 1)),
+		float(totals[1]) / float(maxi(int(counts[1]), 1)),
+	]
+
+
+# --- Biomes (layer 3) ---------------------------------------------------------
+
+## §11.2: every column has a biome, including the wet ones — water is a layer over
+## the board, not a biome — and which one it is follows the climate rather than a
+## second noise field. Two recipes that differ ONLY in their climate must not
+## produce the same kind of world.
+static func _test_biomes_cover_the_board_and_follow_the_climate() -> void:
+	var cold := _biome_shares({"latitude": "polar", "land_mean_temperature": -6.0, "land_mean_moisture": 0.4})
+	var hot := _biome_shares({"latitude": "subtropical", "land_mean_temperature": 26.0, "land_mean_moisture": 0.12})
+
+	var frozen := (
+		float(cold.get(String(BiomeCatalog.POLAR_DESERT), 0.0))
+		+ float(cold.get(String(BiomeCatalog.TUNDRA), 0.0))
+		+ float(cold.get(String(BiomeCatalog.ALPINE), 0.0))
+		+ float(cold.get(String(BiomeCatalog.BOREAL_FOREST), 0.0))
+	)
+	assert(frozen > 0.8, "a polar recipe produced %.2f of cold biomes" % frozen)
+	assert(float(hot.get(String(BiomeCatalog.DESERT), 0.0)) > 0.3,
+		"a hot dry recipe produced %.2f desert" % hot.get(String(BiomeCatalog.DESERT), 0.0))
+	assert(float(cold.get(String(BiomeCatalog.DESERT), 0.0)) < 0.05, "a polar map is not a desert map")
+
+
+static func _biome_shares(climate: Dictionary) -> Dictionary:
+	var recipe := _recipe({"climate": climate})
+	assert(recipe.is_valid(), "; ".join(recipe.errors))
+	var context := GenerationPipeline.run(recipe, GenerationSeed.new(808))
+	assert(context.biomes.size() == context.cell_count, "the mask has to cover every column")
+	var total := 0.0
+	for index in context.cell_count:
+		assert(BiomeCatalog.is_valid_index(int(context.biomes[index])), "an unclassified column")
+		assert(BiomeCatalog.entry_of_index(int(context.biomes[index]))["origin"] == BiomeCatalog.ORIGIN_EARTH)
+	var shares := BiomeField.land_shares(context)
+	for id: String in shares:
+		total += float(shares[id])
+	assert(absf(total - 1.0) < 0.001, "the land shares of the biomes have to add up to the land")
+	return shares
+
+
+## The surface is drawn from the biome's palette, so two climates over the same
+## relief have to produce two different grounds. Only the relative order is
+## asserted: how much of the board ends up as rock is decided by the SHAPE (a face
+## is stone whatever the biome says), and that is not what this test is about.
+static func _test_surface_follows_the_biome() -> void:
+	var desert := _material_counts({
+		"latitude": "subtropical", "land_mean_temperature": 26.0, "land_mean_moisture": 0.1,
+	})
+	var temperate := _material_counts({
+		"latitude": "temperate", "land_mean_temperature": 12.0, "land_mean_moisture": 0.6,
+	})
+	var desert_sand := int(desert.get(TerrainMaterialCatalog.SAND, 0))
+	var desert_grass := int(desert.get(TerrainMaterialCatalog.GRASS, 0))
+	var temperate_grass := int(temperate.get(TerrainMaterialCatalog.GRASS, 0))
+	assert(desert_sand > desert_grass, "a desert with more meadow than sand is not a desert")
+	assert(temperate_grass > desert_grass, "a temperate map must be greener than a desert one")
+
+
+static func _material_counts(climate: Dictionary) -> Dictionary:
+	var generated := _generated(2468, _recipe({"climate": climate}))
+	var grid: TerrainGrid = (generated[0] as Harness).grid
+	var counts: Dictionary = {}
+	var minimum := grid.min_cell()
+	var maximum := grid.max_cell()
+	for z in range(minimum.y, maximum.y + 1):
+		for x in range(minimum.x, maximum.x + 1):
+			var id := grid.material_of(Vector2i(x, z))
+			counts[id] = int(counts.get(id, 0)) + 1
+	return counts
+
+
+## §11.1.3, and the whole point of computing the climate before the hydrology: a
+## hollow in dry country is a dry pan, not a lake. The exemption is a channel
+## running through it, because that water was collected where it did rain.
+static func _test_arid_climate_holds_no_lakes() -> void:
+	var recipe := _recipe({"climate": {
+		"latitude": "subtropical", "land_mean_temperature": 26.0, "land_mean_moisture": 0.1,
+	}})
+	assert(recipe.is_valid(), "; ".join(recipe.errors))
+	var context := GenerationPipeline.run(recipe, GenerationSeed.new(1357))
+	var lakes := 0
+	for entry: Dictionary in context.water_plan:
+		if entry["type"] != WaterBody.Type.LAKE:
+			continue
+		lakes += 1
+		var cells: Array[Vector2i] = entry["cells"]
+		var moisture := 0.0
+		var fed := false
+		for cell: Vector2i in cells:
+			moisture += context.moisture[context.cell_index(cell)]
+			fed = fed or context.river_cells.has(cell)
+		moisture /= float(maxi(cells.size(), 1))
+		assert(fed or moisture >= LakeFiller.LAKE_MIN_MOISTURE,
+			"a lake stands in ground of %.2f moisture with no river feeding it" % moisture)
+
+	# And the verdict measures it on the finished map, not just in the plan.
+	var generated := _generated(1357, recipe)
+	var metrics: Dictionary = (generated[1] as GenerationResult).report.metrics
+	assert(float(metrics["desert_lake_fraction"]) <= recipe.desert_lake_fraction_max,
+		"%.3f of the desert is under a lake" % metrics["desert_lake_fraction"])

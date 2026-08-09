@@ -27,6 +27,13 @@
 		"terrace_bias": 0.35,
 		"repose_override": "stone"
 	},
+	"climate": {
+		"latitude": "temperate",
+		"land_mean_temperature": 14.0, "temperature_span": 5.0, "lapse_rate": 0.6,
+		"land_mean_moisture": 0.6,
+		"wind_direction": 250, "rain_shadow": 0.5, "coastal_reach": 14
+	},
+	"biomes": { "origin": "earth" },
 	"mountains": {
 		"ranges": [
 			{

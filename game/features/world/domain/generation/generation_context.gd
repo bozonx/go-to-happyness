@@ -85,6 +85,21 @@ var river_cells: Dictionary = {}
 ## generation error, so the ratio is a metric and not a curiosity (§3.6).
 var river_stats: Dictionary = {"traced": 0, "terminated": 0}
 
+## Layer 2 — climate (`ClimateField`). Temperature in °C and moisture in 0…1, one
+## value per column, over the ground as it stands when the stage runs. Both are
+## computed twice, before the rivers (which need to know where rain falls) and
+## again on the finished ground (which is what the biomes describe) — the same
+## way the drainage tree is built twice.
+var temperature := PackedFloat32Array()
+var moisture := PackedFloat32Array()
+
+## Layer 3 — the biome mask (`BiomeField`), one `BiomeCatalog` index per column.
+## Every column has one, including the ones under water: water is a layer over the
+## board, not a biome, and a desert lagoon is desert with water in it. Today the
+## surface stage is the only consumer; vegetation and fauna will read this same
+## mask when they exist.
+var biomes := PackedByteArray()
+
 ## Stage 14 — what the ground is made of (`SurfacePainter`). One catalog index and
 ## one packed detail byte per column, exactly as `TerrainGrid` stores them, so the
 ## commit copies rather than decides. Material was a single recipe-wide constant
@@ -116,7 +131,17 @@ func configure(next_recipe: MapRecipe, next_seeds: GenerationSeed) -> void:
 	flow_dir.fill(NO_FLOW)
 	flow_accum = _new_floats()
 	filled = _new_ints()
+	temperature = _new_floats()
+	moisture = _new_floats()
+	biomes = _new_bytes()
 	river_stats = {"traced": 0, "terminated": 0}
+
+
+## The biome of a column, or the catalog default before the biome stage has run.
+func biome_at_index(index: int) -> int:
+	if index < 0 or index >= biomes.size():
+		return BiomeCatalog.DEFAULT_INDEX
+	return int(biomes[index])
 
 
 func _new_floats() -> PackedFloat32Array:

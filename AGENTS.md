@@ -181,8 +181,19 @@ about slopes, rivers or metrics, because that is where the non-obvious constrain
   modifying one.
 - Judge a recipe on **neighbouring seeds**, not on one pretty map: `[` and `]` step the
   seed and the metrics panel keeps the previous numbers beside the current ones. Press
-  `M` before believing a range is crossable and `K` to see the crest graph the recipe
-  actually produced.
+  `M` before believing a range is crossable, `K` to see the crest graph the recipe
+  actually produced, and `B` to cycle the biome / temperature / moisture masks.
+- Climate and biomes are layers 2–3 (spec §11) and they are **computed, not authored**:
+  temperature is latitude plus lapse rate, moisture is coast plus orographic lift minus
+  the rain shadow of the crests §3.5 already built. `SurfacePainter` paints from the
+  biome's palette; snow is a detail-byte state written from the temperature, never a
+  material. The whole board is ONE region — a map showing nine biomes is a bug, not
+  variety (§11.3.1).
+- **Climate runs before the hydrology and the biome mask after it.** A spring needs rain
+  and a hollow in dry country is a dry pan, so `LakeFiller` and `RiverCarver` read
+  moisture; neither silently rescales the count the recipe asked for — the map gets less
+  water and the report says what the climate refused. `desert_lake_fraction` is the
+  acceptance condition for it.
 - `tests/repro/diag_map_generation_presets.gd` runs every preset over three seeds
   without a display; `map_gen_lab.tscn -- --capture` does the same with views and a
   `metrics.json` in `user://map_gen_lab`. A preset that stops passing §6 is a regression

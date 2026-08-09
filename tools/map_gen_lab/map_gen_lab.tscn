@@ -41,6 +41,10 @@ visible = false
 cast_shadow = 0
 visible = false
 
+[node name="ClimateOverlay" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+visible = false
+
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 60, 60)
 far = 1200.0

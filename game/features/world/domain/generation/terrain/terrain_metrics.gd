@@ -80,6 +80,10 @@ static func measure(context: GenerationContext, grid: TerrainGrid, water: WaterG
 		"peaks": context.peaks.size(),
 		"ranges": context.ridges.size(),
 		"passes": context.passes.size(),
+		"mean_temperature": ClimateField.mean_over_land(context, context.temperature),
+		"mean_moisture": ClimateField.mean_over_land(context, context.moisture),
+		"biome_shares": BiomeField.land_shares(context),
+		"desert_lake_fraction": _desert_lake_fraction(context, water),
 	}
 	return metrics
 
@@ -117,7 +121,33 @@ static func failures(recipe: MapRecipe, metrics: Dictionary) -> Array[String]:
 		broken.append("%d water bodies are not physically supported" % metrics["damaged_water_bodies"])
 	if int(metrics["height_min"]) < TerrainGrid.MIN_HEIGHT or int(metrics["height_max"]) > TerrainGrid.MAX_HEIGHT:
 		broken.append("heights left the legal range")
+	if float(metrics["desert_lake_fraction"]) > recipe.desert_lake_fraction_max:
+		broken.append("%.3f of the desert stands under a lake, over %.3f" % [
+			metrics["desert_lake_fraction"], recipe.desert_lake_fraction_max,
+		])
 	return broken
+
+
+## Share of the desert that stands under a LAKE (§11.1.3) — the measurable half of
+## "an arid map has little water". Rivers and the sea are deliberately not counted:
+## a river crossing a desert brought its water from where it rained, and a coastal
+## desert is a real place. A pond in the dunes is neither.
+static func _desert_lake_fraction(context: GenerationContext, water: WaterGrid) -> float:
+	if context.biomes.size() != context.cell_count:
+		return 0.0
+	var desert := BiomeCatalog.index_of(BiomeCatalog.DESERT)
+	var cells := 0
+	var wet := 0
+	for index in context.cell_count:
+		if context.border_locked[index] != 0 or int(context.biomes[index]) != desert:
+			continue
+		cells += 1
+		var body := water.body_at(context.cell_of_index(index))
+		if body != null and body.type == WaterBody.Type.LAKE:
+			wet += 1
+	if cells == 0:
+		return 0.0
+	return float(wet) / float(cells)
 
 
 static func _max_land_height(grid: TerrainGrid, land: Array[Vector2i]) -> int:

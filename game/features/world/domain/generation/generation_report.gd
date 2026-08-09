@@ -65,7 +65,29 @@ func metric_lines(recipe: MapRecipe) -> Array[String]:
 		metrics["ranges"], metrics["peaks"], metrics["passes"],
 	])
 	lines.append("heights       %d … %d" % [metrics["height_min"], metrics["height_max"]])
+	lines.append("climate       %.1f °C   %.2f moisture   (targets %.1f / %.2f)" % [
+		metrics["mean_temperature"], metrics["mean_moisture"],
+		recipe.land_mean_temperature, recipe.land_mean_moisture,
+	])
+	lines.append("desert lakes  %.3f   max %.3f" % [
+		metrics["desert_lake_fraction"], recipe.desert_lake_fraction_max,
+	])
+	lines.append("biomes        %s" % _biome_summary())
 	return lines
+
+
+## The biome mask as shares of the land, biggest first — the line that says what
+## kind of world the recipe actually produced, as opposed to what shape it has.
+func _biome_summary() -> String:
+	var shares: Dictionary = metrics.get("biome_shares", {})
+	if shares.is_empty():
+		return "—"
+	var ids: Array = shares.keys()
+	ids.sort_custom(func(a: String, b: String) -> bool: return float(shares[a]) > float(shares[b]))
+	var parts: Array[String] = []
+	for id: String in ids:
+		parts.append("%s %d%%" % [id, roundi(float(shares[id]) * 100.0)])
+	return ", ".join(parts)
 
 
 func timing_lines() -> Array[String]:

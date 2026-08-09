@@ -22,6 +22,13 @@ const STAGE := &"lakes"
 ## terrain doc), and stage 1 has no winter to model yet.
 const RIVER_FLOW_STRENGTH := 1
 
+## Moisture a basin needs before standing water in it is credible (§11.1.3). Below
+## it the hollow is a dry pan: the same shape, no lake. This is the whole of "a
+## desert has little water" — it is not a special case for a desert biome, it is
+## the rain that would have to fall to keep the level up. A basin fed by a river
+## is exempt: the water arrives from wherever it rained.
+const LAKE_MIN_MOISTURE := 0.3
+
 const NEIGHBOURS: Array[Vector2i] = [
 	Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0),
 ]
@@ -86,6 +93,7 @@ static func _plan_lakes(context: GenerationContext) -> void:
 	if wanted <= 0:
 		return
 	var eligible: Array[Dictionary] = []
+	var too_dry := 0
 	for basin: Dictionary in context.basins:
 		var cells: Array[Vector2i] = basin["cells"]
 		var depth: int = int(basin["spill"]) - int(basin["floor"])
@@ -94,6 +102,9 @@ static func _plan_lakes(context: GenerationContext) -> void:
 		if depth < recipe.lake_depth[0] or depth > recipe.lake_depth[1]:
 			continue
 		if int(basin["spill"]) <= recipe.ocean_level:
+			continue
+		if not _is_watered(context, basin):
+			too_dry += 1
 			continue
 		eligible.append(basin)
 	eligible.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -114,10 +125,28 @@ static func _plan_lakes(context: GenerationContext) -> void:
 		placed += 1
 		if recipe.lakes_connect_to_rivers:
 			RiverCarver.carve_outflow(context, basin["outlet"], level)
+	var arid := " (%d basin(s) refused as too arid)" % too_dry if too_dry > 0 else ""
 	if placed < wanted:
-		context.note("lakes: %d of %d requested — the terrain offered no more basins matching size/depth" % [placed, wanted])
+		context.note("lakes: %d of %d requested — the terrain offered no more basins matching size/depth%s" % [
+			placed, wanted, arid,
+		])
 	else:
-		context.note("lakes: %d placed" % placed)
+		context.note("lakes: %d placed%s" % [placed, arid])
+
+
+## Whether a basin gets any water at all. Rain is the ordinary source, so the mean
+## moisture over the hollow decides; a channel running through it is the other
+## one, and it overrules the climate because that water was collected elsewhere.
+static func _is_watered(context: GenerationContext, basin: Dictionary) -> bool:
+	var cells: Array[Vector2i] = basin["cells"]
+	if cells.is_empty():
+		return false
+	var total := 0.0
+	for cell: Vector2i in cells:
+		if context.river_cells.has(cell):
+			return true
+		total += context.moisture[context.cell_index(cell)]
+	return total / float(cells.size()) >= LAKE_MIN_MOISTURE
 
 
 ## `prefer` is a preference, so it is a ranking rather than a filter: a mountain

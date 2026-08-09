@@ -2,7 +2,7 @@ class_name SurfacePainter
 extends RefCounted
 
 ## Stage 14: what the finished ground is made of
-## (procedural_map_generation.md §5.2, layer 3; terrain_materials.md §2).
+## (procedural_map_generation.md §11.2; terrain_materials.md §2).
 ##
 ## Until this stage existed the generator produced a board of solid `stone`,
 ## because the recipe carried exactly one material — the one the repose pass
@@ -11,39 +11,49 @@ extends RefCounted
 ## different fields: one is a debug knob for comparing shapes, the other is
 ## content.
 ##
-## ## It runs last, and reads only finished ground
+## ## The biome decides, the ground vetoes
 ##
-## Material decides the angle of repose, so painting BEFORE the shape is settled
-## would mean the repose pass sees a different angle per column and the shape it
-## produces depends on a decision that was itself made from the shape. The knot is
-## cut the same way the design cuts it (§2.3): the whole board settles at one
-## angle, and the surface is chosen afterwards from ground nothing will move
-## again. The one obligation that leaves is the last rule below.
-##
-## ## The rules, in the order they are asked
+## The painter itself knows almost nothing about climate. It asks the biome mask
+## what belongs on a column (`BiomeCatalog` palettes, resolved by a low-frequency
+## field so a meadow is patches rather than confetti) and then applies the rules
+## that no biome may override, because they are about the SHAPE of the column and
+## not about the weather over it:
 ##
 ## | Condition | Material |
 ## | :-- | :-- |
-## | under planned water, shallow | `sand` |
-## | under planned water, deep | `mud` |
-## | in a river channel | `gravel` |
+## | under planned water | the biome's bed — shallow, deep or channel |
+## | in a river channel | the biome's channel bed |
 ## | a face: two steps or more to a neighbour | `stone` |
-## | within a few cells of the water line, gentle | `sand` |
-## | high ground | `stone`, `gravel` just below the rock line |
-## | the rest | `grass`, drifting to `dirt` and `grass_tall` by noise |
+## | within a few cells of the water line, gentle | the biome's beach |
+## | anything else | a weighted draw from the biome's palette |
 ##
-## **A material may never be painted where it cannot stand.** Sand holds half a
-## step per cell; painting it on a column that drops a full step to its neighbour
-## authors ground the cascade would immediately collapse, and the editor refuses
-## exactly that by hand (`TerrainService.paint_material`). So every candidate is
-## checked against the local drop and falls back along `FALLBACKS` until one
-## holds. Stone holds four steps and terminates every chain — including on the
-## authored border walls, which are exempt from repose entirely (§3.2 of the
-## generation doc) and are steeper than anything in the catalog. Rock is the
-## honest answer there; sand would be a promise the ground cannot keep.
+## There used to be a "rock line" here — above a share of the height range the
+## ground turned to stone. It is gone, and its absence is the point: a summit is
+## bare because the lapse rate makes it cold and the cold makes it `alpine`
+## (`BiomeField`), which is a palette of rock. One mechanism, measurable in °C,
+## instead of a constant that had to be re-tuned for every kind of map.
+##
+## ## Snow is a state, and it comes from the temperature
+##
+## Permanent snow is written into the detail byte, never painted as a material
+## (`terrain_materials.md` §2.5 — a material change would run the cascade over
+## half the board twice a year). How much of it lies on a column is a reading of
+## that column's temperature, so a polar cap and the top of a single high peak on
+## a warm map are the same rule.
+##
+## ## A material may never be painted where it cannot stand
+##
+## Sand holds half a step per cell; painting it on a column that drops a full step
+## to its neighbour authors ground the cascade would immediately collapse, and the
+## editor refuses exactly that by hand (`TerrainService.paint_material`). So every
+## candidate is checked against the local drop and falls back along `FALLBACKS`
+## until one holds. Stone holds four steps and terminates every chain — including
+## on the authored border walls, which are exempt from repose entirely (§3.2) and
+## are steeper than anything in the catalog. Rock is the honest answer there; sand
+## would be a promise the ground cannot keep.
 
 ## Cells from the water line that can still be beach, and how deep water has to be
-## before its bed stops being sand.
+## before its bed stops being the shallow kind.
 const BEACH_CELLS := 3
 const SHALLOW_STEPS := 2
 
@@ -60,9 +70,9 @@ const FALLBACKS: Dictionary = {
 }
 
 ## Metres of world per repetition of the two decision fields. Coarse on purpose:
-## a per-cell random choice produces confetti, and the point of a variant is a
-## patch of meadow, not a speckle (`terrain_materials.md` §4).
-const BIOME_NOISE_PERIOD := 34.0
+## a per-cell random choice produces confetti, and the point of a palette draw is
+## a patch of meadow, not a speckle (`terrain_materials.md` §4).
+const PALETTE_NOISE_PERIOD := 34.0
 const VARIANT_NOISE_PERIOD := 19.0
 
 
@@ -79,18 +89,27 @@ static func apply(context: GenerationContext) -> void:
 
 	var water_depth := _water_depth_field(context)
 	var shore := _distance_to_water(context, water_depth)
-	var biome := _noise(context.seeds.stream_seed(&"surface_biome"), BIOME_NOISE_PERIOD)
+	var palette_noise := _noise(context.seeds.stream_seed(&"surface_palette"), PALETTE_NOISE_PERIOD)
 	var variant_noise := _noise(context.seeds.stream_seed(&"surface_variant"), VARIANT_NOISE_PERIOD)
-	var rock_line := _rock_line(context)
+	# Resolved once for the whole board: a palette is a pair of small arrays, and
+	# building it per column would allocate two of them 16 384 times to answer a
+	# question with a dozen possible answers.
+	var palettes: Array = []
+	for biome_index in BiomeCatalog.count():
+		palettes.append(BiomeCatalog.palette_of_index(biome_index))
 
 	var counts: Dictionary = {}
 	for index in context.cell_count:
 		var cell := context.cell_of_index(index)
-		var candidate := _candidate(context, index, cell, water_depth, shore, biome, rock_line)
+		var candidate := _candidate(context, index, cell, water_depth, shore, palette_noise, palettes)
 		var material_index := _settle(candidate, _local_drop(context, cell))
 		context.materials[index] = material_index
+		# Snow does not lie on open water: a frozen lake is the water layer's
+		# business and a seasonal state of a body, not a surface of the bed (§9.6
+		# of the terrain document).
+		var snow := 0 if water_depth[index] > 0 else ClimateField.snow_level(context.temperature[index])
 		context.details[index] = TerrainDetailCodec.pack(
-			_variant_of(material_index, cell, variant_noise), 0, 0,
+			_variant_of(material_index, cell, variant_noise), 0, snow,
 		)
 		var id := TerrainMaterialCatalog.id_of_index(material_index)
 		counts[id] = int(counts.get(id, 0)) + 1
@@ -146,17 +165,17 @@ static func _grid_drop(grid: TerrainGrid, cell: Vector2i) -> int:
 static func _candidate(
 	context: GenerationContext, index: int, cell: Vector2i,
 	water_depth: PackedInt32Array, shore: PackedInt32Array,
-	biome: FastNoiseLite, rock_line: int,
+	palette: FastNoiseLite, palettes: Array,
 ) -> StringName:
+	var biome_index := context.biome_at_index(index)
+	var channel := context.river_cells.has(cell)
 	if water_depth[index] > 0:
 		# The bed the author would have painted under the lake, so draining it later
 		# leaves a beach or a silt flat rather than whatever the land happened to be
 		# (`terrain_materials.md` §2.5: there is no `lakebed` material).
-		if context.river_cells.has(cell):
-			return TerrainMaterialCatalog.GRAVEL
-		return TerrainMaterialCatalog.SAND if water_depth[index] <= SHALLOW_STEPS else TerrainMaterialCatalog.MUD
-	if context.river_cells.has(cell):
-		return TerrainMaterialCatalog.GRAVEL
+		return BiomeCatalog.bed_material_of_index(biome_index, water_depth[index], channel, SHALLOW_STEPS)
+	if channel:
+		return BiomeCatalog.bed_material_of_index(biome_index, 0, true, SHALLOW_STEPS)
 
 	var drop := _local_drop(context, cell)
 	# A column that drops two steps or more to a neighbour is a face, and a face is
@@ -166,22 +185,25 @@ static func _candidate(
 		return TerrainMaterialCatalog.STONE
 
 	if shore[index] <= BEACH_CELLS and drop <= 1:
-		return TerrainMaterialCatalog.SAND
+		return BiomeCatalog.beach_material_of_index(biome_index)
 
-	var height := context.heights[index]
-	if height >= rock_line:
-		return TerrainMaterialCatalog.STONE
-	if height >= rock_line - 3:
-		return TerrainMaterialCatalog.GRAVEL
+	return _palette_draw(palettes[biome_index], cell, palette)
 
-	# Everything else is ordinary land, and which ordinary land it is comes from one
-	# low-frequency field: meadow where it is high, bare earth where it is low.
-	var wet := biome.get_noise_2d(float(cell.x), float(cell.y))
-	if wet > 0.25:
-		return TerrainMaterialCatalog.GRASS_TALL
-	if wet < -0.35:
-		return TerrainMaterialCatalog.DIRT
-	return TerrainMaterialCatalog.GRASS
+
+## One draw from the biome's palette, decided by a low-frequency field rather than
+## by a hash of the cell. The field is what turns weights into geography: the same
+## 55 % grass is a meadow with stands of tall grass in it instead of a grey average
+## of the two.
+static func _palette_draw(resolved: Array, cell: Vector2i, palette: FastNoiseLite) -> StringName:
+	var ids: Array[StringName] = resolved[0]
+	var thresholds: PackedFloat32Array = resolved[1]
+	if ids.is_empty():
+		return TerrainMaterialCatalog.DEFAULT_MATERIAL
+	var value := clampf(palette.get_noise_2d(float(cell.x), float(cell.y)) * 0.5 + 0.5, 0.0, 0.9999)
+	for slot in ids.size():
+		if value < thresholds[slot]:
+			return ids[slot]
+	return ids[ids.size() - 1]
 
 
 ## Walks the fallback chain until the material can hold the drop this column
@@ -251,18 +273,6 @@ static func _distance_to_water(context: GenerationContext, water_depth: PackedIn
 						best = mini(best, distance[context.index_of(x + offset_x, z + offset_z)] + 1)
 				distance[index] = mini(best, limit)
 	return distance
-
-
-## Height above which the map is bare rock, as a share of the range this attempt
-## actually produced. Taken from the result rather than from the recipe: a recipe
-## asking for gentle plains and one asking for alps would otherwise need two
-## different constants to put snow-free rock in the same visual place.
-static func _rock_line(context: GenerationContext) -> int:
-	var highest := context.recipe.ocean_level
-	for index in context.cell_count:
-		highest = maxi(highest, context.heights[index])
-	var span := maxi(highest - context.recipe.ocean_level, 1)
-	return context.recipe.ocean_level + maxi(roundi(float(span) * 0.62), 4)
 
 
 ## Largest orthogonal height difference to a neighbour, in steps — the number a
