@@ -1378,22 +1378,7 @@ func _confirm_discard_changes() -> bool:
 ## Модальное подтверждение для режимов: они спрашивают через `MapEditorContext`,
 ## а диалог остаётся здесь, в сцене.
 func confirm_action(message: String, title: String = "Подтверждение") -> bool:
-	var dialog := ConfirmationDialog.new()
-	dialog.title = title
-	dialog.dialog_text = message
-	dialog.ok_button_text = "Продолжить"
-	dialog.cancel_button_text = "Отмена"
-	# The flag lives in an Array because GDScript lambdas capture locals by value:
-	# writing to a plain `var` from the handler would leave the outer one untouched
-	# and every dialog would read as cancelled.
-	var confirmed := [false]
-	dialog.confirmed.connect(func() -> void: confirmed[0] = true)
-	add_child(dialog)
-	dialog.popup_centered(Vector2i(420, 140))
-	while dialog.visible:
-		await get_tree().process_frame
-	dialog.queue_free()
-	return confirmed[0]
+	return await EditorConfirmation.ask(self, message, title)
 
 
 func _cycle_render_mode() -> void:

@@ -637,12 +637,7 @@ var confirm_handler: Callable = Callable()
 func confirm_action(message: String, title := "Подтверждение") -> bool:
 	if confirm_handler.is_valid():
 		return await confirm_handler.call(message, title)
-	var dialog := ConfirmationDialog.new()
-	dialog.title = title
-	dialog.dialog_text = message
-	dialog.ok_button_text = "Продолжить"
-	dialog.cancel_button_text = "Отмена"
-	return await _run_confirmation_dialog(dialog, Vector2i(440, 150))
+	return await EditorConfirmation.ask(self, message, title, "Продолжить", "Отмена", Vector2i(440, 150))
 
 
 func is_pointer_over_ui() -> bool:
@@ -1230,31 +1225,7 @@ func _restore_history_snapshot(snapshot: Dictionary) -> void:
 func _confirm_discard_changes() -> bool:
 	if not _dirty:
 		return true
-	var dialog := ConfirmationDialog.new()
-	dialog.title = "Несохранённые изменения"
-	dialog.dialog_text = "Есть несохранённые изменения. Продолжить?"
-	dialog.ok_button_text = "Да"
-	dialog.cancel_button_text = "Отмена"
-	return await _run_confirmation_dialog(dialog, Vector2i(360, 120))
-
-
-## Shows `dialog` modally and resolves to `true` only when the user pressed OK.
-##
-## The confirmation flag lives in an Array because GDScript lambdas capture
-## locals by value: writing to a plain `var` from inside the `confirmed`
-## handler would leave the outer variable untouched and every dialog would
-## read as "cancelled".
-func _run_confirmation_dialog(dialog: ConfirmationDialog, size: Vector2i) -> bool:
-	var confirmed_flag := [false]
-	dialog.confirmed.connect(func(): confirmed_flag[0] = true)
-	add_child(dialog)
-	dialog.popup_centered(size)
-	# `popup_centered` makes the dialog visible synchronously, so the loop
-	# body only runs while the user hasn't confirmed or cancelled yet.
-	while dialog.visible:
-		await get_tree().process_frame
-	dialog.queue_free()
-	return confirmed_flag[0]
+	return await confirm_action("Есть несохранённые изменения. Продолжить?", "Несохранённые изменения")
 
 
 # ---------------------------------------------------------------------------
