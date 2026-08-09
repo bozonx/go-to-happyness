@@ -1,37 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
-[ext_resource type="Script" path="res://game/features/world/presentation/editor/ui/map_editor_palette.gd" id="1_palette"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor/editor_palette_panel.tscn" id="1_palette"]
+[ext_resource type="Script" path="res://game/features/world/presentation/editor/ui/map_editor_palette.gd" id="2_script"]
 
-[node name="Palette" type="PanelContainer"]
-custom_minimum_size = Vector2(240, 0)
-script = ExtResource("1_palette")
-
-[node name="Margin" type="MarginContainer" parent="."]
-theme_override_constants/margin_left = 10
-theme_override_constants/margin_top = 8
-theme_override_constants/margin_right = 10
-theme_override_constants/margin_bottom = 8
-
-[node name="Rows" type="VBoxContainer" parent="Margin"]
-theme_override_constants/separation = 6
-
-[node name="Title" type="Label" parent="Margin/Rows"]
-text = "Палитра"
-theme_override_font_sizes/font_size = 14
-
-[node name="Scroll" type="ScrollContainer" parent="Margin/Rows"]
-size_flags_vertical = 3
-horizontal_scroll_mode = 0
-
-[node name="Entries" type="VBoxContainer" parent="Margin/Rows/Scroll"]
-size_flags_horizontal = 3
-theme_override_constants/separation = 4
-
-[node name="Separator" type="HSeparator" parent="Margin/Rows"]
-
-[node name="OptionsTitle" type="Label" parent="Margin/Rows"]
-text = "Настройки кисти"
-theme_override_font_sizes/font_size = 14
-
-[node name="Options" type="VBoxContainer" parent="Margin/Rows"]
-theme_override_constants/separation = 4
+[node name="Palette" instance=ExtResource("1_palette")]
+script = ExtResource("2_script")

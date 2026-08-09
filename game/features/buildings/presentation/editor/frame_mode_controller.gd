@@ -48,8 +48,9 @@ var _camera_controller: CameraController = null
 var _material_option: OptionButton = null
 var _brush_line_btn: Button = null
 var _brush_rect_btn: Button = null
-var _palette_panel: PanelContainer = null
+var _palette_panel: EditorPalettePanel = null
 var _palette_container: VBoxContainer = null
+var _palette_content: VBoxContainer = null
 var _tool_place_btn: Button = null
 var _tool_erase_btn: Button = null
 var _frame_toolbar: HBoxContainer = null
@@ -91,11 +92,12 @@ func setup(editor: Node) -> void:
 	_ground = editor.get_node("Ground") as MeshInstance3D
 	_ghost = editor.get_node("%Ghost")
 	_layer_plane = editor.get_node("%LayerPlane")
-	_material_option = editor.get_node("%MaterialOption")
 	_brush_line_btn = editor.get_node("%BrushLineBtn")
 	_brush_rect_btn = editor.get_node("%BrushRectBtn")
 	_palette_panel = editor.get_node("%PalettePanel")
-	_palette_container = editor.get_node("%PaletteContainer")
+	_palette_panel.set_title("Каркас")
+	_palette_container = _palette_panel.entries_container()
+	_build_palette_header()
 	_tool_place_btn = editor.get_node("%ToolPlaceBtn")
 	_tool_erase_btn = editor.get_node("%ToolEraseBtn")
 	_frame_toolbar = editor.get_node("%FrameToolbar")
@@ -901,7 +903,7 @@ func select_style_in_option(style: StringName) -> void:
 # ---------------------------------------------------------------------------
 
 func _build_palette_blocks() -> void:
-	for child in _palette_container.get_children():
+	for child in _palette_content.get_children():
 		child.queue_free()
 	_palette_buttons.clear()
 
@@ -918,7 +920,7 @@ func _build_palette_blocks() -> void:
 		var cat_label := Label.new()
 		cat_label.text = BuildingBlockCatalog.category_name(category)
 		cat_label.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
-		_palette_container.add_child(cat_label)
+		_palette_content.add_child(cat_label)
 		for def in blocks_by_category[category]:
 			var block_id: StringName = def["id"]
 			var btn := Button.new()
@@ -931,7 +933,26 @@ func _build_palette_blocks() -> void:
 				btn.tooltip_text = "Размер: %.2f×%.2f×%.2f м" % [s.x, s.y, s.z]
 			btn.pressed.connect(select_block.bind(block_id))
 			_palette_buttons[block_id] = btn
-			_palette_container.add_child(btn)
+			_palette_content.add_child(btn)
+
+
+func _build_palette_header() -> void:
+	var material_label := Label.new()
+	material_label.text = "Материал каркаса (по эре)"
+	material_label.add_theme_font_size_override("font_size", 14)
+	_palette_container.add_child(material_label)
+	_material_option = OptionButton.new()
+	_material_option.tooltip_text = "Материал новых блоков каркаса"
+	_palette_container.add_child(_material_option)
+	var separator := HSeparator.new()
+	_palette_container.add_child(separator)
+	var blocks_label := Label.new()
+	blocks_label.text = "Блоки"
+	blocks_label.add_theme_font_size_override("font_size", 14)
+	_palette_container.add_child(blocks_label)
+	_palette_content = VBoxContainer.new()
+	_palette_content.add_theme_constant_override("separation", 4)
+	_palette_container.add_child(_palette_content)
 
 
 func _ensure_brush_inspector() -> Control:
@@ -939,7 +960,7 @@ func _ensure_brush_inspector() -> Control:
 		return _brush_inspector
 	_brush_inspector = VBoxContainer.new()
 	_brush_inspector.name = "BrushInspector"
-	_palette_container.add_child(_brush_inspector)
+	_palette_content.add_child(_brush_inspector)
 	return _brush_inspector
 
 
@@ -952,7 +973,7 @@ func _move_brush_inspector_under_selection() -> void:
 	var target := btn.get_index() + 1
 	if _brush_inspector.get_index() < target:
 		target -= 1
-	_palette_container.move_child(_brush_inspector, target)
+	_palette_content.move_child(_brush_inspector, target)
 
 
 func _rebuild_brush_inspector() -> void:

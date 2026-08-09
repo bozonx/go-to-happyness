@@ -11,6 +11,7 @@
 [ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor/editor_mode_bar.tscn" id="8_mode_bar"]
 [ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor/editor_document_actions.tscn" id="9_document_actions"]
 [ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor/editor_history_actions.tscn" id="10_history_actions"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor/editor_palette_panel.tscn" id="11_palette"]
 
 [sub_resource type="PlaneMesh" id="mesh_ground"]
 size = Vector2(64, 64)
@@ -451,9 +452,8 @@ tooltip_text = "Удалить выделенную зону"
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="PalettePanel" type="PanelContainer" parent="EditorUI/Root"]
+[node name="PalettePanel" parent="EditorUI/Root" instance=ExtResource("11_palette")]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(240, 0)
 layout_mode = 1
 anchors_preset = 9
 anchor_bottom = 1.0
@@ -462,37 +462,6 @@ offset_top = 60.0
 offset_right = 248.0
 offset_bottom = -48.0
 grow_vertical = 2
-
-[node name="Scroll" type="ScrollContainer" parent="EditorUI/Root/PalettePanel"]
-layout_mode = 2
-horizontal_scroll_mode = 0
-
-[node name="PaletteVBox" type="VBoxContainer" parent="EditorUI/Root/PalettePanel/Scroll"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/separation = 6
-
-
-
-[node name="MaterialsLabel" type="Label" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 16
-text = "Материал каркаса (по эре)"
-
-[node name="MaterialOption" type="OptionButton" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="BlocksLabel" type="Label" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 16
-text = "Блоки"
-
-[node name="PaletteContainer" type="VBoxContainer" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/separation = 4
 
 [node name="ZonesInspectorPanel" type="PanelContainer" parent="EditorUI/Root"]
 unique_name_in_owner = true
