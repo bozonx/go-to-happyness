@@ -96,8 +96,7 @@ var _orbiting: bool = false
 ## Entrances are authored as `door` anchors in zones mode; the metadata panel
 ## only reports where they landed (active_zones.md §5.2).
 @onready var _entrance_label: Label = %EntranceDerivedLabel
-@onready var _status_label: Label = %StatusLabel
-@onready var _shortcut_tooltip: EditorShortcutTooltip = %ShortcutTooltip
+@onready var _status_bar: EditorStatusBar = $EditorUI/Root/StatusBar
 @onready var _metadata_panel: ConfirmationDialog = %MetadataPanel
 @onready var _load_popup: PopupPanel = %LoadPopup
 @onready var _load_list: ItemList = %LoadList
@@ -573,6 +572,10 @@ func _refresh_undo_redo_buttons() -> void:
 
 func set_status(message: String, severity: int = -1) -> void:
 	_update_status(message, _infer_status_severity(message) if severity < 0 else severity)
+
+
+func set_status_context(text: String) -> void:
+	_status_bar.set_context(text)
 
 
 func set_warning(message: String) -> void:
@@ -1084,10 +1087,9 @@ func _mode_id(mode: int) -> StringName:
 # ---------------------------------------------------------------------------
 
 func _update_status(message: String, severity: int = -1) -> void:
-	if _status_label != null:
+	if _status_bar != null:
 		var resolved := _infer_status_severity(message) if severity < 0 else severity
-		_status_label.text = EditorStatusMessage.text(message, resolved)
-		_status_label.add_theme_color_override("font_color", EditorStatusMessage.color(resolved))
+		_status_bar.set_message(message, resolved)
 
 
 func _infer_status_severity(message: String) -> int:
@@ -1097,7 +1099,7 @@ func _infer_status_severity(message: String) -> int:
 
 
 func _update_shortcut_tooltip() -> void:
-	if _shortcut_tooltip == null:
+	if _status_bar == null:
 		return
 	var text := "Общее\n• ПКМ — камера · СКМ — панорама · Колесо — зум\n• WASD / Q E — перемещение камеры\n• P — пипетка · Esc — отмена / очистить выбор\n• Ctrl+Z / Ctrl+Shift+Z (Ctrl+Y) — отмена / повтор\n• 1–4 — выбор режима\n\nПрогулка по зданию\n• F5 — походить от выбранной цели · Shift+F5 — от клетки под курсором\n• WASD, мышь, Shift — бегом, Пробел — прыжок, Esc — выход\n• F6 — тест-точка здесь · Shift+F6 — свойства · Ctrl+F6 — удалить\n• Alt+1…9 — выбрать тест-точку · Alt+0 — вход здания\n\n"
 	match current_mode:
@@ -1109,10 +1111,7 @@ func _update_shortcut_tooltip() -> void:
 			text += "Наполнение:\n• ЛКМ — разместить из каталога или выбрать и перетащить объект\n• Ctrl+ЛКМ — добавить к выделению\n• Shift+ЛКМ — пипетка со смещением, масштабом и внешним видом\n• Z / X / C (или R для Y) — поворот по осям\n• Delete / Shift+ПКМ — удалить объект\n• PageDown / PageUp — смена слоя Y\n• Esc — снять выделение"
 		EditMode.ZONES:
 			text += "Зоны:\n• Q — рисование области · W — установка точек\n• Tab — следующая роль зоны\n• F — поворот точки на 90°\n• ➖ / ➕ — смена слоя Y\n• Shift+ПКМ — стереть клетку зоны\n• Delete — удалить выбранное\n• Esc — очистить выделение / в режим выбора"
-	_shortcut_tooltip.shortcuts_text = text
-	var label: Label = _shortcut_tooltip.get_node_or_null("Popup/Margin/Label")
-	if label != null:
-		label.text = text
+	_status_bar.set_shortcuts(text)
 
 
 func _mark_dirty() -> void:

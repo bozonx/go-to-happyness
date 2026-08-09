@@ -9,7 +9,7 @@
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_top_bar.tscn" id="6_top_bar"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_side_panel.tscn" id="8_side_panel"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_palette.tscn" id="9_palette"]
-[ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_status_bar.tscn" id="10_status_bar"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor_status_bar.tscn" id="10_status_bar"]
 [ext_resource type="Script" uid="uid://dvuwd0lsd080y" path="res://game/features/world/presentation/water/water_world.gd" id="11_water"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_dialogs.tscn" id="12_dialogs"]
 [ext_resource type="Script" path="res://game/features/world/presentation/water/water_body_highlight.gd" id="14_water_highlight"]

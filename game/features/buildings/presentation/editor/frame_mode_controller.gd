@@ -57,7 +57,6 @@ var _rot_x_btn: Button = null
 var _rot_btn: Button = null
 var _rot_z_btn: Button = null
 var _layer_label: Label = null
-var _count_label: Label = null
 var _footprint_x_spin: SpinBox = null
 var _footprint_z_spin: SpinBox = null
 var _variant_edit: LineEdit = null
@@ -104,7 +103,6 @@ func setup(editor: Node) -> void:
 	_rot_btn = editor.get_node("%RotBtn")
 	_rot_z_btn = editor.get_node("%RotZBtn")
 	_layer_label = editor.get_node("%LayerLabel")
-	_count_label = editor.get_node("%CountLabel")
 	_footprint_x_spin = editor.get_node("%FootprintXSpin")
 	_footprint_z_spin = editor.get_node("%FootprintZSpin")
 	_variant_edit = editor.get_node("%VariantEdit")
@@ -396,8 +394,7 @@ func end_paint_stroke() -> void:
 func _mark_frame_changed() -> void:
 	if painting:
 		_stroke_changed = true
-		if _count_label != null:
-			_count_label.text = "Блоков: %d" % _editor.grid_model.count()
+		_editor.set_status_context("Блоков: %d" % _editor.grid_model.count())
 		return
 	_update_count()
 	_editor.mark_dirty()
@@ -1067,8 +1064,7 @@ func _update_rotation_label() -> void:
 
 
 func _update_count() -> void:
-	if _count_label != null:
-		_count_label.text = "Блоков: %d" % _editor.grid_model.count()
+	_editor.set_status_context("Блоков: %d" % _editor.grid_model.count())
 	if _editor.blueprint != null:
 		_editor.grid_model.write_to_blueprint(_editor.blueprint)
 		_editor.blueprint.recalculate_construction_cost()

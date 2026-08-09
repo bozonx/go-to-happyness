@@ -42,9 +42,7 @@ const PLANNED_MODES: Array = []
 @onready var _side_panel: MapEditorSidePanel = $UI/Screen/Middle/SidePanel
 @onready var _palette: MapEditorPalette = $UI/Screen/Middle/Palette
 @onready var _compass: Label = $UI/Screen/Middle/Workspace/Viewport3D/Compass
-@onready var _status_cell: Label = $UI/Screen/StatusBar/Margin/Row/CellLabel
-@onready var _status_message: Label = $UI/Screen/StatusBar/Margin/Row/MessageLabel
-@onready var _shortcut_tooltip: EditorShortcutTooltip = $UI/Screen/StatusBar/Margin/Row/ShortcutTooltip
+@onready var _status_bar: EditorStatusBar = $UI/Screen/StatusBar
 @onready var _back_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/DocumentActions/BackButton
 @onready var _new_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/DocumentActions/NewButton
 @onready var _load_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/DocumentActions/LoadButton
@@ -457,7 +455,7 @@ func _select_mode(mode_id: StringName) -> void:
 
 
 func _update_shortcut_tooltip() -> void:
-	if _shortcut_tooltip == null or _active == null:
+	if _status_bar == null or _active == null:
 		return
 	var text := "Общее\nЛКМ — применить · Shift+ПКМ — обратное действие\nПКМ — камера · СКМ — панорама · Колесо — зум\nWASD/QE — движение камеры · Home — показать всю карту\nCtrl+S — сохранить · Ctrl+Z / Ctrl+Shift+Z — отменить / повторить\n1–6 — режим редактора · Esc — снять выделение / в меню\n\nТест-запуск\nF5 — запуск из выбранного места (меню справа от ▶)\nShift+F5 — запуск из клетки под курсором\nF6 — тест-точка здесь · Shift+F6 — свойства · Ctrl+F6 — удалить\nAlt+1…9 — выбрать тест-точку · Alt+0 — вход карты\n\n"
 	if _active.id == &"water":
@@ -470,10 +468,7 @@ func _update_shortcut_tooltip() -> void:
 		text += "Наполнение:\n• ЛКМ — разместить или выбрать объект\n• Ctrl+ЛКМ — добавить к выделению\n• Shift+ЛКМ — пипетка со всеми свойствами\n• R / Shift+R — повернуть вправо / влево\n• Delete / Shift+ПКМ — удалить\n• Список справа поддерживает Ctrl-выделение и фокусирует камеру"
 	elif _active.id == &"zones":
 		text += "Зоны и точки:\n• Q / W / E — область, точка, маршрут · Tab — роль\n• ЛКМ — создать или выбрать · Shift+ПКМ — стереть\n• F — повернуть точку · Del — удалить выделенное\n• Esc — снять выделение, затем режим выбора\n• W → роль spawn → «лидер партии» — точка старта отряда"
-	_shortcut_tooltip.shortcuts_text = text
-	var label: Label = _shortcut_tooltip.get_node_or_null("Popup/Margin/Label")
-	if label != null:
-		label.text = text
+	_status_bar.set_shortcuts(text)
 
 
 # --- UI wiring ----------------------------------------------------------------
@@ -649,8 +644,7 @@ func _refresh_panels() -> void:
 	# live here. Resolve their presentation at this single UI boundary so a prior
 	# error cannot leave the next successful action red.
 	_message_severity = EditorStatusMessage.infer(_message)
-	_status_message.text = EditorStatusMessage.text(_message, _message_severity)
-	_status_message.add_theme_color_override("font_color", EditorStatusMessage.color(_message_severity))
+	_status_bar.set_message(_message, _message_severity)
 
 
 func _update_workspace_visibility() -> void:
@@ -705,7 +699,7 @@ func _process(delta: float) -> void:
 		_active.clear_hover()
 	_update_hover_marker()
 	_update_compass()
-	_status_cell.text = _active.status_text()
+	_status_bar.set_context(_active.status_text())
 
 
 ## Where north is, on screen, right now (`building_placement.md` §9).
