@@ -24,7 +24,38 @@ static func run_all() -> void:
 	_test_every_authored_base_name_is_unique()
 	_test_presentation_tables_are_catalog_sized()
 	_test_built_arrays_match_the_domain_layout()
+	_test_surface_maps_follow_the_board_size()
 	print("    [PASS] Terrain Texture Registry Tests")
+
+
+## The index map is the size of the board, and it has to catch up when the board
+## gets one late.
+##
+## A caller that binds the presentation before the grid knows how big it is — the
+## generation laboratory does exactly that, because the recipe that says the size
+## has not been read yet — leaves the maps one texel wide. Every fragment then
+## samples the same texel, and the whole world renders in ONE material over data
+## that is perfectly varied. It looked like a bug in the surface painter and cost
+## an afternoon; `GridTerrainWorld` now re-checks the size every frame, and this
+## is the property that makes the re-check meaningful.
+static func _test_surface_maps_follow_the_board_size() -> void:
+	var grid := TerrainGrid.new()
+	var maps := TerrainSurfaceMaps.new()
+	maps.configure(grid.board_cells)
+	assert(maps.board_cells() == 1, "an empty grid gives a degenerate map, which is the trap")
+
+	grid.configure(1.0, 64)
+	grid.set_material_index(Vector2i(0, 0), TerrainMaterialCatalog.index_of(TerrainMaterialCatalog.SAND))
+	maps.rebuild(grid)
+	assert(maps.board_cells() == 64, "the maps must resize themselves to the board they are given")
+	assert(maps.index_texture().get_size() == Vector2(64.0, 64.0))
+
+	# And a cell written afterwards has to land on a texel that exists: with the
+	# stale half-size, every coordinate on the board fell outside the map and the
+	# brush wrote nothing at all.
+	assert(maps.texel_of(Vector2i(-32, -32)) == 0)
+	assert(maps.texel_of(Vector2i(31, 31)) == 64 * 64 - 1)
+	assert(maps.texel_of(Vector2i(64, 0)) < 0, "a cell off the board has no texel")
 
 
 ## The list under a material id must hold exactly `surface_style_count` entries:

@@ -152,6 +152,13 @@ func update_cells(grid: TerrainGrid, cells: Array[Vector2i]) -> void:
 	_upload()
 
 
+## Index of the texel a cell writes to, or −1 when the cell is off the board.
+## Public because it is the property that broke: with a stale board size every
+## coordinate on the map answered −1 and the brush wrote nothing.
+func texel_of(cell: Vector2i) -> int:
+	return _texel_of(cell)
+
+
 func _texel_of(cell: Vector2i) -> int:
 	var x := cell.x + _half_cells
 	var y := cell.y + _half_cells

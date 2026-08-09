@@ -284,6 +284,19 @@ func _collect_dirty() -> void:
 ## Drain the dirty cells once, then hand the same set to both GPU maps and the
 ## affected chunk MultiMeshes so neither presentation keeps a second state list.
 func _sync_surface_visuals() -> void:
+	# The surface maps are the size of the board, always. A caller that configured
+	# this world before the grid had a board — or reconfigured the grid to another
+	# size afterwards — leaves them one texel wide, and then every fragment on the
+	# map samples the same texel: the whole world is drawn with one material while
+	# the data underneath is perfectly varied. That is exactly what happened to the
+	# generation laboratory, and it cost an afternoon of looking for the bug in the
+	# painter. One comparison per frame is cheaper than the next afternoon.
+	if _surface_maps.board_cells() != grid.board_cells:
+		_surface_maps.rebuild(grid)
+		_surface_maps.rebuild_coverage(coverage)
+		grid.clear_dirty_surface_cells()
+		grid.mark_all_chunks_dirty()
+		_collect_dirty()
 	# Coverage is drained first and on its own: it has a separate owner and a
 	# separate dirty set, and a road stroke must show up on the frame it was laid
 	# even when no material was painted at all.

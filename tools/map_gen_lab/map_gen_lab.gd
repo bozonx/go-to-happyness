@@ -162,6 +162,11 @@ func _ready() -> void:
 
 func _configure_board(board_cells: int) -> void:
 	grid.configure(CELL_SIZE, board_cells)
+	# The board only gets a size here — `_ready` bound the world to an empty grid,
+	# because the recipe that says how big the map is has not been read yet. The
+	# world has to hear about it, or its surface maps stay one texel wide and the
+	# whole map renders in a single material over perfectly varied data.
+	terrain.configure(grid, camera)
 	water.configure(CELL_SIZE, board_cells)
 	terrain_service.configure(grid)
 	water_service.configure(water, grid)
