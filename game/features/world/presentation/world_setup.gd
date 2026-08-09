@@ -50,6 +50,10 @@ var fireflies: Array[FirefliesEffect] = []
 ## territory. The runtime record is data; this node owns only its presentation.
 var map_entity_runtime := MapEntityRuntime.new()
 var map_entity_presenter: MapEntityPresenter = null
+## Authored buildings from `placements[]`, projected once from their immutable
+## blueprint references. Their zone and routing metadata stays on the root node
+## so the same building runtime readers used by constructed buildings can read it.
+var map_placement_presenter: MapPlacementPresenter = null
 
 var _camera: Camera3D
 var _cell_size: float
@@ -92,6 +96,7 @@ func build(parent: Node) -> void:
 			sun_glare_material = glare_rect.material as ShaderMaterial
 	_build_sky()
 	_build_terrain(parent)
+	_build_map_placements()
 	_build_map_entities()
 	_build_boundary(parent)
 	_build_precipitation_effect(parent)
@@ -129,6 +134,7 @@ func dispose() -> void:
 	preview_back_entrance_marker = null
 	hero_build_radius_marker = null
 	map_entity_presenter = null
+	map_placement_presenter = null
 	_territory = null
 
 
@@ -178,6 +184,16 @@ func _build_map_entities() -> void:
 	# presenter; forward them so the weather controller's night fade still has a
 	# list to drive. AmbientSpawner no longer owns this.
 	fireflies = map_entity_presenter.firefly_views()
+
+
+func _build_map_placements() -> void:
+	if _territory == null or _map_document == null:
+		return
+	if map_placement_presenter == null:
+		map_placement_presenter = MapPlacementPresenter.new()
+		map_placement_presenter.name = "MapBuildings"
+	_territory.add_landscape_object(map_placement_presenter)
+	map_placement_presenter.present(_map_document, _territory)
 
 
 func _build_boundary(parent: Node) -> void:

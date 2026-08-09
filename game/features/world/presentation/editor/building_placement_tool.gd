@@ -303,6 +303,7 @@ func place_at(cell: Vector2i) -> bool:
 	var record := service().commit(plan_result, current)
 	var parts := context.end_capture()
 	if record == null:
+		_rollback_failed_capture(parts, before)
 		context.set_status_message("Постановка не удалась: рельеф отказал в последний момент.", true)
 		return true
 	_selected_id = record.id
@@ -352,11 +353,23 @@ func move_selected(origin_cell: Vector2i, orientation: int) -> bool:
 	var moved := service().commit(plan_result, current, record.id)
 	var parts := context.end_capture()
 	if moved == null:
+		_rollback_failed_capture(parts, before)
+		context.set_status_message("Перенос отменён: рельеф изменился до подтверждения.", true)
 		return false
 	_selected_id = moved.id
 	_push(parts, before, "перенос здания")
 	_report_warnings(plan_result, moved)
 	return true
+
+
+## A commit revalidates against the live grid. If it loses that race, restore
+## every captured service delta and the placement layer; a failed move must not
+## turn into an unrecorded demolition.
+func _rollback_failed_capture(parts: Array[MapEditorCommand], placement_snapshot: Array) -> void:
+	for index in range(parts.size() - 1, -1, -1):
+		parts[index].undo()
+	layer().from_json(placement_snapshot)
+	context.request_document_refresh()
 
 
 ## Re-places the selected building with the tool's current orientation and height
@@ -385,10 +398,21 @@ func _report_warnings(plan_result: PlacementPlan, record: MapPlacementRecord) ->
 	# exists after the ground has actually moved — so this runs on the committed
 	# state, not on the dry run (§7).
 	messages.append_array(BuildingPlacementService.entrance_warnings(
-		BuildingPlacementService.footprint_of(record), context.nav_grid, "здание %s" % record.id))
+		BuildingPlacementService.footprint_of(record), context.nav_grid, "здание %s" % record.id,
+		_other_placement_cells(record.id)))
 	if messages.is_empty():
 		return
 	context.set_status_message("Предупреждение: %s" % "; ".join(messages), true)
+
+
+func _other_placement_cells(ignored_id: StringName) -> Dictionary:
+	var blocked: Dictionary = {}
+	for placed: MapPlacementRecord in layer().placements:
+		if placed.id == ignored_id:
+			continue
+		for cell: Vector2i in BuildingPlacementService.footprint_of(placed).cells():
+			blocked[cell] = true
+	return blocked
 
 
 ## The north-west cell of a footprint centred on the cursor. The author points at

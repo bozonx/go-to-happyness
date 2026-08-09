@@ -46,6 +46,10 @@ static func _validate_placements(
 ) -> void:
 	var ids: Dictionary = {}
 	var claimed: Array[Dictionary] = []
+	var placement_obstacles: Dictionary = {}
+	for placed: MapPlacementRecord in document.placements.placements:
+		for occupied: Vector2i in BuildingPlacementService.footprint_of(placed).cells():
+			placement_obstacles[occupied] = placed.id
 	for record: MapPlacementRecord in document.placements.placements:
 		if record.id == &"" or ids.has(record.id):
 			errors.append("дубликат или пустой id размещения: %s" % record.id)
@@ -61,6 +65,13 @@ static func _validate_placements(
 				record.id, record.state])
 		var footprint := BuildingFootprint.of(blueprint, record.cell, record.orientation)
 		if terrain != null:
+			if record.level_value != PlacementLevel.quantize(record.level_value):
+				errors.append("здание %s хранит уровень площадки вне шага террасы" % record.id)
+			var blueprint_is_current := record.blueprint_revision().is_empty() \
+				or record.blueprint_revision() == blueprint.revision_id()
+			var ground_mismatch := false
+			var border_too_high := false
+			var max_border_drop := PlacementPolicy.editor().max_border_drop
 			for cell: Vector2i in footprint.cells():
 				if not terrain.is_inside(cell):
 					errors.append("здание %s выходит за пределы доски" % record.id)
@@ -68,12 +79,31 @@ static func _validate_placements(
 				if terrain.is_hole(cell) and not footprint.is_cut_out(cell):
 					errors.append("пятно здания %s попадает в вырез террейна" % record.id)
 					break
+				if blueprint_is_current and not footprint.is_cut_out(cell) \
+						and terrain.height_of(cell) != record.level_value + footprint.relative_height(cell):
+					ground_mismatch = true
+				for direction: int in SlopeCatalog.ORTHOGONAL_DIRECTIONS:
+					var neighbour := cell + SlopeCatalog.direction_offset(direction)
+					if footprint.contains(neighbour) or not terrain.is_inside(neighbour) \
+							or terrain.is_hole(neighbour):
+						continue
+					if absi(terrain.height_of(cell) - terrain.height_of(neighbour)) \
+							> max_border_drop:
+						border_too_high = true
+			if ground_mismatch:
+				errors.append("рельеф под зданием %s не совпадает с сохранённым уровнем площадки" % record.id)
+			if border_too_high:
+				errors.append("перепад по границе здания %s больше допустимого" % record.id)
 		for previous: Dictionary in claimed:
 			if (previous["rect"] as Rect2i).intersects(footprint.rect()):
 				errors.append("здания %s и %s занимают общие клетки" % [previous["id"], record.id])
 		claimed.append({"id": record.id, "rect": footprint.rect()})
+		var other_obstacles := placement_obstacles.duplicate()
+		for own_cell: Vector2i in footprint.cells():
+			if other_obstacles.get(own_cell, &"") == record.id:
+				other_obstacles.erase(own_cell)
 		for warning: String in BuildingPlacementService.entrance_warnings(
-				footprint, nav_grid, "здание %s" % record.id):
+				footprint, nav_grid, "здание %s" % record.id, other_obstacles):
 			errors.append(warning)
 
 
@@ -391,6 +421,7 @@ static func _warn_about_starts(document: MapDocument, warnings: Array[String]) -
 static func _warn_about_placements(document: MapDocument, warnings: Array[String]) -> void:
 	var terrain := document.terrain
 	var water := document.water
+	var footprints: Array[Dictionary] = []
 	for record: MapPlacementRecord in document.placements.placements:
 		var blueprint := BuildingPlacementService.blueprint_of(record)
 		if blueprint == null:
@@ -411,8 +442,23 @@ static func _warn_about_placements(document: MapDocument, warnings: Array[String
 			walled = walled or _edge_is_walled(terrain, footprint, cell)
 		if submerged and blueprint.expects_surface == BuildingBlueprint.SURFACE_GROUND:
 			warnings.append("здание %s стоит в воде вопреки объявленной опоре чертежа" % record.id)
+		elif not submerged and blueprint.expects_surface == BuildingBlueprint.SURFACE_WATER:
+			warnings.append("здание %s стоит на суше вопреки объявленной опоре чертежа" % record.id)
 		if walled:
 			warnings.append("у здания %s есть граница без выезда" % record.id)
+		for previous: Dictionary in footprints:
+			if (previous["rect"] as Rect2i).grow(1).intersects(footprint.rect()):
+				warnings.append("между зданиями %s и %s нет минимального зазора в 1 клетку" % [
+					previous["id"], record.id])
+		footprints.append({"id": record.id, "rect": footprint.rect()})
+		for entity: MapEntityRecord in document.entities.entities:
+			var entity_cell := entity.cell(terrain)
+			if not footprint.contains(entity_cell):
+				continue
+			if water != null and water.is_wet(terrain, entity_cell):
+				warnings.append("объект %s под зданием %s оказался в воде или лаве" % [entity.id, record.id])
+			else:
+				warnings.append("объект %s остаётся под пятном здания %s" % [entity.id, record.id])
 
 
 ## An edge of a pad that drops to lower ground with no ramp climbing back up to

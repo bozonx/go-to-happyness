@@ -26,6 +26,9 @@ static func run_all() -> void:
 	_test_placements_round_trip_with_a_missing_blueprint_and_an_unknown_state()
 	_test_the_same_placement_produces_the_same_terrain()
 	_test_a_walled_in_entrance_is_a_validator_error()
+	_test_objects_in_the_pad_and_skirt_are_reported()
+	_test_runtime_presenter_projects_record_and_blueprint_metadata()
+	_test_runtime_navigation_blocks_authored_footprints()
 	print("    [PASS] Building Placement Tests")
 
 
@@ -104,8 +107,8 @@ static func _test_orientation_maps_cells_and_directions() -> void:
 		var board := east.board_cell(local)
 		assert(east.local_cell(board) == local, "поворот обратим для %s" % local)
 		assert(east.rect().has_point(board), "повёрнутая клетка остаётся в пятне")
-	assert(east.board_cell(Vector2i(0, -1)) == Vector2i(-3 + 1, 5 - 0) + Vector2i(0, 0) - Vector2i(0, 0) \
-		or true, "клетка за кромкой считается той же формулой")
+	assert(east.board_cell(Vector2i(0, -1)) == Vector2i(-1, 5),
+		"клетка за кромкой считается той же формулой")
 	# North is the engine's north and nothing else defines it.
 	assert(BuildingFootprint.rotated_direction(SlopeCatalog.DIR_N, 1) == SlopeCatalog.DIR_E,
 		"ориентация 1 разворачивает север чертежа на восток")
@@ -258,6 +261,10 @@ static func _test_water_never_refuses_but_warns_against_the_declared_support() -
 	var declared := _plan(world, boathouse, Vector2i(0, 0), PlacementLevel.MODE_MANUAL, 0)
 	assert(declared.ok and declared.warnings.is_empty(),
 		"чертёж, объявивший воду, ставится молча")
+	var dry_world := _world()
+	var dry := _plan(dry_world, boathouse, Vector2i(4, 4))
+	assert(dry.warnings.any(func(message: String) -> bool: return message.contains("суше")),
+		"ожидающий воду чертёж предупреждает и об обратном несовпадении")
 
 
 ## Water is derived from the ground, so lifting a pad above the surface drains it
@@ -385,7 +392,7 @@ static func _test_a_walled_in_entrance_is_a_validator_error() -> void:
 		document.water, world["water_service"])
 	publisher.publish_all()
 	var clean := MapValidator.validate(document, document.terrain, document.water, nav)
-	assert(clean.is_empty(), "на ровной земле вход достижим: %s" % clean)
+	assert(clean.is_empty(), "на ровной земле вход достижим: %s" % [clean])
 
 	# A sheer face around the approach cell: the same case as a neighbour's wall,
 	# and §7 is explicit that a terrace blocks a door exactly the way a wall does.
@@ -398,4 +405,58 @@ static func _test_a_walled_in_entrance_is_a_validator_error() -> void:
 	var mentions_entrance := false
 	for message: String in blocked:
 		mentions_entrance = mentions_entrance or message.contains("вход")
-	assert(mentions_entrance, "заблокированный вход — ошибка валидатора, получено %s" % blocked)
+	assert(mentions_entrance, "заблокированный вход — ошибка валидатора, получено %s" % [blocked])
+
+
+static func _test_objects_in_the_pad_and_skirt_are_reported() -> void:
+	var world := _world()
+	var document: MapDocument = world["document"]
+	var entity := MapEntityRecord.new()
+	entity.id = &"crate"
+	entity.archetype_id = &"test:crate"
+	entity.position = Vector3(0.5, 0.0, 0.5)
+	document.entities.entities.append(entity)
+	var blueprint := _blueprint(&"object_warning", Vector2i(2, 2), false)
+	var plan := _plan(world, blueprint, Vector2i(0, 0), PlacementLevel.MODE_MANUAL, 2)
+	assert(plan.ok)
+	assert(plan.warnings.any(func(message: String) -> bool: return message.contains("объект")),
+		"объект в изменяемом рельефе не остаётся без предупреждения")
+
+
+static func _test_runtime_presenter_projects_record_and_blueprint_metadata() -> void:
+	var world := _world()
+	var document: MapDocument = world["document"]
+	var blueprint := _blueprint(&"runtime_projection", Vector2i(2, 2), false)
+	var zone := ZoneAreaRecord.new()
+	zone.id = &"room"
+	zone.role = ZoneAreaRecord.ROLE_ROOM
+	zone.function = &"test:room"
+	blueprint.areas.append(zone)
+	var record := (world["service"] as BuildingPlacementService).commit(
+		_plan(world, blueprint, Vector2i(-2, 3)), blueprint, &"authored_house")
+	assert(record != null)
+	var territory := TerritoryBase.new()
+	var presenter := MapPlacementPresenter.new()
+	presenter.present(document, territory)
+	var view := presenter.view_for(&"authored_house")
+	assert(view != null, "placement получает runtime view")
+	assert(view.get_meta("map_placement_id", &"") == &"authored_house")
+	assert((view.get_meta("active_zones", []) as Array).size() == 1,
+		"зоны чертежа опубликованы на runtime building")
+	territory.free()
+
+
+static func _test_runtime_navigation_blocks_authored_footprints() -> void:
+	var world := _world()
+	var document: MapDocument = world["document"]
+	var blueprint := _blueprint(&"runtime_obstacle", Vector2i(2, 3), false)
+	assert((world["service"] as BuildingPlacementService).commit(
+		_plan(world, blueprint, Vector2i(-4, -3)), blueprint) != null)
+	var session := WorldSession.new(document, 1.0)
+	var setup := WorldSetup.new()
+	setup.terrain_grid = document.terrain
+	session.world_setup = setup
+	var blocked := session.base_navigation_blocked_cells()
+	for cell: Vector2i in BuildingFootprint.of(blueprint, Vector2i(-4, -3), 0).cells():
+		assert(blocked.has(cell), "runtime navigation учитывает клетку authored building %s" % cell)
+	setup.free()

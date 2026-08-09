@@ -192,7 +192,7 @@ func _setup_ai_and_navigation() -> void:
 	game.navigation_obstacle_publisher = NavigationObstaclePublisher.new()
 	game.navigation_obstacle_publisher.configure(
 		game.nav_grid,
-		game.world_session.entity_navigation_blocked_cells,
+		game.world_session.base_navigation_blocked_cells,
 	)
 	game.trail_field = TrailFieldService.new()
 	game.trail_field.configure(game.board_cells * SettlementConstants.CELL_SIZE, SettlementConstants.CELL_SIZE, game.nav_grid)

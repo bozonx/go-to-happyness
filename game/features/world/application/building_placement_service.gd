@@ -257,6 +257,8 @@ func _collect_water(
 		plan_result.submerged_cells.append(cell)
 		lava = lava or _water.is_lava(cell)
 	if plan_result.submerged_cells.is_empty():
+		if blueprint.expects_surface == BuildingBlueprint.SURFACE_WATER:
+			plan_result.warn("чертёж рассчитан на воду, а площадка окажется на суше")
 		return
 	if blueprint.expects_surface == BuildingBlueprint.SURFACE_GROUND:
 		plan_result.warn("чертёж рассчитан на сушу, а площадка окажется под %s" % ("лавой" if lava else "водой"))
@@ -275,10 +277,23 @@ func _collect_neighbourhood_warnings(
 				break
 	if _entities == null:
 		return
+	var changed: Dictionary = {}
+	if plan_result.delta != null:
+		for changed_cell: Vector2i in plan_result.delta.cells:
+			changed[changed_cell] = true
+	var submerged: Dictionary = {}
+	for wet_cell: Vector2i in plan_result.submerged_cells:
+		submerged[wet_cell] = true
 	for entity: MapEntityRecord in _entities.entities:
-		if plan_result.footprint.contains(entity.cell(_terrain)):
+		var cell := entity.cell(_terrain)
+		if not changed.has(cell) and not plan_result.footprint.contains(cell):
+			continue
+		if submerged.has(cell):
+			plan_result.warn("размещённый объект окажется под водой или лавой")
+		elif plan_result.footprint.contains(cell):
 			plan_result.warn("под пятном остаются размещённые объекты")
-			break
+		else:
+			plan_result.warn("размещённый объект попадёт в зону откоса")
 
 
 # --- Commit ---------------------------------------------------------------------
@@ -292,7 +307,11 @@ func _collect_neighbourhood_warnings(
 func commit(
 	plan_result: PlacementPlan, blueprint: BuildingBlueprint, placement_id: StringName = &"",
 ) -> MapPlacementRecord:
-	if plan_result == null or not plan_result.ok or _layer == null or blueprint == null:
+	if plan_result == null or not plan_result.ok or _layer == null or blueprint == null \
+			or _terrain_service == null or plan_result.footprint == null \
+			or plan_result.footprint.blueprint != blueprint:
+		return null
+	if placement_id != &"" and _layer.has_id(placement_id):
 		return null
 	if plan_result.operation != null and _terrain_service != null:
 		# Re-solved rather than replayed from the plan's delta: the dry run proves
@@ -419,6 +438,7 @@ static func zones_of(record: MapPlacementRecord, cell_size := 1.0) -> Dictionary
 ## so there is no separate "check the terrace" rule.
 static func entrance_warnings(
 	footprint: BuildingFootprint, nav_grid: NavGrid, label := "здание",
+	blocked_cells: Dictionary = {},
 ) -> Array[String]:
 	var warnings: Array[String] = []
 	if footprint == null or nav_grid == null:
@@ -427,21 +447,36 @@ static func entrance_warnings(
 		if not nav_grid.is_board_cell(approach):
 			warnings.append("%s: вход выходит за пределы доски" % label)
 			continue
-		if not nav_grid.is_walkable(approach):
+		if blocked_cells.has(approach) or not nav_grid.is_walkable(approach):
 			warnings.append("%s: перед входом непроходимая клетка %s" % [label, approach])
 			continue
-		if not _has_way_out(footprint, nav_grid, approach):
+		if not _has_way_out(footprint, nav_grid, approach, blocked_cells):
 			warnings.append("%s: от входа %s некуда выйти" % [label, approach])
 	return warnings
 
 
 ## A door needs somewhere to go: at least one step off the approach cell that
 ## leads away from the building and that the routing field allows.
-static func _has_way_out(footprint: BuildingFootprint, nav_grid: NavGrid, approach: Vector2i) -> bool:
-	for direction: int in SlopeCatalog.ORTHOGONAL_DIRECTIONS:
-		var neighbour := approach + SlopeCatalog.direction_offset(direction)
-		if footprint.contains(neighbour) or not nav_grid.is_board_cell(neighbour):
-			continue
-		if nav_grid.is_step_passable(approach, neighbour):
+static func _has_way_out(
+	footprint: BuildingFootprint, nav_grid: NavGrid, approach: Vector2i,
+	blocked_cells: Dictionary = {},
+) -> bool:
+	# Reaching one adjacent cell is not enough: a two-cell-deep retaining wall
+	# would otherwise pass validation.  Leave the building's immediate apron and
+	# prove that the approach belongs to the surrounding navigation component.
+	var apron := footprint.rect().grow(1)
+	var frontier: Array[Vector2i] = [approach]
+	var visited := {approach: true}
+	while not frontier.is_empty():
+		var current: Vector2i = frontier.pop_front()
+		if not apron.has_point(current):
 			return true
+		for direction: int in SlopeCatalog.ORTHOGONAL_DIRECTIONS:
+			var neighbour := current + SlopeCatalog.direction_offset(direction)
+			if visited.has(neighbour) or footprint.contains(neighbour) or blocked_cells.has(neighbour) \
+					or not nav_grid.is_board_cell(neighbour):
+				continue
+			if nav_grid.is_step_passable(current, neighbour):
+				visited[neighbour] = true
+				frontier.append(neighbour)
 	return false

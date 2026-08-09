@@ -159,7 +159,7 @@ func publish_navigation() -> void:
 	# Static authored entities are the world's base obstacle layer. Game modules
 	# may add buildings or temporary obstacles later, but they start from this set
 	# instead of reinterpreting asset metadata themselves.
-	nav_grid.set_blocked_cells(entity_navigation_blocked_cells())
+	nav_grid.set_blocked_cells(base_navigation_blocked_cells())
 	nav_grid.refresh_connectivity()
 
 
@@ -169,13 +169,27 @@ func entity_navigation_blocked_cells() -> Dictionary:
 	return entity_runtime.navigation_blocked_cells(world_setup.terrain_grid)
 
 
+## Static obstacles authored into the map.  Placements must participate in the
+## same base set as entities so a game module publishing its dynamic buildings
+## cannot accidentally erase the map's buildings from navigation.
+func base_navigation_blocked_cells() -> Dictionary:
+	var blocked := entity_navigation_blocked_cells()
+	if map_document == null or world_setup == null or world_setup.terrain_grid == null:
+		return blocked
+	for record: MapPlacementRecord in map_document.placements.placements:
+		for cell: Vector2i in BuildingPlacementService.footprint_of(record).cells():
+			if world_setup.terrain_grid.is_inside(cell):
+				blocked[cell] = true
+	return blocked
+
+
 func _on_entity_changed(_entity_id: StringName, change: StringName) -> void:
 	if change != &"active":
 		return
 	if obstacle_refresh_callback.is_valid():
 		obstacle_refresh_callback.call()
 		return
-	nav_grid.set_blocked_cells(entity_navigation_blocked_cells())
+	nav_grid.set_blocked_cells(base_navigation_blocked_cells())
 	nav_grid.refresh_connectivity()
 
 
