@@ -168,6 +168,7 @@ func _configure_board(board_cells: int) -> void:
 	# whole map renders in a single material over perfectly varied data.
 	terrain.configure(grid, camera)
 	water.configure(CELL_SIZE, board_cells)
+	water_world.configure(water, grid, water_service, terrain_service)
 	terrain_service.configure(grid)
 	water_service.configure(water, grid)
 	nav_grid.configure(CELL_SIZE, board_cells)
@@ -188,6 +189,9 @@ func _generate() -> void:
 	var started := Time.get_ticks_msec()
 	_result = generator.generate(_recipe, _seed)
 	terrain.rebuild_everything_now()
+	# Generation writes the water layer in bulk, so not a single `edit_committed`
+	# fired and this presentation still holds the previous map's surface.
+	water_world.refresh_all()
 	water_world.rebuild_pending_now()
 	if nav_overlay.visible:
 		nav_overlay.rebuild()
@@ -604,6 +608,7 @@ func _process_capture() -> void:
 			_configure_board(loaded.board_size)
 			_result = generator.generate(loaded, _seed)
 			terrain.rebuild_everything_now()
+			water_world.refresh_all()
 			water_world.rebuild_pending_now()
 			_rebuild_structure_overlay()
 			metrics_panel.show_report(_recipe, _result.report, _result.attempts.size())

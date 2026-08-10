@@ -63,6 +63,10 @@ var _materials: Dictionary = {}
 ## shore band does not paint a beach along a coastline that continues.
 var _border_kind: StringName = MapMeta.BORDER_NOTHING
 var _border_level := 0
+## The board size this presentation was last built for. Not the same thing as the
+## grid's: a world bound before the board had a size has to notice when it gets
+## one, and nothing else in the system tells it.
+var _built_board_cells := 0
 var _border_node: MeshInstance3D = null
 
 
@@ -93,6 +97,7 @@ func configure(next_water: WaterGrid, next_terrain: TerrainGrid, water_service: 
 	# this surface without the water layer being touched at all.
 	if terrain_service != null and not terrain_service.edit_committed.is_connected(_on_terrain_committed):
 		terrain_service.edit_committed.connect(_on_terrain_committed)
+	_built_board_cells = water.board_cells
 	_mark_all_chunks_dirty()
 
 
@@ -106,9 +111,27 @@ func configure_border(kind: StringName, level: int) -> void:
 	_mark_all_chunks_dirty()
 
 
+## Everything the water layer draws, from scratch. For callers that wrote the grid
+## in bulk instead of through `WaterService` — generation is the one that does —
+## because then no `edit_committed` ever fired and this presentation has no other
+## way of knowing the board filled up with sea.
+func refresh_all() -> void:
+	_built_board_cells = water.board_cells if water != null else 0
+	_rebuild_border()
+	_mark_all_chunks_dirty()
+
+
 func _process(_delta: float) -> void:
 	if water == null:
 		return
+	# The board is allowed to get its size after this world was bound to it — the
+	# generation laboratory binds first and reads the recipe that says how big the
+	# map is afterwards. `configure` marked nothing dirty back then, because there
+	# was no board to mark, and nothing would ever have marked it again: generation
+	# writes the water layer in bulk, so not one `edit_committed` fires. The result
+	# is an archipelago with no sea in it and lakes with nothing in them.
+	if _built_board_cells != water.board_cells:
+		refresh_all()
 	if _pending_chunks.is_empty():
 		return
 	var budget := mini(REBUILD_BUDGET_PER_FRAME, _pending_chunks.size())
@@ -123,6 +146,8 @@ func _process(_delta: float) -> void:
 func rebuild_pending_now() -> void:
 	if water == null:
 		return
+	if _built_board_cells != water.board_cells:
+		refresh_all()
 	while not _pending_chunks.is_empty():
 		var chunk: Vector2i = _pending_chunks.pop_front()
 		_queued_lookup.erase(chunk)
