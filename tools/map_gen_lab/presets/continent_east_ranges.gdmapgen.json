@@ -16,13 +16,25 @@
 		},
 		"east": {
 			"kind": "mountain_wall",
-			"height": 28,
-			"thickness": 5
+			"reach": [
+				7,
+				15
+			],
+			"seal": {
+				"risers": 2,
+				"riser_steps": 3
+			}
 		},
 		"south": {
 			"kind": "mountain_wall",
-			"height": 28,
-			"thickness": 5
+			"reach": [
+				7,
+				15
+			],
+			"seal": {
+				"risers": 2,
+				"riser_steps": 3
+			}
 		},
 		"ocean_level": -2
 	},

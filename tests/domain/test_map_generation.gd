@@ -25,6 +25,9 @@ static func run_all() -> void:
 	_test_rivers_run_downhill_and_reach_a_receiver()
 	_test_water_bodies_are_supported()
 	_test_border_wall_cannot_be_walked_around()
+	_test_every_crossing_of_a_border_wall_is_un_jumpable()
+	_test_a_border_wall_is_a_mountainside_and_not_a_slab()
+	_test_a_climbable_riser_is_refused()
 	_test_navigation_is_published_once()
 	_test_surface_is_painted_and_always_stands()
 	_test_surface_can_be_turned_off()
@@ -347,6 +350,78 @@ static func _test_border_wall_cannot_be_walked_around() -> void:
 	var walled := _generated(9002, four_walls)
 	assert(bool((walled[1] as GenerationResult).report.metrics["walls_sealed"]),
 		"a basin closed on all four sides leaked")
+
+
+## §3.2, the strong form. `walls_sealed` asks whether a flood from the centre
+## happened to reach the frame; this asks the thing the flood is evidence FOR —
+## that every single boundary from the map onto the rim is a drop nothing walks
+## up. A leak the flood misses because the ground behind it is a pocket is still a
+## leak, and it is the kind a later edit turns into a route.
+static func _test_every_crossing_of_a_border_wall_is_un_jumpable() -> void:
+	var generated := _generated(9003)
+	var harness: Harness = generated[0]
+	var context: GenerationContext = (generated[1] as GenerationResult).context
+	var grid := harness.grid
+	var crossings := 0
+	for index in context.cell_count:
+		if context.border_outer[index] == 0:
+			continue
+		var cell := context.cell_of_index(index)
+		for offset: Vector2i in BorderShaper.NEIGHBOURS_8:
+			var neighbour := cell + offset
+			if not context.contains(neighbour.x, neighbour.y):
+				continue
+			var neighbour_index := context.cell_index(neighbour)
+			# Only crossings from the map itself. Water is not a route out — the sea
+			# at the foot of a headland owes the rim nothing (§3.2).
+			if context.border_outer[neighbour_index] != 0 or context.is_land[neighbour_index] == 0:
+				continue
+			crossings += 1
+			var drop := grid.height_of(cell) - grid.height_of(neighbour)
+			assert(drop >= MapRecipe.MIN_SEAL_RISER,
+				"%s stands only %d over %s — a pedestrian walks up two" % [cell, drop, neighbour])
+			assert(not harness.nav.is_edge_passable(neighbour, cell, &"pedestrian"),
+				"navigation lets a pedestrian step from %s onto the rim at %s" % [neighbour, cell])
+	assert(crossings > 0, "the recipe has two walled sides and produced no frame to cross")
+
+
+## The other half of §3.2, and the reason the stage was rewritten: impassable is
+## not the same promise as walled. The rim has to be a mountainside — a ragged
+## foot and foothills that can be stood on — and both halves are numbers rather
+## than opinions, which is what lets a test hold them.
+static func _test_a_border_wall_is_a_mountainside_and_not_a_slab() -> void:
+	var metrics: Dictionary = (_generated(9004)[1] as GenerationResult).report.metrics
+	# A band of fixed thickness — the shape this replaced — scores exactly 0 here.
+	assert(float(metrics["rim_edge_spread"]) >= 1.0,
+		"the foot of the rim wanders %.1f cells: that is a straight line, not a mountainside" % metrics["rim_edge_spread"])
+	assert(float(metrics["rim_walkable"]) >= 0.4,
+		"only %.2f of the rim's foothills can be stood on" % metrics["rim_walkable"])
+	assert(bool(metrics["walls_sealed"]), "a rim that is pretty and passable is not a wall")
+
+
+## §3.3 applied to the one number the wall's promise rests on: a riser of two is a
+## step a pedestrian walks up (slope class 5, `very_steep`), so a recipe asking for
+## one is asking for a wall that can be walked over. It gets a refusal, not a
+## quiet clamp to something it did not request.
+static func _test_a_climbable_riser_is_refused() -> void:
+	var climbable := _recipe({
+		"border": {
+			"north": {"kind": "ocean"}, "west": {"kind": "ocean"},
+			"east": {"kind": "mountain_wall", "seal": {"risers": 1, "riser_steps": 2}},
+			"south": {"kind": "mountain_wall"},
+			"ocean_level": -2,
+		},
+	})
+	assert(not climbable.is_valid(), "a riser of two steps is climbable and must be refused")
+	var narrow := _recipe({
+		"border": {
+			"north": {"kind": "ocean"}, "west": {"kind": "ocean"},
+			"east": {"kind": "mountain_wall", "reach": [3, 6], "seal": {"risers": 3, "riser_steps": 3}},
+			"south": {"kind": "mountain_wall"},
+			"ocean_level": -2,
+		},
+	})
+	assert(not narrow.is_valid(), "three terraces do not fit on a rim three cells deep")
 
 
 ## §8: the board is published once, not once per column. The revision counter of

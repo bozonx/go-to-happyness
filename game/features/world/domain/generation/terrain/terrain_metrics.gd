@@ -77,6 +77,8 @@ static func measure(context: GenerationContext, grid: TerrainGrid, water: WaterG
 		"cart_reach": _reach_share(nav, land, &"cart"),
 		"pedestrian_walkable": _walkable_share(nav, land, &"pedestrian"),
 		"walls_sealed": _walls_sealed(context, grid, nav),
+		"rim_walkable": _rim_walkable(context, nav),
+		"rim_edge_spread": _rim_edge_spread(context),
 		"rivers_traced": int(context.river_stats["traced"]),
 		"rivers_terminated": int(context.river_stats["terminated"]),
 		"water_bodies": water.body_count(),
@@ -137,6 +139,10 @@ static func failures(recipe: MapRecipe, metrics: Dictionary) -> Array[String]:
 		])
 	if not bool(metrics["walls_sealed"]):
 		broken.append("a border wall is passable — the flood from the centre reached it")
+	if float(metrics["rim_walkable"]) < recipe.rim_walkable_min:
+		broken.append("only %.3f of the rim's foothills can be stood on, under %.3f — the edge is a wall, not a mountainside" % [
+			metrics["rim_walkable"], recipe.rim_walkable_min,
+		])
 	if int(metrics["rivers_terminated"]) < int(metrics["rivers_traced"]):
 		broken.append("%d of %d rivers end nowhere" % [
 			int(metrics["rivers_traced"]) - int(metrics["rivers_terminated"]), metrics["rivers_traced"],
@@ -314,6 +320,102 @@ static func _walls_sealed(context: GenerationContext, grid: TerrainGrid, nav: Na
 			seen[neighbour] = true
 			queue.append(neighbour)
 	return true
+
+
+## The half of §3.2 that "impassable" says nothing about: how much of the rim the
+## player can actually walk on.
+##
+## Measured over the rim's foothills INSIDE the seal, because those are the ones
+## that are in the map at all — the crest and its outer face are scenery, and
+## scoring them would let a sheer inner face hide behind a gentle outer one. A
+## slab of a border, the shape this design replaced, scores 0 here: every column
+## of it was either wall or frame.
+static func _rim_walkable(context: GenerationContext, nav: NavGrid) -> float:
+	if not nav.has_terrain_field():
+		return 0.0
+	var cells := 0
+	var walkable := 0
+	for index in context.cell_count:
+		if context.border_rim[index] == 0 or context.border_locked[index] != 0:
+			continue
+		if context.is_land[index] == 0:
+			continue
+		cells += 1
+		if nav.is_walkable(context.cell_of_index(index), &"pedestrian"):
+			walkable += 1
+	if cells == 0:
+		return 1.0
+	return float(walkable) / float(cells)
+
+
+## How ragged the foot of the rim is, in cells: the spread of the depth the
+## mountains reach inland, measured along every walled side.
+##
+## The foot and not the frame boundary, because the foot is what anyone standing
+## in the map can see. The frame ends at the seal contour, which is halfway up the
+## rim and behind it — a number about that line would describe geometry nobody
+## looks at. A band of fixed thickness, the shape §3.2 stopped asking for, scores
+## 0 either way.
+static func _rim_edge_spread(context: GenerationContext) -> float:
+	var depths := PackedFloat32Array()
+	var low := context.min_coordinate()
+	var high := context.max_coordinate()
+	for side_index in MapRecipe.SIDES.size():
+		var side: StringName = MapRecipe.SIDES[side_index]
+		if context.recipe.border_kind(side) != MapRecipe.BORDER_MOUNTAIN_WALL:
+			continue
+		for position in range(low, high + 1):
+			# Corners belong to both sides, and a column inside the neighbouring
+			# side's rim would be counted as this side's frame running the whole
+			# depth of the board. Measured along a four-walled basin that alone
+			# reported a spread of 29 cells on a rim eight deep.
+			if _inside_perpendicular_rim(context, side_index, position, low, high):
+				continue
+			var depth := 0
+			for step in range(0, high - low + 1):
+				var cell := _side_cell(side_index, position, step, low, high)
+				if context.border_rim[context.cell_index(cell)] == 0:
+					break
+				depth = step + 1
+			depths.append(float(depth))
+	if depths.size() < 2:
+		return 0.0
+	var mean := 0.0
+	for value: float in depths:
+		mean += value
+	mean /= float(depths.size())
+	var variance := 0.0
+	for value: float in depths:
+		variance += (value - mean) * (value - mean)
+	return sqrt(variance / float(depths.size()))
+
+
+## Whether a position along one side already stands inside the rim of a side at
+## right angles to it.
+static func _inside_perpendicular_rim(context: GenerationContext, side_index: int, position: int, low: int, high: int) -> bool:
+	var crossing: Array[int] = ([1, 3] as Array[int]) if side_index == 0 or side_index == 2 else ([0, 2] as Array[int])
+	for other: int in crossing:
+		var side: StringName = MapRecipe.SIDES[other]
+		if context.recipe.border_kind(side) != MapRecipe.BORDER_MOUNTAIN_WALL:
+			continue
+		var reach := context.recipe.border_reach(side)
+		var distance := high - position if other == 1 or other == 2 else position - low
+		if distance < reach[1]:
+			return true
+	return false
+
+
+## The cell `step` columns inland from `side`, at `position` along it.
+static func _side_cell(side_index: int, position: int, step: int, low: int, high: int) -> Vector2i:
+	match side_index:
+		0:
+			return Vector2i(position, low + step)
+		1:
+			return Vector2i(high - step, position)
+		2:
+			return Vector2i(position, high - step)
+		_:
+			return Vector2i(low + step, position)
 
 
 static func _nearest_walkable(grid: TerrainGrid, nav: NavGrid, around: Vector2i) -> Variant:

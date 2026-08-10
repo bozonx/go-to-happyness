@@ -157,15 +157,25 @@ size_flags_horizontal = 3
 
 [node name="Label" type="Label" parent="Margin/Scroll/Rows/Row13"]
 custom_minimum_size = Vector2(170, 0)
-text = "wall height"
+text = "rim reach (min/max)"
 
-[node name="BorderHeight" type="SpinBox" parent="Margin/Scroll/Rows/Row13"]
+[node name="BorderReachMin" type="SpinBox" parent="Margin/Scroll/Rows/Row13"]
 unique_name_in_owner = true
 size_flags_horizontal = 3
-min_value = 1.0
-max_value = 120.0
+min_value = 3.0
+max_value = 64.0
 step = 1.0
-value = 26.0
+value = 8.0
+allow_greater = false
+allow_lesser = false
+
+[node name="BorderReachMax" type="SpinBox" parent="Margin/Scroll/Rows/Row13"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 4.0
+max_value = 64.0
+step = 1.0
+value = 18.0
 allow_greater = false
 allow_lesser = false
 
@@ -173,15 +183,25 @@ allow_lesser = false
 
 [node name="Label" type="Label" parent="Margin/Scroll/Rows/Row14"]
 custom_minimum_size = Vector2(170, 0)
-text = "wall thickness"
+text = "seal risers / steps"
 
-[node name="BorderThickness" type="SpinBox" parent="Margin/Scroll/Rows/Row14"]
+[node name="BorderSealRisers" type="SpinBox" parent="Margin/Scroll/Rows/Row14"]
 unique_name_in_owner = true
 size_flags_horizontal = 3
 min_value = 1.0
-max_value = 32.0
+max_value = 4.0
 step = 1.0
-value = 6.0
+value = 2.0
+allow_greater = false
+allow_lesser = false
+
+[node name="BorderRiserSteps" type="SpinBox" parent="Margin/Scroll/Rows/Row14"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+min_value = 3.0
+max_value = 8.0
+step = 1.0
+value = 3.0
 allow_greater = false
 allow_lesser = false
 

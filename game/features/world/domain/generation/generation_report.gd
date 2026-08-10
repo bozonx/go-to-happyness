@@ -57,6 +57,12 @@ func metric_lines(recipe: MapRecipe) -> Array[String]:
 	])
 	lines.append("walkable      %.3f   of the land a walker can stand on" % metrics["pedestrian_walkable"])
 	lines.append("walls sealed  %s" % ("yes" if bool(metrics["walls_sealed"]) else "NO"))
+	# The other half of §3.2: sealed says the edge holds, these two say it is a
+	# mountainside rather than a box — how much of the rim can be stood on, and how
+	# far its inner edge wanders. A slab scores 0.000 and 0.0 here.
+	lines.append("rim           %.3f walkable foothills · %.1f cells of ragged edge   (min %.3f)" % [
+		metrics.get("rim_walkable", 0.0), metrics.get("rim_edge_spread", 0.0), recipe.rim_walkable_min,
+	])
 	lines.append("rivers        %d/%d reach a receiver" % [metrics["rivers_terminated"], metrics["rivers_traced"]])
 	lines.append("water         %d bodies, %d wet cells, %d damaged" % [
 		metrics["water_bodies"], metrics["wet_cells"], metrics["damaged_water_bodies"],

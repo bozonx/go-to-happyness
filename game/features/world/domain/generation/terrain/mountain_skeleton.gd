@@ -123,7 +123,7 @@ static func _grow_flanks(context: GenerationContext, crest: PackedVector2Array, 
 	var tallest := 0.0
 	for height: float in crest_heights:
 		tallest = maxf(tallest, height)
-	var gradient := _flank_gradient(context.recipe.repose_override, steepness)
+	var gradient := flank_gradient(context.recipe.repose_override, steepness)
 	# The profile is steepest at the crest, so the width comes from the steepest
 	# point and not from the average — an average-fitted flank overshoots the
 	# gradient over its whole upper half.
@@ -167,7 +167,10 @@ static func rampable_drops(material_id: StringName) -> Array[int]:
 	return drops if not drops.is_empty() else ([1] as Array[int])
 
 
-static func _flank_gradient(material_id: StringName, steepness: float) -> float:
+## Public because the border rim is grown by the same rule (§3.2): the edge of the
+## board is a range like any other, and a range that picks its own gradient is a
+## range the catalog cannot express.
+static func flank_gradient(material_id: StringName, steepness: float) -> float:
 	var drops := rampable_drops(material_id)
 	var choice := clampi(roundi(steepness * float(drops.size() - 1)), 0, drops.size() - 1)
 	return float(drops[choice])

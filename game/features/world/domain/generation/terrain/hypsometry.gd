@@ -50,8 +50,17 @@ static func apply(context: GenerationContext) -> void:
 
 	var shaped := _shaped_field(context, land)
 	var ceiling := _plain_ceiling(recipe)
+	# The two promises of §3.4 are about the MAP, and the frame is not map. Solving
+	# over it too was harmless while the frame was a slab written after this stage;
+	# now that the rim of §3.2 is uplift like any range, a rim taller than the
+	# ranges behind it would absorb the whole mountain budget and leave the map's
+	# own peaks short of the maximum the recipe asked for — measured, of course,
+	# over the map, where the rim is not.
+	var sample: PackedInt32Array = _sample_indices(context, land)
+	if sample.is_empty():
+		sample = land
 	var uplift_peak := 0.0
-	for index: int in land:
+	for index: int in sample:
 		uplift_peak = maxf(uplift_peak, context.uplift[index])
 
 	var exponent := 1.0
@@ -60,16 +69,24 @@ static func apply(context: GenerationContext) -> void:
 		# No mountains: the plains alone must reach the maximum, so the ceiling IS
 		# the maximum and only the mean is left to solve.
 		ceiling = float(recipe.land_max_height)
-		exponent = _solve_exponent(context, land, shaped, ceiling, 0.0, float(recipe.land_mean_height))
+		exponent = _solve_exponent(context, sample, shaped, ceiling, 0.0, float(recipe.land_mean_height))
 	else:
 		for _round in OUTER_ROUNDS:
-			exponent = _solve_exponent(context, land, shaped, ceiling, gain, float(recipe.land_mean_height))
-			gain = _solve_gain(context, land, shaped, ceiling, exponent, float(recipe.land_max_height))
+			exponent = _solve_exponent(context, sample, shaped, ceiling, gain, float(recipe.land_mean_height))
+			gain = _solve_gain(context, sample, shaped, ceiling, exponent, float(recipe.land_max_height))
+	context.mountain_gain = gain
 
+	var ceiling_height := float(recipe.land_max_height)
 	for index: int in land:
 		var plain := ceiling * pow(shaped[index], exponent)
-		context.height_field[index] = maxf(plain, context.uplift[index] * gain)
 		context.uplift[index] *= gain
+		var height := maxf(plain, context.uplift[index])
+		# The rim keeps to the map's own height budget. It is scaled by a gain
+		# solved without it, so nothing stops it overshooting — and a frame standing
+		# a head above every range behind it reads as a wall however ragged it is.
+		if context.border_locked[index] != 0:
+			height = minf(height, ceiling_height)
+		context.height_field[index] = height
 
 	# The two targets can be genuinely incompatible: mountains wide enough to hold
 	# their own peaks can cover so much of a small board that no plain exponent
@@ -85,6 +102,17 @@ static func _land_indices(context: GenerationContext) -> PackedInt32Array:
 		if context.is_land[index] != 0:
 			land.append(index)
 	return land
+
+
+## The land the recipe was describing: everything except the frame. It is what the
+## verdict measures the mean and the maximum over (§6), so it is what the solver
+## has to aim at.
+static func _sample_indices(context: GenerationContext, land: PackedInt32Array) -> PackedInt32Array:
+	var sample := PackedInt32Array()
+	for index: int in land:
+		if context.border_locked[index] == 0:
+			sample.append(index)
+	return sample
 
 
 static func _plain_ceiling(recipe: MapRecipe) -> float:

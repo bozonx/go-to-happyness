@@ -10,23 +10,47 @@
 	"border": {
 		"north": {
 			"kind": "mountain_wall",
-			"height": 32,
-			"thickness": 6
+			"reach": [
+				8,
+				18
+			],
+			"seal": {
+				"risers": 2,
+				"riser_steps": 3
+			}
 		},
 		"east": {
 			"kind": "mountain_wall",
-			"height": 32,
-			"thickness": 6
+			"reach": [
+				8,
+				18
+			],
+			"seal": {
+				"risers": 2,
+				"riser_steps": 3
+			}
 		},
 		"south": {
 			"kind": "mountain_wall",
-			"height": 32,
-			"thickness": 6
+			"reach": [
+				8,
+				18
+			],
+			"seal": {
+				"risers": 2,
+				"riser_steps": 3
+			}
 		},
 		"west": {
 			"kind": "mountain_wall",
-			"height": 32,
-			"thickness": 6
+			"reach": [
+				8,
+				18
+			],
+			"seal": {
+				"risers": 2,
+				"riser_steps": 3
+			}
 		},
 		"ocean_level": -8
 	},

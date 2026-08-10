@@ -27,9 +27,9 @@ extends RefCounted
 const COMPOSITION_PASSES := 3
 
 const STAGES: Array[StringName] = [
-	&"border_plan", &"landmass", &"relief", &"mountains", &"hypsometry", &"border",
-	&"quantize", &"climate", &"passes", &"flow", &"rivers", &"ground", &"repose", &"reflow",
-	&"lakes", &"reclimate", &"biomes", &"surface",
+	&"border_plan", &"landmass", &"relief", &"mountains", &"border_rim", &"hypsometry", &"border",
+	&"quantize", &"seal", &"climate", &"passes", &"flow", &"rivers", &"ground", &"repose",
+	&"reflow", &"lakes", &"reseal", &"reclimate", &"biomes", &"surface",
 ]
 
 
@@ -80,6 +80,12 @@ static func run(recipe: MapRecipe, seeds: GenerationSeed, land_fraction_bias := 
 	# it, and the flood that fills it at write time escapes across the whole map.
 	_timed(context, &"reflow", func() -> void: FlowField.build(context))
 	_timed(context, &"lakes", func() -> void: LakeFiller.fill(context))
+	# The riser is re-asserted LAST, after the final stage that moves a column.
+	# Settling reworks the ground at the foot of the contour and the lake stage
+	# carves an outflow through it, and both of them left drops of one and two on
+	# a rim that had been sealed correctly two stages earlier. The promise is about
+	# the ground that ships, so it is made on the ground that ships.
+	_timed(context, &"reseal", func() -> void: BorderSeal.enforce(context))
 	# Temperature is mostly altitude, and the river channels and the repose pass
 	# have both moved altitude since the first climate pass. The biomes describe
 	# the ground that ships, so they are computed from the climate of that ground.
@@ -98,9 +104,18 @@ static func _shape_land(context: GenerationContext) -> void:
 	_timed(context, &"landmass", func() -> void: LandmassField.build(context))
 	_timed(context, &"relief", func() -> void: BaseReliefField.build(context))
 	_timed(context, &"mountains", func() -> void: MountainSkeleton.build(context))
+	# The rim is a range and is written as one, into the same uplift buffer and
+	# before the same solver (§3.2). Everything that asks "is this a mountain"
+	# downstream — the height budget, the angle of repose, the rain shadow — then
+	# gets the same answer for the edge of the board as for the middle of it.
+	_timed(context, &"border_rim", func() -> void: BorderShaper.raise_rims(context))
 	_timed(context, &"hypsometry", func() -> void: Hypsometry.apply(context))
 	_timed(context, &"border", func() -> void: BorderShaper.apply(context))
 	_timed(context, &"quantize", func() -> void: HeightQuantizer.apply(context))
+	# The riser is whole steps and is enforced on whole steps. Half a step of
+	# rounding is the difference between a drop nothing climbs and a drop a
+	# pedestrian walks up, so it may not be left to the quantiser.
+	_timed(context, &"seal", func() -> void: BorderSeal.enforce(context))
 
 
 ## Land share measured the way §6 measures it: inside the frame, over the integer

@@ -14,9 +14,11 @@ extends RefCounted
 ## that would slide: a meadow at the foot of a cliff holds nothing up and is an
 ## ordinary landscape, while sand on the brow of the same drop is not.
 ##
-## Two things are deliberately exempt. Border walls are AUTHORED faces (§3.2) —
-## letting them slump would quietly undo the side the recipe asked for — and river
-## channels are authored cuts, which would fill in again on the first sweep.
+## Two things are deliberately exempt, and the first one is deliberately SMALL.
+## The authored part of a border is the seal contour of §3.2 and nothing else —
+## one cell wide — because the rim around it is a mountain and a mountain that is
+## not allowed to settle is the slab this whole design replaced. River channels are
+## the second: they are authored cuts and would fill in again on the first sweep.
 ##
 ## The pass runs before slopes are assigned, because `SlopeAssigner` chooses a
 ## class from the drop it finds and the free ground beside it; moving columns
@@ -58,10 +60,15 @@ static func apply(context: GenerationContext) -> void:
 static func _fill_potholes(context: GenerationContext) -> int:
 	var filled := 0
 	for index in context.cell_count:
-		if context.border_locked[index] != 0:
+		if context.border_seal[index] != 0:
 			continue
 		var cell := context.cell_of_index(index)
 		if context.river_cells.has(cell) or context.carved_cells.has(cell):
+			continue
+		# The trench at the foot of a riser is not a pothole. Filling it is the one
+		# way this pass can climb a seal contour: raise the column below the drop and
+		# the drop is no longer the drop the recipe promised.
+		if _beside_seal(context, cell):
 			continue
 		var lowest := TerrainGrid.MAX_HEIGHT
 		for offset: Vector2i in NEIGHBOURS:
@@ -76,10 +83,20 @@ static func _fill_potholes(context: GenerationContext) -> int:
 	return filled
 
 
+static func _beside_seal(context: GenerationContext, cell: Vector2i) -> bool:
+	for offset: Vector2i in BorderShaper.NEIGHBOURS_8:
+		var neighbour := cell + offset
+		if not context.contains(neighbour.x, neighbour.y):
+			continue
+		if context.border_seal[context.cell_index(neighbour)] != 0:
+			return true
+	return false
+
+
 static func _sweep_once(context: GenerationContext) -> int:
 	var moved := 0
 	for index in context.cell_count:
-		if context.border_locked[index] != 0:
+		if context.border_seal[index] != 0:
 			continue
 		var cell := context.cell_of_index(index)
 		if context.river_cells.has(cell) or context.carved_cells.has(cell):

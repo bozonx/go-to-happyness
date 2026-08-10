@@ -67,6 +67,18 @@ const BORDER_KINDS: Array[StringName] = [
 	BORDER_OCEAN, BORDER_MOUNTAIN_WALL, BORDER_PLATEAU, BORDER_OPEN,
 ]
 
+## The smallest riser that is honestly un-jumpable. A pedestrian walks up to
+## slope class 5 (`very_steep`, two steps in one cell), so two is climbable and
+## three is not: no ramp class divides a drop of three, which makes it a bare
+## `cliff`, and a drop of four takes `pre_cliff` — class 6, above the limit. A
+## recipe that asks for less is asking for a wall it can be walked over, and that
+## is refused rather than clamped (§3.3).
+const MIN_SEAL_RISER := 3
+## How many risers a rim may stack. More than four is not a terraced flank any
+## more, it is a staircase filling the whole reach.
+const MAX_SEAL_RISERS := 4
+const DEFAULT_SEAL_RISERS := 2
+
 const LATITUDE_POLAR := &"polar"
 const LATITUDE_BOREAL := &"boreal"
 const LATITUDE_TEMPERATE := &"temperate"
@@ -105,7 +117,8 @@ var seed := 0
 
 var board_size := 96
 
-## side -> {"kind": StringName, "height": int, "thickness": int}
+## side -> {"kind": StringName, "height": int, "height_set": bool, "thickness": int,
+##          "reach": Array[int], "seal_risers": int, "seal_riser_steps": int}
 var border: Dictionary = {}
 var ocean_level := -2
 
@@ -197,6 +210,12 @@ var land_max_height_tolerance := 4
 ## boundary on soil is a 45° face by the catalog's own budget rule, so cart routes
 ## are the business of roads and the Ramp Tool, not of natural ground.
 var cart_reach_min := 0.0
+## Share of the rim's PLAYABLE flank — the foothills inside the seal — a
+## pedestrian can stand on (§3.2). It is what "the edge is a mountainside, not a
+## wall" means as a number: a rim whose inner face is all cliff scores near zero
+## even though it is ragged and pretty from above. Reported always, required only
+## when a recipe says so, exactly like `cart_reach_min`.
+var rim_walkable_min := 0.0
 ## Share of the desert that may stand under a LAKE (§11.1.3). Rivers and the sea
 ## are exempt on purpose: a Nile crossing a desert and a lagoon on its coast are
 ## both real, a chain of ponds in the dunes is not.
@@ -238,6 +257,37 @@ func border_thickness(side: StringName) -> int:
 	return int(entry.get("thickness", 6))
 
 
+## Whether the author named a crest for this side at all. When nobody did, the
+## rim takes its height from the mountains the rest of the map has (§3.2): a
+## frame that is a head taller than every range behind it reads as a wall no
+## matter how ragged its edge is.
+func border_height_is_authored(side: StringName) -> bool:
+	var entry: Dictionary = border.get(side, {})
+	return bool(entry.get("height_set", false))
+
+
+## How deep the rim's foothills come inland, as a band in cells.
+func border_reach(side: StringName) -> Array[int]:
+	var entry: Dictionary = border.get(side, {})
+	var reach: Array = entry.get("reach", [8, 18])
+	if reach.size() < 2:
+		return [8, 18] as Array[int]
+	return [int(reach[0]), int(reach[1])] as Array[int]
+
+
+## How many un-jumpable risers this side stacks. One is a scarp, two or three are
+## terraces — and the guarantee is the same either way, because every one of them
+## is a closed contour on its own.
+func border_seal_risers(side: StringName) -> int:
+	var entry: Dictionary = border.get(side, {})
+	return clampi(int(entry.get("seal_risers", DEFAULT_SEAL_RISERS)), 1, MAX_SEAL_RISERS)
+
+
+func border_seal_riser_steps(side: StringName) -> int:
+	var entry: Dictionary = border.get(side, {})
+	return int(entry.get("seal_riser_steps", MIN_SEAL_RISER))
+
+
 ## The recipe as it will be written back — every field explicit, so the lab can
 ## round-trip an edited recipe without the defaults quietly changing under it.
 func to_dictionary() -> Dictionary:
@@ -245,8 +295,15 @@ func to_dictionary() -> Dictionary:
 	for side: StringName in SIDES:
 		var entry: Dictionary = {"kind": String(border_kind(side))}
 		if border_kind(side) == BORDER_MOUNTAIN_WALL or border_kind(side) == BORDER_PLATEAU:
-			entry["height"] = border_height(side)
 			entry["thickness"] = border_thickness(side)
+			entry["reach"] = border_reach(side).duplicate()
+			if border_height_is_authored(side):
+				entry["height"] = border_height(side)
+		if border_kind(side) == BORDER_MOUNTAIN_WALL:
+			entry["seal"] = {
+				"risers": border_seal_risers(side),
+				"riser_steps": border_seal_riser_steps(side),
+			}
 		border_out[String(side)] = entry
 	border_out["ocean_level"] = ocean_level
 	return {
@@ -313,6 +370,7 @@ func to_dictionary() -> Dictionary:
 			"land_mean_height_tolerance": land_mean_height_tolerance,
 			"land_max_height_tolerance": land_max_height_tolerance,
 			"cart_reach_min": cart_reach_min,
+			"rim_walkable_min": rim_walkable_min,
 			"desert_lake_fraction_max": desert_lake_fraction_max,
 		},
 	}
@@ -366,6 +424,12 @@ func _parse(source: Dictionary) -> void:
 	_parse_targets(source.get("targets", {}))
 
 
+## A `mountain_wall` side is described by how far its foothills come inland and by
+## the riser that makes it un-jumpable — not by a slab of fixed thickness and
+## fixed crest. `thickness` and `height` are still read, because recipes that
+## carry them exist: a thickness becomes the reach the same band would have had
+## with a ragged edge, and a height becomes a crest the rim aims at instead of a
+## number every column of it holds.
 func _parse_border(source: Dictionary) -> void:
 	ocean_level = int(source.get("ocean_level", ocean_level))
 	for side: StringName in SIDES:
@@ -375,11 +439,25 @@ func _parse_border(source: Dictionary) -> void:
 		if not BORDER_KINDS.has(kind):
 			errors.append("border.%s.kind: unknown value \"%s\"" % [side, kind])
 			kind = BORDER_OPEN
+		var thickness := maxi(1, int(entry.get("thickness", 6)))
+		var seal: Dictionary = entry.get("seal", {}) if typeof(entry.get("seal", {})) == TYPE_DICTIONARY else {}
 		border[side] = {
 			"kind": kind,
 			"height": maxi(1, int(entry.get("height", 26))),
-			"thickness": maxi(1, int(entry.get("thickness", 6))),
+			"height_set": entry.has("height"),
+			"thickness": thickness,
+			"reach": _reach_pair(entry.get("reach", [thickness + 2, thickness * 3])),
+			"seal_risers": int(seal.get("risers", DEFAULT_SEAL_RISERS)),
+			"seal_riser_steps": int(seal.get("riser_steps", MIN_SEAL_RISER)),
 		}
+
+
+## A reach is a band and not a number: the two ends are how deep the foothills
+## come inland where the rim is narrowest and where it is widest, and everything
+## between them is what makes the inner edge ragged instead of straight.
+static func _reach_pair(raw: Variant) -> Array[int]:
+	var pair := _int_pair(raw)
+	return [maxi(pair[0], 3), maxi(pair[1], 4)] as Array[int]
 
 
 func _parse_landmass(source: Dictionary) -> void:
@@ -488,6 +566,7 @@ func _parse_targets(source: Dictionary) -> void:
 	land_mean_height_tolerance = maxf(0.0, float(source.get("land_mean_height_tolerance", land_mean_height_tolerance)))
 	land_max_height_tolerance = maxi(0, int(source.get("land_max_height_tolerance", land_max_height_tolerance)))
 	cart_reach_min = clampf(float(source.get("cart_reach_min", cart_reach_min)), 0.0, 1.0)
+	rim_walkable_min = clampf(float(source.get("rim_walkable_min", rim_walkable_min)), 0.0, 1.0)
 	desert_lake_fraction_max = float(source.get("desert_lake_fraction_max", desert_lake_fraction_max))
 
 
@@ -538,10 +617,30 @@ func _validate() -> void:
 	for side: StringName in SIDES:
 		if border_kind(side) != BORDER_MOUNTAIN_WALL and border_kind(side) != BORDER_PLATEAU:
 			continue
+		var reach := border_reach(side)
+		if reach[0] > reach[1]:
+			errors.append("border.%s.reach %d…%d is inverted" % [side, reach[0], reach[1]])
+		if reach[1] * 2 >= board_size:
+			errors.append("border.%s.reach %d does not fit on a %d board" % [side, reach[1], board_size])
 		if border_thickness(side) * 2 >= board_size:
 			errors.append("border.%s.thickness %d does not fit on a %d board" % [side, border_thickness(side), board_size])
 		if land_mean_height + border_height(side) > TerrainGrid.MAX_HEIGHT:
 			errors.append("border.%s crest would exceed the height range" % side)
+		if border_kind(side) != BORDER_MOUNTAIN_WALL:
+			continue
+		# The promise of a `mountain_wall` is impassability, and impassability is
+		# arithmetic: a riser under `MIN_SEAL_RISER` is a step a pedestrian walks up.
+		if border_seal_riser_steps(side) < MIN_SEAL_RISER:
+			errors.append("border.%s.seal.riser_steps %d is climbable — %d is the smallest riser nothing walks up" % [
+				side, border_seal_riser_steps(side), MIN_SEAL_RISER,
+			])
+		# Every riser needs its own tread to stand on, and both have to fit inside
+		# the narrowest place the rim has.
+		var needed := border_seal_risers(side) * 2
+		if reach[0] < needed:
+			errors.append("border.%s: %d riser(s) need %d cells and the rim is only %d deep at its narrowest" % [
+				side, border_seal_risers(side), needed, reach[0],
+			])
 
 	var band: Dictionary = LATITUDE_PRESETS.get(latitude, LATITUDE_PRESETS[LATITUDE_TEMPERATE])
 	if absf(land_mean_temperature - float(band["temperature"])) > float(band["tolerance"]) + 0.0001:

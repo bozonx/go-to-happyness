@@ -111,8 +111,14 @@ func load_recipe(recipe: MapRecipe) -> void:
 	%BorderEast.selected = maxi(BORDER_KINDS.find(recipe.border_kind(&"east")), 0)
 	%BorderSouth.selected = maxi(BORDER_KINDS.find(recipe.border_kind(&"south")), 0)
 	%BorderWest.selected = maxi(BORDER_KINDS.find(recipe.border_kind(&"west")), 0)
-	%BorderHeight.value = recipe.border_height(&"east")
-	%BorderThickness.value = recipe.border_thickness(&"east")
+	# The rim takes its height from the map's own mountains (§3.2), so the panel has
+	# no crest to offer: what an author moves is how far the foothills come inland
+	# and how the un-jumpable part of them is stacked.
+	var reach := recipe.border_reach(&"east")
+	%BorderReachMin.value = reach[0]
+	%BorderReachMax.value = reach[1]
+	%BorderSealRisers.value = recipe.border_seal_risers(&"east")
+	%BorderRiserSteps.value = recipe.border_seal_riser_steps(&"east")
 
 	%Shape.selected = maxi(SHAPES.find(recipe.shape), 0)
 	%LandFraction.value = recipe.land_fraction
@@ -266,8 +272,11 @@ func build_recipe(id: String, seed_value: int) -> MapRecipe:
 func _border_entry(picker: OptionButton) -> Dictionary:
 	return {
 		"kind": String(BORDER_KINDS[picker.selected]),
-		"height": int(%BorderHeight.value),
-		"thickness": int(%BorderThickness.value),
+		"reach": [int(%BorderReachMin.value), int(%BorderReachMax.value)],
+		"seal": {
+			"risers": int(%BorderSealRisers.value),
+			"riser_steps": int(%BorderRiserSteps.value),
+		},
 	}
 
 

@@ -10,8 +10,14 @@
 	"border": {
 		"north": {
 			"kind": "mountain_wall",
-			"height": 30,
-			"thickness": 5
+			"reach": [
+				7,
+				15
+			],
+			"seal": {
+				"risers": 2,
+				"riser_steps": 3
+			}
 		},
 		"east": {
 			"kind": "open"

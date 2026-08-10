@@ -51,12 +51,38 @@ var carved_cells: Dictionary = {}
 
 ## Stage 4/5 — the continuous height field in steps, before quantisation.
 var height_field := PackedFloat32Array()
+## What `Hypsometry` had to multiply the mountain uplift by to land the requested
+## maximum. The rim of §3.2 is uplift like any range, and it is written before the
+## solver runs, so this is how a stage after it reads back the height the ranges
+## really came out at.
+var mountain_gain := 1.0
 ## Cells the border stage authored as an impassable wall. Three consumers depend
 ## on this mask: the repose pass leaves them alone (a wall is a face on purpose,
 ## not a slope that failed to settle), the pass carver refuses to tunnel through
 ## them, and the metrics exclude them from the land — a frame around the map is
 ## not ground the recipe was describing.
 var border_locked := PackedByteArray()
+## How many of the rim's nested seal contours a column stands beyond, counted from
+## the map inwards: 0 is ground the player walks on, 1 is past the first riser, 2
+## is past the second. It is the ONE geometric fact the rim stage, the seal stage
+## and the verdict all read, so "outside" can never mean three slightly different
+## regions in three files. `border_locked` is exactly "level > 0".
+var border_outer := PackedByteArray()
+## Columns that carry a riser: the inner edge of some contour, one cell thick.
+## These are the only cells of the whole frame that are AUTHORED — the settling
+## pass skips them and the slope assigner may not build on them or beside them,
+## because everything the wall promises rests on this one contour and on nothing
+## else. The rest of the rim is ordinary mountain and settles like one.
+var border_seal := PackedByteArray()
+## How far along its side each column reads the rim's profile, in cells. It is
+## the one field the whole border stage is built on: the frame, the rim and the
+## contour are the same shape only because all three warp by these same numbers.
+var border_warp := PackedFloat32Array()
+## Every column the rim's uplift touched, including the foothills inside the seal
+## that the player actually walks. Only the metrics read it: "the edge of the map
+## is a mountainside" is a promise about ground that can be stood on, so it has to
+## be measured over ground that is inside the map.
+var border_rim := PackedByteArray()
 ## The subset of `border_locked` that is a `mountain_wall` — the sides that
 ## promised to be impassable. A `plateau` is locked too, because it is frame and
 ## not the ground the recipe described, but it is a SHELF: the slope assigner is
@@ -142,6 +168,10 @@ func configure(next_recipe: MapRecipe, next_seeds: GenerationSeed) -> void:
 	uplift = _new_floats()
 	height_field = _new_floats()
 	border_locked = _new_bytes()
+	border_outer = _new_bytes()
+	border_seal = _new_bytes()
+	border_warp = _new_floats()
+	border_rim = _new_bytes()
 	border_wall = _new_bytes()
 	border_sea = _new_bytes()
 	heights = _new_ints()

@@ -277,7 +277,7 @@ func _assign_slopes(context: GenerationContext) -> void:
 		for x in range(minimum.x, maximum.x + 1):
 			seed_cells.append(Vector2i(x, z))
 	var placed := SlopeAssigner.assign_slopes(
-		region, seed_cells, RampConnectionPlan.AUTO_CLASS, _wall_footings(context))
+		region, seed_cells, RampConnectionPlan.AUTO_CLASS, BorderSeal.footings(context))
 	for cell: Vector2i in region.touched_cells():
 		_grid.set_cell_state(
 			cell, region.height_of(cell),
@@ -285,29 +285,6 @@ func _assign_slopes(context: GenerationContext) -> void:
 			_grid.material_index_at(cell), _grid.flags_of(cell), _grid.detail_at(cell),
 		)
 	context.note("slopes: %d boundaries got a ramp" % placed)
-
-
-## Ground the slope assigner may not build on: the columns of a `mountain_wall`
-## and the ring of land at its foot.
-##
-## The budget rule of §3.2 spends "the footprint the cascade would have spent",
-## and the cascade's footprint depends on the material at the BOTTOM of the drop.
-## Once the plains stopped being stone, the soil at the foot of a border wall
-## bought a budget big enough for a `shallow` chain — and the generator obligingly
-## built a staircase up the one side of the map that had promised to be
-## impassable. The verdict caught it (`walls_sealed` went false), which is what
-## that check is for; this is the answer to it. A `plateau` is deliberately not in
-## here: it is a shelf, and a shelf nobody can climb is a wall by another name.
-func _wall_footings(context: GenerationContext) -> Dictionary:
-	var blocked: Dictionary = {}
-	for index in context.cell_count:
-		if context.border_wall[index] == 0:
-			continue
-		var cell := context.cell_of_index(index)
-		blocked[cell] = true
-		for direction: int in SlopeCatalog.ORTHOGONAL_DIRECTIONS:
-			blocked[cell + SlopeCatalog.direction_offset(direction)] = true
-	return blocked
 
 
 ## Stage 12. The plan carries a level and a footprint; the level is authoritative
