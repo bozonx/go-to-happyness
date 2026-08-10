@@ -53,8 +53,8 @@ func _run() -> void:
 	_test_new_map_is_unnamed_until_asked()
 	_test_save_writes_back_to_the_same_file(editor)
 	_test_read_only_source_detaches(editor)
-	_test_recipe_tuning_dialog(editor)
-	_test_generation_creates_a_map_that_stays_re_rollable(editor)
+	await _test_recipe_tuning_dialog(editor)
+	await _test_generation_creates_a_map_that_stays_re_rollable(editor)
 
 	editor.queue_free()
 	print("--- test_map_editor.gd PASSED ---")
@@ -1326,6 +1326,9 @@ func _test_generation_creates_a_map_that_stays_re_rollable(editor: Node) -> void
 	assert(editor.document.meta.id == &"generated_map", "the generated document took the id")
 	assert(editor.document.board_cells() == MapMeta.PRESET_ARENA,
 		"and the board size the dialog chose, not the default: %d" % editor.document.board_cells())
+	await process_frame
+	_assert_ok_button_reachable(dialogs._generation_report_dialog, "Отчёт генерации")
+	dialogs._generation_report_dialog.hide()
 	var heights := _height_signature(editor.document.terrain)
 	assert(_distinct_heights(editor.document.terrain) > 1, "the generator produced relief rather than a slab")
 	assert(editor.current_path.is_empty(), "a generated map is not bound to a file yet")
@@ -1369,12 +1372,15 @@ func _test_recipe_tuning_dialog(editor: Node) -> void:
 	# «Создать» at all once the section was open.
 	assert(dialogs._new_generate_box.get_parent().get_parent() is ScrollContainer,
 		"the fields live inside a scroll, so the section cannot grow the dialog")
-	var open_height := dialogs._new_dialog.get_contents_minimum_size().y
+	await process_frame
+	var open_height := dialogs._new_dialog.size.y
 	dialogs._new_generate_check.button_pressed = false
-	var closed_height := dialogs._new_dialog.get_contents_minimum_size().y
+	await process_frame
+	assert(dialogs._new_dialog.size.y == open_height,
+		"opening the section must not resize the dialog: %d vs %d" % [open_height, dialogs._new_dialog.size.y])
 	dialogs._new_generate_check.button_pressed = true
-	assert(is_equal_approx(open_height, closed_height),
-		"opening the section must not make the dialog taller: %.0f vs %.0f" % [open_height, closed_height])
+	await process_frame
+	_assert_ok_button_reachable(dialogs._new_dialog, "Новая карта")
 
 	var panel = dialogs._recipe_panel
 	for hidden: String in ["Row2", "Row3", "Row5", "Row7"]:
@@ -1382,6 +1388,8 @@ func _test_recipe_tuning_dialog(editor: Node) -> void:
 		assert(not row.visible, "%s is laboratory chrome and stays out of the dialog" % hidden)
 
 	dialogs._open_recipe_tuning()
+	await process_frame
+	_assert_ok_button_reachable(dialogs._recipe_tune_dialog, "Тонкая настройка")
 	assert(panel.board_size() == MapMeta.PRESET_ARENA,
 		"the panel opened on the map's board, not the recipe's: %d" % panel.board_size())
 
@@ -1420,6 +1428,19 @@ func _distinct_heights(terrain: TerrainGrid) -> int:
 		for x in terrain.board_cells:
 			seen[terrain.height_of(Vector2i(x, y))] = true
 	return seen.size()
+
+
+## `AcceptDialog` sets `wrap_controls`, so the window is exactly as big as its
+## contents claim to need — and a `ScrollContainer` claims nothing. Without a
+## minimum size on the scroll the dialog collapses to a sliver with its own OK
+## button pushed out of the window: the fields are there, «Создать» is not.
+func _assert_ok_button_reachable(dialog: AcceptDialog, title: String) -> void:
+	var button := dialog.get_ok_button()
+	var bottom := button.get_global_rect().end.y
+	assert(button.visible and not button.disabled, "«%s»: the OK button is live" % title)
+	assert(bottom <= float(dialog.size.y),
+		"«%s»: the OK button must sit inside the window — ends at %.0f of %d" % [title, bottom, dialog.size.y])
+	assert(dialog.size.y > 200, "«%s»: the dialog did not collapse: %d px" % [title, dialog.size.y])
 
 
 func _click(button: int, pressed: bool, shift := false, ctrl := false) -> InputEventMouseButton:

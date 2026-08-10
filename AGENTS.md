@@ -160,12 +160,19 @@ no-map fallback. See `design_docs/engine/map_editor.md`.
   editor is how the two drifted last time — see `design_docs/engine/active_zones.md` §19.
 - `tests/features/world/test_map_editor.gd` drives the real scene end to end. Unit tests
   over the brush and format prove the parts; only that one proves the editor.
+- `AcceptDialog` sets `wrap_controls`: the window is exactly as big as its contents claim
+  to need, and a `ScrollContainer` claims nothing. Put a `custom_minimum_size` on any
+  scroll inside a dialog, or the dialog collapses to a sliver with its own OK button
+  outside the window. `_assert_ok_button_reachable` in the editor test guards this.
 
 ## Map generation laboratory
 
-Procedural map generation starts in `res://tools/map_gen_lab/map_gen_lab.tscn`, not in
-the map editor. It runs the real `TerrainGenerationService` over the real `TerrainGrid`,
-`WaterGrid`, mesher and `NavGrid`. The rules are in
+Procedural map generation is tuned in `res://tools/map_gen_lab/map_gen_lab.tscn`; the map
+editor generates from it at map creation («Новая карта» → «Сгенерировать ландшафт»). The
+recipe panel is shared by both and lives in
+`game/features/world/presentation/editor/ui/recipe_panel.tscn`, because `tools/*` is
+excluded from export. The laboratory runs the real `TerrainGenerationService` over the
+real `TerrainGrid`, `WaterGrid`, mesher and `NavGrid`. The rules are in
 `design_docs/engine/procedural_map_generation.md`; read §10.1 before changing anything
 about slopes, rivers or metrics, because that is where the non-obvious constraints are.
 

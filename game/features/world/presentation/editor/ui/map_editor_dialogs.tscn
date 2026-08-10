@@ -31,6 +31,7 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="Scroll" type="ScrollContainer" parent="NewDialog/Body"]
+custom_minimum_size = Vector2(420, 320)
 layout_mode = 2
 horizontal_scroll_mode = 0
 
@@ -150,6 +151,7 @@ autowrap_mode = 3
 
 [node name="RecipePanel" parent="RecipeTuneDialog/Body/VBox" instance=ExtResource("2_recipe")]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(480, 560)
 layout_mode = 2
 size_flags_vertical = 3
 
@@ -170,6 +172,7 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="Scroll" type="ScrollContainer" parent="GenerationReportDialog/Body"]
+custom_minimum_size = Vector2(520, 440)
 layout_mode = 2
 horizontal_scroll_mode = 0
 
