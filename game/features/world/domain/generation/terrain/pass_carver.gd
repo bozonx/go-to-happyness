@@ -179,7 +179,7 @@ static func _press_corridor(context: GenerationContext, route: Array[Vector2i]) 
 				# over does, and leaving one of the two unfixed makes the loop
 				# above run its whole budget without ever joining the halves.
 				context.heights[index] = profile[step]
-				context.is_land[index] = 1 if profile[step] > context.recipe.ocean_level else 0
+				context.is_land[index] = 1 if profile[step] >= context.recipe.ocean_level else 0
 				# A saddle is AUTHORED ground, like a river channel: the recipe asked
 				# for a way through, and letting the next settling sweep relax it
 				# closes the pass again. It also means the corridor may legitimately

@@ -42,6 +42,7 @@ static func run_all() -> void:
 	_test_biomes_cover_the_board_and_follow_the_climate()
 	_test_surface_follows_the_biome()
 	_test_arid_climate_holds_no_lakes()
+	_test_audit_contracts_are_explicit()
 	print("    [PASS] Map Generation Tests")
 
 
@@ -473,6 +474,10 @@ static func _test_surface_is_painted_and_always_stands() -> void:
 			assert(
 				TerrainMaterialCatalog.holds_height_difference(index, drop)
 				or grid.material_of(cell) == TerrainMaterialCatalog.STONE
+				or (
+					grid.material_of(cell) == TerrainMaterialCatalog.SAND and drop == 1
+					and SurfacePainter.supports_half_step_at(grid, cell)
+				)
 				# A ramp is SHAPED ground and repose is about ground that slumps:
 				# the slope assigner lifted this column on purpose, and reading the
 				# lift back as a face is what used to turn every hillside to rock.
@@ -536,7 +541,7 @@ static func _test_a_generated_world_is_not_made_of_stone() -> void:
 				# the recipe was describing (§3.2).
 				if context.border_locked[context.cell_index(cell)] != 0:
 					continue
-				if harness.water.has_water(cell) or grid.height_of(cell) <= context.recipe.ocean_level:
+				if harness.water.has_water(cell) or grid.height_of(cell) < context.recipe.ocean_level:
 					continue
 				land += 1
 				var id := grid.material_of(cell)
@@ -581,7 +586,7 @@ static func _test_soil_holds_the_plains_and_rock_holds_the_ranges() -> void:
 			var neighbour := cell + offset
 			if context.contains(neighbour.x, neighbour.y):
 				lowest = mini(lowest, context.heights[context.cell_index(neighbour)])
-		if context.heights[index] > context.recipe.ocean_level:
+		if context.heights[index] >= context.recipe.ocean_level:
 			lowest = maxi(lowest, context.recipe.ocean_level)
 		if context.heights[index] - lowest > GroundMask.SOIL_STEPS:
 			steep_soil += 1
@@ -869,6 +874,103 @@ static func _material_counts(climate: Dictionary) -> Dictionary:
 			var id := grid.material_of(Vector2i(x, z))
 			counts[id] = int(counts.get(id, 0)) + 1
 	return counts
+
+
+## Latent contracts found by the full pipeline audit: each one is asserted at
+## its owning boundary so a table reorder or a reporting-only metric cannot make
+## it silently disappear again.
+static func _test_audit_contracts_are_explicit() -> void:
+	# Equal-height shoreline is dry ground because water requires positive depth.
+	var shoreline_recipe := _recipe()
+	var shoreline := GenerationContext.new()
+	shoreline.configure(shoreline_recipe, GenerationSeed.new(1))
+	shoreline.heights.fill(shoreline_recipe.ocean_level)
+	shoreline.refresh_land_mask()
+	assert(shoreline.land_cell_count() == shoreline.cell_count, "ocean-level columns are shoreline land")
+
+	# Flow accumulation reaches every authored strength and therefore both the
+	# no-freeze and no-ford mechanics already defined by WaterBody.
+	assert(LakeFiller.flow_strength(RiverCarver.MIN_SOURCE_ACCUMULATION) == 1)
+	assert(LakeFiller.flow_strength(LakeFiller.FAST_FLOW_ACCUMULATION) == 2)
+	assert(LakeFiller.flow_strength(LakeFiller.BLOCKING_FLOW_ACCUMULATION) == 3)
+
+	# Overlapping climate rectangles resolve by authored priority, never table order.
+	assert(
+		BiomeCatalog.id_of_index(BiomeCatalog.classify_climate(0.0, 0.1)) == BiomeCatalog.TUNDRA,
+		"cold dry overlap must resolve to tundra rather than desert",
+	)
+
+	var tolerance_recipe := _recipe({"targets": {
+		"land_mean_temperature_tolerance": 0.25,
+		"land_mean_moisture_tolerance": 0.01,
+	}})
+	assert(tolerance_recipe.land_mean_temperature_tolerance == 0.25)
+	assert(tolerance_recipe.land_mean_moisture_tolerance == 0.01)
+	var round_trip := MapRecipe.from_dictionary(tolerance_recipe.to_dictionary())
+	assert(round_trip.land_mean_temperature_tolerance == 0.25)
+	assert(round_trip.land_mean_moisture_tolerance == 0.01)
+
+	# The generator's direct board sweep still crosses WaterService once, allowing
+	# presentation to refresh without a presentation dependency in the generator.
+	var harness := Harness.new()
+	var bulk_notifications := [0]
+	harness.water_service.bulk_replaced.connect(func() -> void: bulk_notifications[0] += 1)
+	var result := harness.service.generate(_recipe(), 10101)
+	assert(result.context != null)
+	assert(bulk_notifications[0] > 0, "bulk generation must notify water consumers")
+	var strongest_generated_flow := 0
+	for body: WaterBody in harness.water.bodies():
+		for cell: Vector2i in body.flow:
+			var strength := body.flow_strength_at(cell)
+			strongest_generated_flow = maxi(strongest_generated_flow, strength)
+			assert(strength == LakeFiller.flow_strength(result.context.flow_accum[result.context.cell_index(cell)]))
+	assert(strongest_generated_flow == WaterBody.MAX_FLOW_STRENGTH,
+		"the generated accumulation axis must reach the blocking-current tier")
+	var rejected_metrics: Dictionary = result.report.metrics.duplicate(true)
+	rejected_metrics["mean_temperature"] = (
+		tolerance_recipe.land_mean_temperature + tolerance_recipe.land_mean_temperature_tolerance + 1.0
+	)
+	rejected_metrics["mean_moisture"] = tolerance_recipe.land_mean_moisture
+	var climate_failures := TerrainMetrics.failures(tolerance_recipe, rejected_metrics)
+	assert(climate_failures.any(func(reason: String) -> bool: return reason.begins_with("mean temperature")),
+		"a measured climate outside its tolerance must reject the attempt")
+
+	# Acceptance reads the published triangles and edges. Recompute the two shares
+	# directly from NavTerrainField and require the report to match them exactly.
+	var field := harness.nav.terrain_field()
+	var land: Dictionary = {}
+	var flat := 0
+	for index in result.context.cell_count:
+		if result.context.border_locked[index] != 0:
+			continue
+		var cell := result.context.cell_of_index(index)
+		if harness.grid.height_of(cell) < result.context.recipe.ocean_level:
+			continue
+		land[cell] = true
+		if field.slope_class_at(cell) == SlopeCatalog.CLASS_FLAT:
+			flat += 1
+	assert(is_equal_approx(
+		float(result.report.metrics["flat_fraction"]), float(flat) / float(maxi(land.size(), 1))))
+	var boundaries := 0
+	var cliffs := 0
+	for cell: Vector2i in land:
+		for offset: Vector2i in [Vector2i(1, 0), Vector2i(0, 1)]:
+			var neighbour := cell + offset
+			if not land.has(neighbour):
+				continue
+			boundaries += 1
+			if field.edge_class(cell, neighbour) == NavTerrainField.CLASS_CLIFF:
+				cliffs += 1
+	var geometric_cliffs := 0.0 if boundaries == 0 else float(cliffs) / float(boundaries)
+	assert(is_equal_approx(float(result.report.metrics["cliff_fraction"]), geometric_cliffs))
+
+	# Repose and alpine now consume the same landform mask. There is no independent
+	# height threshold left for either one to drift from.
+	for index in result.context.cell_count:
+		var rock_form := LandformField.is_rock(int(result.context.landforms[index]))
+		assert((int(result.context.repose_limit[index]) == GroundMask.ROCK_STEPS) == rock_form)
+		if int(result.context.biomes[index]) == BiomeCatalog.index_of(BiomeCatalog.ALPINE):
+			assert(int(result.context.landforms[index]) == LandformField.SUMMIT)
 
 
 ## §11.1.3, and the whole point of computing the climate before the hydrology: a

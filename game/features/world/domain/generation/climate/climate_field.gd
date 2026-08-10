@@ -91,7 +91,6 @@ const SOLVER_PASSES := 4
 ## colder each further level of it needs. Snow is a STATE in the detail byte, not
 ## a material (`terrain_materials.md` §2.5), which is exactly why the painter can
 ## put it on top of whatever the biome chose.
-const SNOW_TEMPERATURES: Array[float] = [-3.0, -10.0, -18.0]
 
 
 static func build(context: GenerationContext) -> void:
@@ -145,15 +144,6 @@ static func build(context: GenerationContext) -> void:
 static func wind_vector(bearing_degrees: float) -> Vector2:
 	var bearing := deg_to_rad(bearing_degrees)
 	return Vector2(-sin(bearing), cos(bearing))
-
-
-## Snow depth (0…3, `TerrainDetailCodec`) a column this cold carries all year.
-static func snow_level(temperature: float) -> int:
-	var level := 0
-	for threshold: float in SNOW_TEMPERATURES:
-		if temperature <= threshold:
-			level += 1
-	return level
 
 
 ## Mean of a field over the land inside the frame — the same population every

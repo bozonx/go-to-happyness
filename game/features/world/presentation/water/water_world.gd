@@ -93,6 +93,8 @@ func configure(next_water: WaterGrid, next_terrain: TerrainGrid, water_service: 
 			water_service.registry_changed.connect(_on_registry_changed)
 		if not water_service.edit_committed.is_connected(_on_water_committed):
 			water_service.edit_committed.connect(_on_water_committed)
+		if not water_service.bulk_replaced.is_connected(refresh_all):
+			water_service.bulk_replaced.connect(refresh_all)
 	# Depth is water level minus ground, so raising the bottom of a lake changes
 	# this surface without the water layer being touched at all.
 	if terrain_service != null and not terrain_service.edit_committed.is_connected(_on_terrain_committed):
@@ -111,10 +113,8 @@ func configure_border(kind: StringName, level: int) -> void:
 	_mark_all_chunks_dirty()
 
 
-## Everything the water layer draws, from scratch. For callers that wrote the grid
-## in bulk instead of through `WaterService` — generation is the one that does —
-## because then no `edit_committed` ever fired and this presentation has no other
-## way of knowing the board filled up with sea.
+## Everything the water layer draws, from scratch. `WaterService.bulk_replaced`
+## calls this after generation creates a complete non-undoable document.
 func refresh_all() -> void:
 	_built_board_cells = water.board_cells if water != null else 0
 	_rebuild_border()

@@ -1,11 +1,11 @@
 class_name ReposePass
 extends RefCounted
 
-## Stage 10: the ground settles (procedural_map_generation.md §2.3, §4).
+## `repose`: the ground settles (procedural_map_generation.md §2.3, §4).
 ##
 ## Each column settles at the angle ITS OWN ground holds, which `GroundMask` has
-## already decided: four steps per cell on a range, two on its shoulders, one on
-## the plains. That is the whole difference between a map made of stone and a map
+## already decided from `LandformField`: four steps per cell on ridges/summits and
+## one on every softer landform. That is the whole difference between a map made of stone and a map
 ## made of what the biome asked for — a plain left standing at rock's angle has
 ## boundaries no soil can hold, and the surface painter then has no honest choice
 ## but to paint it stone (see `GroundMask` for the measurement).
@@ -28,7 +28,7 @@ extends RefCounted
 const STAGE := &"repose"
 ## Settling the plains from rock's angle down to soil's moves whole hillsides, so
 ## the sweep needs more rounds than it did when the limit was uniform and high.
-const MAX_SWEEPS := 12
+const MAX_SWEEPS := 16
 
 const NEIGHBOURS: Array[Vector2i] = [
 	Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0),
@@ -119,7 +119,7 @@ static func _sweep_once(context: GenerationContext) -> int:
 		# every map — measurably, it cost every preset its land-fraction target on
 		# the first attempt and made the generator spend a second one to put the
 		# same land back.
-		if height > context.recipe.ocean_level:
+		if height >= context.recipe.ocean_level:
 			lowest = maxi(lowest, context.recipe.ocean_level)
 		# The angle of repose proper: a column may not stand more than its own
 		# ground holds above its lowest neighbour. Needles fall out of the same
@@ -130,6 +130,6 @@ static func _sweep_once(context: GenerationContext) -> int:
 			continue
 		var settled := lowest + limit
 		context.heights[index] = clampi(settled, TerrainGrid.MIN_HEIGHT, TerrainGrid.MAX_HEIGHT)
-		context.is_land[index] = 1 if context.heights[index] > context.recipe.ocean_level else 0
+		context.is_land[index] = 1 if context.heights[index] >= context.recipe.ocean_level else 0
 		moved += 1
 	return moved

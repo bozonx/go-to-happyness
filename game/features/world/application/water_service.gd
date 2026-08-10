@@ -31,6 +31,10 @@ signal edit_rejected(reason: StringName)
 ## cells. Presentation still drops its cached per-body material either way,
 ## because that cache is keyed by id and not by cell.
 signal registry_changed(affected_cells: Array[Vector2i])
+## A non-undoable document creation replaced the complete layer in one sweep.
+## There is deliberately no giant `WaterDelta`; consumers that cache the whole
+## layer (currently `WaterWorld`) rebuild once from the finished grid.
+signal bulk_replaced
 
 var grid: WaterGrid = null
 ## Read-only here. Water needs the ground for depth, for flood fill and for
@@ -54,6 +58,14 @@ func clear_history() -> void:
 	_redo_stack.clear()
 	_last_delta = null
 	_last_rejection = REASON_NONE
+
+
+## Completes the generator's one allowed direct bulk write. Generation creates a
+## document and therefore has no undo delta, but it still crosses the service
+## boundary once so presentation cannot remain stale.
+func notify_bulk_replaced() -> void:
+	clear_history()
+	bulk_replaced.emit()
 
 
 func last_rejection() -> StringName:

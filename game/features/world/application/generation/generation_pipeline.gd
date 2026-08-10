@@ -26,13 +26,6 @@ extends RefCounted
 ## How many times the composition half may be re-shaped to hit `land_fraction`.
 const COMPOSITION_PASSES := 3
 
-const STAGES: Array[StringName] = [
-	&"border_plan", &"landmass", &"relief", &"mountains", &"border_rim", &"hypsometry", &"border",
-	&"quantize", &"seal", &"climate", &"passes", &"flow", &"rivers", &"ground", &"repose",
-	&"reflow", &"lakes", &"reseal", &"reclimate", &"biomes", &"surface",
-]
-
-
 static func run(recipe: MapRecipe, seeds: GenerationSeed, land_fraction_bias := 0.0) -> GenerationContext:
 	var context := GenerationContext.new()
 	context.configure(recipe, seeds)
@@ -68,6 +61,9 @@ static func run(recipe: MapRecipe, seeds: GenerationSeed, land_fraction_bias := 
 	_timed(context, &"passes", func() -> void: PassCarver.carve(context))
 	_timed(context, &"flow", func() -> void: FlowField.build(context))
 	_timed(context, &"rivers", func() -> void: RiverCarver.carve(context))
+	# Shape has one vocabulary. It is fixed once the quantised terrain and authored
+	# river cuts exist, then shared by repose, rule biomes and the surface painter.
+	_timed(context, &"landforms", func() -> void: LandformField.build(context))
 	# Which columns are rock and which are soil, decided from the ranges and the
 	# climate rather than from the biome mask that does not exist yet. Without it
 	# the whole board settles at one angle and every plain ends up too steep for

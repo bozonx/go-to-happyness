@@ -20,11 +20,9 @@ extends RefCounted
 ##
 ## ## Two rules come before the climate, and both are about ground, not air
 ##
-## 1. **Alpine.** Cold ground that is cold BECAUSE IT IS HIGH is bare rock, not
-##    tundra: same temperature, completely different place. The rule is a height
-##    one, measured against the range this attempt actually produced, so a recipe
-##    of gentle hills and one of real alps put their rock in the same visual
-##    place without a second parameter.
+## 1. **Alpine.** A cold `summit` is bare rock, not tundra: same temperature,
+##    completely different place. `LandformField` owns the single height rule;
+##    this layer adds only the climatic envelope.
 ## 2. **Wetland.** Flat, low, wet ground beside standing water is a marsh whatever
 ##    the latitude says. This is drainage, and drainage beats climate locally —
 ##    the shoulder ten metres above the same hollow is ordinary meadow.
@@ -34,11 +32,8 @@ extends RefCounted
 
 const STAGE := &"biomes"
 
-## A column is alpine when it stands in the top share of the height range AND is
-## below this temperature. Both halves matter: the share alone would make the
-## highest dune in a desert into a rock face, and the temperature alone would make
-## the whole northern edge of a cold map alpine.
-const ALPINE_HEIGHT_SHARE := 0.55
+## A summit becomes alpine below this temperature. The geometric half of the
+## statement lives only in `LandformField`.
 const ALPINE_TEMPERATURE := 4.0
 
 ## A wetland is wet ground with nowhere to drain: no more than this far above the
@@ -51,7 +46,6 @@ const WETLAND_RISE := 2
 
 static func build(context: GenerationContext) -> void:
 	context.biomes.resize(context.cell_count)
-	var alpine_height := _alpine_height(context)
 	var nearest_water := _nearest_standing_water(context)
 	var wet_near: PackedInt32Array = nearest_water[0]
 	var wet_level: PackedInt32Array = nearest_water[1]
@@ -59,7 +53,7 @@ static func build(context: GenerationContext) -> void:
 	var counts := PackedInt32Array()
 	counts.resize(BiomeCatalog.count())
 	for index in context.cell_count:
-		var biome_index := _classify(context, index, alpine_height, wet_near, wet_level)
+		var biome_index := _classify(context, index, wet_near, wet_level)
 		context.biomes[index] = biome_index
 		counts[biome_index] += 1
 
@@ -90,12 +84,12 @@ static func land_shares(context: GenerationContext) -> Dictionary:
 # --- Classification -----------------------------------------------------------
 
 static func _classify(
-	context: GenerationContext, index: int, alpine_height: int,
+	context: GenerationContext, index: int,
 	wet_near: PackedInt32Array, wet_level: PackedInt32Array,
 ) -> int:
 	var temperature := context.temperature[index]
 	var moisture := context.moisture[index]
-	if context.heights[index] >= alpine_height and temperature <= ALPINE_TEMPERATURE:
+	if int(context.landforms[index]) == LandformField.SUMMIT and temperature <= ALPINE_TEMPERATURE:
 		return BiomeCatalog.index_of(BiomeCatalog.ALPINE)
 	if _is_wetland(context, index, wet_near, wet_level, temperature, moisture):
 		return BiomeCatalog.index_of(BiomeCatalog.WETLAND)
@@ -111,7 +105,10 @@ static func _is_wetland(
 	wet_near: PackedInt32Array, wet_level: PackedInt32Array,
 	temperature: float, moisture: float,
 ) -> bool:
-	if context.is_land[index] == 0 or moisture < WETLAND_MOISTURE or temperature < 1.0:
+	if (
+		context.is_land[index] == 0 or moisture < WETLAND_MOISTURE or temperature < 1.0
+		or int(context.landforms[index]) != LandformField.FLOODPLAIN
+	):
 		return false
 	var distance := wet_near[index]
 	if distance <= 0 or distance > WETLAND_CELLS:
@@ -132,20 +129,6 @@ static func _is_wetland(
 
 # --- Fields -------------------------------------------------------------------
 
-## The height at which the top `ALPINE_HEIGHT_SHARE` of this attempt's range
-## begins. Taken from the RESULT, never from the recipe: the recipe's
-## `land_max_height` is a target the verdict checks, and the biome mask has to
-## describe the board that exists even on an attempt that missed it.
-static func _alpine_height(context: GenerationContext) -> int:
-	var highest := context.recipe.ocean_level
-	for index in context.cell_count:
-		if context.border_locked[index] != 0:
-			continue
-		highest = maxi(highest, context.heights[index])
-	var span := maxi(highest - context.recipe.ocean_level, 1)
-	return context.recipe.ocean_level + maxi(roundi(float(span) * ALPINE_HEIGHT_SHARE), 4)
-
-
 ## Chebyshev distance to the nearest column the water plan will cover, and the
 ## surface level of that water, capped just past the wetland band. Two linear
 ## sweeps rather than a flood fill, the same way the painter measures its beach —
@@ -160,7 +143,7 @@ static func _nearest_standing_water(context: GenerationContext) -> Array:
 	distance.fill(limit)
 	level.fill(context.recipe.ocean_level)
 	for index in context.cell_count:
-		if context.heights[index] <= context.recipe.ocean_level:
+		if context.heights[index] < context.recipe.ocean_level:
 			distance[index] = 0
 	for entry: Dictionary in context.water_plan:
 		var surface := int(entry["level"])

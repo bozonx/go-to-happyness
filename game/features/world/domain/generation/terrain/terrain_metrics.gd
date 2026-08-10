@@ -1,7 +1,7 @@
 class_name TerrainMetrics
 extends RefCounted
 
-## Stage 13: the map is measured, not admired
+## `verdict`: the map is measured, not admired
 ## (procedural_map_generation.md §6).
 ##
 ## A generated map passes when measurable conditions hold, not when it "looks
@@ -34,6 +34,7 @@ static func measure(context: GenerationContext, grid: TerrainGrid, water: WaterG
 	var height_max := TerrainGrid.MIN_HEIGHT
 	var height_min := TerrainGrid.MAX_HEIGHT
 	var flat := 0
+	var terrain_field: NavTerrainField = nav.terrain_field() if nav.has_terrain_field() else null
 	var minimum := grid.min_cell()
 	var maximum := grid.max_cell()
 	for z in range(minimum.y, maximum.y + 1):
@@ -49,7 +50,7 @@ static func measure(context: GenerationContext, grid: TerrainGrid, water: WaterG
 			if context.border_locked[context.cell_index(cell)] != 0:
 				continue
 			total += 1
-			if height <= recipe.ocean_level:
+			if height < recipe.ocean_level:
 				continue
 			land.append(cell)
 			land_index[cell] = true
@@ -59,7 +60,7 @@ static func measure(context: GenerationContext, grid: TerrainGrid, water: WaterG
 			# aimed at — the ranges are most of the height budget on a mountainous
 			# recipe, and leaving them out reads 1 where the solver aimed at 5.
 			height_sum += height
-			if grid.slope_class_at(cell) == SlopeCatalog.CLASS_FLAT:
+			if terrain_field != null and terrain_field.slope_class_at(cell) == NavTerrainField.class_from_steps_per_cell(0.0):
 				flat += 1
 
 	var land_count := land.size()
@@ -71,7 +72,7 @@ static func measure(context: GenerationContext, grid: TerrainGrid, water: WaterG
 		"height_min": height_min,
 		"height_max": height_max,
 		"flat_fraction": float(flat) / float(maxi(land_count, 1)),
-		"cliff_fraction": _cliff_fraction(grid, land, land_index),
+		"cliff_fraction": _cliff_fraction(terrain_field, land, land_index),
 		"largest_land_component": _largest_component_share(grid, land, land_index),
 		"pedestrian_reach": _reach_share(nav, land, &"pedestrian"),
 		"cart_reach": _reach_share(nav, land, &"cart"),
@@ -118,6 +119,16 @@ static func failures(recipe: MapRecipe, metrics: Dictionary) -> Array[String]:
 	if max_error > recipe.land_max_height_tolerance:
 		broken.append("highest point %d is more than %d from %d" % [
 			metrics["land_max_height"], recipe.land_max_height_tolerance, recipe.land_max_height,
+		])
+	var temperature_error := absf(float(metrics["mean_temperature"]) - recipe.land_mean_temperature)
+	if temperature_error > recipe.land_mean_temperature_tolerance:
+		broken.append("mean temperature %.2f is more than %.2f from %.2f" % [
+			metrics["mean_temperature"], recipe.land_mean_temperature_tolerance, recipe.land_mean_temperature,
+		])
+	var moisture_error := absf(float(metrics["mean_moisture"]) - recipe.land_mean_moisture)
+	if moisture_error > recipe.land_mean_moisture_tolerance:
+		broken.append("mean moisture %.3f is more than %.3f from %.3f" % [
+			metrics["mean_moisture"], recipe.land_mean_moisture_tolerance, recipe.land_mean_moisture,
 		])
 	if float(metrics["largest_land_component"]) < recipe.largest_land_component_min:
 		broken.append("largest land component %.3f is under %.3f" % [
@@ -190,19 +201,21 @@ static func _max_land_height(grid: TerrainGrid, land: Array[Vector2i]) -> int:
 ## The share of land-to-land boundaries that ended up a bare vertical face. A
 ## cliff is a normal outcome, a board made of them is not — which is why this is a
 ## fraction with a ceiling and not a count.
-static func _cliff_fraction(grid: TerrainGrid, land: Array[Vector2i], land_index: Dictionary) -> float:
+static func _cliff_fraction(field: NavTerrainField, land: Array[Vector2i], land_index: Dictionary) -> float:
+	if field == null:
+		return 0.0
 	var boundaries := 0
 	var cliffs := 0
 	for cell: Vector2i in land:
-		for offset: Vector2i in NEIGHBOURS:
+		# East and south visit every undirected orthogonal boundary exactly once.
+		# The published edge class is the geometry, including a ramp on only one
+		# side of a cell; a per-cell descriptor cannot answer this question.
+		for offset: Vector2i in [Vector2i(1, 0), Vector2i(0, 1)]:
 			var neighbour := cell + offset
 			if not land_index.has(neighbour):
 				continue
-			var drop := grid.height_of(neighbour) - grid.height_of(cell)
-			if drop <= 0:
-				continue
 			boundaries += 1
-			if not grid.is_ramp_cell(cell):
+			if field.edge_class(cell, neighbour) == NavTerrainField.CLASS_CLIFF:
 				cliffs += 1
 	return 0.0 if boundaries == 0 else float(cliffs) / float(boundaries)
 

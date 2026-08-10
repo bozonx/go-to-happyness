@@ -1,7 +1,7 @@
 class_name SurfacePainter
 extends RefCounted
 
-## Stage 14: what the finished ground is made of
+## `surface`: what the finished ground is made of
 ## (procedural_map_generation.md §11.2; terrain_materials.md §2).
 ##
 ## Until this stage existed the generator produced a board of solid `stone`,
@@ -33,13 +33,9 @@ extends RefCounted
 ## (`BiomeField`), which is a palette of rock. One mechanism, measurable in °C,
 ## instead of a constant that had to be re-tuned for every kind of map.
 ##
-## ## Snow is a state, and it comes from the temperature
-##
-## Permanent snow is written into the detail byte, never painted as a material
-## (`terrain_materials.md` §2.5 — a material change would run the cascade over
-## half the board twice a year). How much of it lies on a column is a reading of
-## that column's temperature, so a polar cap and the top of a single high peak on
-## a warm map are the same rule.
+## Snow is deliberately absent here. `snow_depth` has one writer — environment
+## accumulation — so generated alpine rock cannot be mistaken for seasonal snow
+## and melted permanently by the first thaw.
 ##
 ## ## A material may never be painted where it cannot stand
 ##
@@ -102,14 +98,12 @@ static func apply(context: GenerationContext) -> void:
 	for index in context.cell_count:
 		var cell := context.cell_of_index(index)
 		var candidate := _candidate(context, index, cell, water_depth, shore, palette_noise, palettes)
-		var material_index := _settle(candidate, _local_drop(context, cell))
+		var material_index := _settle(
+			candidate, _local_drop(context, cell), _has_two_cell_run(context, cell),
+		)
 		context.materials[index] = material_index
-		# Snow does not lie on open water: a frozen lake is the water layer's
-		# business and a seasonal state of a body, not a surface of the bed (§9.6
-		# of the terrain document).
-		var snow := 0 if water_depth[index] > 0 else ClimateField.snow_level(context.temperature[index])
 		context.details[index] = TerrainDetailCodec.pack(
-			_variant_of(material_index, cell, variant_noise), 0, snow,
+			_variant_of(material_index, cell, variant_noise), 0, 0,
 		)
 		var id := TerrainMaterialCatalog.id_of_index(material_index)
 		counts[id] = int(counts.get(id, 0)) + 1
@@ -149,7 +143,10 @@ static func settle_grid(grid: TerrainGrid) -> int:
 			if grid.is_ramp_cell(cell):
 				continue
 			var current := grid.material_index_at(cell)
-			var settled := _settle(TerrainMaterialCatalog.id_of_index(current), _grid_drop(grid, cell))
+			var settled := _settle(
+				TerrainMaterialCatalog.id_of_index(current), _grid_drop(grid, cell),
+				supports_half_step_at(grid, cell),
+			)
 			if settled == current:
 				continue
 			grid.set_material_index(cell, settled)
@@ -186,13 +183,15 @@ static func _candidate(
 		return BiomeCatalog.bed_material_of_index(biome_index, 0, true, SHALLOW_STEPS)
 
 	var drop := _local_drop(context, cell)
+	if LandformField.is_rock(int(context.landforms[index])) and drop > 0:
+		return TerrainMaterialCatalog.STONE
 	# A column that drops two steps or more to a neighbour is a face, and a face is
 	# rock: it is the only thing that stands there without a retaining structure,
 	# and the auto-rock kind under it (§3) then matches what is on top.
 	if drop >= 2:
 		return TerrainMaterialCatalog.STONE
 
-	if shore[index] <= BEACH_CELLS and drop <= 1:
+	if int(context.landforms[index]) == LandformField.SHORE and shore[index] <= BEACH_CELLS and drop <= 1:
 		return BiomeCatalog.beach_material_of_index(biome_index)
 
 	return _palette_draw(palettes[biome_index], cell, palette)
@@ -216,18 +215,51 @@ static func _palette_draw(resolved: Array, cell: Vector2i, palette: FastNoiseLit
 
 ## Walks the fallback chain until the material can hold the drop this column
 ## actually has. Returns an index, never an id: the caller stores bytes.
-static func _settle(candidate: StringName, drop: int) -> int:
+static func _settle(candidate: StringName, drop: int, supports_half_step := false) -> int:
 	var id := candidate
 	for _step in FALLBACKS.size() + 1:
 		var index := TerrainMaterialCatalog.index_of(id)
 		if index < 0:
 			break
+		# Sand's 0.5 step/cell is representable as the catalog's two-cell
+		# `moderate` ramp. Integer column differences alone cannot say that: a
+		# one-step boundary is valid when two cells continue downhill for the run.
+		if id == TerrainMaterialCatalog.SAND and drop == 1 and supports_half_step:
+			return index
 		if TerrainMaterialCatalog.holds_height_difference(index, drop):
 			return index
 		if not FALLBACKS.has(id):
 			break
 		id = FALLBACKS[id]
 	return TerrainMaterialCatalog.index_of(TerrainMaterialCatalog.STONE)
+
+
+static func _has_two_cell_run(context: GenerationContext, cell: Vector2i) -> bool:
+	var own := context.heights[context.cell_index(cell)]
+	for offset: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var first := cell + offset
+		var second := first + offset
+		if not context.contains(second.x, second.y):
+			continue
+		var first_height := context.heights[context.cell_index(first)]
+		if own - first_height == 1 and context.heights[context.cell_index(second)] <= first_height:
+			return true
+	return false
+
+
+## Whether integer columns provide the two-cell run needed by sand's 0.5 repose.
+## Validation uses this same statement instead of inventing a local approximation.
+static func supports_half_step_at(grid: TerrainGrid, cell: Vector2i) -> bool:
+	var own := grid.height_of(cell)
+	for offset: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var first := cell + offset
+		var second := first + offset
+		if not grid.is_inside(second):
+			continue
+		var first_height := grid.height_of(first)
+		if own - first_height == 1 and grid.height_of(second) <= first_height:
+			return true
+	return false
 
 
 static func _variant_of(material_index: int, cell: Vector2i, noise: FastNoiseLite) -> int:

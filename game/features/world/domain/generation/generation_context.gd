@@ -136,14 +136,19 @@ var moisture := PackedFloat32Array()
 ## mask when they exist.
 var biomes := PackedByteArray()
 
-## Stage 10a — how steep each column may stand, in whole height steps per cell
+## Geomorphic kind of every column (`LandformField`). Built once after the
+## quantised terrain and river cuts exist; settling, biome rules and painting all
+## read this field instead of carrying private definitions of "high" or "shore".
+var landforms := PackedByteArray()
+
+## `ground` — how steep each column may stand, in whole height steps per cell
 ## (`GroundMask`). Rock where the map is rocky, soil everywhere else. Without it
 ## the whole board settles at one angle, and the only angle that keeps a mountain
 ## a mountain leaves every plain too steep for anything but stone to be painted
 ## on — which is exactly what used to happen (§2.3).
 var repose_limit := PackedByteArray()
 
-## Stage 14 — what the ground is made of (`SurfacePainter`). One catalog index and
+## `surface` — what the ground is made of (`SurfacePainter`). One catalog index and
 ## one packed detail byte per column, exactly as `TerrainGrid` stores them, so the
 ## commit copies rather than decides. Material was a single recipe-wide constant
 ## until this layer existed, which is why every generated map used to be stone.
@@ -182,6 +187,7 @@ func configure(next_recipe: MapRecipe, next_seeds: GenerationSeed) -> void:
 	temperature = _new_floats()
 	moisture = _new_floats()
 	biomes = _new_bytes()
+	landforms = _new_bytes()
 	repose_limit = _new_bytes()
 	repose_limit.fill(GroundMask.SOIL_STEPS)
 	river_stats = {"traced": 0, "terminated": 0}
@@ -260,11 +266,12 @@ func note(text: String) -> void:
 	notes.append(text)
 
 
-## Land is "above the sea", and that is a statement about the integer heights.
+## Ground at the water surface is shoreline, not water: water is wet only where
+## its surface is strictly above the ground (`WaterGrid.is_wet`).
 ## Every stage that moves a column calls this afterwards rather than patching the
 ## mask as it goes: a mask maintained by hand in six places is a mask that is
 ## wrong in one of them, and every metric downstream counts land from here.
 func refresh_land_mask() -> void:
 	var level := recipe.ocean_level
 	for index in cell_count:
-		is_land[index] = 1 if heights[index] > level else 0
+		is_land[index] = 1 if heights[index] >= level else 0

@@ -1,12 +1,12 @@
 class_name RiverCarver
 extends RefCounted
 
-## Stage 8: rivers cut into the ground (procedural_map_generation.md §3.6).
+## `rivers`: rivers cut into the ground (procedural_map_generation.md §3.6).
 ##
-## A river is traced down the drainage tree of stage 7, never drawn with noise:
+## A river is traced down the drainage tree of `flow`, never drawn with noise:
 ## that is what guarantees water runs from the mountain to the sea instead of into
 ## the hillside. The trace then **incises** the channel — it lowers columns — and
-## only after that does stage 12 put water in it. A river added on top of finished
+## only after that does `water` put water in it. A river added on top of finished
 ## ground is a puddle on a slope.
 ##
 ## One constraint of the water layer shapes the whole result and is worth stating
@@ -89,7 +89,7 @@ static func _note_termination(context: GenerationContext, trace: Array[Vector2i]
 	var low := context.min_coordinate()
 	var high := context.max_coordinate()
 	var terminated := (
-		context.heights[index] <= context.recipe.ocean_level
+		context.heights[index] < context.recipe.ocean_level
 		or context.filled[index] > context.heights[index]
 		or context.river_cells.has(last)
 		# A trace that ends on a cell it already passed has closed a meander loop:
@@ -218,7 +218,7 @@ static func _trace(context: GenerationContext, wander: FastNoiseLite, source: Ve
 		visited[cell] = true
 		trace.append(cell)
 		var index := context.cell_index(cell)
-		if context.heights[index] <= context.recipe.ocean_level:
+		if context.heights[index] < context.recipe.ocean_level:
 			break
 		if context.river_cells.has(cell) and trace.size() > 1:
 			break
@@ -241,7 +241,7 @@ static func _extend_to_receiver(context: GenerationContext, trace: Array[Vector2
 	var high := context.max_coordinate()
 	for _step in MAX_TRACE_STEPS:
 		var index := context.cell_index(cell)
-		if context.heights[index] <= context.recipe.ocean_level or context.filled[index] > context.heights[index]:
+		if context.heights[index] < context.recipe.ocean_level or context.filled[index] > context.heights[index]:
 			return
 		# A confluence and the board edge are receivers too, and they are exactly
 		# the two the trace loop stops on. Walking past them here would turn a
@@ -366,7 +366,7 @@ static func _cut_cross_section(context: GenerationContext, centre: Vector2i, wid
 			# is a channel that leaks. The levee this raises is at most half the
 			# river's width and is what a bank is.
 			context.heights[index] = bed
-			context.is_land[index] = 1 if bed > context.recipe.ocean_level else 0
+			context.is_land[index] = 1 if bed >= context.recipe.ocean_level else 0
 			var existing: Variant = context.river_cells.get(cell)
 			if existing != null and bool((existing as Dictionary)["sill"]):
 				continue
@@ -409,7 +409,7 @@ static func _step_direction(trace: Array[Vector2i], step: int) -> int:
 ## the trace ends below the ocean level.
 static func _spread_delta(context: GenerationContext, trace: Array[Vector2i]) -> void:
 	var mouth: Vector2i = trace[trace.size() - 1]
-	if context.heights[context.cell_index(mouth)] > context.recipe.ocean_level:
+	if context.heights[context.cell_index(mouth)] >= context.recipe.ocean_level:
 		return
 	var bed := context.recipe.ocean_level - 1
 	for step in range(maxi(trace.size() - 6, 0), trace.size()):

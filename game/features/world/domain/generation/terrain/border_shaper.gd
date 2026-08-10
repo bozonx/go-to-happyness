@@ -251,7 +251,7 @@ static func apply(context: GenerationContext) -> void:
 				if context.is_land[index] != 0 and context.border_sea[index] == 0:
 					context.height_field[index] = maxf(context.height_field[index], float(recipe.ocean_level) + 1.0)
 				else:
-					context.is_land[index] = 1 if context.height_field[index] > float(recipe.ocean_level) else 0
+					context.is_land[index] = 1 if context.height_field[index] >= float(recipe.ocean_level) else 0
 
 			var shelf := -INF
 			for side_index in MapRecipe.SIDES.size():

@@ -455,9 +455,6 @@ func generate_into_current(recipe: MapRecipe, seed_value: int) -> GenerationResu
 	# has to hear about it before the first stroke does.
 	_border_ocean.configure(_water_service, document.terrain, document.water, document.meta)
 	water_world.configure_border(document.meta.border_kind, document.meta.border_level)
-	# Generation wrote the water layer in bulk, so no `edit_committed` fired and
-	# this presentation has no other way of learning that the board filled up.
-	water_world.refresh_all()
 	terrain_world.rebuild_pending_now()
 	water_world.rebuild_pending_now()
 	for mode: MapEditorMode in _modes:

@@ -72,7 +72,7 @@ const TEMPERATURE_SPAN := 40.0
 ## so the indexed path and the readable record cannot drift apart.
 const BIOMES: Array = [
 	{
-		"id": POLAR_DESERT, "index": 0, "origin": ORIGIN_EARTH,
+		"id": POLAR_DESERT, "index": 0, "origin": ORIGIN_EARTH, "priority": 100,
 		"climate": {"temperature": [-60.0, -6.0], "moisture": [0.0, 1.0]},
 		"ground": {
 			TerrainMaterialCatalog.GRAVEL: 0.45,
@@ -83,7 +83,7 @@ const BIOMES: Array = [
 		"bed": [TerrainMaterialCatalog.GRAVEL, TerrainMaterialCatalog.MUD, TerrainMaterialCatalog.GRAVEL],
 	},
 	{
-		"id": TUNDRA, "index": 1, "origin": ORIGIN_EARTH,
+		"id": TUNDRA, "index": 1, "origin": ORIGIN_EARTH, "priority": 90,
 		"climate": {"temperature": [-6.0, 2.0], "moisture": [0.0, 1.0]},
 		"ground": {
 			TerrainMaterialCatalog.DIRT: 0.45,
@@ -109,7 +109,7 @@ const BIOMES: Array = [
 		"bed": [TerrainMaterialCatalog.GRAVEL, TerrainMaterialCatalog.MUD, TerrainMaterialCatalog.GRAVEL],
 	},
 	{
-		"id": BOREAL_FOREST, "index": 3, "origin": ORIGIN_EARTH,
+		"id": BOREAL_FOREST, "index": 3, "origin": ORIGIN_EARTH, "priority": 70,
 		"climate": {"temperature": [1.0, 9.0], "moisture": [0.35, 1.0]},
 		"ground": {
 			TerrainMaterialCatalog.GRASS: 0.45,
@@ -121,7 +121,7 @@ const BIOMES: Array = [
 		"bed": [TerrainMaterialCatalog.SAND, TerrainMaterialCatalog.MUD, TerrainMaterialCatalog.GRAVEL],
 	},
 	{
-		"id": TEMPERATE_FOREST, "index": 4, "origin": ORIGIN_EARTH,
+		"id": TEMPERATE_FOREST, "index": 4, "origin": ORIGIN_EARTH, "priority": 60,
 		"climate": {"temperature": [8.0, 20.0], "moisture": [0.42, 1.0]},
 		"ground": {
 			TerrainMaterialCatalog.GRASS: 0.55,
@@ -132,7 +132,7 @@ const BIOMES: Array = [
 		"bed": [TerrainMaterialCatalog.SAND, TerrainMaterialCatalog.MUD, TerrainMaterialCatalog.GRAVEL],
 	},
 	{
-		"id": TEMPERATE_GRASSLAND, "index": 5, "origin": ORIGIN_EARTH,
+		"id": TEMPERATE_GRASSLAND, "index": 5, "origin": ORIGIN_EARTH, "priority": 50,
 		"climate": {"temperature": [1.0, 18.0], "moisture": [0.15, 0.42]},
 		"ground": {
 			TerrainMaterialCatalog.GRASS: 0.50,
@@ -143,7 +143,7 @@ const BIOMES: Array = [
 		"bed": [TerrainMaterialCatalog.SAND, TerrainMaterialCatalog.MUD, TerrainMaterialCatalog.GRAVEL],
 	},
 	{
-		"id": SHRUBLAND, "index": 6, "origin": ORIGIN_EARTH,
+		"id": SHRUBLAND, "index": 6, "origin": ORIGIN_EARTH, "priority": 40,
 		"climate": {"temperature": [14.0, 26.0], "moisture": [0.15, 0.40]},
 		"ground": {
 			TerrainMaterialCatalog.DIRT: 0.35,
@@ -155,7 +155,7 @@ const BIOMES: Array = [
 		"bed": [TerrainMaterialCatalog.SAND, TerrainMaterialCatalog.MUD, TerrainMaterialCatalog.GRAVEL],
 	},
 	{
-		"id": SAVANNA, "index": 7, "origin": ORIGIN_EARTH,
+		"id": SAVANNA, "index": 7, "origin": ORIGIN_EARTH, "priority": 30,
 		"climate": {"temperature": [20.0, 34.0], "moisture": [0.22, 0.55]},
 		"ground": {
 			TerrainMaterialCatalog.GRASS: 0.45,
@@ -166,7 +166,7 @@ const BIOMES: Array = [
 		"bed": [TerrainMaterialCatalog.SAND, TerrainMaterialCatalog.MUD, TerrainMaterialCatalog.GRAVEL],
 	},
 	{
-		"id": TROPICAL_FOREST, "index": 8, "origin": ORIGIN_EARTH,
+		"id": TROPICAL_FOREST, "index": 8, "origin": ORIGIN_EARTH, "priority": 20,
 		"climate": {"temperature": [21.0, 45.0], "moisture": [0.55, 1.0]},
 		"ground": {
 			TerrainMaterialCatalog.GRASS_TALL: 0.50,
@@ -192,7 +192,7 @@ const BIOMES: Array = [
 		"bed": [TerrainMaterialCatalog.MUD, TerrainMaterialCatalog.MUD, TerrainMaterialCatalog.MUD],
 	},
 	{
-		"id": DESERT, "index": 10, "origin": ORIGIN_EARTH,
+		"id": DESERT, "index": 10, "origin": ORIGIN_EARTH, "priority": 10,
 		"climate": {"temperature": [-2.0, 45.0], "moisture": [0.0, 0.15]},
 		"ground": {
 			TerrainMaterialCatalog.SAND: 0.72,
@@ -257,6 +257,7 @@ static func entry_of_index(biome_index: int) -> Dictionary:
 static func classify_climate(temperature: float, moisture: float) -> int:
 	var best := DEFAULT_INDEX
 	var best_distance := INF
+	var best_priority := -1
 	for biome_index: int in CLIMATE_INDICES:
 		var envelope: Dictionary = BIOMES[biome_index]["climate"]
 		var temperature_range: Array = envelope["temperature"]
@@ -267,8 +268,12 @@ static func classify_climate(temperature: float, moisture: float) -> int:
 			(temperature_gap / TEMPERATURE_SPAN) * (temperature_gap / TEMPERATURE_SPAN)
 			+ moisture_gap * moisture_gap
 		)
-		if distance < best_distance:
+		var priority := int(BIOMES[biome_index].get("priority", 0))
+		if distance < best_distance - 0.000001 or (
+			absf(distance - best_distance) <= 0.000001 and priority > best_priority
+		):
 			best_distance = distance
+			best_priority = priority
 			best = biome_index
 	return best
 

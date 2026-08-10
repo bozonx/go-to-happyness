@@ -158,12 +158,16 @@ var base_material: StringName = TerrainMaterialCatalog.GRASS
 ## which is not a number anyone can read off a map.
 var latitude: StringName = LATITUDE_TEMPERATE
 var land_mean_temperature := 12.0
+## Acceptance band for the measured finished-map mean, in °C.
+var land_mean_temperature_tolerance := 0.5
 ## °C between the southern edge of the board and the northern one.
 var temperature_span := 6.0
 ## °C lost per height step. The treeline, the bare rock on a summit and the snow
 ## on top of it are all consequences of this one number.
 var lapse_rate := 0.6
 var land_mean_moisture := 0.5
+## Acceptance band for the measured finished-map mean, in 0…1 moisture units.
+var land_mean_moisture_tolerance := 0.03
 ## Bearing the prevailing wind blows FROM, in degrees; 0 is a northerly.
 var wind_direction := 270.0
 ## 0…1 — how thoroughly a range dries the ground behind it.
@@ -369,6 +373,8 @@ func to_dictionary() -> Dictionary:
 			"land_fraction_tolerance": land_fraction_tolerance,
 			"land_mean_height_tolerance": land_mean_height_tolerance,
 			"land_max_height_tolerance": land_max_height_tolerance,
+			"land_mean_temperature_tolerance": land_mean_temperature_tolerance,
+			"land_mean_moisture_tolerance": land_mean_moisture_tolerance,
 			"cart_reach_min": cart_reach_min,
 			"rim_walkable_min": rim_walkable_min,
 			"desert_lake_fraction_max": desert_lake_fraction_max,
@@ -565,6 +571,10 @@ func _parse_targets(source: Dictionary) -> void:
 	land_fraction_tolerance = float(source.get("land_fraction_tolerance", land_fraction_tolerance))
 	land_mean_height_tolerance = maxf(0.0, float(source.get("land_mean_height_tolerance", land_mean_height_tolerance)))
 	land_max_height_tolerance = maxi(0, int(source.get("land_max_height_tolerance", land_max_height_tolerance)))
+	land_mean_temperature_tolerance = maxf(0.0, float(source.get(
+		"land_mean_temperature_tolerance", land_mean_temperature_tolerance)))
+	land_mean_moisture_tolerance = maxf(0.0, float(source.get(
+		"land_mean_moisture_tolerance", land_mean_moisture_tolerance)))
 	cart_reach_min = clampf(float(source.get("cart_reach_min", cart_reach_min)), 0.0, 1.0)
 	rim_walkable_min = clampf(float(source.get("rim_walkable_min", rim_walkable_min)), 0.0, 1.0)
 	desert_lake_fraction_max = float(source.get("desert_lake_fraction_max", desert_lake_fraction_max))

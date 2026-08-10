@@ -1,26 +1,33 @@
 class_name LakeFiller
 extends RefCounted
 
-## Stage 9: what the water layer will be asked to author
-## (procedural_map_generation.md §3.7, §4 stages 9 and 12).
+## `lakes`: what the water layer will be asked to author
+## (procedural_map_generation.md §3.7, §4).
 ##
-## A lake here is a FILLED BASIN, never a painted patch: stage 7 already found
+## A lake here is a FILLED BASIN, never a painted patch: `reflow` already found
 ## every hollow and the level it spills at, so this stage only chooses which of
 ## them deserve water and how the choice answers `size`, `depth` and `prefer`.
 ## Where too few hollows fit the recipe, the shortfall is reported rather than
 ## faked — a lake dug into a hillside to satisfy a count is the exact failure the
 ## design doc refuses.
 ##
-## The stage produces a PLAN, not water. Writing happens once, in stage 12, after
+## The stage produces a PLAN, not water. Writing happens once in `water`, after
 ## slopes exist — because `SlopeAssigner` moves ground, and ground that moves
 ## under a finished lake breaks the body. The plan carries a level and a seed
 ## cell; the water stage floods from the seed at that level over the final terrain
 ## and so cannot disagree with it.
 
 const STAGE := &"lakes"
-## Ordinary rivers wade; a strength of 2 or more stops them freezing (§9.6 of the
-## terrain doc), and stage 1 has no winter to model yet.
-const RIVER_FLOW_STRENGTH := 1
+## Flow accumulation becomes the authored 1…3 strength axis. The thresholds are
+## expressed from the same minimum catchment that admits a river source, so they
+## scale with that rule instead of being unrelated magic numbers.
+const FAST_FLOW_ACCUMULATION := RiverCarver.MIN_SOURCE_ACCUMULATION * 2.0
+const BLOCKING_FLOW_ACCUMULATION := RiverCarver.MIN_SOURCE_ACCUMULATION * 8.0
+
+## A planned footprint is allowed modest flood-fill growth after slope assignment.
+## Both the planner and the final writer use this one rule.
+const FLOOD_EXPANSION_FACTOR := 2
+const FLOOD_EXPANSION_ALLOWANCE := 16
 
 ## Moisture a basin needs before standing water in it is credible (§11.1.3). Below
 ## it the hollow is a dry pan: the same shape, no lake. This is the whole of "a
@@ -155,7 +162,7 @@ static func _is_watered(context: GenerationContext, basin: Dictionary) -> bool:
 static func _lake_score(context: GenerationContext, basin: Dictionary) -> float:
 	var cells: Array[Vector2i] = basin["cells"]
 	var score := float(cells.size())
-	var centre: Vector2i = cells[cells.size() / 2]
+	var centre := _centroid_cell(cells)
 	var index := context.cell_index(centre)
 	match context.recipe.lake_prefer:
 		MapRecipe.LAKE_PREFER_MOUNTAINS:
@@ -168,7 +175,7 @@ static func _lake_score(context: GenerationContext, basin: Dictionary) -> float:
 
 
 ## Each pool of each river becomes its own body: a `WaterBody` has one surface for
-## all of its cells, and the sills carved by stage 8 are what keep two pools of
+## all of its cells, and the sills carved by `rivers` are what keep two pools of
 ## different level from touching.
 static func _plan_rivers(context: GenerationContext) -> void:
 	if context.river_cells.is_empty():
@@ -198,7 +205,9 @@ static func _plan_rivers(context: GenerationContext) -> void:
 			head += 1
 			cells.append(current)
 			var record: Dictionary = context.river_cells[current]
-			flow[current] = Vector2i(int(record["direction"]), RIVER_FLOW_STRENGTH)
+			flow[current] = Vector2i(
+				int(record["direction"]), flow_strength(context.flow_accum[context.cell_index(current)]),
+			)
 			for offset: Vector2i in NEIGHBOURS:
 				var neighbour := current + offset
 				if seen.has(neighbour) or not levels.has(neighbour):
@@ -217,7 +226,7 @@ static func _plan_rivers(context: GenerationContext) -> void:
 			rapids += 1
 			continue
 		var pool := _reachable_at(context, cells, level)
-		if pool.is_empty() or pool.size() > cells.size() * 2 + 16:
+		if pool.is_empty() or footprint_escaped(cells.size(), pool.size()):
 			leaked += 1
 			continue
 		context.water_plan.append({
@@ -264,3 +273,35 @@ static func _reachable_at(context: GenerationContext, from: Array[Vector2i], lev
 
 static func _cell_order(a: Vector2i, b: Vector2i) -> bool:
 	return a.y < b.y if a.y != b.y else a.x < b.x
+
+
+static func flow_strength(accumulation: float) -> int:
+	if accumulation >= BLOCKING_FLOW_ACCUMULATION:
+		return 3
+	if accumulation >= FAST_FLOW_ACCUMULATION:
+		return 2
+	return 1
+
+
+static func footprint_escaped(planned_size: int, filled_size: int) -> bool:
+	return filled_size > planned_size * FLOOD_EXPANSION_FACTOR + FLOOD_EXPANSION_ALLOWANCE
+
+
+## The basin lists are sorted for determinism, not spatial meaning. Use the cell
+## nearest the arithmetic centroid so a long east-west lake is scored from its
+## middle rather than from the median row's arbitrary edge.
+static func _centroid_cell(cells: Array[Vector2i]) -> Vector2i:
+	if cells.is_empty():
+		return Vector2i.ZERO
+	var centre := Vector2.ZERO
+	for cell: Vector2i in cells:
+		centre += Vector2(cell)
+	centre /= float(cells.size())
+	var best := cells[0]
+	var best_distance := Vector2(best).distance_squared_to(centre)
+	for cell: Vector2i in cells:
+		var distance := Vector2(cell).distance_squared_to(centre)
+		if distance < best_distance:
+			best = cell
+			best_distance = distance
+	return best

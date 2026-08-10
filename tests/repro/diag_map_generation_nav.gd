@@ -36,7 +36,7 @@ func _init() -> void:
 	for z in range(minimum.y, maximum.y + 1):
 		for x in range(minimum.x, maximum.x + 1):
 			var cell := Vector2i(x, z)
-			if grid.height_of(cell) <= recipe.ocean_level:
+			if grid.height_of(cell) < recipe.ocean_level:
 				continue
 			land += 1
 			var stored_class := grid.slope_class_at(cell)
@@ -67,7 +67,7 @@ func _components(grid: TerrainGrid, water: WaterGrid, nav: NavGrid, recipe: MapR
 	for z in range(minimum.y, maximum.y + 1):
 		for x in range(minimum.x, maximum.x + 1):
 			var cell := Vector2i(x, z)
-			if grid.height_of(cell) <= recipe.ocean_level:
+			if grid.height_of(cell) < recipe.ocean_level:
 				continue
 			if nav.is_walkable(cell, &"pedestrian"):
 				walkable[cell] = true

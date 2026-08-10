@@ -40,7 +40,7 @@ func verdict() -> String:
 ## which number is a measurement and which one is a promise.
 func metric_lines(recipe: MapRecipe) -> Array[String]:
 	if metrics.is_empty():
-		return ["no metrics — the run did not reach stage 13"] as Array[String]
+		return ["no metrics — the run did not reach verdict"] as Array[String]
 	var lines: Array[String] = []
 	lines.append("land          %.3f   target %.3f ±%.3f" % [
 		metrics["land_fraction"], recipe.land_fraction, recipe.land_fraction_tolerance,

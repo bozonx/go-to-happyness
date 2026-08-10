@@ -136,7 +136,7 @@ func _apply(context: GenerationContext) -> void:
 	# Nothing here belongs in the author's undo stack: this is a new document, not
 	# an edit of one.
 	_terrain_service.clear_history()
-	_water_service.clear_history()
+	_water_service.notify_bulk_replaced()
 
 
 func _commit(context: GenerationContext) -> void:
@@ -205,7 +205,7 @@ func _walkable_components(ocean_level: int) -> Array:
 	for z in range(minimum.y, maximum.y + 1):
 		for x in range(minimum.x, maximum.x + 1):
 			var start := Vector2i(x, z)
-			if seen.has(start) or _grid.height_of(start) <= ocean_level:
+			if seen.has(start) or _grid.height_of(start) < ocean_level:
 				continue
 			if not _nav_grid.is_walkable(start, &"pedestrian"):
 				continue
@@ -221,7 +221,7 @@ func _walkable_components(ocean_level: int) -> Array:
 					var neighbour: Vector2i = cell + NavTerrainField.DIRECTION_OFFSETS[direction]
 					if seen.has(neighbour) or not _grid.is_inside(neighbour):
 						continue
-					if _grid.height_of(neighbour) <= ocean_level:
+					if _grid.height_of(neighbour) < ocean_level:
 						continue
 					if not _nav_grid.is_walkable(neighbour, &"pedestrian"):
 						continue
@@ -245,7 +245,7 @@ func _write_heights(context: GenerationContext) -> void:
 	# Material and detail come from the surface stage, one value per column. They
 	# used to be a single recipe constant repeated across the board — which is why
 	# every generated map was made of stone — and the commit is deliberately not
-	# where that decision gets made now: it copies what stage 14 decided.
+	# where that decision gets made now: it copies what `surface` decided.
 	var painted := context.materials.size() == context.cell_count
 	var fallback := TerrainMaterialCatalog.index_of(context.recipe.base_material)
 	if fallback < 0:
@@ -264,7 +264,7 @@ func _write_heights(context: GenerationContext) -> void:
 		)
 
 
-## Stage 11. The generator does not invent slope classes: it hands the finished
+## `slopes`. The generator does not invent slope classes: it hands the finished
 ## columns to the same `SlopeAssigner` the height brush uses, and takes whatever
 ## the catalog allows on the ground it left (§1 "Генератор не имеет своих правил
 ## геометрии").
@@ -287,7 +287,7 @@ func _assign_slopes(context: GenerationContext) -> void:
 	context.note("slopes: %d boundaries got a ramp" % placed)
 
 
-## Stage 12. The plan carries a level and a footprint; the level is authoritative
+## `water`. The plan carries a level and a footprint; the level is authoritative
 ## and the footprint is re-derived by flooding over the FINISHED ground. That is
 ## deliberate: slope assignment moves columns, and a footprint captured before it
 ## would describe a lake the terrain no longer supports.
@@ -346,7 +346,7 @@ static func _escaped(entry: Dictionary, filled_size: int) -> bool:
 	if entry["type"] == WaterBody.Type.SEA:
 		return false
 	var planned: int = (entry["cells"] as Array).size()
-	return filled_size > planned * 2 + 16
+	return LakeFiller.footprint_escaped(planned, filled_size)
 
 
 ## The cell of a plan most likely to still be under its level after the terrain
