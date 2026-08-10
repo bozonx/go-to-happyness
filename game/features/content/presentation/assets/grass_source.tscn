@@ -1,11 +1,17 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+[ext_resource type="Shader" path="res://game/features/content/presentation/foliage_sway.gdshader" id="2_sway"]
 
-[sub_resource type="StandardMaterial3D" id="Mat_blade"]
-albedo_color = Color(0.396, 0.639, 0.302, 1)
-roughness = 1.0
-cull_mode = 2
+
+[sub_resource type="ShaderMaterial" id="Mat_blade"]
+shader = ExtResource("2_sway")
+shader_parameter/albedo_color = Color(0.396, 0.639, 0.302, 1)
+shader_parameter/roughness_value = 1.0
+shader_parameter/sway_amount = 1.35
+shader_parameter/sway_pivot_y = -0.31
+shader_parameter/sway_full_height = 0.62
+shader_parameter/sway_speed = 2.1
 
 [sub_resource type="PrismMesh" id="Mesh_blade_tall"]
 material = SubResource("Mat_blade")

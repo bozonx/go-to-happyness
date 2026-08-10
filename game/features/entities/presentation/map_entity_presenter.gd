@@ -5,9 +5,6 @@ extends Node3D
 ## placeholder so a shared map remains launchable and resaveable.
 
 var _views: Dictionary = {}
-## Firefly placements published to the weather controller. Keyed by entity id so
-## `clear()` can drop them in lockstep with the views they come from.
-var _firefly_views: Dictionary = {}
 var _runtime: MapEntityRuntime = null
 
 
@@ -30,25 +27,10 @@ func present(runtime: MapEntityRuntime, territory: TerritoryBase) -> void:
 		var view := _make_view(entity)
 		territory.add_landscape_object(view)
 		_views[entity.id] = view
-		# Fireflies are an ambient effect, not a settlement_natural object, so
-		# they reach the weather controller here rather than through AmbientSpawner.
-		if view is FirefliesEffect:
-			_firefly_views[entity.id] = view
 
 
 func view_for(entity_id: StringName) -> Node3D:
 	return _views.get(entity_id, null)
-
-
-## Every live firefly instance created by the last `present`. `WorldSetup`
-## forwards this list to `SkyAndWeatherController` so the night fade keeps
-## working without AmbientSpawner owning the visual.
-func firefly_views() -> Array[FirefliesEffect]:
-	var result: Array[FirefliesEffect] = []
-	for view: FirefliesEffect in _firefly_views.values():
-		if is_instance_valid(view):
-			result.append(view)
-	return result
 
 
 func clear() -> void:
@@ -59,7 +41,6 @@ func clear() -> void:
 		if is_instance_valid(view):
 			view.queue_free()
 	_views.clear()
-	_firefly_views.clear()
 
 
 func _on_entity_changed(entity_id: StringName, change: StringName) -> void:

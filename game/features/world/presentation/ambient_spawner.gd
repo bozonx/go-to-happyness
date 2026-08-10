@@ -22,6 +22,11 @@ class NaturalEntry:
 	## kind and differ only here — that is how a spruce is a tree.
 	var asset_id: StringName = &""
 	var appearance: Dictionary = {}
+	## Повадка, если архетип объявил компонент `wander`. Пусто — существо не
+	## бродит (или это вообще не существо).
+	var habit: WanderHabit = null
+	## Значение `settlement_natural.kind`, если компонент есть.
+	var kind: StringName = &""
 
 
 func setup(p_simulation: Node, map_document: MapDocument = null, p_start_option: StringName = &"") -> void:
@@ -31,6 +36,20 @@ func setup(p_simulation: Node, map_document: MapDocument = null, p_start_option:
 
 
 func _entities_of_kind(kind: StringName) -> Array[NaturalEntry]:
+	return _entities_where(func(archetype: EntityArchetype) -> bool:
+		return archetype.has_component(&"settlement_natural") \
+			and StringName(archetype.component_data(&"settlement_natural").get("kind", "")) == kind)
+
+
+## Всё живое на доске: архетипы, объявившие повадку. Кролик попадает сюда же, а
+## не отдельной веткой, — он «бродячее существо, которое вдобавок можно поймать»,
+## а не отдельный вид сущности.
+func _wandering_entities() -> Array[NaturalEntry]:
+	return _entities_where(func(archetype: EntityArchetype) -> bool:
+		return archetype.has_component(&"wander"))
+
+
+func _entities_where(predicate: Callable) -> Array[NaturalEntry]:
 	var result: Array[NaturalEntry] = []
 	if map_document == null:
 		return result
@@ -38,9 +57,7 @@ func _entities_of_kind(kind: StringName) -> Array[NaturalEntry]:
 		if not placed.belongs_to_start(start_option):
 			continue
 		var archetype := EntityArchetypeCatalog.get_archetype(placed.archetype_id)
-		if archetype == null or not archetype.has_component(&"settlement_natural"):
-			continue
-		if StringName(archetype.component_data(&"settlement_natural").get("kind", "")) != kind:
+		if archetype == null or not bool(predicate.call(archetype)):
 			continue
 		var entry := NaturalEntry.new()
 		entry.position = placed.position
@@ -48,6 +65,10 @@ func _entities_of_kind(kind: StringName) -> Array[NaturalEntry]:
 		entry.props = archetype.resolved_properties(placed.props)
 		entry.asset_id = archetype.asset_id
 		entry.appearance = placed.appearance.duplicate(true)
+		if archetype.has_component(&"wander"):
+			entry.habit = WanderHabit.from_component(archetype.component_data(&"wander"))
+		if archetype.has_component(&"settlement_natural"):
+			entry.kind = StringName(archetype.component_data(&"settlement_natural").get("kind", ""))
 		result.append(entry)
 	return result
 
@@ -99,8 +120,8 @@ func create_forest() -> void:
 		_create_forage_source_at(entry)
 	simulation.world_navigation_controller.refresh_navigation_grid()
 	# Fireflies are no longer spawned here: they are authored as `core:fireflies`
-	# map entities and rendered by MapEntityPresenter, which publishes each
-	# instance into WorldSetup.fireflies for the weather controller.
+	# map entities, rendered by MapEntityPresenter and driven by the ambient-effect
+	# group the weather controller publishes to.
 
 
 func _create_tree(entry: NaturalEntry, refresh_navigation := true) -> void:
@@ -210,35 +231,43 @@ func _loot_resources(loot: Dictionary) -> Dictionary:
 	return resources
 
 
-func spawn_initial_rabbits() -> void:
-	for entry in _entities_of_kind(&"rabbit"):
-		if simulation.rabbit_sources.size() >= simulation.RABBIT_MAX_COUNT:
-			break
-		_create_rabbit_source(
-			simulation.cell_from_position(entry.position),
-			entry.position + Vector3.UP * 0.02,
-			Vector3(simulation.random.randf_range(-1.0, 1.0), 0.0, simulation.random.randf_range(-1.0, 1.0)).normalized(),
-			entry
-		)
-
-
-func update_wild_food(delta: float) -> void:
-	# Wild food no longer respawns: a harvested bush or a caught rabbit is gone
-	# for the rest of the session, which keeps the map finite and avoids
-	# fabricating new positions. Only rabbit roaming animation runs here.
-	for source in simulation.rabbit_sources.values():
-		var rabbit: RabbitSourceRecord = source
-		if not is_instance_valid(rabbit.node):
+## Всё, что бродит по карте. Один проход на всех: кролик отличается от оленя
+## архетипом, а не веткой кода здесь. Единственная особая строка — учёт в
+## `rabbit_sources`, и она особая честно: охота пока умеет ровно один вид.
+func spawn_wildlife() -> void:
+	for entry in _wandering_entities():
+		if entry.kind == &"rabbit" and simulation.rabbit_sources.size() >= simulation.RABBIT_MAX_COUNT:
 			continue
-		var direction: Vector3 = rabbit.direction
-		if simulation.random.randf() < delta * 0.7:
-			direction = Vector3(simulation.random.randf_range(-1.0, 1.0), 0.0, simulation.random.randf_range(-1.0, 1.0)).normalized()
-			rabbit.direction = direction
-		var next := rabbit.node.global_position + direction * delta * 0.7
-		if simulation.navigation_blocked_cells.has(simulation.cell_from_position(next)):
-			rabbit.direction = -direction
-		else:
-			rabbit.node.global_position = next
+		_create_creature(entry)
+
+
+func _create_creature(entry: NaturalEntry) -> Node3D:
+	var scene := _scene_of(entry.asset_id)
+	if scene == null:
+		return null
+	var node: Node3D = scene.instantiate()
+	# Без подъёма над точкой: высоту существу выставляет служба на первом же шаге
+	# (`AmbientLifeService.GROUND_SNAP`). Прибавлять её ещё и здесь значило бы,
+	# что каждый цикл сохранения приподнимает зверя над землёй.
+	node.position = entry.position
+	if entry.kind == &"rabbit":
+		simulation.building_visuals.add_selector_to_node(
+			node, "rabbit_selector", Vector3(0.5, 0.5, 0.5), Vector3.UP * 0.25)
+		simulation.rabbit_sources[simulation.cell_from_position(entry.position)] = \
+			RabbitSourceRecord.new(node)
+	simulation.world_navigation_controller.add_landscape_object(node)
+	_apply_appearance(node, entry)
+	if entry.habit != null and simulation.ambient_life_service != null:
+		# Стая — это те, у кого совпадает вид: олени держатся оленей.
+		simulation.ambient_life_service.register(node, entry.habit, entry.kind)
+	return node
+
+
+## Wild food no longer respawns: a harvested bush or a caught rabbit is gone for
+## the rest of the session, which keeps the map finite and avoids fabricating new
+## positions. Roaming is not done here any more — `AmbientLifeService` moves every
+## wandering creature, so a second animal is an archetype rather than a second
+## copy of this loop.
 
 
 func export_resource_state() -> Dictionary:
@@ -267,11 +296,12 @@ func restore_resource_state(data: Dictionary) -> void:
 	for cell in state.forage_cells:
 		_create_forage_source(cell)
 	for entry: Dictionary in state.rabbits:
-		var cell := WorldResourceStateScript._dict_to_cell(entry.get("cell", {}))
-		_create_rabbit_source(cell, WorldResourceStateScript._dict_to_vector(entry.get("position", {})), WorldResourceStateScript._dict_to_vector(entry.get("direction", {})))
+		_create_rabbit_source(WorldResourceStateScript._dict_to_vector(entry.get("position", {})))
 
 
 func _clear_natural_source_nodes() -> void:
+	if simulation.ambient_life_service != null:
+		simulation.ambient_life_service.clear()
 	for sources: Dictionary in [
 		simulation.grass_sources,
 		simulation.bush_sources,
@@ -311,22 +341,14 @@ func _create_forage_source(cell: Vector2i) -> void:
 		simulation.forage_sources[cell] = ForageSourceRecord.new(node)
 
 
-func _create_rabbit_source(
-	cell: Vector2i,
-	position: Vector3,
-	direction: Vector3,
-	authored: NaturalEntry = null
-) -> void:
-	var entry := authored if authored != null else _restored_entry(&"rabbit", position)
-	var scene := _scene_of(entry.asset_id)
-	if scene == null:
-		return
-	var node: Node3D = scene.instantiate()
-	node.position = position
-	simulation.building_visuals.add_selector_to_node(node, "rabbit_selector", Vector3(0.5, 0.5, 0.5), Vector3.UP * 0.25)
-	simulation.world_navigation_controller.add_landscape_object(node)
-	_apply_appearance(node, entry)
-	simulation.rabbit_sources[cell] = RabbitSourceRecord.new(node, direction)
+## Восстановление из сейва. Курс существа не сохраняется и не нужен: он меняется
+## каждую секунду, и через мгновение после загрузки от сохранённого не осталось
+## бы ничего — служба выдаёт новый при постановке на учёт.
+func _create_rabbit_source(position: Vector3) -> void:
+	var entry := _restored_entry(&"rabbit", position)
+	entry.kind = &"rabbit"
+	entry.habit = WanderHabit.preset(WanderHabit.HABIT_SKITTISH)
+	_create_creature(entry)
 
 
 ## A save stores where a source stands and how much is left in it, not what it

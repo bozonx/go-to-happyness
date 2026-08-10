@@ -45,7 +45,6 @@ var hero_build_radius_marker: MeshInstance3D
 var village_boundary_markers: VillageBoundaryMarkers
 var village_territory_overlay: VillageTerritoryOverlay
 var sun_glare_material: ShaderMaterial
-var fireflies: Array[FirefliesEffect] = []
 ## Named map entities are loaded once with the map and projected into the
 ## territory. The runtime record is data; this node owns only its presentation.
 var map_entity_runtime := MapEntityRuntime.new()
@@ -144,6 +143,9 @@ func dispose() -> void:
 func update_daylight(snapshot: EnvironmentSnapshot, runtime_seconds: float) -> void:
 	if sky_and_weather_controller != null:
 		sky_and_weather_controller.update_daylight(snapshot, runtime_seconds)
+	# Ветер доезжает до травы террейна и до листвы наполнения из одного места.
+	# До этого `GridTerrainWorld.set_wind` существовал и не вызывался никем.
+	WorldWind.apply(snapshot, _territory.terrain if _territory != null else null)
 
 
 ## The board gets a real `TerrainGrid`, meshed and collided by `GridTerrainWorld`.
@@ -180,10 +182,6 @@ func _build_map_entities() -> void:
 		map_entity_presenter.name = "MapEntities"
 	_territory.add_landscape_object(map_entity_presenter)
 	map_entity_presenter.present(map_entity_runtime, _territory)
-	# Authored firefly placements become live `FirefliesEffect` nodes in the
-	# presenter; forward them so the weather controller's night fade still has a
-	# list to drive. AmbientSpawner no longer owns this.
-	fireflies = map_entity_presenter.firefly_views()
 
 
 func _build_map_placements() -> void:
@@ -236,7 +234,6 @@ func _build_sky_and_weather_controller(parent: Node) -> void:
 		world_environment,
 		sky_material,
 		precipitation_effect,
-		fireflies,
 		sun_glare_material
 	)
 

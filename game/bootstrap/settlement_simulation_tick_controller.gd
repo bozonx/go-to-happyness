@@ -192,8 +192,8 @@ func tick(delta: float) -> void:
 	if game.survival_event_controller != null:
 		game.survival_event_controller.update_survival_busy_workers()
 	game.outside_work_controller.return_outside_workers()
-	if game.ambient_spawner != null:
-		game.ambient_spawner.update_wild_food(delta)
+	if game.ambient_life_service != null:
+		game.ambient_life_service.tick(delta)
 	guard_citizen_positions()
 	game.world_navigation_controller.update_trail_overlay()
 	if game.surface_controller != null:

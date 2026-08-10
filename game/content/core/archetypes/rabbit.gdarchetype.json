@@ -1,1 +1,1 @@
-{"version":1,"id":"rabbit","name":"Кролик","asset":"rabbit","content_class":"actor","category":"creatures","components":{"settlement_natural":{"kind":"rabbit"}}}
+{"version":1,"id":"rabbit","name":"Кролик","asset":"rabbit","content_class":"actor","category":"creatures","components":{"settlement_natural":{"kind":"rabbit"},"wander":{"habit":"skittish"}}}

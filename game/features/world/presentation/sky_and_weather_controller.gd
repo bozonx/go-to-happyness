@@ -92,7 +92,6 @@ var sun: DirectionalLight3D
 var world_environment: Environment
 var sky_material: ShaderMaterial
 var precipitation_effect: Node3D # PrecipitationEffect
-var fireflies: Array = [] # Array of FirefliesEffect
 var sun_glare_material: ShaderMaterial
 var sun_glare_visibility := 0.0
 var sun_glare_veil_visibility := 0.0
@@ -118,7 +117,6 @@ func setup(
 	p_world_environment: Environment,
 	p_sky_material: ShaderMaterial,
 	p_precipitation_effect: Node3D,
-	p_fireflies: Array,
 	p_sun_glare_material: ShaderMaterial
 ) -> void:
 	camera = p_camera
@@ -126,7 +124,6 @@ func setup(
 	world_environment = p_world_environment
 	sky_material = p_sky_material
 	precipitation_effect = p_precipitation_effect
-	fireflies = p_fireflies
 	sun_glare_material = p_sun_glare_material
 
 
@@ -389,10 +386,10 @@ func update_daylight(snapshot: EnvironmentSnapshot, runtime_seconds: float) -> v
 	_apply_atmosphere(snapshot)
 	_glare_clock = motion_clock
 	_update_sun_glare(direct_light, cloud_cover, sun_radius)
-	var firefly_factor := night_factor * (1.0 - cloud_cover * 0.5)
-	for ff in fireflies:
-		if is_instance_valid(ff):
-			ff.set_night_factor(firefly_factor)
+	# Ambient effects get the snapshot and decide for themselves what it means to
+	# them. Naming one of them here — as the firefly night fade used to be — is
+	# what made "add a second effect" a change in this file (`AmbientEffect`).
+	AmbientEffect.publish(get_tree(), snapshot)
 
 
 ## Scene fog reads the snapshot's visibility range — it does not decide it

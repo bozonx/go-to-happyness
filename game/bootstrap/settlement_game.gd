@@ -168,8 +168,6 @@ var camera: Camera3D:
 var world_setup: Node
 var selection_marker: MeshInstance3D:
 	get: return world_setup.selection_marker
-var fireflies: Array[FirefliesEffect]:
-	get: return world_setup.fireflies
 ## Whether anything is falling right now, as of the last tick. Cached only so the
 ## "rain has started/stopped" message can notice the edge; every other weather
 ## question goes to `simulation_tick_controller.environment()`
@@ -397,6 +395,8 @@ var surface_controller: SettlementSurfaceController
 var trail_texture_renderer: TrailTextureRenderer
 var resource_pile_service: ResourcePileService
 var foraging_service: ForagingService
+## Двигает всё, что просто бродит по карте (`map_fill_mode.md` §5).
+var ambient_life_service: AmbientLifeService
 var fire_management_service: FireManagementService
 var fixture_service: FixtureService
 var building_maintenance_service: BuildingMaintenanceService

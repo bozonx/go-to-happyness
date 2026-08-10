@@ -743,6 +743,14 @@ func _make_view(archetype_id: StringName) -> Node3D:
 	return placeholder
 
 
+## Атмосферный эффект в редакторе показывает себя целиком: карта здесь без
+## времени суток, а ночной рой, невидимый днём, автор поставить не сможет
+## (`AmbientEffect.set_authoring_preview`).
+func _enable_authoring_preview(view: Node3D) -> void:
+	if view != null and view.has_method("set_authoring_preview"):
+		view.call("set_authoring_preview", true)
+
+
 func _apply_transform(view: Node3D, record: MapEntityRecord) -> void:
 	view.position = _world_position(record.position)
 	# Stored Y is the authored offset above ground. The editor must draw the same
@@ -757,6 +765,7 @@ func _apply_record_appearance(view: Node3D, record: MapEntityRecord) -> void:
 	var asset := EntityArchetypeCatalog.asset_of(record.archetype_id)
 	if archetype != null and view.has_method("apply_entity_props"):
 		view.call("apply_entity_props", archetype.resolved_properties(record.props))
+	_enable_authoring_preview(view)
 	if archetype == null or asset == null or not view.has_method("apply_decor_properties"):
 		return
 	var appearance := asset.default_appearance()
@@ -806,6 +815,7 @@ func _refresh_ghost() -> void:
 		EditorFillConventions.apply_preview_look(_ghost, _ghost_material_resource())
 	if _ghost.has_method("apply_entity_props"):
 		_ghost.call("apply_entity_props", archetype.resolved_properties(_brush_props))
+	_enable_authoring_preview(_ghost)
 	if _ghost.has_method("apply_decor_properties"):
 		var asset := EntityArchetypeCatalog.asset_of(archetype.id)
 		if asset != null:

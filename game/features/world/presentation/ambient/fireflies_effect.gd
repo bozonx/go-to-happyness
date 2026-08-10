@@ -1,8 +1,12 @@
 class_name FirefliesEffect
-extends Node3D
+extends AmbientEffect
 
 ## Ambient fireflies that drift as persistent points instead of respawning particles.
-## Place at a vegetation cluster; call set_night_factor() to fade the swarm in/out.
+## Place at a vegetation cluster; the swarm fades itself in and out with the night.
+##
+## The night factor is derived here from the snapshot rather than handed in by the
+## weather controller. Both worked, but only this way does adding a second night
+## effect stop meaning "edit the controller too".
 
 const FIREFLY_WARM := Color(1.0, 0.94, 0.36)
 const FIREFLY_SOFT_GREEN := Color(0.62, 1.0, 0.54)
@@ -34,6 +38,10 @@ var _instance: MultiMeshInstance3D
 var _runtime := 0.0
 var _target_visibility := 0.0
 var _visibility := 0.0
+## Авторский предпросмотр: рой показан целиком и не гаснет, плюс нарисован объём,
+## который он занимает. В игре это всегда выключено.
+var _authoring_preview := false
+var _preview_bounds: MeshInstance3D = null
 
 
 class FireflyRecord:
@@ -48,6 +56,7 @@ class FireflyRecord:
 
 
 func _ready() -> void:
+	super()
 	if DisplayServer.get_name() == "headless":
 		set_process(false)
 		return
@@ -59,7 +68,19 @@ func _ready() -> void:
 	_seed_from_position()
 	_configure_multimesh()
 	_spawn_fireflies()
+	if _authoring_preview:
+		_enter_authoring_preview()
 	set_process(true)
+
+
+## Тучи гасят рой мягче, чем рассвет: под плотной облачностью светлячков просто
+## меньше, а не «уже день». Коэффициент тот же, что раньше вычислял контроллер
+## погоды, — переехало место, а не поведение.
+func apply_environment(snapshot: EnvironmentSnapshot) -> void:
+	if _authoring_preview:
+		return
+	var night_factor := 1.0 - smoothstep(0.0, 0.28, snapshot.solar_height)
+	set_night_factor(night_factor * (1.0 - snapshot.cloud_cover * 0.5))
 
 
 func set_night_factor(factor: float) -> void:
@@ -68,6 +89,57 @@ func set_night_factor(factor: float) -> void:
 	_target_visibility = smoothstep(0.28, 0.82, night_factor)
 	if _target_visibility > 0.01:
 		visible = true
+
+
+## Автор ставит светлячков днём и в редакторе без времени суток. Ночной ассет,
+## невидимый ровно в тот момент, когда его ставят, — это ассет, который нельзя
+## разместить осмысленно, поэтому в предпросмотре рой светит всегда и показывает
+## занимаемый объём.
+func set_authoring_preview(enabled: bool) -> void:
+	if _authoring_preview == enabled:
+		return
+	_authoring_preview = enabled
+	if not is_inside_tree() or DisplayServer.get_name() == "headless":
+		return
+	if enabled:
+		_enter_authoring_preview()
+	else:
+		_target_visibility = 0.0
+		if _preview_bounds != null:
+			_preview_bounds.queue_free()
+			_preview_bounds = null
+
+
+func _enter_authoring_preview() -> void:
+	visible = true
+	_visibility = 1.0
+	_target_visibility = 1.0
+	if _preview_bounds == null:
+		_preview_bounds = _build_preview_bounds()
+		add_child(_preview_bounds)
+
+
+## Полупрозрачная оболочка роя. Сами точки днём почти не читаются на светлом
+## фоне, а автору нужно видеть не столько их, сколько куда достанет рой: радиус и
+## высота — как раз те два свойства, которые он и правит в инспекторе.
+func _build_preview_bounds() -> MeshInstance3D:
+	var mesh := SphereMesh.new()
+	mesh.radius = swarm_radius * 0.62
+	mesh.height = swarm_height + minimum_height
+	mesh.radial_segments = 16
+	mesh.rings = 8
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(1.0, 0.92, 0.4, 0.12)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	material.no_depth_test = false
+	mesh.material = material
+	var bounds := MeshInstance3D.new()
+	bounds.name = "AuthoringBounds"
+	bounds.mesh = mesh
+	bounds.position.y = (swarm_height + minimum_height) * 0.5
+	return bounds
 
 
 func _process(delta: float) -> void:
@@ -163,7 +235,9 @@ func _spawn_fireflies() -> void:
 
 
 func _update_instances() -> void:
-	var distance_factor := _camera_distance_factor()
+	# В предпросмотре дальность не гасит рой: автор смотрит на карту с высоты, и
+	# объект, исчезающий именно на рабочей дистанции, бесполезен.
+	var distance_factor := 1.0 if _authoring_preview else _camera_distance_factor()
 	var final_visibility := _visibility * pow(distance_factor, 2.2)
 	_instance.visible = final_visibility > 0.01
 	if not _instance.visible:

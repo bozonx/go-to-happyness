@@ -1,6 +1,8 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=15 format=3]
 
 [ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+[ext_resource type="Shader" path="res://game/features/content/presentation/foliage_sway.gdshader" id="2_sway"]
+
 
 [sub_resource type="StandardMaterial3D" id="Mat_bark"]
 albedo_color = Color(0.298, 0.212, 0.157, 1)
@@ -14,9 +16,14 @@ height = 4.4
 radial_segments = 6
 rings = 1
 
-[sub_resource type="StandardMaterial3D" id="Mat_needle"]
-albedo_color = Color(0.161, 0.353, 0.243, 1)
-roughness = 1.0
+[sub_resource type="ShaderMaterial" id="Mat_needle"]
+shader = ExtResource("2_sway")
+shader_parameter/albedo_color = Color(0.161, 0.353, 0.243, 1)
+shader_parameter/roughness_value = 1.0
+shader_parameter/sway_amount = 0.55
+shader_parameter/sway_pivot_y = -0.8
+shader_parameter/sway_full_height = 4.6
+shader_parameter/sway_speed = 0.95
 
 [sub_resource type="CylinderMesh" id="Mesh_tier_a"]
 material = SubResource("Mat_needle")

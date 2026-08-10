@@ -17,7 +17,7 @@ extends Node3D
 ## res://tools/weather_lab/weather_lab.tscn -- --capture. Captures go to user://weather_lab.
 
 const PrecipitationEffectScene := preload("res://game/features/world/presentation/precipitation_effect.tscn")
-const FirefliesEffectScene := preload("res://game/features/world/presentation/fireflies_effect.tscn")
+const FirefliesEffectScene := preload("res://game/features/world/presentation/ambient/fireflies_effect.tscn")
 const SkyAndWeatherControllerScene := preload("res://game/features/world/presentation/sky_and_weather_controller.tscn")
 const SkyShader := preload("res://game/features/world/presentation/sky_clouds.gdshader")
 
@@ -127,7 +127,6 @@ const TRACK_FRAMING_HEIGHT := 0.18
 var controller: SkyAndWeatherController
 var sky_material: ShaderMaterial
 var precipitation: PrecipitationEffect
-var fireflies: Array = []
 var camera: Camera3D
 var game_minutes := 720.0
 var overcast := 0.0
@@ -195,10 +194,11 @@ func _build_weather_rig() -> void:
 	precipitation = PrecipitationEffectScene.instantiate() as PrecipitationEffect
 	precipitation.set_camera(camera)
 	add_child(precipitation)
+	# The swarm needs no wiring any more: it joins the ambient-effect group in
+	# `_ready` and the controller publishes the snapshot to the whole group.
 	var swarm := FirefliesEffectScene.instantiate() as FirefliesEffect
 	swarm.position = Vector3(-2.8, 0.0, -1.6)
 	add_child(swarm)
-	fireflies.append(swarm)
 
 	# The production glare material, not null: passing null made the lab silently skip
 	# the entire screen-space glare path it is supposed to be validating.
@@ -206,7 +206,7 @@ func _build_weather_rig() -> void:
 
 	controller = SkyAndWeatherControllerScene.instantiate() as SkyAndWeatherController
 	add_child(controller)
-	controller.setup(camera, sun, environment, sky_material, precipitation, fireflies, glare_material)
+	controller.setup(camera, sun, environment, sky_material, precipitation, glare_material)
 
 
 func _configure_cameras() -> void:
@@ -244,7 +244,7 @@ func _select_camera(camera_name: StringName) -> void:
 	if precipitation != null:
 		precipitation.set_camera(camera)
 	if controller != null:
-		controller.setup(camera, sun, environment, sky_material, precipitation, fireflies, glare_material)
+		controller.setup(camera, sun, environment, sky_material, precipitation, glare_material)
 
 
 func _process(delta: float) -> void:

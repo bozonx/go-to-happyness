@@ -30,7 +30,9 @@ func _init() -> void:
 	var forage_cell: Vector2i = sim_a.forage_sources.keys()[0]
 	var rabbit_cell: Vector2i = sim_a.rabbit_sources.keys()[0]
 	var rabbit_before: RabbitSourceRecord = sim_a.rabbit_sources[rabbit_cell]
-	rabbit_before.direction = Vector3(0.4, 0.0, -0.8)
+	# Курс кролика намеренно не сохраняется: он меняется каждую секунду, и от
+	# записанного мгновения через миг после загрузки не осталось бы ничего.
+	# Восстанавливается место — оно и проверяется.
 	var rabbit_position := rabbit_before.node.global_position
 	# Wild food no longer respawns, so harvesting a forage source in A must leave
 	# it permanently gone — the save carries that absence, not a respawn timer.

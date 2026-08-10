@@ -121,11 +121,15 @@ func _set_albedo(node: Node, color: Color) -> void:
 		for child: Node in node.get_children():
 			_set_albedo(child, color)
 		return
+	# Листва рисуется шейдером качания на ветру, а не StandardMaterial3D, но
+	# «перекрасить» обязано значить одно и то же для обоих: иначе автор увидел бы,
+	# что цвет кроны работает у одних растений и молча не работает у других.
+	if mesh_instance.mesh != null and _source_material(mesh_instance) is ShaderMaterial:
+		_set_shader_albedo(mesh_instance, color)
+		return
 	var override := mesh_instance.material_override as StandardMaterial3D
 	if override == null or not override.has_meta("decor_instance_material"):
-		var source: Material = mesh_instance.material_override
-		if source == null and mesh_instance.mesh != null:
-			source = mesh_instance.mesh.surface_get_material(0)
+		var source := _source_material(mesh_instance)
 		override = source.duplicate() as StandardMaterial3D if source is StandardMaterial3D else StandardMaterial3D.new()
 		override.set_meta("decor_instance_material", true)
 		mesh_instance.material_override = override
@@ -133,3 +137,29 @@ func _set_albedo(node: Node, color: Color) -> void:
 	# Unshaded flame meshes read better when the tint drives emission too.
 	if override.emission_enabled:
 		override.emission = color
+
+
+const SHADER_ALBEDO := &"albedo_color"
+
+
+func _set_shader_albedo(mesh_instance: MeshInstance3D, color: Color) -> void:
+	var override := mesh_instance.material_override as ShaderMaterial
+	if override == null or not override.has_meta("decor_instance_material"):
+		var source := _source_material(mesh_instance) as ShaderMaterial
+		if source == null:
+			return
+		override = source.duplicate() as ShaderMaterial
+		override.set_meta("decor_instance_material", true)
+		mesh_instance.material_override = override
+	override.set_shader_parameter(SHADER_ALBEDO, color)
+
+
+## The material a mesh actually draws with before any per-instance override: the
+## override when one is already in place, otherwise the one the scene authored on
+## the mesh surface.
+func _source_material(mesh_instance: MeshInstance3D) -> Material:
+	if mesh_instance.material_override != null:
+		return mesh_instance.material_override
+	if mesh_instance.mesh != null and mesh_instance.mesh.get_surface_count() > 0:
+		return mesh_instance.mesh.surface_get_material(0)
+	return null

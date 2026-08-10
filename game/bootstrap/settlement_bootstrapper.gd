@@ -836,6 +836,7 @@ func _apply_daily_forecast() -> void:
 
 
 func _setup_controllers_and_world() -> void:
+	_setup_ambient_life()
 	game.ambient_spawner = AmbientSpawner.new()
 	game.add_child(game.ambient_spawner)
 	game.ambient_spawner.setup(game, game.launch_config.map_document, game.launch_config.start_option)
@@ -860,8 +861,29 @@ func _setup_controllers_and_world() -> void:
 		game.ui_manager.create_interface()
 	game.ambient_spawner.create_forest()
 	game.ambient_spawner.spawn_trash_piles()
-	game.ambient_spawner.spawn_initial_rabbits()
+	game.ambient_spawner.spawn_wildlife()
 
+
+
+## Живность двигает одна служба. Ей нужны ровно три вопроса о мире: где нельзя
+## пройти, какая под ногами высота и кого бояться, — и всё это отдаётся
+## колбэками, чтобы служба не знала ни `SettlementGame`, ни поселения вообще.
+func _setup_ambient_life() -> void:
+	game.ambient_life_service = AmbientLifeService.new()
+	game.ambient_life_service.configure(
+		game.random,
+		func(position: Vector3) -> bool:
+			return game.navigation_blocked_cells.has(game.cell_from_position(position)),
+		game.terrain_height_at,
+		func() -> Array[Vector3]:
+			# Угроза для дикого зверя — человек. Герой уже среди жителей, поэтому
+			# отдельной строкой он здесь не нужен.
+			var threats: Array[Vector3] = []
+			for citizen: Node3D in game.citizens:
+				if is_instance_valid(citizen):
+					threats.append(citizen.global_position)
+			return threats
+	)
 
 func _setup_citizens_and_ai() -> void:
 	game.citizen_factory.create_citizens()

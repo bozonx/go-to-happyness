@@ -39,3 +39,14 @@ enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg")
 [rendering]
 
 rendering_device/driver.windows="d3d12"
+
+[shader_globals]
+
+world_wind_direction={
+"type": "vec2",
+"value": Vector2(1, 0)
+}
+world_wind_strength={
+"type": "float",
+"value": 0.25
+}

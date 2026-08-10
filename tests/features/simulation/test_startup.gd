@@ -44,15 +44,23 @@ func _init() -> void:
 	assert(not simulation.grass_sources.is_empty())
 	assert(not simulation.forage_sources.is_empty())
 	assert(not simulation.rabbit_sources.is_empty())
-	assert(not simulation.fireflies.is_empty())
+	var ambient_effects := simulation.get_tree().get_nodes_in_group(AmbientEffect.GROUP)
+	assert(not ambient_effects.is_empty())
 	assert(simulation.tree_nodes.values()[0].get_parent() == landscape_objects)
 	assert((simulation.grass_sources.values()[0] as HarvestSourceRecord).node.get_parent() == landscape_objects)
 	assert((simulation.forage_sources.values()[0] as ForageSourceRecord).node.get_parent() == landscape_objects)
 	assert((simulation.rabbit_sources.values()[0] as RabbitSourceRecord).node.get_parent() == landscape_objects)
-	# Authored firefly placements are rendered by MapEntityPresenter and forwarded
-	# into the weather controller's list, so they are live FirefliesEffect nodes.
-	assert(simulation.fireflies[0] is FirefliesEffect)
-	assert(is_instance_valid(simulation.fireflies[0]))
+	# Authored firefly placements are rendered by MapEntityPresenter and announce
+	# themselves to the ambient-effect group, which is how the weather controller
+	# reaches them. Nothing holds a firefly-shaped list any more.
+	assert(ambient_effects[0] is FirefliesEffect)
+	assert(is_instance_valid(ambient_effects[0]))
+	# Ветер обязан доехать до визуала в живой игре. `GridTerrainWorld.set_wind`
+	# однажды уже существовал, не вызывался никем, и трава просто стояла —
+	# «параметр есть, потребителя нет» ни один юнит-тест не ловит.
+	var wind := WorldWind.current()
+	assert((wind["direction"] as Vector2).length() > 0.9, "ветер мира не опубликован")
+	assert(float(wind["strength"]) >= WorldWind.MINIMUM_STIRRING)
 	assert(simulation.resource_piles.any(func(pile): return pile.node.get_parent() == landscape_objects))
 
 	# The runtime count of every natural kind matches the map's authored records
@@ -204,8 +212,8 @@ func _count_natural_entities(simulation: Node) -> void:
 	for placed: MapEntityRecord in document.entities.entities:
 		var archetype := EntityArchetypeCatalog.get_archetype(placed.archetype_id)
 		if archetype == null or not archetype.has_component(&"settlement_natural"):
-			# Fireflies carry no settlement_natural component (the presenter owns
-			# them), so match them by archetype id instead.
+			# Fireflies carry no settlement_natural component (they are an ambient
+			# effect, not a harvestable), so match them by archetype id instead.
 			if String(placed.archetype_id) == "core:fireflies":
 				expected[&"fireflies"] += 1
 			continue
@@ -217,4 +225,4 @@ func _count_natural_entities(simulation: Node) -> void:
 	assert(simulation.grass_sources.size() == expected[&"grass_source"])
 	assert(simulation.forage_sources.size() == expected[&"forage_source"])
 	assert(simulation.rabbit_sources.size() == expected[&"rabbit"])
-	assert(simulation.fireflies.size() == expected[&"fireflies"])
+	assert(simulation.get_tree().get_nodes_in_group(AmbientEffect.GROUP).size() == expected[&"fireflies"])

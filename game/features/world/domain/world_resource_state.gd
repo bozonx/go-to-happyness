@@ -66,10 +66,11 @@ func capture(
 		var rabbit: Variant = rabbit_sources[cell]
 		if not is_instance_valid(rabbit.node):
 			continue
+		# Курс не сохраняется: он меняется каждую секунду, и восстанавливать
+		# мгновение из прошлого незачем. Место — сохраняется.
 		rabbits.append({
 			"cell": _cell_to_dict(cell),
 			"position": _vector_to_dict(rabbit.node.global_position),
-			"direction": _vector_to_dict(rabbit.direction),
 		})
 
 

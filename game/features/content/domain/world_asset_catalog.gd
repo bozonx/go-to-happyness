@@ -635,13 +635,13 @@ static func _register_natural_assets() -> void:
 	rabbit.scope = WorldAssetDef.SCOPE_MAP
 
 	# Fireflies are a non-physical ambient effect (a MultiMesh of glowing points),
-	# so neither a collider nor navigation blocking applies; the weather controller
-	# reaches each instance through `WorldSetup.fireflies`. The scene stays with the
-	# weather feature that drives it — the catalog references assets, it does not
-	# have to own every file.
+	# so neither a collider nor navigation blocking applies. It drives itself from
+	# the published `EnvironmentSnapshot` like any other `AmbientEffect`, and its
+	# scene stays with the ambient effects — the catalog references assets, it does
+	# not have to own every file.
 	var fireflies := WorldAssetDef.new(
 		&"fireflies", "Светлячки", &"ambient", &"world",
-		"res://game/features/world/presentation/fireflies_effect.tscn",
+		"res://game/features/world/presentation/ambient/fireflies_effect.tscn",
 		Vector3i.ONE, 1.0, [], Vector3(4.0, 3.0, 4.0),
 		"Рой светлячков; количество, радиус и высота задаются свойствами сущности."
 	)
