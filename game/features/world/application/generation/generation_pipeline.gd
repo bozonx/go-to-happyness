@@ -26,13 +26,17 @@ extends RefCounted
 ## How many times the composition half may be re-shaped to hit `land_fraction`.
 const COMPOSITION_PASSES := 3
 
-static func run(recipe: MapRecipe, seeds: GenerationSeed, land_fraction_bias := 0.0) -> GenerationContext:
+static func run(recipe: MapRecipe, seeds: GenerationSeed, feedback: Dictionary = {}) -> GenerationContext:
 	var context := GenerationContext.new()
 	context.configure(recipe, seeds)
 	# Carried in from a previous attempt: what the hydrology and the settling cost
 	# the land share last time round (§5.3). Nothing inside the pipeline can know
 	# that number, so the service hands it back.
-	context.land_fraction_bias = land_fraction_bias
+	context.land_fraction_bias = float(feedback.get("land_fraction", 0.0))
+	context.mean_height_adjustment = float(feedback.get("mean_height", 0.0))
+	context.max_height_adjustment = float(feedback.get("max_height", 0.0))
+	context.terrace_bias_adjustment = float(feedback.get("terrace_bias", 0.0))
+	context.roughness_adjustment = float(feedback.get("roughness", 0.0))
 
 	# The sides are planned before the land is: a wall four cells thick is area the
 	# land-fraction solver has to know about in advance (§3.2, §5.3).
@@ -46,7 +50,7 @@ static func run(recipe: MapRecipe, seeds: GenerationSeed, land_fraction_bias := 
 	# The target the composition half aims at already carries the correction the
 	# service measured on the finished map, so the inner loop must not undo it: it
 	# aims at the biased share, not at the recipe's.
-	var composition_target := clampf(recipe.land_fraction + land_fraction_bias, 0.0, 1.0)
+	var composition_target := clampf(recipe.land_fraction + context.land_fraction_bias, 0.0, 1.0)
 	for pass_index in COMPOSITION_PASSES:
 		_shape_land(context)
 		var error := composition_target - _land_share(context)

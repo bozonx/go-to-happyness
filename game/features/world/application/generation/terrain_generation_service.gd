@@ -20,8 +20,8 @@ extends RefCounted
 ## layer 6).
 
 const CELL_SIZE := 1.0
-## How many seeds §6 allows before the generator gives up and reports instead.
-const MAX_ATTEMPTS := 4
+## Total correction/reseed budget §6 allows before reporting a rejected map.
+const MAX_ATTEMPTS := 10
 ## `WaterBody` ids are one byte and 0 means dry, so the layer holds 255 bodies. A
 ## cascading river spends one per pool, which is the only thing here that can
 ## realistically approach the limit.
@@ -73,19 +73,17 @@ func generate(recipe: MapRecipe, seed_value: int) -> GenerationResult:
 		result.attempts.append(refusal)
 		return result
 
-	# Two different things can be wrong with an attempt, and they deserve different
-	# answers. A land share that came out short is a MEASUREMENT: the deltas and
-	# the settling cost the map that much, so the next attempt asks the composition
-	# solver for exactly that much more on the SAME seed (§5.3). Anything else is a
-	# map that did not work out, and the answer to that is another world (§6).
-	var bias := 0.0
+	# Scalar target misses are measurements of deterministic downstream drift. Feed
+	# them back into the same seed. Only structural failures (connectivity, walls,
+	# water, rivers) authorize trying another world (§5.3, §6).
+	var feedback: Dictionary = {}
 	var reseeds := 0
 	for attempt in MAX_ATTEMPTS:
 		var seeds := GenerationSeed.new(seed_value)
 		if reseeds > 0:
 			seeds = seeds.derive(reseeds)
 		var started := Time.get_ticks_msec()
-		var context := GenerationPipeline.run(recipe, seeds, bias)
+		var context := GenerationPipeline.run(recipe, seeds, feedback)
 		_apply(context)
 
 		var report := GenerationReport.new()
@@ -105,12 +103,42 @@ func generate(recipe: MapRecipe, seed_value: int) -> GenerationResult:
 		attempt_finished.emit(report)
 		if report.accepted:
 			break
-		var land_error := recipe.land_fraction - float(report.metrics["land_fraction"])
-		if absf(land_error) > recipe.land_fraction_tolerance:
-			bias += land_error
-		if report.failures.size() > 1 or absf(land_error) <= recipe.land_fraction_tolerance:
+		if TerrainMetrics.has_fatal_failures(recipe, report.metrics):
 			reseeds += 1
+			feedback.clear()
+			continue
+		var previous_feedback := feedback.duplicate()
+		_update_feedback(recipe, report.metrics, feedback)
+		# Every scalar control is saturated: another pass would rebuild the exact
+		# same rejected map. Report now instead of burning the remaining budget.
+		if feedback == previous_feedback:
+			break
 	return result
+
+
+## Closed-loop correction for quantities that the pipeline can control without
+## changing the world's structures. Adjustments accumulate because each attempt
+## measures all downstream stages, including repose and slope assignment.
+static func _update_feedback(recipe: MapRecipe, metrics: Dictionary, feedback: Dictionary) -> void:
+	var land_error := recipe.land_fraction - float(metrics["land_fraction"])
+	if absf(land_error) > recipe.land_fraction_tolerance:
+		feedback["land_fraction"] = float(feedback.get("land_fraction", 0.0)) + land_error
+	var mean_error := float(recipe.land_mean_height) - float(metrics["land_mean_height"])
+	if absf(mean_error) > recipe.land_mean_height_tolerance:
+		feedback["mean_height"] = float(feedback.get("mean_height", 0.0)) + mean_error
+	var max_error := float(recipe.land_max_height) - float(metrics["land_max_height"])
+	if absf(max_error) > float(recipe.land_max_height_tolerance):
+		feedback["max_height"] = float(feedback.get("max_height", 0.0)) + max_error
+	var flat_deficit := recipe.flat_fraction_min - float(metrics["flat_fraction"])
+	if flat_deficit > 0.0:
+		var current := float(feedback.get("terrace_bias", 0.0))
+		feedback["terrace_bias"] = clampf(current + maxf(0.5, flat_deficit * 4.0), 0.0, 1.0 - recipe.terrace_bias)
+	var cliff_excess := float(metrics["cliff_fraction"]) - recipe.cliff_fraction_max
+	if cliff_excess > 0.0:
+		# `roughness` is monotonic and zero is its meaningful lower bound. Walk
+		# there directly; tiny 0.1 decrements rebuilt the same over-cliffed map four
+		# times before discovering that even the smooth field could not pass.
+		feedback["roughness"] = -recipe.roughness
 
 
 # --- Stages 11–13 -------------------------------------------------------------

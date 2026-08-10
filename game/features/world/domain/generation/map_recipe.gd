@@ -18,7 +18,7 @@ extends RefCounted
 
 const FORMAT_VERSION := 1
 const KIND := &"map_generator"
-const GENERATOR_VERSION := 1
+const GENERATOR_VERSION := 2
 
 const SHAPE_CONTINENT := &"continent"
 const SHAPE_COAST := &"coast"
@@ -206,7 +206,7 @@ var land_fraction_tolerance := 0.03
 ## How far the finished map may sit from the two height promises of §3.4. They
 ## are solved exactly on the continuous field and then moved by quantisation, by
 ## the settling pass and by river incision, so the condition is a band. The mean
-## is measured over the PLAINS — the ranges have their own height budget (§3.5).
+## is measured over all playable land, ranges included (§3.4, §6).
 var land_mean_height_tolerance := 2.0
 var land_max_height_tolerance := 4
 ## The share of the walkable land a CART can reach in one piece. Reported always,
@@ -599,6 +599,8 @@ static func _int_pair(raw: Variant) -> Array[int]:
 func _validate() -> void:
 	if format_version != FORMAT_VERSION:
 		errors.append("format_version %d is not supported (expected %d)" % [format_version, FORMAT_VERSION])
+	if generator_version != GENERATOR_VERSION:
+		errors.append("generator_version %d is not supported (expected %d)" % [generator_version, GENERATOR_VERSION])
 	if board_size < MIN_BOARD or board_size > MAX_BOARD:
 		errors.append("board.size %d is outside %d…%d" % [board_size, MIN_BOARD, MAX_BOARD])
 	# Whole chunks, like every board the editor can create (`map_editor.md` §6.2).

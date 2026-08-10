@@ -13,18 +13,23 @@ extends RefCounted
 ##    into a uniform 0…1 field. From here on the noise's own histogram is gone,
 ##    which is why `land_mean_height` can be met exactly rather than approximately.
 ## 2. Bends that uniform field through the curve the recipe named.
-## 3. Solves two scalars — a plain exponent and a mountain gain — so that the mean
-##    and the maximum of the finished land are the requested ones (§5.3).
+## 3. Solves the plain exponent and, when necessary, a mountain-profile exponent
+##    so that the mean and maximum are compatible (§5.3). The peak gain itself is
+##    analytical: requested maximum / raw uplift maximum.
 ##
 ## Plains and mountains keep separate budgets and combine with `max`, which is
 ## what makes "mean height 6, peaks 48" an ordinary recipe instead of a
 ## pathological one: raising the peaks does not lift the plain under them.
 
 const STAGE := &"hypsometry"
-const SOLVER_STEPS := 40
-const OUTER_ROUNDS := 6
+const SOLVER_STEPS := 24
 const MIN_EXPONENT := 0.02
 const MAX_EXPONENT := 32.0
+const MIN_MOUNTAIN_EXPONENT := 1.0
+const MAX_MOUNTAIN_EXPONENT := 32.0
+## Maximum displacement of ordinary ground at roughness=1, as a share of its
+## height budget. It is applied after rank normalisation so the slider survives.
+const ROUGHNESS_AMPLITUDE := 0.30
 
 ## How far above the mean the pure-plain component may reach, per curve. The
 ## ceiling has to sit above the mean or no exponent can bring the mean down to it.
@@ -63,23 +68,38 @@ static func apply(context: GenerationContext) -> void:
 	for index: int in sample:
 		uplift_peak = maxf(uplift_peak, context.uplift[index])
 
+	var target_mean := clampf(
+		float(recipe.land_mean_height) + context.mean_height_adjustment,
+		float(recipe.ocean_level) + 0.5,
+		float(TerrainGrid.MAX_HEIGHT),
+	)
+	var target_max := clampf(
+		float(recipe.land_max_height) + context.max_height_adjustment,
+		target_mean + 1.0,
+		float(TerrainGrid.MAX_HEIGHT),
+	)
+	ceiling = minf(ceiling, target_max)
 	var exponent := 1.0
+	var mountain_exponent := MIN_MOUNTAIN_EXPONENT
 	var gain := 1.0
 	if uplift_peak <= 0.0:
 		# No mountains: the plains alone must reach the maximum, so the ceiling IS
 		# the maximum and only the mean is left to solve.
-		ceiling = float(recipe.land_max_height)
-		exponent = _solve_exponent(context, sample, shaped, ceiling, 0.0, float(recipe.land_mean_height))
+		ceiling = target_max
+		exponent = _solve_exponent(context, sample, shaped, ceiling, target_mean, 0.0, 1.0, target_max)
 	else:
-		for _round in OUTER_ROUNDS:
-			exponent = _solve_exponent(context, sample, shaped, ceiling, gain, float(recipe.land_mean_height))
-			gain = _solve_gain(context, sample, shaped, ceiling, exponent, float(recipe.land_max_height))
+		gain = target_max / uplift_peak
+		mountain_exponent = _solve_mountain_exponent(
+			context, sample, shaped, ceiling, target_mean, uplift_peak, target_max)
+		exponent = _solve_exponent(
+			context, sample, shaped, ceiling, target_mean, uplift_peak, mountain_exponent, target_max)
 	context.mountain_gain = gain
 
-	var ceiling_height := float(recipe.land_max_height)
+	var ceiling_height := target_max
 	for index: int in land:
 		var plain := ceiling * pow(shaped[index], exponent)
-		context.uplift[index] *= gain
+		var normalised_uplift := clampf(context.uplift[index] / maxf(uplift_peak, 0.0001), 0.0, 1.0)
+		context.uplift[index] = target_max * pow(normalised_uplift, mountain_exponent) if uplift_peak > 0.0 else 0.0
 		var height := maxf(plain, context.uplift[index])
 		# The rim keeps to the map's own height budget. It is scaled by a gain
 		# solved without it, so nothing stops it overshooting — and a frame standing
@@ -92,8 +112,12 @@ static func apply(context: GenerationContext) -> void:
 	# their own peaks can cover so much of a small board that no plain exponent
 	# brings the average down. That is a fact about the recipe, not a failure of
 	# the solver, so it is said out loud rather than met halfway in silence.
-	if exponent >= MAX_EXPONENT - 0.01:
-		context.note("elevation: mountains cover too much of the board for a mean of %d — widen the board or shorten the ranges" % recipe.land_mean_height)
+	if mountain_exponent >= MAX_MOUNTAIN_EXPONENT - 0.01 and exponent >= MAX_EXPONENT - 0.01:
+		context.note("elevation: even the narrowest mountain profile cannot reach a mean of %.1f" % target_mean)
+	elif mountain_exponent > MIN_MOUNTAIN_EXPONENT + 0.01:
+		context.note("elevation: mountain profile narrowed to %.2f to preserve mean %.1f and peaks %.1f" % [
+			mountain_exponent, target_mean, target_max,
+		])
 
 
 static func _land_indices(context: GenerationContext) -> PackedInt32Array:
@@ -154,7 +178,10 @@ static func _shaped_field(context: GenerationContext, land: PackedInt32Array) ->
 	var last := maxi(sorted.size() - 1, 1)
 	for position in sorted.size():
 		var t := float(position) / float(last)
-		shaped[sorted[position]] = clampf(_curve(recipe.hypsometry, t), 0.0, 1.0)
+		var index: int = sorted[position]
+		var effective_roughness := clampf(recipe.roughness + context.roughness_adjustment, 0.0, 1.0)
+		var detail := context.roughness_detail[index] * effective_roughness * ROUGHNESS_AMPLITUDE
+		shaped[index] = clampf(_curve(recipe.hypsometry, t) + detail, 0.0, 1.0)
 	return shaped
 
 
@@ -177,42 +204,53 @@ static func _curve(id: StringName, t: float) -> float:
 			return pow(t, 3.0)
 
 
-static func _solve_exponent(context: GenerationContext, land: PackedInt32Array, shaped: PackedFloat32Array, ceiling: float, gain: float, target_mean: float) -> float:
+static func _solve_exponent(
+	context: GenerationContext, land: PackedInt32Array, shaped: PackedFloat32Array,
+	ceiling: float, target_mean: float, uplift_peak: float,
+	mountain_exponent: float, target_max: float,
+) -> float:
 	var low := MIN_EXPONENT
 	var high := MAX_EXPONENT
 	for _step in SOLVER_STEPS:
 		var middle := (low + high) * 0.5
-		if _mean_of(context, land, shaped, ceiling, middle, gain) > target_mean:
+		if _mean_of(context, land, shaped, ceiling, middle, uplift_peak, mountain_exponent, target_max) > target_mean:
 			low = middle
 		else:
 			high = middle
 	return (low + high) * 0.5
 
 
-static func _solve_gain(context: GenerationContext, land: PackedInt32Array, shaped: PackedFloat32Array, ceiling: float, exponent: float, target_max: float) -> float:
-	var low := 0.0
-	var high := 64.0
+## Find the least narrowing that lets the plains solver reach the requested mean.
+## The maximum stays fixed because `target_max * pow(1, p) == target_max`.
+static func _solve_mountain_exponent(
+	context: GenerationContext, land: PackedInt32Array, shaped: PackedFloat32Array,
+	ceiling: float, target_mean: float, uplift_peak: float, target_max: float,
+) -> float:
+	if _mean_of(context, land, shaped, ceiling, MAX_EXPONENT, uplift_peak, MIN_MOUNTAIN_EXPONENT, target_max) <= target_mean:
+		return MIN_MOUNTAIN_EXPONENT
+	var low := MIN_MOUNTAIN_EXPONENT
+	var high := MAX_MOUNTAIN_EXPONENT
 	for _step in SOLVER_STEPS:
 		var middle := (low + high) * 0.5
-		if _max_of(context, land, shaped, ceiling, exponent, middle) > target_max:
-			high = middle
-		else:
+		if _mean_of(context, land, shaped, ceiling, MAX_EXPONENT, uplift_peak, middle, target_max) > target_mean:
 			low = middle
+		else:
+			high = middle
 	return (low + high) * 0.5
 
 
-static func _mean_of(context: GenerationContext, land: PackedInt32Array, shaped: PackedFloat32Array, ceiling: float, exponent: float, gain: float) -> float:
+static func _mean_of(
+	context: GenerationContext, land: PackedInt32Array, shaped: PackedFloat32Array,
+	ceiling: float, exponent: float, uplift_peak: float,
+	mountain_exponent: float, target_max: float,
+) -> float:
 	var total := 0.0
 	for index: int in land:
-		total += maxf(ceiling * pow(shaped[index], exponent), context.uplift[index] * gain)
+		var mountain := 0.0
+		if uplift_peak > 0.0:
+			mountain = target_max * pow(clampf(context.uplift[index] / uplift_peak, 0.0, 1.0), mountain_exponent)
+		total += maxf(ceiling * pow(shaped[index], exponent), mountain)
 	return total / float(land.size())
-
-
-static func _max_of(context: GenerationContext, land: PackedInt32Array, shaped: PackedFloat32Array, ceiling: float, exponent: float, gain: float) -> float:
-	var highest := -INF
-	for index: int in land:
-		highest = maxf(highest, maxf(ceiling * pow(shaped[index], exponent), context.uplift[index] * gain))
-	return highest
 
 
 ## The sea floor: a shelf of the requested width around the coast, deepening to

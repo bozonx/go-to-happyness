@@ -8,6 +8,16 @@ const SEEDS := 10
 
 
 func _init() -> void:
+	var preset_filter := ""
+	var seed_filter := 0
+	var board_override := 0
+	for argument: String in OS.get_cmdline_user_args():
+		if argument.begins_with("--preset="):
+			preset_filter = argument.trim_prefix("--preset=")
+		elif argument.begins_with("--seed="):
+			seed_filter = int(argument.trim_prefix("--seed="))
+		elif argument.begins_with("--board="):
+			board_override = int(argument.trim_prefix("--board="))
 	var directory := DirAccess.open("res://tools/map_gen_lab/presets")
 	var names := directory.get_files()
 	names.sort()
@@ -16,8 +26,18 @@ func _init() -> void:
 	for name: String in names:
 		if not name.ends_with(".gdmapgen.json"):
 			continue
+		if not preset_filter.is_empty() and name.get_basename().get_basename() != preset_filter:
+			continue
 		var recipe := MapRecipe.from_json_path("res://tools/map_gen_lab/presets/%s" % name)
-		for seed_value in range(1, SEEDS + 1):
+		if board_override > 0:
+			recipe = MapRecipeLibrary.with_board(recipe, board_override)
+		var seed_values: Array[int] = []
+		if seed_filter > 0:
+			seed_values.append(seed_filter)
+		else:
+			for value in range(1, SEEDS + 1):
+				seed_values.append(value)
+		for seed_value: int in seed_values:
 			var result := _run(recipe, seed_value)
 			var verdict := result.report.verdict()
 			var attempts := result.attempts.size()

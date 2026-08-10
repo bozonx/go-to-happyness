@@ -59,6 +59,8 @@ static func apply(context: GenerationContext) -> void:
 ## would have swallowed the hollows the lake stage is about to use.
 static func _fill_potholes(context: GenerationContext) -> int:
 	var filled := 0
+	var source := context.heights.duplicate()
+	var next := source.duplicate()
 	for index in context.cell_count:
 		if context.border_seal[index] != 0:
 			continue
@@ -75,11 +77,12 @@ static func _fill_potholes(context: GenerationContext) -> int:
 			var neighbour := cell + offset
 			if not context.contains(neighbour.x, neighbour.y):
 				continue
-			lowest = mini(lowest, context.heights[context.cell_index(neighbour)])
-		if lowest == TerrainGrid.MAX_HEIGHT or context.heights[index] >= lowest - 1:
+			lowest = mini(lowest, source[context.cell_index(neighbour)])
+		if lowest == TerrainGrid.MAX_HEIGHT or source[index] >= lowest - 1:
 			continue
-		context.heights[index] = lowest - 1
+		next[index] = lowest - 1
 		filled += 1
+	context.heights = next
 	return filled
 
 
@@ -95,20 +98,28 @@ static func _beside_seal(context: GenerationContext, cell: Vector2i) -> bool:
 
 static func _sweep_once(context: GenerationContext) -> int:
 	var moved := 0
+	# Jacobi relaxation: every decision reads the immutable state at the start of
+	# the sweep and writes a second buffer. Raster order (and future chunk order)
+	# therefore cannot change the map (§4.2).
+	var source := context.heights.duplicate()
+	var next := source.duplicate()
 	for index in context.cell_count:
 		if context.border_seal[index] != 0:
 			continue
 		var cell := context.cell_of_index(index)
 		if context.river_cells.has(cell) or context.carved_cells.has(cell):
 			continue
-		var height := context.heights[index]
+		var height := source[index]
 		var lowest := TerrainGrid.MAX_HEIGHT
 		var neighbours := 0
 		for offset: Vector2i in NEIGHBOURS:
 			var neighbour := cell + offset
 			if not context.contains(neighbour.x, neighbour.y):
 				continue
-			lowest = mini(lowest, context.heights[context.cell_index(neighbour)])
+			var neighbour_index := context.cell_index(neighbour)
+			var neighbour_height := source[neighbour_index]
+			if neighbour_height < lowest:
+				lowest = neighbour_height
 			neighbours += 1
 		if neighbours == 0:
 			continue
@@ -129,7 +140,7 @@ static func _sweep_once(context: GenerationContext) -> int:
 		if height - lowest <= limit:
 			continue
 		var settled := lowest + limit
-		context.heights[index] = clampi(settled, TerrainGrid.MIN_HEIGHT, TerrainGrid.MAX_HEIGHT)
-		context.is_land[index] = 1 if context.heights[index] >= context.recipe.ocean_level else 0
+		next[index] = clampi(settled, TerrainGrid.MIN_HEIGHT, TerrainGrid.MAX_HEIGHT)
 		moved += 1
+	context.heights = next
 	return moved

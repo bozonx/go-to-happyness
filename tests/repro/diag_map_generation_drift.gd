@@ -5,6 +5,7 @@ extends SceneTree
 ## the verdict would measure after each one.
 
 const CASES: Array = [
+	["archipelago", 1],
 	["continent_east_ranges", 8],
 	["continent_east_ranges", 10],
 	["river_valley", 1],

@@ -43,7 +43,7 @@ func noise(stage_id: StringName, frequency: float, octaves: int = 4, gain: float
 	return field
 
 
-## A derived seed for retrying the same recipe (§6): a rejected attempt comes back
-## with a different world, not with the same one twice.
+## A derived seed for retrying a structurally broken world (§6). Scalar target
+## misses are corrected on the original seed and never call this function.
 func derive(attempt: int) -> GenerationSeed:
 	return GenerationSeed.new(int(hash("gdmapgen/retry/%d/%d" % [base_seed, attempt])))

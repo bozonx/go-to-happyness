@@ -27,6 +27,13 @@ var cell_count := 0
 ## than model every one of them, the pipeline measures the result and asks stage 1
 ## for that much more or less land next time (§5.3).
 var land_fraction_bias := 0.0
+## Corrections measured on the finished grid and fed back into the same world.
+## Rivers, repose and slope assignment happen after the continuous solver, so
+## their drift cannot be predicted honestly from inside `Hypsometry`.
+var mean_height_adjustment := 0.0
+var max_height_adjustment := 0.0
+var terrace_bias_adjustment := 0.0
+var roughness_adjustment := 0.0
 
 ## Stage 1 — continental composition.
 ## Signed distance to the coastline in cells: positive inland, negative at sea.
@@ -35,6 +42,9 @@ var is_land := PackedByteArray()
 
 ## Stage 2 — the continuous relief of the plains, normalised to 0…1.
 var relief := PackedFloat32Array()
+## Zero-centred fine detail kept separate from the ranked broad relief. Applying
+## it after rank normalisation is what makes `roughness` observable (§3.1).
+var roughness_detail := PackedFloat32Array()
 
 ## Stage 3 — mountain uplift in height steps, and the skeleton that produced it.
 var uplift := PackedFloat32Array()
@@ -170,6 +180,7 @@ func configure(next_recipe: MapRecipe, next_seeds: GenerationSeed) -> void:
 	shore_distance = _new_floats()
 	is_land = _new_bytes()
 	relief = _new_floats()
+	roughness_detail = _new_floats()
 	uplift = _new_floats()
 	height_field = _new_floats()
 	border_locked = _new_bytes()

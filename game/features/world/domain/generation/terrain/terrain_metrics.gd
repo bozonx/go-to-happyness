@@ -112,7 +112,7 @@ static func failures(recipe: MapRecipe, metrics: Dictionary) -> Array[String]:
 	# exactness that nothing enforced.
 	var mean_error := absf(float(metrics["land_mean_height"]) - float(recipe.land_mean_height))
 	if mean_error > recipe.land_mean_height_tolerance:
-		broken.append("mean height of the plains %.2f is more than %.1f from %d" % [
+		broken.append("mean land height %.2f is more than %.1f from %d" % [
 			metrics["land_mean_height"], recipe.land_mean_height_tolerance, recipe.land_mean_height,
 		])
 	var max_error := absi(int(metrics["land_max_height"]) - recipe.land_max_height)
@@ -167,6 +167,25 @@ static func failures(recipe: MapRecipe, metrics: Dictionary) -> Array[String]:
 			metrics["desert_lake_fraction"], recipe.desert_lake_fraction_max,
 		])
 	return broken
+
+
+## A retry changes seed only for a structural failure. Land share, height and
+## buildable-flat share have explicit solver controls, so reseeding them would be
+## acceptance by lottery rather than solving the recipe (§5.3, §6).
+static func has_fatal_failures(recipe: MapRecipe, metrics: Dictionary) -> bool:
+	var all_failures := failures(recipe, metrics).size()
+	var correctable := 0
+	if absf(float(metrics["land_fraction"]) - recipe.land_fraction) > recipe.land_fraction_tolerance:
+		correctable += 1
+	if absf(float(metrics["land_mean_height"]) - float(recipe.land_mean_height)) > recipe.land_mean_height_tolerance:
+		correctable += 1
+	if absi(int(metrics["land_max_height"]) - recipe.land_max_height) > recipe.land_max_height_tolerance:
+		correctable += 1
+	if float(metrics["flat_fraction"]) < recipe.flat_fraction_min:
+		correctable += 1
+	if float(metrics["cliff_fraction"]) > recipe.cliff_fraction_max:
+		correctable += 1
+	return all_failures > correctable
 
 
 ## Share of the desert that stands under a LAKE (§11.1.3) — the measurable half of

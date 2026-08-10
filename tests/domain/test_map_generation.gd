@@ -18,6 +18,8 @@ static func run_all() -> void:
 	_test_streams_are_independent_per_stage()
 	_test_land_fraction_is_a_target_not_a_hope()
 	_test_mean_and_max_height_are_met()
+	_test_recipe_shape_controls_are_observable()
+	_test_repose_is_mirror_invariant()
 	_test_every_stored_height_is_a_legal_integer()
 	_test_mountain_graph_has_the_requested_shape()
 	_test_generation_is_reproducible()
@@ -166,6 +168,8 @@ static func _test_recipe_refuses_contradictions() -> void:
 
 	var odd := MapRecipe.from_dictionary({"board": {"size": 49}, "mountains": {"ranges": []}, "rivers": {"count": 0}})
 	assert(not odd.is_valid(), "an odd board cannot be centred on the origin")
+	var legacy := MapRecipe.from_dictionary({"generator_version": 1, "mountains": {"ranges": []}, "rivers": {"count": 0}})
+	assert(not legacy.is_valid(), "a recipe from the previous generator algorithm must be refused")
 
 	assert(_recipe().is_valid(), "the reference recipe has to be accepted")
 
@@ -214,6 +218,76 @@ static func _test_mean_and_max_height_are_met() -> void:
 		"mean height %.2f" % report.metrics["land_mean_height"])
 	assert(absi(int(report.metrics["land_max_height"]) - 24) <= 3,
 		"max height %d" % report.metrics["land_max_height"])
+
+
+## §3.1: a recipe slider must survive the solver and change a measurable property
+## of the integer map. These compare the same seed and alter exactly one control.
+static func _test_recipe_shape_controls_are_observable() -> void:
+	var smooth := _pipeline_for_elevation(0.0, 0.0)
+	var rough := _pipeline_for_elevation(1.0, 0.0)
+	var changed := 0
+	for index in smooth.cell_count:
+		if smooth.heights[index] != rough.heights[index]:
+			changed += 1
+	assert(float(changed) / float(smooth.cell_count) > 0.08,
+		"roughness changed only %d of %d integer columns" % [changed, smooth.cell_count])
+
+	var unterraced := _pipeline_for_elevation(0.25, 0.0)
+	var terraced := _pipeline_for_elevation(0.25, 1.0)
+	assert(_level_neighbourhood_share(terraced) > _level_neighbourhood_share(unterraced) + 0.03,
+		"terrace_bias must create measurably more level ground")
+
+
+static func _pipeline_for_elevation(roughness: float, terrace_bias: float) -> GenerationContext:
+	var recipe := _settled_recipe()
+	recipe.roughness = roughness
+	recipe.terrace_bias = terrace_bias
+	return GenerationPipeline.run(recipe, GenerationSeed.new(7070))
+
+
+static func _level_neighbourhood_share(context: GenerationContext) -> float:
+	var level := 0
+	var land := 0
+	for index in context.cell_count:
+		if context.border_locked[index] != 0 or context.is_land[index] == 0:
+			continue
+		land += 1
+		var cell := context.cell_of_index(index)
+		var same := true
+		for offset: Vector2i in ReposePass.NEIGHBOURS:
+			var neighbour := cell + offset
+			if context.contains(neighbour.x, neighbour.y) and context.heights[context.cell_index(neighbour)] != context.heights[index]:
+				same = false
+				break
+		if same:
+			level += 1
+	return float(level) / float(maxi(land, 1))
+
+
+## §4.2: mirroring the input changes traversal order relative to the shape. A
+## Jacobi relaxation must return the mirrored output exactly.
+static func _test_repose_is_mirror_invariant() -> void:
+	var recipe := _recipe({"board": {"size": 32}})
+	recipe.terrace_bias = 0.0
+	var left := GenerationContext.new()
+	var right := GenerationContext.new()
+	left.configure(recipe, GenerationSeed.new(1))
+	right.configure(recipe, GenerationSeed.new(1))
+	left.repose_limit.fill(1)
+	right.repose_limit.fill(1)
+	for index in left.cell_count:
+		var cell := left.cell_of_index(index)
+		var height := 12 if cell.x < -3 and cell.y > -7 else (5 if cell.x + cell.y > 4 else 8)
+		left.heights[index] = height
+		right.heights[right.index_of(-cell.x - 1, cell.y)] = height
+	left.refresh_land_mask()
+	right.refresh_land_mask()
+	ReposePass.apply(left)
+	ReposePass.apply(right)
+	for index in left.cell_count:
+		var cell := left.cell_of_index(index)
+		assert(left.heights[index] == right.heights[right.index_of(-cell.x - 1, cell.y)],
+			"repose depends on raster order at %s" % cell)
 
 
 static func _test_every_stored_height_is_a_legal_integer() -> void:
@@ -918,6 +992,15 @@ static func _test_audit_contracts_are_explicit() -> void:
 	var result := harness.service.generate(_recipe(), 10101)
 	assert(result.context != null)
 	assert(bulk_notifications[0] > 0, "bulk generation must notify water consumers")
+	assert(result.recipe.generator_version == 2)
+	var scalar_miss: Dictionary = result.report.metrics.duplicate(true)
+	scalar_miss["flat_fraction"] = 0.0
+	assert(not TerrainMetrics.has_fatal_failures(result.recipe, scalar_miss),
+		"a flat target miss must correct the same world, not reseed it")
+	var broken_wall: Dictionary = result.report.metrics.duplicate(true)
+	broken_wall["walls_sealed"] = false
+	assert(TerrainMetrics.has_fatal_failures(result.recipe, broken_wall),
+		"a leaking wall is a structural failure")
 	var strongest_generated_flow := 0
 	for body: WaterBody in harness.water.bodies():
 		for cell: Vector2i in body.flow:
