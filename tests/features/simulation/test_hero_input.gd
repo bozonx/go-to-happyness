@@ -7,6 +7,7 @@ const SimHelper = preload("res://tests/helpers/simulation_test_helper.gd")
 
 func _init() -> void:
 	var simulation := await SimHelper.setup_simulation(self)
+	_test_direct_control_terrain_rules()
 
 	# The game starts in hero view; R toggles between hero FPP and overview.
 	assert(simulation.is_first_person)
@@ -56,3 +57,28 @@ func _init() -> void:
 
 	await SimHelper.cleanup_simulation(self, simulation)
 	quit(0)
+
+
+func _test_direct_control_terrain_rules() -> void:
+	var terrain := TerrainGrid.new()
+	terrain.configure(1.0, 16)
+	for z in range(-2, 3):
+		for x in range(1, 4):
+			assert(terrain.set_height(Vector2i(x, z), 2))
+	var grid := NavGrid.new()
+	grid.configure(1.0, 16)
+	TerrainNavigationPublisher.publish(terrain, grid)
+	var below_lip := Vector3(0.9, 0.0, 0.5)
+	var above_lip := Vector3(1.1, 1.0, 0.5)
+	assert(not PlayerController.direct_motion_allowed(grid, below_lip, above_lip, false), "ground input may not cross a terrace face")
+	assert(PlayerController.direct_motion_allowed(grid, below_lip, above_lip, true), "a jump may cross a physically jumpable terrace lip")
+
+	var recovery_terrain := TerrainGrid.new()
+	recovery_terrain.configure(1.0, 16)
+	assert(recovery_terrain.set_hole(Vector2i(0, 0), true))
+	var recovery_grid := NavGrid.new()
+	recovery_grid.configure(1.0, 16)
+	TerrainNavigationPublisher.publish(recovery_terrain, recovery_grid)
+	assert(PlayerController.direct_motion_allowed(recovery_grid, Vector3(0.5, 0.0, 0.5), Vector3(0.7, 0.0, 0.5), false), "direct control must move inside an invalid start cell")
+	assert(PlayerController.direct_motion_allowed(recovery_grid, Vector3(0.9, 0.0, 0.5), Vector3(1.1, 0.0, 0.5), false), "direct control must be able to escape onto valid ground")
+	assert(not PlayerController.direct_motion_allowed(recovery_grid, Vector3(7.9, 0.0, 0.5), Vector3(8.1, 0.0, 0.5), true), "airborne input may not cross the board rim")

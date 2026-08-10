@@ -415,10 +415,16 @@ func is_step_passable(from: Vector2i, to: Vector2i, profile: StringName = PEDEST
 	# Written out rather than looped over an array: the connectivity fill runs this
 	# for all eight neighbours of every cell on the board, and a two-element array
 	# per call is an allocation in that loop.
-	return (
+	var shoulders_clear := (
 		_is_shoulder_clear(from, from + Vector2i(delta.x, 0), to, profile, profile_override)
 		and _is_shoulder_clear(from, from + Vector2i(0, delta.y), to, profile, profile_override)
 	)
+	if not shoulders_clear:
+		return false
+	# Adjacent cell centres are half a cell from either side face, enough for every
+	# profile admitted to this grid. Finite-body clearance matters when smoothing
+	# or direct control cuts across those centres; `segment_cost` checks that path.
+	return true
 
 
 func _is_shoulder_clear(from: Vector2i, shoulder: Vector2i, to: Vector2i, profile: StringName, profile_override: TravelerProfile) -> bool:
@@ -501,6 +507,9 @@ func segment_cost(from: Vector3, to: Vector3, profile: StringName = PEDESTRIAN_P
 	var end_cell := cell_from_position(to)
 	if not is_walkable(start_cell, profile, profile_override) or not is_walkable(end_cell, profile, profile_override):
 		return INF
+	var resolved := profile_override if profile_override != null else TravelerProfile.get_profile(profile)
+	if not _terrain_segment_has_clearance(from, to, resolved):
+		return INF
 	var ax := from.x / cell_size
 	var az := from.z / cell_size
 	var dx := (to.x / cell_size) - ax
@@ -571,6 +580,94 @@ func segment_cost(from: Vector3, to: Vector3, profile: StringName = PEDESTRIAN_P
 		if not is_step_passable(previous_cell, cell, profile, profile_override):
 			return INF
 	return INF
+
+
+## Whether the centre line of a physical traveller leaves enough room around
+## vertical terrain faces. Cell/edge passability answers topology for a point;
+## this is the missing finite-body half used by smoothing, route validation and
+## direct control.
+func _terrain_segment_has_clearance(from: Vector3, to: Vector3, profile: TravelerProfile) -> bool:
+	if _terrain == null or profile == null or profile.width_clearance <= 0.0:
+		return true
+	var radius := profile.width_clearance * 0.5
+	var radius_squared := radius * radius
+	var a := Vector2(from.x, from.z)
+	var b := Vector2(to.x, to.z)
+	var min_x := floori((minf(a.x, b.x) - radius) / cell_size) - 1
+	var max_x := ceili((maxf(a.x, b.x) + radius) / cell_size) + 1
+	var min_z := floori((minf(a.y, b.y) - radius) / cell_size) - 1
+	var max_z := ceili((maxf(a.y, b.y) + radius) / cell_size) + 1
+
+	# Vertical grid boundaries: left | right.
+	for boundary_x in range(min_x, max_x + 1):
+		var world_x := float(boundary_x) * cell_size
+		for z in range(min_z, max_z + 1):
+			var left := Vector2i(boundary_x - 1, z)
+			var right := Vector2i(boundary_x, z)
+			if not is_board_cell(left) and not is_board_cell(right):
+				continue
+			if is_edge_passable(left, right, profile.profile_id, profile):
+				continue
+			var edge_a := Vector2(world_x, float(z) * cell_size)
+			var edge_b := Vector2(world_x, float(z + 1) * cell_size)
+			if _segment_distance_squared(a, b, edge_a, edge_b) < radius_squared - 0.000001:
+				return false
+
+	# Horizontal grid boundaries: north / south.
+	for boundary_z in range(min_z, max_z + 1):
+		var world_z := float(boundary_z) * cell_size
+		for x in range(min_x, max_x + 1):
+			var north := Vector2i(x, boundary_z - 1)
+			var south := Vector2i(x, boundary_z)
+			if not is_board_cell(north) and not is_board_cell(south):
+				continue
+			if is_edge_passable(north, south, profile.profile_id, profile):
+				continue
+			var edge_a := Vector2(float(x) * cell_size, world_z)
+			var edge_b := Vector2(float(x + 1) * cell_size, world_z)
+			if _segment_distance_squared(a, b, edge_a, edge_b) < radius_squared - 0.000001:
+				return false
+	return true
+
+
+static func _segment_distance_squared(a: Vector2, b: Vector2, c: Vector2, d: Vector2) -> float:
+	if _segments_intersect(a, b, c, d):
+		return 0.0
+	return minf(
+		minf(_point_segment_distance_squared(a, c, d), _point_segment_distance_squared(b, c, d)),
+		minf(_point_segment_distance_squared(c, a, b), _point_segment_distance_squared(d, a, b))
+	)
+
+
+static func _point_segment_distance_squared(point: Vector2, a: Vector2, b: Vector2) -> float:
+	var span := b - a
+	var length_squared := span.length_squared()
+	if length_squared <= 0.0000001:
+		return point.distance_squared_to(a)
+	var amount := clampf((point - a).dot(span) / length_squared, 0.0, 1.0)
+	return point.distance_squared_to(a + span * amount)
+
+
+static func _segments_intersect(a: Vector2, b: Vector2, c: Vector2, d: Vector2) -> bool:
+	var ab_c := (b - a).cross(c - a)
+	var ab_d := (b - a).cross(d - a)
+	var cd_a := (d - c).cross(a - c)
+	var cd_b := (d - c).cross(b - c)
+	if ab_c * ab_d < -0.0000001 and cd_a * cd_b < -0.0000001:
+		return true
+	return (
+		(absf(ab_c) <= 0.0000001 and _point_on_segment(c, a, b))
+		or (absf(ab_d) <= 0.0000001 and _point_on_segment(d, a, b))
+		or (absf(cd_a) <= 0.0000001 and _point_on_segment(a, c, d))
+		or (absf(cd_b) <= 0.0000001 and _point_on_segment(b, c, d))
+	)
+
+
+static func _point_on_segment(point: Vector2, a: Vector2, b: Vector2) -> bool:
+	return (
+		point.x >= minf(a.x, b.x) - 0.000001 and point.x <= maxf(a.x, b.x) + 0.000001
+		and point.y >= minf(a.y, b.y) - 0.000001 and point.y <= maxf(a.y, b.y) + 0.000001
+	)
 
 
 ## Same Amanatides traversal as segment_cost, except the final blocked cell is

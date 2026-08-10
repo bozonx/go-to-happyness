@@ -193,10 +193,33 @@ func _restrict_horizontal_movement(delta: float) -> void:
 		return
 	var next_position := player_citizen.global_position + horizontal * delta
 	# Segment traversal checks every crossed cell, so a long frame cannot tunnel
-	# over a one-cell strip of deep water or across the board rim.
-	if not simulation.nav_grid.is_segment_clear(player_citizen.global_position, next_position):
+	# over a one-cell strip of deep water or across the board rim. It also keeps
+	# the real capsule clear of terrace faces, not merely its centre point.
+	var airborne := player_citizen.velocity.y > 0.0 or not player_citizen.is_on_floor()
+	if not direct_motion_allowed(simulation.nav_grid, player_citizen.global_position, next_position, airborne):
 		player_citizen.velocity.x = 0.0
 		player_citizen.velocity.z = 0.0
+
+
+## Shared, deterministic half of direct-control movement. Physics still owns the
+## capsule sweep; this decides when terrain topology should veto horizontal input.
+static func direct_motion_allowed(nav_grid: NavGrid, current_position: Vector3, next_position: Vector3, airborne: bool) -> bool:
+	if nav_grid == null:
+		return true
+	var current_cell := nav_grid.cell_from_position(current_position)
+	var next_cell := nav_grid.cell_from_position(next_position)
+	var current_walkable := nav_grid.is_walkable(current_cell)
+	var next_walkable := nav_grid.is_walkable(next_cell)
+	# A jump is real 3D motion, not a ground edge traversal. Let the capsule clear
+	# a physically jumpable terrace lip while still refusing the board rim, deep
+	# water and every other cell on which the pedestrian may not land.
+	if airborne:
+		return next_cell == current_cell or next_walkable
+	# Direct control is also the recovery tool for a citizen displaced into a
+	# newly blocked/unwalkable cell. Allow motion inside it and the first step out.
+	if not current_walkable:
+		return next_cell == current_cell or next_walkable
+	return nav_grid.is_segment_clear(current_position, next_position)
 
 
 func update_interaction(delta: float) -> void:

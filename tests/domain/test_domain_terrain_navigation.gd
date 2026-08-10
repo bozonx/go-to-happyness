@@ -21,6 +21,7 @@ static func run_all() -> void:
 	_test_slope_class_from_gradient()
 	_test_flat_terrain_leaves_routing_unchanged()
 	_test_terrace_edge_blocks_and_ramp_opens_it()
+	_test_terrace_clearance_keeps_route_inside_ramp()
 	_test_ramp_too_steep_for_a_cart()
 	_test_slope_costs_speed()
 	_test_holes_are_not_walkable()
@@ -140,6 +141,31 @@ static func _test_terrace_edge_blocks_and_ramp_opens_it() -> void:
 	assert(terrain.dissolve_ramp_at(Vector2i(3, 0)))
 	TerrainNavigationPublisher.publish(terrain, grid)
 	assert(not _route(grid, Vector2i(0, 6), Vector2i(6, 6)).reachable)
+
+
+static func _test_terrace_clearance_keeps_route_inside_ramp() -> void:
+	var terrain := _terrain()
+	_raise_plateau(terrain)
+	assert(terrain.place_ramp(Vector2i(3, 0), SlopeCatalog.VERY_STEEP, SlopeCatalog.DIR_E))
+	var grid := _nav_over(terrain)
+	var start := _centre(Vector2i(0, 2))
+	var destination := _centre(Vector2i(6, 2))
+	destination.y = grid.height_at(destination)
+
+	# The centre line cuts across the side wall of the one-cell ramp. It is valid
+	# for a mathematical point but not for the pedestrian's 0.6 m-wide capsule.
+	var unsafe_plateau_corner := grid.cell_center(Vector2i(4, 0))
+	assert(not grid.is_segment_clear(start, unsafe_plateau_corner))
+	# Approaching through the centre of the ramp retains 0.5 m on both sides and
+	# therefore remains valid for the same profile.
+	assert(grid.is_segment_clear(_centre(Vector2i(2, 0)), grid.cell_center(Vector2i(4, 0))))
+
+	var route := _route(grid, Vector2i(0, 2), Vector2i(6, 2))
+	assert(route.reachable)
+	var previous := start
+	for waypoint: Vector3 in route.waypoints:
+		assert(grid.is_segment_clear(previous, waypoint), "every smoothed leg must fit the physical pedestrian")
+		previous = waypoint
 
 
 static func _test_ramp_too_steep_for_a_cart() -> void:

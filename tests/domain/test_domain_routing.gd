@@ -766,6 +766,7 @@ static func _test_force_repath_recovery_limit() -> void:
 	citizen._force_repath()
 	assert(citizen.route_recovery_attempt == 1)
 	assert(citizen.recovery_repath_done)
+	assert(citizen.recovery_detour_requested, "the first physical stall must request a different route")
 	citizen.recovery_repath_done = false
 	citizen._force_repath()
 	assert(citizen.route_recovery_attempt == 2)

@@ -318,7 +318,9 @@ func force_repath(actor: Citizen) -> void:
 		return
 	actor.active_route = null
 	actor.movement_path.clear()
-	actor.recovery_detour_requested = actor.route_recovery_attempt > 1
+	# Re-running deterministic A* once produces the same physical collision. The
+	# first confirmed no-progress event already justifies a lateral recovery path.
+	actor.recovery_detour_requested = actor.route_recovery_attempt >= 1
 	actor.route_retry_timer = 0.0
 	actor.route_retry_delay = Citizen.ROUTE_RETRY_INTERVAL
 	actor.route_no_progress_time = 0.0
