@@ -53,6 +53,7 @@ func _run() -> void:
 	_test_new_map_is_unnamed_until_asked()
 	_test_save_writes_back_to_the_same_file(editor)
 	_test_read_only_source_detaches(editor)
+	_test_generation_creates_a_map_that_stays_re_rollable(editor)
 
 	editor.queue_free()
 	print("--- test_map_editor.gd PASSED ---")
@@ -1304,6 +1305,71 @@ func _test_read_only_source_detaches(editor: Node) -> void:
 	editor.current_path = previous_path
 	editor._build_services()
 	print("  read-only detach ok")
+
+
+## Generation from the «Новая карта» dialog, and the one exception to
+## "generation happens at creation only": re-rolling the seed while the generated
+## map is still untouched (`map_editor.md` §6.2).
+##
+## Driven through the dialog's signals rather than its widgets, for the same
+## reason `_test_new_map_is_unnamed_until_asked` does: the editor has to react to
+## exactly what the UI emits.
+func _test_generation_creates_a_map_that_stays_re_rollable(editor: Node) -> void:
+	var recipes := MapRecipeLibrary.list()
+	assert(not recipes.is_empty(), "the engine ships recipes to generate from")
+	var dialogs: MapEditorDialogs = editor._dialogs
+
+	dialogs.generate_requested.emit(
+		&"generated_map", "Сгенерированная", MapMeta.PRESET_ARENA, recipes[0]["path"], 4242)
+	assert(editor.document.meta.id == &"generated_map", "the generated document took the id")
+	assert(editor.document.board_cells() == MapMeta.PRESET_ARENA,
+		"and the board size the dialog chose, not the default: %d" % editor.document.board_cells())
+	var heights := _height_signature(editor.document.terrain)
+	assert(_distinct_heights(editor.document.terrain) > 1, "the generator produced relief rather than a slab")
+	assert(editor.current_path.is_empty(), "a generated map is not bound to a file yet")
+
+	# The stack was cleared with the ground: an undo here would replay a stroke
+	# recorded against a board that no longer exists.
+	assert(not editor.history.can_undo(), "generation left no undo step")
+	assert(editor.can_regenerate(), "an untouched generated map can be re-rolled")
+	assert(not editor._regenerate_button.disabled, "and the button says so")
+
+	dialogs.regenerate_requested.emit()
+	assert(editor.can_regenerate(), "a re-roll leaves the map re-rollable")
+	var rerolled := _height_signature(editor.document.terrain)
+	assert(rerolled != heights, "another seed produced different ground")
+
+	# The author's first stroke ends it: from here the map holds authored work,
+	# and a new coastline would move the ground out from under it.
+	editor._select_mode(&"terrain")
+	editor._brush.hovered_cell = Vector2i(1, 1)
+	editor._brush.has_hover = true
+	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, false))
+	assert(editor.history.can_undo(), "the stroke landed on the stack")
+	assert(not editor.can_regenerate(), "an edited map is no longer re-rollable")
+	assert(editor.regenerate() == null, "and asking anyway is refused rather than obeyed")
+	editor._refresh_panels()
+	assert(editor._regenerate_button.disabled, "the button went grey with it")
+	print("  generation from the new dialog ok")
+
+
+## A cheap hash of the whole board, which is all "another seed is another board"
+## needs — and unlike a set of heights it notices a rearrangement of the same ones.
+func _height_signature(terrain: TerrainGrid) -> int:
+	var signature := 0
+	for y in terrain.board_cells:
+		for x in terrain.board_cells:
+			signature = (signature * 31 + terrain.height_of(Vector2i(x, y))) & 0x7fffffff
+	return signature
+
+
+func _distinct_heights(terrain: TerrainGrid) -> int:
+	var seen: Dictionary = {}
+	for y in terrain.board_cells:
+		for x in terrain.board_cells:
+			seen[terrain.height_of(Vector2i(x, y))] = true
+	return seen.size()
 
 
 func _click(button: int, pressed: bool, shift := false, ctrl := false) -> InputEventMouseButton:

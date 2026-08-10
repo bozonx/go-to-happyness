@@ -14,7 +14,7 @@ script = ExtResource("1_dialogs")
 
 [node name="NewDialog" type="ConfirmationDialog" parent="."]
 title = "Новая карта"
-size = Vector2i(420, 260)
+size = Vector2i(460, 380)
 ok_button_text = "Создать"
 cancel_button_text = "Отмена"
 
@@ -58,6 +58,111 @@ text = "Размер доски (потом не меняется):"
 [node name="NewBoardOption" type="OptionButton" parent="NewDialog/Body/VBox"]
 unique_name_in_owner = true
 layout_mode = 2
+
+[node name="GenSep" type="HSeparator" parent="NewDialog/Body/VBox"]
+layout_mode = 2
+
+[node name="NewGenerateCheck" type="CheckBox" parent="NewDialog/Body/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Сгенерировать ландшафт"
+
+[node name="NewGenerateBox" type="VBoxContainer" parent="NewDialog/Body/VBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="RecipeLbl" type="Label" parent="NewDialog/Body/VBox/NewGenerateBox"]
+layout_mode = 2
+text = "Рецепт:"
+
+[node name="NewRecipeOption" type="OptionButton" parent="NewDialog/Body/VBox/NewGenerateBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="SeedLbl" type="Label" parent="NewDialog/Body/VBox/NewGenerateBox"]
+layout_mode = 2
+text = "Seed:"
+
+[node name="SeedRow" type="HBoxContainer" parent="NewDialog/Body/VBox/NewGenerateBox"]
+layout_mode = 2
+
+[node name="NewSeedSpin" type="SpinBox" parent="NewDialog/Body/VBox/NewGenerateBox/SeedRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 2.14748365e+09
+rounded = true
+
+[node name="NewSeedRollButton" type="Button" parent="NewDialog/Body/VBox/NewGenerateBox/SeedRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(38, 0)
+layout_mode = 2
+focus_mode = 0
+text = "🎲"
+tooltip_text = "Случайный seed"
+
+[node name="NewRecipeHint" type="Label" parent="NewDialog/Body/VBox/NewGenerateBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.78, 0.9, 1)
+autowrap_mode = 3
+text = "Рецепт подгоняется под выбранный размер доски. Тонкая настройка — в лаборатории генерации; сохранённые там рецепты появляются в этом списке."
+
+[node name="GenerationReportDialog" type="AcceptDialog" parent="."]
+title = "Отчёт генерации"
+size = Vector2i(560, 520)
+ok_button_text = "Принять"
+
+[node name="Body" type="MarginContainer" parent="GenerationReportDialog"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -46.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Scroll" type="ScrollContainer" parent="GenerationReportDialog/Body"]
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="Rows" type="VBoxContainer" parent="GenerationReportDialog/Body/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="GenVerdictLabel" type="Label" parent="GenerationReportDialog/Body/Scroll/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.85, 0.42, 1)
+autowrap_mode = 3
+text = "—"
+
+[node name="GenFailuresLabel" type="Label" parent="GenerationReportDialog/Body/Scroll/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.45, 0.42, 1)
+autowrap_mode = 3
+
+[node name="GenNotesLabel" type="Label" parent="GenerationReportDialog/Body/Scroll/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.86, 0.66, 1)
+autowrap_mode = 3
+
+[node name="MetricsTitle" type="Label" parent="GenerationReportDialog/Body/Scroll/Rows"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.78, 0.9, 1)
+text = "Метрики"
+
+[node name="GenMetricsLabel" type="Label" parent="GenerationReportDialog/Body/Scroll/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 3
+text = "—"
 
 [node name="LoadDialog" type="ConfirmationDialog" parent="."]
 title = "Открыть карту"

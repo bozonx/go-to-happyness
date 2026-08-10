@@ -30,6 +30,12 @@ focus_mode = 0
 text = "▶⚙"
 tooltip_text = "Настройки старта на карте"
 
+[node name="RegenerateButton" type="Button" parent="Margin/Scroll/Row"]
+custom_minimum_size = Vector2(38, 0)
+focus_mode = 0
+text = "🎲"
+tooltip_text = "Перегенерировать с новым seed — доступно, пока сгенерированная карта не изменена"
+
 [node name="VSep1" type="VSeparator" parent="Margin/Scroll/Row"]
 
 [node name="HistoryActions" parent="Margin/Scroll/Row" instance=ExtResource("3_history")]

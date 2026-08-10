@@ -50,6 +50,7 @@ const PLANNED_MODES: Array = []
 @onready var _save_as_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/DocumentActions/SaveAsButton
 @onready var _settings_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/DocumentActions/SettingsButton
 @onready var _start_settings_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/StartSettingsButton
+@onready var _regenerate_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/RegenerateButton
 @onready var _undo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/HistoryActions/UndoButton
 @onready var _redo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/HistoryActions/RedoButton
 @onready var _eyedropper_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/EyedropperButton
@@ -98,6 +99,10 @@ var _border_ocean := BorderOceanService.new()
 ## never a brush.
 var _terrain_generation := TerrainGenerationService.new()
 var _map_generation := MapGenerationService.new()
+## The recipe the open document was generated from, kept only while re-rolling it
+## is still free — see `can_regenerate`. Null on every map that was not generated,
+## and on every generated map the author has since touched.
+var _generated_recipe: MapRecipe = null
 var _test_run_service := MapTestRunService.new()
 ## State of the two sections the start dialog may rewrite, captured when it opens.
 ## Empty means no dialog is open; a confirmed dialog turns them into one command.
@@ -369,6 +374,24 @@ func _on_create_requested(id: StringName, display_name: String, board_cells: int
 	_message = "новая карта: %s (%d×%d)" % [id, board_cells, board_cells]
 
 
+func _on_generate_requested(id: StringName, display_name: String, board_cells: int,
+		recipe_path: String, seed_value: int) -> void:
+	var result := generate_map(id, display_name, recipe_path, seed_value, board_cells)
+	_dialogs.open_generation_report(result, result.recipe)
+
+
+## «Перегенерировать» from the report or from the top bar: the same operation, and
+## the same verdict shown afterwards, so a re-roll is judged the way the first run
+## was rather than accepted blind.
+func _on_regenerate_pressed() -> void:
+	var result := regenerate()
+	if result == null:
+		_message = "перегенерация уже недоступна: карта изменена после генерации"
+		_refresh_panels()
+		return
+	_dialogs.open_generation_report(result, result.recipe)
+
+
 ## Creates a map and fills it from a recipe (`map_editor.md` §6.2,
 ## `procedural_map_generation.md` §11.4, layer 6).
 ##
@@ -382,11 +405,32 @@ func _on_create_requested(id: StringName, display_name: String, board_cells: int
 ## Returns the run so a caller — the dialog, or a test — can show the verdict.
 ## A rejected map is still returned and still shown: the author gets to look at
 ## the best attempt and decide, which is exactly what the laboratory does.
-func generate_map(id: StringName, display_name: String, recipe_path: String, seed_value: int) -> GenerationResult:
-	var next := MapDocument.create(id, display_name, MapMeta.DEFAULT_BOARD_CELLS)
+func generate_map(id: StringName, display_name: String, recipe_path: String, seed_value: int,
+		board_cells := MapMeta.DEFAULT_BOARD_CELLS) -> GenerationResult:
+	var next := MapDocument.create(id, display_name, board_cells)
 	var recipe := MapRecipeLibrary.load_for_board(recipe_path, next.meta.board_cells)
 	_replace_document(next, "")
 	return generate_into_current(recipe, seed_value)
+
+
+## True while another seed of the same recipe would cost the author nothing.
+##
+## Generation is a creation-time operation, and re-rolling is the one exception
+## the shape of the operation actually allows: a map that has just been generated
+## and not yet touched holds nothing but ground — no placements, no zones, no
+## entities whose coordinates a new coastline would strand. The moment the author
+## makes their first edit that stops being true, and the undo stack is the honest
+## witness: `generate_into_current` clears it, so anything on it happened after.
+func can_regenerate() -> bool:
+	return _generated_recipe != null and not history.can_undo()
+
+
+## Another seed of the recipe the open map came from. Returns null when the map is
+## no longer eligible, so a stale button cannot rewrite an authored board.
+func regenerate() -> GenerationResult:
+	if not can_regenerate():
+		return null
+	return generate_into_current(_generated_recipe, randi() & 0x7fffffff)
 
 
 ## Generates into the document that is already open. Only meaningful right after
@@ -412,6 +456,10 @@ func generate_into_current(recipe: MapRecipe, seed_value: int) -> GenerationResu
 	for mode: MapEditorMode in _modes:
 		mode.configure(_context)
 	_refresh_camera_framing()
+	# Remembered after the run, not before it: a recipe that was refused outright
+	# left the ground untouched, and offering to re-roll it would offer the same
+	# refusal again.
+	_generated_recipe = null if result.report == null or result.report.is_rejected_recipe() else recipe
 	_message = "сгенерировано: %s" % (
 		result.report.verdict() if result.report != null else "нет отчёта")
 	if not result.failure_summary().is_empty():
@@ -445,6 +493,10 @@ func _on_open_requested(path: String) -> void:
 func _replace_document(next: MapDocument, path: String) -> void:
 	document = next
 	_adopt_path(path)
+	# A document that arrives from disk or from «Новая карта» was not generated by
+	# this session, whatever the previous one was. Re-rolling belongs to the run
+	# that produced the ground, not to the editor.
+	_generated_recipe = null
 	history.clear()
 	_terrain_service.clear_history()
 	_water_service.clear_history()
@@ -561,7 +613,10 @@ func _connect_ui() -> void:
 	_validate_button.disabled = false
 	_test_button.disabled = false
 	_test_here_button.disabled = false
+	_regenerate_button.pressed.connect(_on_regenerate_pressed)
 	_dialogs.create_requested.connect(_on_create_requested)
+	_dialogs.generate_requested.connect(_on_generate_requested)
+	_dialogs.regenerate_requested.connect(_on_regenerate_pressed)
 	_dialogs.open_requested.connect(_on_open_requested)
 	_dialogs.save_as_requested.connect(_on_save_as_requested)
 	_dialogs.properties_applied.connect(_on_properties_applied)
@@ -604,6 +659,10 @@ func _open_start_settings() -> void:
 ## caches a header value has to be told, which is the same work switching the
 ## border does.
 func _on_properties_applied() -> void:
+	# Header edits do not always reach the undo stack, and the rim and the sea
+	# level are exactly what a re-roll would overwrite from the recipe. An author
+	# who has set them by hand has made the map theirs.
+	_generated_recipe = null
 	_record_start_dialog_edit()
 	_apply_header_change("свойства карты обновлены")
 
@@ -698,6 +757,9 @@ func _refresh_panels() -> void:
 	# fill buttons do.
 	_undo_button.disabled = not history.can_undo()
 	_redo_button.disabled = not history.can_redo()
+	# Re-rolling is only ever offered on ground nobody has built on yet, so the
+	# button goes grey on the author's first stroke and stays grey.
+	_regenerate_button.disabled = not can_regenerate()
 	# Most messages originate in mode controllers, while save/load and validation
 	# live here. Resolve their presentation at this single UI boundary so a prior
 	# error cannot leave the next successful action red.
