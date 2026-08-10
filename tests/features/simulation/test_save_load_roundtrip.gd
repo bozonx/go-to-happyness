@@ -25,7 +25,7 @@ func _init() -> void:
 	depleted_tree.remaining_branches = 3
 	depleted_tree.hand_branches = 2
 	var grass_cell: Vector2i = sim_a.grass_sources.keys()[0]
-	var grass_before: GrassSourceRecord = sim_a.grass_sources[grass_cell]
+	var grass_before: HarvestSourceRecord = sim_a.grass_sources[grass_cell]
 	grass_before.remaining = maxi(1, grass_before.initial - 1)
 	var forage_cell: Vector2i = sim_a.forage_sources.keys()[0]
 	var rabbit_cell: Vector2i = sim_a.rabbit_sources.keys()[0]

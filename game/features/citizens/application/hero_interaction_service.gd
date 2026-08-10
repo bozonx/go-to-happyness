@@ -4,7 +4,7 @@ extends RefCounted
 ## Handles hero proximity queries for nearby trees, sawmills, farms, water,
 ## grass patches, forage sources, rabbits, and interaction percentages.
 
-const GrassSourceRecord = preload("res://game/features/production/domain/grass_source_record.gd")
+const HarvestSourceRecord = preload("res://game/features/production/domain/harvest_source_record.gd")
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 var _player_citizen_getter: Callable
@@ -17,6 +17,7 @@ var _water_source_positions_getter: Callable
 var _grass_sources: Dictionary = {}
 var _forage_sources: Dictionary = {}
 var _rabbit_sources: Dictionary = {}
+var _bush_sources: Dictionary = {}
 var _cell_from_position: Callable
 var _consume_grass_source: Callable
 
@@ -32,6 +33,7 @@ func configure(port: HeroInteractionRuntimePort) -> void:
 	_grass_sources = port.grass_sources
 	_forage_sources = port.forage_sources
 	_rabbit_sources = port.rabbit_sources
+	_bush_sources = port.bush_sources
 	_cell_from_position = port.cell_from_position
 	_consume_grass_source = port.consume_grass_source
 
@@ -110,6 +112,25 @@ func nearby_grass_source() -> bool:
 
 
 func nearby_grass_source_position() -> Vector3:
+	return _nearby_source_position(_grass_sources)
+
+
+func nearby_bush_source_position() -> Vector3:
+	return _nearby_source_position(_bush_sources)
+
+
+## Доля оставшегося в ближайшем источнике этого вида; 0, если рядом ничего нет.
+func _source_remaining_percent(sources: Dictionary) -> int:
+	var pos: Vector3 = _nearby_source_position(sources)
+	if pos == Vector3.INF:
+		return 0
+	var source: HarvestSourceRecord = sources.get(_cell_from_position.call(pos) as Vector2i)
+	if source == null:
+		return 0
+	return clampi(int(round(float(source.remaining) / float(maxi(1, source.initial)) * 100.0)), 0, 100)
+
+
+func _nearby_source_position(sources: Dictionary) -> Vector3:
 	var player: Citizen = _player_citizen_getter.call()
 	if player == null:
 		return Vector3.INF
@@ -117,9 +138,9 @@ func nearby_grass_source_position() -> Vector3:
 	var max_dist: float = _interaction_range + 1.5
 	var best_dist: float = max_dist
 	var player_xz := Vector2(player.global_position.x, player.global_position.z)
-	for cell in _grass_sources:
-		var source: GrassSourceRecord = _grass_sources[cell]
-		if source == null or source.remaining <= 0:
+	for cell in sources:
+		var source: HarvestSourceRecord = sources[cell]
+		if source == null or source.is_spent():
 			continue
 		var node_pos: Vector3 = Vector3.INF
 		if is_instance_valid(source.node):
@@ -187,18 +208,10 @@ func resource_remaining_percent(resource_type: String) -> int:
 						var remaining := int(tree.get_meta("remaining_branches", 0))
 						var initial := maxi(1, int(tree.get_meta("initial_branches", remaining)))
 						return clampi(int(round(float(remaining) / float(initial) * 100.0)), 0, 100)
-			return 0
+			# Без дерева рядом ветки всё ещё могут быть — на кусте.
+			return _source_remaining_percent(_bush_sources)
 		ResourceIds.GRASS:
-			var pos: Vector3 = nearby_grass_source_position()
-			if pos != Vector3.INF:
-				var cell: Vector2i = _cell_from_position.call(pos)
-				var source: GrassSourceRecord = _grass_sources.get(cell)
-				if source == null:
-					return 0
-				var remaining := source.remaining
-				var initial := maxi(1, source.initial)
-				return clampi(int(round(float(remaining) / float(initial) * 100.0)), 0, 100)
-			return 0
+			return _source_remaining_percent(_grass_sources)
 		ResourceIds.WATER:
 			return 100
 		ResourceIds.FOOD:

@@ -254,6 +254,9 @@ func take_from_pile(pile: ResourcePile, all: bool) -> void:
 	refresh_interaction_hint()
 
 
+## Branches for the hero standing next to whatever grows here. A tree is tried
+## first because it is the richer source; a bush is what the early game actually
+## has before the first axe.
 func consume_tree_near_player(amount: int) -> void:
 	if game.player_citizen == null:
 		return
@@ -273,6 +276,14 @@ func consume_tree_near_player(amount: int) -> void:
 				else:
 					game.update_interface(S.TREE_NO_BRANCHES_LEFT)
 				return
+	var from_bush := 0
+	while from_bush < amount:
+		var taken := game.foraging_service.consume_branches(game.player_citizen.global_position)
+		if taken <= 0:
+			break
+		from_bush += taken
+	if from_bush > 0:
+		game.update_interface(S.BRANCHES_GATHERED_TREE_STANDING % from_bush)
 
 
 func fell_nearest_tree() -> void:

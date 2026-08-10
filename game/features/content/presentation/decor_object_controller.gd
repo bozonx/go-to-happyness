@@ -52,6 +52,19 @@ func get_decor_properties() -> Dictionary:
 	return _appearance.duplicate(true)
 
 
+## Applies one named variant declared by the asset (`state_variants`) on top of
+## whatever the object currently shows. Only the keys the variant mentions move:
+## a tree that withers must keep the crown size its author chose, and gameplay
+## code must not have to know which control holds the colour.
+func apply_state_variant(variant_id: String) -> void:
+	var asset := _asset()
+	if asset == null:
+		return
+	var variant := asset.state_appearance(variant_id)
+	for key: Variant in variant.keys():
+		set_decor_property(str(key), variant[key])
+
+
 func _asset() -> WorldAssetDef:
 	return WorldAssetCatalog.get_asset(asset_id) if asset_id != &"" else null
 
@@ -76,22 +89,37 @@ func _apply_bindings(binds: Variant, value: Variant) -> void:
 func _apply_to_node(node: Node, property_name: String, value: Variant) -> void:
 	match property_name:
 		WorldAssetDef.PROP_ALBEDO:
-			_set_albedo(node, _to_color(value))
+			_set_albedo(node, WorldAssetDef.to_color(value))
+		WorldAssetDef.PROP_SCALE:
+			if node is Node3D:
+				(node as Node3D).scale = Vector3.ONE * maxf(0.001, float(value))
 		WorldAssetDef.PROP_SCALE_Y:
 			if node is Node3D:
 				(node as Node3D).scale.y = maxf(0.001, float(value))
 		"light_color":
-			node.set(property_name, _to_color(value))
+			node.set(property_name, WorldAssetDef.to_color(value))
 		_:
-			node.set(property_name, value)
+			# A sub-property path (`position:y`, `rotation_degrees:z`) is the
+			# difference between "this asset varies" and "this asset needs its own
+			# script": plain `set` cannot reach one axis, `set_indexed` can.
+			if property_name.contains(":"):
+				node.set_indexed(NodePath(property_name), value)
+			else:
+				node.set(property_name, value)
 
 
 ## Tints a mesh without touching the scene's shared sub-resource — every instance
 ## gets its own material_override, otherwise recolouring one campfire recolours
 ## every campfire in the settlement.
+##
+## Binding a plain Node3D tints every mesh under it. A tree crown is four blobs
+## that must always share a colour; listing all four in the catalog would mean
+## the declaration silently rots the moment the scene gains a fifth.
 func _set_albedo(node: Node, color: Color) -> void:
 	var mesh_instance := node as MeshInstance3D
 	if mesh_instance == null:
+		for child: Node in node.get_children():
+			_set_albedo(child, color)
 		return
 	var override := mesh_instance.material_override as StandardMaterial3D
 	if override == null or not override.has_meta("decor_instance_material"):
@@ -105,10 +133,3 @@ func _set_albedo(node: Node, color: Color) -> void:
 	# Unshaded flame meshes read better when the tint drives emission too.
 	if override.emission_enabled:
 		override.emission = color
-
-
-static func _to_color(value: Variant) -> Color:
-	if value is Color:
-		return value
-	var text := String(value)
-	return Color.from_string(text, Color.WHITE) if not text.is_empty() else Color.WHITE

@@ -40,7 +40,7 @@ func harvest_source_info(resource_type: String) -> String:
 			var node := game.foraging_service.nearest_grass_node(game.player_citizen.global_position)
 			if is_instance_valid(node):
 				for cell in game.grass_sources:
-					var source: GrassSourceRecord = game.grass_sources[cell]
+					var source: HarvestSourceRecord = game.grass_sources[cell]
 					if source.node == node:
 						var rem := source.remaining
 						var init := maxi(1, source.initial)
@@ -76,12 +76,20 @@ func citizen_state_name(state: int) -> String:
 
 
 func targeted_grass_info(target: Dictionary) -> Dictionary:
+	return _targeted_source_info(game.grass_sources, target)
+
+
+func targeted_bush_info(target: Dictionary) -> Dictionary:
+	return _targeted_source_info(game.bush_sources, target)
+
+
+func _targeted_source_info(sources: Dictionary, target: Dictionary) -> Dictionary:
 	var target_node := target.get("node") as Node3D
 	if not is_instance_valid(target_node):
 		return {}
-	for cell in game.grass_sources:
-		var source: GrassSourceRecord = game.grass_sources[cell]
-		if source.node == target_node:
+	for cell in sources:
+		var source: HarvestSourceRecord = sources[cell]
+		if source != null and source.node == target_node:
 			return {"remaining": source.remaining, "initial": maxi(1, source.initial)}
 	return {}
 
@@ -112,7 +120,7 @@ func nearest_grass_source_to_point(point: Vector3, max_distance: float) -> Vecto
 	var best_dist := max_distance
 	var point_xz := Vector2(point.x, point.z)
 	for cell in game.grass_sources:
-		var source: GrassSourceRecord = game.grass_sources[cell]
+		var source: HarvestSourceRecord = game.grass_sources[cell]
 		if source.remaining <= 0 or not is_instance_valid(source.node):
 			continue
 		var node_pos: Vector3 = source.node.global_position

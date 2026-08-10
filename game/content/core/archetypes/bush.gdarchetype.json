@@ -1,0 +1,1 @@
+{"version":1,"id":"bush","name":"Куст","asset":"bush","content_class":"object","category":"vegetation","components":{"settlement_natural":{"kind":"bush"}},"properties":[{"name":"branches","label":"Ветки","type":"int","min":1,"max":99,"default":3}]}

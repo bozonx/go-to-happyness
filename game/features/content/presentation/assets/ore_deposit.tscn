@@ -1,0 +1,91 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_rock"]
+albedo_color = Color(0.361, 0.369, 0.396, 1)
+roughness = 0.95
+
+[sub_resource type="SphereMesh" id="Mesh_rock_main"]
+material = SubResource("Mat_rock")
+radius = 0.58
+height = 0.66
+radial_segments = 6
+rings = 3
+
+[sub_resource type="SphereMesh" id="Mesh_rock_side"]
+material = SubResource("Mat_rock")
+radius = 0.32
+height = 0.4
+radial_segments = 5
+rings = 3
+
+[sub_resource type="StandardMaterial3D" id="Mat_ore"]
+albedo_color = Color(0.831, 0.588, 0.267, 1)
+roughness = 0.35
+metallic = 0.6
+emission_enabled = true
+emission = Color(0.831, 0.588, 0.267, 1)
+emission_energy_multiplier = 0.25
+
+[sub_resource type="PrismMesh" id="Mesh_shard_tall"]
+material = SubResource("Mat_ore")
+size = Vector3(0.16, 0.46, 0.16)
+
+[sub_resource type="PrismMesh" id="Mesh_shard_mid"]
+material = SubResource("Mat_ore")
+size = Vector3(0.13, 0.34, 0.13)
+
+[sub_resource type="PrismMesh" id="Mesh_shard_short"]
+material = SubResource("Mat_ore")
+size = Vector3(0.1, 0.24, 0.1)
+
+[sub_resource type="CylinderShape3D" id="Shape_rock"]
+radius = 0.6
+height = 0.66
+
+[node name="OreDeposit" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"ore_deposit"
+
+[node name="Rock" type="Node3D" parent="."]
+
+[node name="Main" type="MeshInstance3D" parent="Rock"]
+transform = Transform3D(1.0586, 0, -0.4493, 0, 1, 0, 0.3907, 0, 0.9205, 0, 0.24, 0)
+mesh = SubResource("Mesh_rock_main")
+
+[node name="SideA" type="MeshInstance3D" parent="Rock"]
+transform = Transform3D(0.866, 0, 0.5, 0, 1, 0, -0.5, 0, 0.866, 0.5, 0.13, 0.26)
+mesh = SubResource("Mesh_rock_side")
+
+[node name="SideB" type="MeshInstance3D" parent="Rock"]
+transform = Transform3D(0.7071, 0, -0.7071, 0, 1, 0, 0.7071, 0, 0.7071, -0.44, 0.11, -0.32)
+mesh = SubResource("Mesh_rock_side")
+
+[node name="Veins" type="Node3D" parent="."]
+
+[node name="ShardA" type="MeshInstance3D" parent="Veins"]
+transform = Transform3D(0.9372, 0.2419, -0.2511, -0.2337, 0.9703, 0.06261, 0.2588, 0, 0.9659, 0.06, 0.42, 0.02)
+mesh = SubResource("Mesh_shard_tall")
+
+[node name="ShardB" type="MeshInstance3D" parent="Veins"]
+transform = Transform3D(-0.08081, -0.3746, -0.9237, -0.03265, 0.9272, -0.3732, 0.9962, 0, -0.08716, -0.26, 0.3, 0.18)
+mesh = SubResource("Mesh_shard_mid")
+
+[node name="ShardC" type="MeshInstance3D" parent="Veins"]
+transform = Transform3D(-0.8146, 0.4384, 0.3798, 0.3973, 0.8988, -0.1853, -0.4226, 0, -0.9063, 0.24, 0.28, -0.2)
+mesh = SubResource("Mesh_shard_mid")
+
+[node name="ShardD" type="MeshInstance3D" parent="Veins"]
+transform = Transform3D(0.3288, -0.2756, 0.9033, 0.09427, 0.9613, 0.259, -0.9397, 0, 0.342, -0.12, 0.24, -0.3)
+mesh = SubResource("Mesh_shard_short")
+
+[node name="ShardE" type="MeshInstance3D" parent="Veins"]
+transform = Transform3D(-0.7745, 0.3256, -0.5423, 0.2667, 0.9455, 0.1867, 0.5736, 0, -0.8192, 0.3, 0.22, 0.26)
+mesh = SubResource("Mesh_shard_short")
+
+[node name="DepositCollision" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="DepositCollision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.25, 0)
+shape = SubResource("Shape_rock")

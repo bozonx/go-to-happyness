@@ -885,6 +885,81 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 		editor._undo()
 	assert(editor.history.undo_depth() == 0, "fill left the next mode a clean stack")
 	print("  fill placement + shared undo ok")
+	_test_scatter_variation(editor)
+
+
+## Разброс — единственное, что отличает лес от одного дерева, размноженного
+## копипастой. Проверяется в живом редакторе, потому что интересна не функция
+## случайных чисел, а то, что её результат доезжает до записи карты.
+func _test_scatter_variation(editor: Node) -> void:
+	editor._select_mode(&"fill")
+	var fill_ctrl: FillModeController = editor._active as FillModeController
+	assert(fill_ctrl != null, "режим наполнения должен быть активен")
+	fill_ctrl._select(&"", false)
+	editor._active.select_palette_entry(&"core:tree")
+
+	# Переключатель предлагается дереву и не предлагается костру: у костра нечему
+	# отличаться, и мёртвая галка в инспекторе хуже, чем её отсутствие.
+	assert(_has_inspector_property(fill_ctrl, FillModeController.INSPECTOR_SCATTER_VARY),
+		"дереву нужен переключатель разброса")
+	editor._active.select_palette_entry(&"core:campfire")
+	assert(not _has_inspector_property(fill_ctrl, FillModeController.INSPECTOR_SCATTER_VARY),
+		"костру переключатель разброса предлагать нечего")
+
+	editor._active.select_palette_entry(&"core:tree")
+	assert(fill_ctrl.apply_inspector_value(FillModeController.INSPECTOR_SCATTER_VARY, true))
+	var placed: Array[MapEntityRecord] = []
+	for index in 12:
+		editor._brush.hovered_cell = Vector2i(4 + index, 18)
+		editor._brush.has_hover = true
+		fill_ctrl._select(&"", false)
+		fill_ctrl.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	for record: MapEntityRecord in editor.document.entities.entities:
+		if record.archetype_id == &"core:tree":
+			placed.append(record)
+	assert(placed.size() >= 6, "нужно достаточно деревьев, чтобы разброс был виден")
+
+	var distinct_colors: Dictionary = {}
+	var distinct_scales: Dictionary = {}
+	var distinct_yaws: Dictionary = {}
+	for record: MapEntityRecord in placed:
+		assert(record.appearance.has("crown_color"), "разброс обязан записать цвет кроны")
+		distinct_colors[record.appearance["crown_color"]] = true
+		distinct_scales[snappedf(record.scale, 0.01)] = true
+		distinct_yaws[snappedf(record.yaw_degrees, 1.0)] = true
+	assert(distinct_colors.size() > 1, "кроны не должны быть одного цвета")
+	assert(distinct_scales.size() > 1, "деревья не должны быть одного размера")
+	assert(distinct_yaws.size() > 1, "деревья не должны смотреть в одну сторону")
+
+	var tree_asset := WorldAssetCatalog.get_asset(&"tree")
+	for record: MapEntityRecord in placed:
+		assert(tree_asset.is_scale_allowed(record.scale),
+			"разброс вышел за разрешённый ассетом масштаб: %f" % record.scale)
+
+	# Значение, введённое автором вручную, разброс не трогает: иначе переключатель
+	# работал бы как «испортить настройки кисти». Выделение нужно снять до правки:
+	# при выделенной записи инспектор правит её, а не кисть.
+	fill_ctrl._select(&"", false)
+	assert(fill_ctrl.apply_inspector_value(&"appearance/crown_color", Color("ff0000")))
+	editor._brush.hovered_cell = Vector2i(4, 21)
+	editor._brush.has_hover = true
+	fill_ctrl._select(&"", false)
+	fill_ctrl.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	var authored: MapEntityRecord = editor.document.entities.entities[-1]
+	assert(String(authored.appearance["crown_color"]).begins_with("ff0000"),
+		"авторский цвет должен пережить разброс, получено %s" % authored.appearance["crown_color"])
+
+	assert(fill_ctrl.apply_inspector_value(FillModeController.INSPECTOR_SCATTER_VARY, false))
+	while editor.history.undo_depth() > 0:
+		editor._undo()
+	print("  fill scatter variation ok")
+
+
+func _has_inspector_property(fill_ctrl: FillModeController, property_name: StringName) -> bool:
+	for definition: EntityPropertyDef in fill_ctrl.inspector_properties():
+		if definition.name == property_name:
+			return true
+	return false
 
 
 ## The claim that makes surface a separate mode rather than a terrain brush: a

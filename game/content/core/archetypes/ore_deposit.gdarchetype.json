@@ -1,0 +1,1 @@
+{"version":1,"id":"ore_deposit","name":"Залежь руды","asset":"ore_deposit","content_class":"object","category":"rocks_minerals","properties":[{"name":"ore","label":"Запас руды","type":"int","min":1,"max":999,"default":40}]}

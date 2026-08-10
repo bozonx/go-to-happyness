@@ -20,6 +20,86 @@ static func run_all() -> void:
 	_test_policy_round_trips_through_json()
 	_test_policy_ignores_values_it_does_not_know()
 	print("    [PASS] Asset Placement Policy Tests")
+	_test_natural_assets_are_authorable()
+	_test_random_appearance_stays_inside_declared_range()
+	_test_random_appearance_leaves_fixed_controls_alone()
+	print("    [PASS] Natural Asset Variation Tests")
+
+
+# --- Natural assets and variation ---------------------------------------------
+
+## The first batch of natural fill. Each one has to be findable, drawable and
+## varied — an asset that exists but has nothing to vary would put a dead
+## "Разброс" switch in the editor.
+static func _test_natural_assets_are_authorable() -> void:
+	for asset_id: StringName in [
+		&"tree", &"conifer_tree", &"bush", &"grass_source",
+		&"forage_source", &"boulder", &"ore_deposit", &"rabbit",
+	]:
+		var asset := WorldAssetCatalog.get_asset(asset_id)
+		assert(asset != null, "Отсутствует природный ассет %s" % asset_id)
+		assert(not asset.scene_path.is_empty(), "%s без сцены" % asset_id)
+		assert(not asset.description.is_empty(), "%s без описания для автора" % asset_id)
+		assert(asset.has_varying_controls(), "%s нечем варьировать" % asset_id)
+		# Yaw only: a tilted tree is a bug, not a variation.
+		assert(asset.rotation_axes == ["y"], "%s должен вращаться только по Y" % asset_id)
+
+	# A bush yields branches and nothing else; wood belongs to trees.
+	var bush := WorldAssetCatalog.get_asset(&"bush")
+	assert(bush.supported_capabilities == [&"branch_source"])
+	var tree := WorldAssetCatalog.get_asset(&"tree")
+	assert(tree.supported_capabilities.has(&"wood_source"))
+	assert(tree.supported_capabilities.has(&"branch_source"))
+
+	# A spruce keeps its needles: declaring an autumn variant it cannot honour is
+	# how a seasonal pass ends up painting evergreens orange.
+	var conifer := WorldAssetCatalog.get_asset(&"conifer_tree")
+	assert(conifer.state_variants.has("winter"))
+	assert(not conifer.state_variants.has("autumn"))
+	assert(tree.state_variants.has("autumn"))
+	# Branch exhaustion asks the asset what "spent" looks like.
+	for tree_id: StringName in [&"tree", &"conifer_tree"]:
+		assert(WorldAssetCatalog.get_asset(tree_id).state_variants.has("withered"),
+			"%s must declare the withered look the foraging service asks for" % tree_id)
+
+
+static func _test_random_appearance_stays_inside_declared_range() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 12345
+	var boulder := WorldAssetCatalog.get_asset(&"boulder")
+	var size_control := boulder.get_control("rock_size")
+	var minimum := float(size_control["min"])
+	var maximum := float(size_control["max"])
+	var seen_distinct := false
+	var previous: Variant = null
+	for index in 40:
+		var drawn := boulder.random_appearance(rng)
+		assert(drawn.has("rock_size"))
+		var value := float(drawn["rock_size"])
+		assert(value >= minimum and value <= maximum,
+			"Разброс вышел за объявленные границы: %f" % value)
+		# Colours are stored JSON-safe, or a varied boulder could not be saved.
+		assert(drawn["rock_color"] is String)
+		if previous != null and not is_equal_approx(float(previous), value):
+			seen_distinct = true
+		previous = value
+	assert(seen_distinct, "Разброс обязан давать разные значения")
+
+
+static func _test_random_appearance_leaves_fixed_controls_alone() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 999
+	# A campfire varies nothing: randomising it would light fires the author left
+	# cold. The brush must therefore offer it nothing to randomise.
+	var campfire := WorldAssetCatalog.get_asset(&"campfire")
+	assert(not campfire.has_varying_controls())
+	assert(campfire.random_appearance(rng).is_empty())
+
+	# A tree's snow flag is authored, not drawn: a forest must not sprout random
+	# snow caps in July.
+	var tree := WorldAssetCatalog.get_asset(&"tree")
+	for index in 20:
+		assert(not tree.random_appearance(rng).has("has_snow"))
 
 
 # --- Scope --------------------------------------------------------------------

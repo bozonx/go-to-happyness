@@ -1,27 +1,102 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=8 format=3]
 
-[sub_resource type="CylinderMesh" id="StemMesh"]
-top_radius = 0.05
-bottom_radius = 0.06
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_leaf"]
+albedo_color = Color(0.361, 0.545, 0.263, 1)
+roughness = 1.0
+
+[sub_resource type="SphereMesh" id="Mesh_leaf_a"]
+material = SubResource("Mat_leaf")
+radius = 0.24
 height = 0.16
+radial_segments = 7
+rings = 3
 
-[sub_resource type="SphereMesh" id="CapMesh"]
-radius = 0.16
-height = 0.32
+[sub_resource type="SphereMesh" id="Mesh_leaf_b"]
+material = SubResource("Mat_leaf")
+radius = 0.19
+height = 0.13
+radial_segments = 7
+rings = 3
 
-[sub_resource type="StandardMaterial3D" id="ForageMaterial"]
-albedo_color = Color(0.4588, 0.6588, 0.298, 1)
-emission_enabled = true
-emission = Color(0.1529, 0.2706, 0.1098, 1)
+[sub_resource type="StandardMaterial3D" id="Mat_stem"]
+albedo_color = Color(0.294, 0.427, 0.216, 1)
+roughness = 1.0
+
+[sub_resource type="CylinderMesh" id="Mesh_stem"]
+material = SubResource("Mat_stem")
+top_radius = 0.011
+bottom_radius = 0.016
+height = 0.22
+radial_segments = 5
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="Mat_berry"]
+albedo_color = Color(0.769, 0.235, 0.239, 1)
+roughness = 0.6
+
+[sub_resource type="SphereMesh" id="Mesh_berry"]
+material = SubResource("Mat_berry")
+radius = 0.055
+height = 0.11
+radial_segments = 6
+rings = 4
 
 [node name="ForageSource" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"forage_source"
 
-[node name="Stem" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.08, 0)
-mesh = SubResource("StemMesh")
-material_override = SubResource("ForageMaterial")
+[node name="Foliage" type="Node3D" parent="."]
 
-[node name="Cap" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 0.5, 0, 0, 0, 1, 0, 0.19, 0)
-mesh = SubResource("CapMesh")
-material_override = SubResource("ForageMaterial")
+[node name="LeafA" type="MeshInstance3D" parent="Foliage"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.09, 0.09, 0.06)
+mesh = SubResource("Mesh_leaf_a")
+
+[node name="LeafB" type="MeshInstance3D" parent="Foliage"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.12, 0.07, -0.08)
+mesh = SubResource("Mesh_leaf_b")
+
+[node name="LeafC" type="MeshInstance3D" parent="Foliage"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.02, 0.13, 0.15)
+mesh = SubResource("Mesh_leaf_b")
+
+[node name="LeafD" type="MeshInstance3D" parent="Foliage"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.13, 0.06, -0.12)
+mesh = SubResource("Mesh_leaf_b")
+
+[node name="Stems" type="Node3D" parent="."]
+
+[node name="StemA" type="MeshInstance3D" parent="Stems"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.19, 0)
+mesh = SubResource("Mesh_stem")
+
+[node name="StemB" type="MeshInstance3D" parent="Stems"]
+transform = Transform3D(0.9848, 0.1736, 0, -0.1736, 0.9848, 0, 0, 0, 1, 0.13, 0.16, 0.11)
+mesh = SubResource("Mesh_stem")
+
+[node name="StemC" type="MeshInstance3D" parent="Stems"]
+transform = Transform3D(0.9848, -0.1736, 0, 0.1736, 0.9848, 0, 0, 0, 1, -0.12, 0.16, -0.09)
+mesh = SubResource("Mesh_stem")
+
+[node name="Berries" type="Node3D" parent="."]
+
+[node name="BerryA" type="MeshInstance3D" parent="Berries"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.32, 0)
+mesh = SubResource("Mesh_berry")
+
+[node name="BerryB" type="MeshInstance3D" parent="Berries"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.15, 0.28, 0.11)
+mesh = SubResource("Mesh_berry")
+
+[node name="BerryC" type="MeshInstance3D" parent="Berries"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.14, 0.28, -0.09)
+mesh = SubResource("Mesh_berry")
+
+[node name="BerryD" type="MeshInstance3D" parent="Berries"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.06, 0.22, -0.14)
+mesh = SubResource("Mesh_berry")
+
+[node name="BerryE" type="MeshInstance3D" parent="Berries"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.07, 0.2, 0.13)
+mesh = SubResource("Mesh_berry")

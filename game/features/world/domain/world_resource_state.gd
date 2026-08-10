@@ -7,6 +7,7 @@ const TreeResourceStateScript = preload("res://game/features/world/domain/tree_r
 ## stable cells and values only; Node3D references stay in presentation.
 
 var grass_sources: Array = []
+var bush_sources: Array = []
 var forage_cells: Array[Vector2i] = []
 var rabbits: Array = []
 var trees: Dictionary = {}
@@ -50,14 +51,15 @@ func restore_tree_state(entries: Array) -> void:
 func capture(
 	grass: Dictionary,
 	forage: Dictionary,
-	rabbit_sources: Dictionary
+	rabbit_sources: Dictionary,
+	bushes: Dictionary = {}
 ) -> void:
 	grass_sources.clear()
+	bush_sources.clear()
 	forage_cells.clear()
 	rabbits.clear()
-	for cell: Vector2i in grass:
-		var source: Variant = grass[cell]
-		grass_sources.append({"cell": _cell_to_dict(cell), "remaining": int(source.remaining), "initial": int(source.initial)})
+	grass_sources = _capture_depleting(grass)
+	bush_sources = _capture_depleting(bushes)
 	for cell: Vector2i in forage:
 		forage_cells.append(cell)
 	for cell: Vector2i in rabbit_sources:
@@ -71,12 +73,28 @@ func capture(
 		})
 
 
+## Cell plus counters for every depleting source in a collection. The layout is
+## shared by grass and bushes because their state genuinely is the same three
+## numbers — a second, near-identical writer is how the two would drift apart.
+func _capture_depleting(sources: Dictionary) -> Array:
+	var captured: Array = []
+	for cell: Vector2i in sources:
+		var source: Variant = sources[cell]
+		captured.append({
+			"cell": _cell_to_dict(cell),
+			"remaining": int(source.remaining),
+			"initial": int(source.initial),
+		})
+	return captured
+
+
 func to_save_dict() -> Dictionary:
 	var forage: Array[Dictionary] = []
 	for cell in forage_cells:
 		forage.append(_cell_to_dict(cell))
 	return {
 		"grass_sources": grass_sources.duplicate(true),
+		"bush_sources": bush_sources.duplicate(true),
 		"forage_cells": forage,
 		"rabbits": rabbits.duplicate(true),
 	}
@@ -84,6 +102,8 @@ func to_save_dict() -> Dictionary:
 
 func load_from_save_dict(data: Dictionary) -> void:
 	grass_sources = (data.get("grass_sources", []) as Array).duplicate(true)
+	# Absent in saves written before bushes existed: such a world simply had none.
+	bush_sources = (data.get("bush_sources", []) as Array).duplicate(true)
 	forage_cells.clear()
 	for raw_cell in data.get("forage_cells", []):
 		if raw_cell is Dictionary:

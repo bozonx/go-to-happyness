@@ -102,12 +102,11 @@ func _test_asset_scenes_exist() -> void:
 ## Every declared binding must point at a node that actually exists, otherwise
 ## the control silently does nothing in the editor.
 ##
-## The `asset_id` meta and binding resolution are a fill-object contract: they
-## matter for assets the `DecorObjectController` drives through
-## `appearance_controls`. Natural and ambient fill (trees, grass, forage,
-## rabbits, fireflies) is rendered by other presenters and carries no bindings,
-## so it is skipped here — its scenes only need to exist, which
-## `_test_asset_scenes_exist` already asserts.
+## Natural assets are covered here too, now that trees, bushes and rocks carry
+## `appearance_controls` of their own: a renamed node inside `tree.tscn` has to
+## fail here rather than in a forest that quietly stopped varying. Assets with no
+## bindings at all (fireflies, whose shape comes from entity props) are skipped —
+## `_test_asset_scenes_exist` already asserts their scene loads.
 func _test_bindings_resolve_in_scenes() -> void:
 	for asset in WorldAssetCatalog.get_all_assets():
 		var bindings := asset.bindings()

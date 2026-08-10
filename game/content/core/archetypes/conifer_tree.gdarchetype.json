@@ -1,0 +1,1 @@
+{"version":1,"id":"conifer_tree","name":"Хвойное дерево","asset":"conifer_tree","content_class":"object","category":"vegetation","components":{"settlement_natural":{"kind":"tree"}},"properties":[{"name":"wood","label":"Древесина","type":"int","min":1,"max":99,"default":7},{"name":"branches","label":"Ветки","type":"int","min":0,"max":99,"default":5}]}

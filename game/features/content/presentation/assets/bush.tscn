@@ -1,0 +1,103 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_leaf"]
+albedo_color = Color(0.302, 0.502, 0.259, 1)
+roughness = 1.0
+
+[sub_resource type="SphereMesh" id="Mesh_leaf_a"]
+material = SubResource("Mat_leaf")
+radius = 0.52
+height = 0.82
+radial_segments = 7
+rings = 4
+
+[sub_resource type="SphereMesh" id="Mesh_leaf_b"]
+material = SubResource("Mat_leaf")
+radius = 0.44
+height = 0.66
+radial_segments = 7
+rings = 4
+
+[sub_resource type="SphereMesh" id="Mesh_leaf_c"]
+material = SubResource("Mat_leaf")
+radius = 0.36
+height = 0.54
+radial_segments = 7
+rings = 3
+
+[sub_resource type="StandardMaterial3D" id="Mat_twig"]
+albedo_color = Color(0.4, 0.318, 0.235, 1)
+roughness = 1.0
+
+[sub_resource type="CylinderMesh" id="Mesh_twig"]
+material = SubResource("Mat_twig")
+top_radius = 0.011
+bottom_radius = 0.032
+height = 0.56
+radial_segments = 5
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_twig_short"]
+material = SubResource("Mat_twig")
+top_radius = 0.009
+bottom_radius = 0.027
+height = 0.42
+radial_segments = 5
+rings = 1
+
+[sub_resource type="BoxShape3D" id="Shape_select"]
+size = Vector3(1.1, 0.9, 1.1)
+
+[node name="Bush" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"bush"
+
+[node name="Foliage" type="Node3D" parent="."]
+
+[node name="LeafA" type="MeshInstance3D" parent="Foliage"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.16, 0.4, 0.08)
+mesh = SubResource("Mesh_leaf_a")
+
+[node name="LeafB" type="MeshInstance3D" parent="Foliage"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.24, 0.34, -0.14)
+mesh = SubResource("Mesh_leaf_b")
+
+[node name="LeafC" type="MeshInstance3D" parent="Foliage"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.04, 0.58, 0.22)
+mesh = SubResource("Mesh_leaf_c")
+
+[node name="LeafD" type="MeshInstance3D" parent="Foliage"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.05, 0.55, -0.24)
+mesh = SubResource("Mesh_leaf_c")
+
+[node name="Twigs" type="Node3D" parent="."]
+
+[node name="TwigA" type="MeshInstance3D" parent="Twigs"]
+transform = Transform3D(0.6064, 0.7431, -0.2828, -0.6735, 0.6691, 0.3141, 0.4226, 0, 0.9063, 0.28, 0.56, 0.16)
+mesh = SubResource("Mesh_twig")
+
+[node name="TwigB" type="MeshInstance3D" parent="Twigs"]
+transform = Transform3D(-0.246, -0.6947, -0.676, -0.2376, 0.7193, -0.6528, 0.9397, 0, -0.342, -0.3, 0.5, 0.22)
+mesh = SubResource("Mesh_twig")
+
+[node name="TwigC" type="MeshInstance3D" parent="Twigs"]
+transform = Transform3D(-0.5785, 0.788, 0.2106, 0.7405, 0.6157, -0.2695, -0.342, 0, -0.9397, -0.24, 0.6, -0.25)
+mesh = SubResource("Mesh_twig_short")
+
+[node name="TwigD" type="MeshInstance3D" parent="Twigs"]
+transform = Transform3D(0.333, -0.6157, 0.7142, 0.2602, 0.788, 0.558, -0.9063, 0, 0.4226, 0.3, 0.52, -0.2)
+mesh = SubResource("Mesh_twig_short")
+
+[node name="TwigE" type="MeshInstance3D" parent="Twigs"]
+transform = Transform3D(-0.8937, 0.309, -0.3253, 0.2904, 0.9511, 0.1057, 0.342, 0, -0.9397, 0.05, 0.72, 0.04)
+mesh = SubResource("Mesh_twig")
+
+[node name="BushInteractionSelector" type="Area3D" parent="."]
+collision_layer = 4
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="BushInteractionSelector"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.45, 0)
+shape = SubResource("Shape_select")

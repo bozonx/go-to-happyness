@@ -70,6 +70,8 @@ func _classify_area_hit(collider: Area3D, simulation: Node) -> Dictionary:
 		return {"kind": ""}
 	if collider.is_in_group("grass_selector") and is_instance_valid(area_parent):
 		return {"kind": "grass", "node": area_parent, "position": area_parent.global_position}
+	if collider.is_in_group("bush_selector") and is_instance_valid(area_parent):
+		return {"kind": "bush", "node": area_parent, "position": area_parent.global_position}
 	if collider.is_in_group("forage_selector") and is_instance_valid(area_parent):
 		return {"kind": "forage", "node": area_parent, "position": area_parent.global_position}
 	if collider.is_in_group("rabbit_selector") and is_instance_valid(area_parent):

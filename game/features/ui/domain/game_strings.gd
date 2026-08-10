@@ -49,6 +49,10 @@ const F_OCCUPY_WORKPLACE := "F — занять рабочее место (%s)"
 # --- First Person HUD: tree ---
 const BRANCHES_DEPLETED := "Ветки иссякли (топор откроет полный сбор)"
 const F_GATHER_BRANCHES := "F: собрать ветки (%d/%d) | Shift+F: до полноты"
+## У куста нет запрета на сбор руками: топор ему не нужен, поэтому и подсказка
+## про топор здесь не появляется.
+const F_GATHER_BUSH_BRANCHES := "F: наломать веток (%d/%d) | Shift+F: до полноты"
+const BUSH_DEPLETED := "Куст обломан"
 const F_CHOP_TREE := "F: срубить дерево | Shift+F: рубить до полноты"
 
 # --- First Person HUD: grass ---

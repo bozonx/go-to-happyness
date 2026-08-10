@@ -361,7 +361,8 @@ func _setup_foraging_and_fire() -> void:
 		game.gather_progress_labels,
 		game.terrain_height_at,
 		game.cell_from_position,
-		func(): return game.hero_interaction_controller.first_person_target()
+		func(): return game.hero_interaction_controller.first_person_target(),
+		game.bush_sources
 	)
 	# Natural-resource dictionaries are owned by ForagingService. Configure hero
 	# proximity queries only after that service exists, otherwise the bootstrap
@@ -376,6 +377,7 @@ func _setup_foraging_and_fire() -> void:
 	hero_port.water_source_positions_getter = func() -> Array[Vector3]: return game.water_source_positions
 	hero_port.grass_sources = game.grass_sources
 	hero_port.forage_sources = game.forage_sources
+	hero_port.bush_sources = game.bush_sources
 	hero_port.rabbit_sources = game.rabbit_sources
 	hero_port.cell_from_position = game.cell_from_position
 	hero_port.consume_grass_source = func(position): return game.foraging_service.consume_grass_source(position)

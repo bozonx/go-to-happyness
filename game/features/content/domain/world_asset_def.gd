@@ -15,10 +15,18 @@ extends Resource
 ##
 ## `bind` declares *where the value lands in the scene*, so DecorObjectController
 ## stays a generic applier instead of carrying one @export per asset. `prop`
-## accepts any node property plus the synthetic `albedo` (tints the mesh material,
-## duplicated per instance) and `scale_y`.
+## accepts any node property (including sub-paths such as `position:y`) plus the
+## synthetic `albedo` (tints the mesh material, duplicated per instance), `scale`
+## and `scale_y`.
+##
+## A control may also declare `"vary"`: how far the fill-mode brush is allowed to
+## randomise it when the author asks for scattered variation (§9.2.1). Forty hand-placed
+## trees have to differ from each other, and the asset is the only place that
+## knows *which* of its knobs may differ — a brush that randomised every control
+## would set fire to campfires that the author left cold.
 
 const PROP_ALBEDO := "albedo"
+const PROP_SCALE := "scale"
 const PROP_SCALE_Y := "scale_y"
 
 const TYPE_BOOL := "bool"
@@ -145,6 +153,66 @@ func bindings() -> Dictionary:
 		if raw_binds is Array and not (raw_binds as Array).is_empty():
 			map[control_name] = raw_binds
 	return map
+
+
+## Whether anything about this asset is allowed to differ between two copies.
+func has_varying_controls() -> bool:
+	for control in appearance_controls:
+		if float(control.get("vary", 0.0)) > 0.0:
+			return true
+	return false
+
+
+## One random draw of every control that declares `vary`, JSON-safe and ready to
+## be stored as a record's appearance. Controls without `vary` are absent from the
+## result rather than repeated at their default: the caller merges this over the
+## brush values, and a key that means "unchanged" must not overwrite an authored
+## one.
+##
+## `vary` reads differently per type, and deliberately so — the useful randomness
+## is not the same shape for a size, a colour and a flag:
+##   float  — maximum drift from the default, clamped to the control's range
+##   colour — jitter strength in HSV; hue moves least, value most
+##   bool   — probability of `true`
+func random_appearance(rng: RandomNumberGenerator) -> Dictionary:
+	var result: Dictionary = {}
+	for control in appearance_controls:
+		var amount := float(control.get("vary", 0.0))
+		if amount <= 0.0:
+			continue
+		var control_name := String(control.get("name", ""))
+		if control_name.is_empty():
+			continue
+		match String(control.get("type", TYPE_FLOAT)):
+			TYPE_FLOAT:
+				var base := float(control.get("default", 0.0))
+				var low := float(control.get("min", base - amount))
+				var high := float(control.get("max", base + amount))
+				result[control_name] = clampf(base + rng.randf_range(-amount, amount), low, high)
+			TYPE_COLOR:
+				var base_color := to_color(control.get("default", Color.WHITE))
+				result[control_name] = FillObjectRecord.json_safe_value(
+					jittered_color(base_color, amount, rng)
+				)
+			TYPE_BOOL:
+				result[control_name] = rng.randf() < amount
+	return result
+
+
+static func jittered_color(base: Color, amount: float, rng: RandomNumberGenerator) -> Color:
+	var hue := fposmod(base.h + rng.randf_range(-amount, amount) * 0.05, 1.0)
+	var saturation := clampf(base.s * (1.0 + rng.randf_range(-amount, amount) * 0.25), 0.0, 1.0)
+	var value := clampf(base.v * (1.0 + rng.randf_range(-amount, amount) * 0.35), 0.0, 1.0)
+	return Color.from_hsv(hue, saturation, value, base.a)
+
+
+## Authored defaults arrive as `Color` from GDScript and as an html string from
+## JSON; every consumer needs the same answer from both.
+static func to_color(value: Variant) -> Color:
+	if value is Color:
+		return value as Color
+	var text := String(value)
+	return Color.from_string(text, Color.WHITE) if not text.is_empty() else Color.WHITE
 
 
 func get_control(control_name: String) -> Dictionary:

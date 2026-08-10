@@ -4,7 +4,7 @@ extends RefCounted
 const INTERACTION_RANGE := 2.8
 const HARVEST_DURATION := 3.5
 const CitizenTaskStateScript = preload("res://game/features/citizens/domain/citizen_task_state.gd")
-const GrassSourceRecord = preload("res://game/features/production/domain/grass_source_record.gd")
+const HarvestSourceRecord = preload("res://game/features/production/domain/harvest_source_record.gd")
 const ForageSourceRecord = preload("res://game/features/production/domain/forage_source_record.gd")
 const RabbitSourceRecord = preload("res://game/features/production/domain/rabbit_source_record.gd")
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
@@ -22,6 +22,7 @@ var forager_positions: Array[Vector3] = []
 var forage_sources: Dictionary = {}
 var rabbit_sources: Dictionary = {}
 var grass_sources: Dictionary = {}
+var bush_sources: Dictionary = {}
 var tree_nodes: Dictionary = {}
 var tree_positions: Array[Vector3] = []
 var gather_progress_labels: Dictionary = {}
@@ -49,7 +50,8 @@ func setup(
 	gather_labels_ref: Dictionary,
 	terrain_fn: Callable = Callable(),
 	cell_fn: Callable = Callable(),
-	target_fn: Callable = Callable()
+	target_fn: Callable = Callable(),
+	bush_src_ref: Dictionary = {}
 ) -> void:
 	settlement = settlement_ref
 	world_resource_state = world_state_ref
@@ -57,6 +59,7 @@ func setup(
 	forage_sources = forage_src_ref
 	rabbit_sources = rabbit_src_ref
 	grass_sources = grass_src_ref
+	bush_sources = bush_src_ref
 	tree_nodes = tree_nodes_ref
 	tree_positions = tree_pos_ref
 	gather_progress_labels = gather_labels_ref
@@ -107,33 +110,46 @@ func harvest_wild_food(position: Vector3, worker: Node3D) -> String:
 	return ""
 
 func consume_grass_source(position: Vector3) -> int:
+	return _consume_source(grass_sources, position)
+
+
+## Takes one unit from whichever depleting source of this kind stands at (or
+## nearest to) the position. The tolerance exists because a citizen stops where
+## navigation let it stop, not on the exact cell it aimed at.
+func _consume_source(sources: Dictionary, position: Vector3) -> int:
 	var cell: Vector2i = cell_query.call(position) if cell_query.is_valid() else Vector2i.ZERO
-	if not grass_sources.has(cell):
+	if not sources.has(cell):
 		var best_cell: Vector2i = Vector2i(-99999, -99999)
 		var best_dist: float = 2.0
 		var pos_xz := Vector2(position.x, position.z)
-		for c in grass_sources:
-			var src: GrassSourceRecord = grass_sources[c]
-			if src == null or src.remaining <= 0:
+		for c in sources:
+			var src: HarvestSourceRecord = sources[c]
+			if src == null or src.is_spent():
 				continue
 			var src_pos: Vector3 = src.node.global_position if is_instance_valid(src.node) else Vector3((c.x + 0.5) * 2.0, 0.0, (c.y + 0.5) * 2.0)
 			var d := pos_xz.distance_to(Vector2(src_pos.x, src_pos.z))
 			if d <= best_dist:
 				best_dist = d
 				best_cell = c
-		if grass_sources.has(best_cell):
+		if sources.has(best_cell):
 			cell = best_cell
 		else:
 			return 0
-	var source: GrassSourceRecord = grass_sources[cell]
-	if source.remaining <= 0:
-		return 0
-	source.remaining = maxi(0, source.remaining - 1)
-	if source.remaining == 0:
-		if is_instance_valid(source.node):
-			source.node.queue_free()
-		grass_sources.erase(cell)
-	return 1
+	var source: HarvestSourceRecord = sources[cell]
+	var taken := source.take_one()
+	if source.is_spent():
+		sources.erase(cell)
+	return taken
+
+
+## Branches come from two stands of objects, and the caller must not have to know
+## which one it is standing next to. A bush gives its branches outright: there is
+## no hand limit and no axe, because there is nothing to cut.
+func consume_branches(position: Vector3) -> int:
+	var from_tree := consume_tree_branches(position)
+	if from_tree > 0:
+		return from_tree
+	return _consume_source(bush_sources, position)
 
 
 func consume_tree_branches(position: Vector3) -> int:
@@ -176,13 +192,11 @@ func mark_tree_branch_exhausted(cell: Vector2i) -> void:
 	if not is_instance_valid(tree):
 		return
 	_sync_tree_visual_state(cell)
-	for child in tree.get_children():
-		var mesh := child as MeshInstance3D
-		if mesh == null or not (mesh.mesh is SphereMesh):
-			continue
-		var material := mesh.material_override as StandardMaterial3D
-		if material != null:
-			material.albedo_color = Color("6b4c2a")
+	# The asset declares what "withered" looks like; this service only says that
+	# the tree is spent. Hunting for sphere meshes here used to mean a spruce with
+	# cone-shaped foliage would silently keep its summer colour.
+	if tree.has_method("apply_state_variant"):
+		tree.call("apply_state_variant", "withered")
 
 
 func _sync_tree_visual_state(cell: Vector2i) -> void:
@@ -216,11 +230,19 @@ func nearest_tree_node(from: Vector3) -> Node3D:
 	return best
 
 func nearest_grass_node(from: Vector3) -> Node3D:
+	return _nearest_source_node(grass_sources, from)
+
+
+func nearest_bush_node(from: Vector3) -> Node3D:
+	return _nearest_source_node(bush_sources, from)
+
+
+func _nearest_source_node(sources: Dictionary, from: Vector3) -> Node3D:
 	var best: Node3D = null
 	var best_dist := INTERACTION_RANGE
-	for cell in grass_sources:
-		var source: GrassSourceRecord = grass_sources[cell]
-		if source.remaining <= 0 or not is_instance_valid(source.node):
+	for cell in sources:
+		var source: HarvestSourceRecord = sources[cell]
+		if source == null or source.is_spent() or not is_instance_valid(source.node):
 			continue
 		var dist := from.distance_to(source.node.global_position)
 		if dist <= best_dist:
@@ -232,16 +254,27 @@ func player_gather_target_node(player_citizen: Node3D, interaction_resource: Str
 	if player_citizen == null:
 		return null
 	match interaction_resource:
-		ResourceIds.WOOD, ResourceIds.BRANCHES: return nearest_tree_node(player_citizen.global_position)
-		ResourceIds.GRASS: return nearest_grass_node(player_citizen.global_position)
+		ResourceIds.WOOD:
+			return nearest_tree_node(player_citizen.global_position)
+		ResourceIds.BRANCHES:
+			var tree := nearest_tree_node(player_citizen.global_position)
+			return tree if tree != null else nearest_bush_node(player_citizen.global_position)
+		ResourceIds.GRASS:
+			return nearest_grass_node(player_citizen.global_position)
 	return null
 
 func gather_node_at(position: Vector3, resource_type: String) -> Node3D:
 	var cell: Vector2i = cell_query.call(position) if cell_query.is_valid() else Vector2i.ZERO
 	if resource_type in [ResourceIds.WOOD, ResourceIds.BRANCHES, ResourceIds.LOGS]:
-		return tree_nodes.get(cell)
+		var tree: Node3D = tree_nodes.get(cell)
+		if tree != null:
+			return tree
+	if resource_type == ResourceIds.BRANCHES:
+		var bush: HarvestSourceRecord = bush_sources.get(cell)
+		if bush != null:
+			return bush.node
 	if resource_type == ResourceIds.GRASS:
-		var source: GrassSourceRecord = grass_sources.get(cell)
+		var source: HarvestSourceRecord = grass_sources.get(cell)
 		if source != null:
 			return source.node
 	return null
@@ -259,12 +292,13 @@ func gather_progress_amounts(resource_type: String, node: Node3D) -> Dictionary:
 			max_amount = tree_state.initial_branches
 			current = tree_state.hand_branches
 	else:
-		for cell in grass_sources:
-			var source: GrassSourceRecord = grass_sources[cell]
-			if source.node == node:
-				max_amount = source.initial
-				current = max_amount - source.remaining
-				break
+		for sources: Dictionary in [grass_sources, bush_sources]:
+			for cell in sources:
+				var source: HarvestSourceRecord = sources[cell]
+				if source != null and source.node == node:
+					max_amount = source.initial
+					current = max_amount - source.remaining
+					return {"current": current, "max": max_amount}
 	return {"current": current, "max": max_amount}
 
 func ensure_gather_progress_label(node: Node3D) -> Label3D:
@@ -319,6 +353,8 @@ func update_gathering_indicators(
 			var era_val: int = int(settlement.era) if settlement != null and "era" in settlement else 0
 			var res_type := ResourceIds.BRANCHES if era_val < 1 else ResourceIds.WOOD
 			active_targets[target.get("node")] = {"resource_type": res_type, "partial": -1.0}
+		elif kind == "bush" and is_instance_valid(target.get("node")):
+			active_targets[target.get("node")] = {"resource_type": ResourceIds.BRANCHES, "partial": -1.0}
 		elif kind == "grass" and is_instance_valid(target.get("node")):
 			active_targets[target.get("node")] = {"resource_type": ResourceIds.GRASS, "partial": -1.0}
 

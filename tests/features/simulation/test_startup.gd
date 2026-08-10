@@ -46,7 +46,7 @@ func _init() -> void:
 	assert(not simulation.rabbit_sources.is_empty())
 	assert(not simulation.fireflies.is_empty())
 	assert(simulation.tree_nodes.values()[0].get_parent() == landscape_objects)
-	assert((simulation.grass_sources.values()[0] as GrassSourceRecord).node.get_parent() == landscape_objects)
+	assert((simulation.grass_sources.values()[0] as HarvestSourceRecord).node.get_parent() == landscape_objects)
 	assert((simulation.forage_sources.values()[0] as ForageSourceRecord).node.get_parent() == landscape_objects)
 	assert((simulation.rabbit_sources.values()[0] as RabbitSourceRecord).node.get_parent() == landscape_objects)
 	# Authored firefly placements are rendered by MapEntityPresenter and forwarded
@@ -96,7 +96,7 @@ func _init() -> void:
 	# Hero proximity checks must share the live natural-resource registries.
 	# A stale empty registry makes first-person grass gathering cancel at once.
 	var hero_start_position: Vector3 = simulation.hero_citizen.global_position
-	var grass_source: GrassSourceRecord = simulation.grass_sources.values()[0]
+	var grass_source: HarvestSourceRecord = simulation.grass_sources.values()[0]
 	simulation.hero_citizen.global_position = grass_source.node.global_position
 	assert(simulation.hero_interaction_service.nearby_grass_source())
 	simulation.hero_citizen.global_position = hero_start_position

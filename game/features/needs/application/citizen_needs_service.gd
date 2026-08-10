@@ -4,7 +4,7 @@ extends RefCounted
 ## Owns personal-need schedules and completion state. It never drives a Citizen
 ## directly; the native AI consumes the exported requests through the facade.
 
-const GrassSourceRecord = preload("res://game/features/production/domain/grass_source_record.gd")
+const HarvestSourceRecord = preload("res://game/features/production/domain/harvest_source_record.gd")
 
 const TOILET_START_MINUTE := 8.0 * 60.0
 const TOILET_END_MINUTE := 20.0 * 60.0
@@ -197,7 +197,7 @@ func _nearest_relief_position(citizen: Citizen, relief_type: StringName) -> Vect
 	elif relief_type == &"grass":
 		var positions_by_distance: Array[Dictionary] = []
 		for source in _grass_sources.values():
-			var grass_source: GrassSourceRecord = source
+			var grass_source: HarvestSourceRecord = source
 			if not is_instance_valid(grass_source.node) or citizen.global_position.distance_to(grass_source.node.global_position) > RELIEF_SEARCH_RADIUS:
 				continue
 			positions_by_distance.append({

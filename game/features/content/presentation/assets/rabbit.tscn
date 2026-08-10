@@ -1,11 +1,105 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=10 format=3]
 
-[sub_resource type="BoxMesh" id="RabbitMesh"]
-size = Vector3(0.48, 0.32, 0.32)
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
 
-[sub_resource type="StandardMaterial3D" id="RabbitMaterial"]
-albedo_color = Color(0.8353, 0.8196, 0.7647, 1)
+[sub_resource type="StandardMaterial3D" id="Mat_fur"]
+albedo_color = Color(0.686, 0.643, 0.576, 1)
+roughness = 1.0
 
-[node name="Rabbit" type="MeshInstance3D"]
-mesh = SubResource("RabbitMesh")
-material_override = SubResource("RabbitMaterial")
+[sub_resource type="SphereMesh" id="Mesh_body"]
+material = SubResource("Mat_fur")
+radius = 0.15
+height = 0.26
+radial_segments = 8
+rings = 4
+
+[sub_resource type="SphereMesh" id="Mesh_head"]
+material = SubResource("Mat_fur")
+radius = 0.095
+height = 0.17
+radial_segments = 8
+rings = 4
+
+[sub_resource type="PrismMesh" id="Mesh_ear"]
+material = SubResource("Mat_fur")
+size = Vector3(0.05, 0.16, 0.022)
+
+[sub_resource type="StandardMaterial3D" id="Mat_tail"]
+albedo_color = Color(0.898, 0.882, 0.851, 1)
+roughness = 1.0
+
+[sub_resource type="SphereMesh" id="Mesh_tail"]
+material = SubResource("Mat_tail")
+radius = 0.05
+height = 0.1
+radial_segments = 6
+rings = 3
+
+[sub_resource type="CylinderMesh" id="Mesh_leg"]
+material = SubResource("Mat_fur")
+top_radius = 0.032
+bottom_radius = 0.028
+height = 0.1
+radial_segments = 5
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="Mat_eye"]
+albedo_color = Color(0.11, 0.09, 0.086, 1)
+roughness = 0.4
+
+[sub_resource type="SphereMesh" id="Mesh_eye"]
+material = SubResource("Mat_eye")
+radius = 0.016
+height = 0.032
+radial_segments = 5
+rings = 3
+
+[node name="Rabbit" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"rabbit"
+
+[node name="Fur" type="Node3D" parent="."]
+
+[node name="Body" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1.35, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.17, 0)
+mesh = SubResource("Mesh_body")
+
+[node name="Head" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.19, 0.24, 0)
+mesh = SubResource("Mesh_head")
+
+[node name="EarLeft" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(0.9781, 0.1908, -0.08152, -0.2079, 0.8978, -0.3836, 0, 0.3907, 0.9205, 0.19, 0.37, 0.05)
+mesh = SubResource("Mesh_ear")
+
+[node name="EarRight" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(0.9781, 0.1908, 0.08152, -0.2079, 0.8978, 0.3836, 0, -0.3907, 0.9205, 0.19, 0.37, -0.05)
+mesh = SubResource("Mesh_ear")
+
+[node name="LegFrontLeft" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.11, 0.05, 0.08)
+mesh = SubResource("Mesh_leg")
+
+[node name="LegFrontRight" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.11, 0.05, -0.08)
+mesh = SubResource("Mesh_leg")
+
+[node name="LegBackLeft" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.11, 0.05, 0.09)
+mesh = SubResource("Mesh_leg")
+
+[node name="LegBackRight" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.11, 0.05, -0.09)
+mesh = SubResource("Mesh_leg")
+
+[node name="Tail" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.22, 0.19, 0)
+mesh = SubResource("Mesh_tail")
+
+[node name="EyeLeft" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0.27, 0.06)
+mesh = SubResource("Mesh_eye")
+
+[node name="EyeRight" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0.27, -0.06)
+mesh = SubResource("Mesh_eye")

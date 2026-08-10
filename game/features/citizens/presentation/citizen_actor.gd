@@ -2185,7 +2185,7 @@ func _process_gathering(delta: float) -> void:
 			if resource_type == ResourceIds.GRASS:
 				consumed_amount = simulation.foraging_service.consume_grass_source(gather_source_position)
 			elif resource_type == ResourceIds.BRANCHES:
-				consumed_amount = simulation.foraging_service.consume_tree_branches(gather_source_position)
+				consumed_amount = simulation.foraging_service.consume_branches(gather_source_position)
 		if consumed_amount <= 0 and resource_type in [ResourceIds.GRASS, ResourceIds.BRANCHES]:
 			idle()
 			return

@@ -131,6 +131,8 @@ var factories: Array[Node3D]:
 var sawmill_stocks: Dictionary = {}
 var grass_sources: Dictionary:
 	get: return foraging_service.grass_sources
+var bush_sources: Dictionary:
+	get: return foraging_service.bush_sources
 var forage_sources: Dictionary:
 	get: return foraging_service.forage_sources
 var rabbit_sources: Dictionary:

@@ -1,6 +1,6 @@
 extends SceneTree
 
-const GrassSourceRecord = preload("res://game/features/production/domain/grass_source_record.gd")
+const HarvestSourceRecord = preload("res://game/features/production/domain/harvest_source_record.gd")
 
 
 class FakeToiletSimulation extends Node:
@@ -51,7 +51,7 @@ func _test_toilet_candidates_prefer_toilets() -> void:
 	var grass_node := Node3D.new()
 	grass_node.position = Vector3.ZERO
 	simulation.add_child(grass_node)
-	simulation.grass_sources[Vector2i(0, 0)] = GrassSourceRecord.new(grass_node)
+	simulation.grass_sources[Vector2i(0, 0)] = HarvestSourceRecord.new(grass_node)
 	var citizen := Citizen.new()
 	citizen.ai_id = 1
 	citizen.gender = "male"
@@ -74,7 +74,7 @@ func _test_toilet_candidates_by_gender() -> void:
 	var grass_node := Node3D.new()
 	grass_node.position = Vector3(-10.0, 0.0, 0.0)
 	simulation.add_child(grass_node)
-	simulation.grass_sources[Vector2i(-10, 0)] = GrassSourceRecord.new(grass_node)
+	simulation.grass_sources[Vector2i(-10, 0)] = HarvestSourceRecord.new(grass_node)
 	var service := CitizenNeedsService.new()
 	simulation.configure_needs_service(service)
 	var male := Citizen.new()
@@ -107,7 +107,7 @@ func _test_toilet_candidates_fall_back_after_demolition() -> void:
 	var grass_node := Node3D.new()
 	grass_node.position = Vector3(-10.0, 0.0, 0.0)
 	simulation.add_child(grass_node)
-	simulation.grass_sources[Vector2i(-10, 0)] = GrassSourceRecord.new(grass_node)
+	simulation.grass_sources[Vector2i(-10, 0)] = HarvestSourceRecord.new(grass_node)
 	var toilet := Node3D.new()
 	toilet.position = Vector3(5.0, 0.0, 5.0)
 	toilet.set_meta("building_type", "toilet_earth")

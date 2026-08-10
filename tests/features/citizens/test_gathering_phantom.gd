@@ -1,6 +1,6 @@
 extends SceneTree
 
-const GrassSourceRecord = preload("res://game/features/production/domain/grass_source_record.gd")
+const HarvestSourceRecord = preload("res://game/features/production/domain/harvest_source_record.gd")
 
 
 class FakeSettlement extends RefCounted:
@@ -40,7 +40,7 @@ class FakeGatheringSimulation extends Node:
 		var cell := cell_from_position(position)
 		if not grass_sources.has(cell):
 			return 0
-		var source: GrassSourceRecord = grass_sources[cell]
+		var source: HarvestSourceRecord = grass_sources[cell]
 		if source.remaining <= 0:
 			return 0
 		consumed_count += 1
@@ -61,7 +61,7 @@ func _init() -> void:
 	await process_frame
 
 	var source_pos := Vector3(2.0, 0.0, 0.0)
-	simulation.grass_sources[simulation.cell_from_position(source_pos)] = GrassSourceRecord.new(null, 1, 1)
+	simulation.grass_sources[simulation.cell_from_position(source_pos)] = HarvestSourceRecord.new(null, 1, 1)
 	citizen.gather_resource_type = "grass"
 	citizen.gather_source_position = source_pos
 	citizen.active_role = "gather_grass"

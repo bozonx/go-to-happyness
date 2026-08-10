@@ -1,15 +1,88 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=7 format=3]
 
-[sub_resource type="CylinderMesh" id="GrassMesh"]
-top_radius = 0.3
-bottom_radius = 0.3
-height = 0.06
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
 
-[sub_resource type="StandardMaterial3D" id="GrassMaterial"]
-albedo_color = Color(0.3098, 0.7373, 0.3333, 1)
-emission_enabled = true
-emission = Color(0.1412, 0.3569, 0.1647, 1)
+[sub_resource type="StandardMaterial3D" id="Mat_blade"]
+albedo_color = Color(0.396, 0.639, 0.302, 1)
+roughness = 1.0
+cull_mode = 2
 
-[node name="GrassSource" type="MeshInstance3D"]
-mesh = SubResource("GrassMesh")
-material_override = SubResource("GrassMaterial")
+[sub_resource type="PrismMesh" id="Mesh_blade_tall"]
+material = SubResource("Mat_blade")
+size = Vector3(0.1, 0.62, 0.02)
+
+[sub_resource type="PrismMesh" id="Mesh_blade_mid"]
+material = SubResource("Mat_blade")
+size = Vector3(0.09, 0.5, 0.02)
+
+[sub_resource type="PrismMesh" id="Mesh_blade_short"]
+material = SubResource("Mat_blade")
+size = Vector3(0.08, 0.4, 0.02)
+
+[sub_resource type="StandardMaterial3D" id="Mat_seed"]
+albedo_color = Color(0.702, 0.635, 0.353, 1)
+roughness = 1.0
+
+[sub_resource type="CylinderMesh" id="Mesh_seed"]
+material = SubResource("Mat_seed")
+top_radius = 0.008
+bottom_radius = 0.028
+height = 0.13
+radial_segments = 5
+rings = 1
+
+[node name="GrassSource" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"grass_source"
+
+[node name="Blades" type="Node3D" parent="."]
+
+[node name="BladeA" type="MeshInstance3D" parent="Blades"]
+transform = Transform3D(0.9945, 0.1045, -0, -0.1045, 0.9945, 0, 0, 0, 1, 0.02, 0.31, 0)
+mesh = SubResource("Mesh_blade_tall")
+
+[node name="BladeB" type="MeshInstance3D" parent="Blades"]
+transform = Transform3D(0.734, -0.1564, -0.6609, 0.1163, 0.9877, -0.1047, 0.6691, 0, 0.7431, 0.13, 0.26, 0.09)
+mesh = SubResource("Mesh_blade_mid")
+
+[node name="BladeC" type="MeshInstance3D" parent="Blades"]
+transform = Transform3D(0.03414, 0.2079, -0.9776, -0.007256, 0.9781, 0.2078, 0.9994, 0, 0.0349, 0.16, 0.22, -0.11)
+mesh = SubResource("Mesh_blade_short")
+
+[node name="BladeD" type="MeshInstance3D" parent="Blades"]
+transform = Transform3D(-0.6769, -0.1219, -0.7259, -0.08311, 0.9925, -0.08913, 0.7314, 0, -0.682, -0.05, 0.29, 0.17)
+mesh = SubResource("Mesh_blade_mid")
+
+[node name="BladeE" type="MeshInstance3D" parent="Blades"]
+transform = Transform3D(-0.9839, 0.1564, -0.08608, 0.1558, 0.9877, 0.01363, 0.08716, 0, -0.9962, -0.14, 0.33, 0.05)
+mesh = SubResource("Mesh_blade_tall")
+
+[node name="BladeF" type="MeshInstance3D" parent="Blades"]
+transform = Transform3D(-0.7678, -0.225, 0.5999, -0.1773, 0.9744, 0.1385, -0.6157, 0, -0.788, -0.17, 0.24, -0.08)
+mesh = SubResource("Mesh_blade_short")
+
+[node name="BladeG" type="MeshInstance3D" parent="Blades"]
+transform = Transform3D(-0.1386, 0.08716, 0.9865, 0.01213, 0.9962, -0.08631, -0.9903, 0, -0.1392, 0.05, 0.27, -0.18)
+mesh = SubResource("Mesh_blade_mid")
+
+[node name="BladeH" type="MeshInstance3D" parent="Blades"]
+transform = Transform3D(0.5704, -0.1045, 0.8147, 0.05996, 0.9945, 0.08562, -0.8192, 0, 0.5736, 0.11, 0.21, 0.15)
+mesh = SubResource("Mesh_blade_short")
+
+[node name="BladeI" type="MeshInstance3D" parent="Blades"]
+transform = Transform3D(0.9224, 0.1908, 0.3357, -0.1793, 0.9816, -0.06526, -0.342, 0, 0.9397, -0.09, 0.3, -0.15)
+mesh = SubResource("Mesh_blade_tall")
+
+[node name="SeedHeads" type="Node3D" parent="."]
+
+[node name="HeadA" type="MeshInstance3D" parent="SeedHeads"]
+transform = Transform3D(0.9945, 0.1045, -0, -0.1045, 0.9945, 0, 0, 0, 1, 0.02, 0.63, 0)
+mesh = SubResource("Mesh_seed")
+
+[node name="HeadB" type="MeshInstance3D" parent="SeedHeads"]
+transform = Transform3D(-0.9839, 0.1564, -0.08608, 0.1558, 0.9877, 0.01363, 0.08716, 0, -0.9962, -0.14, 0.67, 0.05)
+mesh = SubResource("Mesh_seed")
+
+[node name="HeadC" type="MeshInstance3D" parent="SeedHeads"]
+transform = Transform3D(0.9224, 0.1908, 0.3357, -0.1793, 0.9816, -0.06526, -0.342, 0, 0.9397, -0.09, 0.61, -0.15)
+mesh = SubResource("Mesh_seed")

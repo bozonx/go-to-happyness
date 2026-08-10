@@ -135,6 +135,11 @@ func first_person_action_hint() -> String:
 				var init: int = maxi(1, int(tree_node.get_meta("initial_branches", rem)))
 				return S.F_GATHER_BRANCHES % [rem, init]
 			return S.F_CHOP_TREE
+		"bush":
+			var bush_info: Dictionary = simulation.query_helper.targeted_bush_info(target)
+			if bush_info.is_empty() or int(bush_info.remaining) <= 0:
+				return S.BUSH_DEPLETED
+			return S.F_GATHER_BUSH_BRANCHES % [int(bush_info.remaining), int(bush_info.initial)]
 		"grass":
 			var grass_info: Dictionary = simulation.query_helper.targeted_grass_info(target)
 			if grass_info.is_empty():

@@ -23,6 +23,9 @@ const INSPECTOR_ROLL := &"editor_roll"
 const INSPECTOR_ROTATION := &"editor_rotation"
 const INSPECTOR_SCALE := &"editor_scale"
 const INSPECTOR_INITIAL_STATE := &"editor_initial_state"
+## Настройка кисти, а не свойство записи: сорок деревьев, поставленных подряд,
+## не должны быть сорока копиями одного (`map_fill_mode.md` §9.2.1).
+const INSPECTOR_SCATTER_VARY := &"editor_scatter_vary"
 const TRANSFORM_PROPERTIES: Array[StringName] = [INSPECTOR_CELL, INSPECTOR_CELL_X, INSPECTOR_CELL_Z, INSPECTOR_ELEVATION, INSPECTOR_OFFSET, INSPECTOR_PITCH, INSPECTOR_YAW, INSPECTOR_ROLL, INSPECTOR_ROTATION, INSPECTOR_SCALE]
 ## Действие «заменить выделенное на выбранный в палитре архетип».
 const OPTION_REPLACE := &"fill_replace"
@@ -41,6 +44,10 @@ var _brush_roll_degrees := 0.0
 var _brush_elevation_blocks := 0
 var _brush_scale := 1.0
 var _brush_offset := Vector3.ZERO
+## Разброс — состояние инструмента, поэтому он не попадает ни в документ, ни в
+## историю отмены: выключив его, автор не «отменяет» уже поставленные объекты.
+var _brush_vary := false
+var _vary_rng := RandomNumberGenerator.new()
 var _pending_reference_property: StringName = &""
 var _selected_id: StringName = &""
 var _additional_selected: Array[StringName] = []
@@ -69,6 +76,7 @@ func _init() -> void:
 	id = &"fill"
 	title = "Наполнение"
 	icon = "🪣"
+	_vary_rng.randomize()
 
 
 func configure(next_context: MapEditorContext) -> void:
@@ -450,11 +458,34 @@ func _place(cell: Vector2i, merge_key: StringName = &"") -> void:
 	record.pitch_degrees = _brush_pitch_degrees
 	record.roll_degrees = _brush_roll_degrees
 	record.scale = _brush_scale
+	_scatter_vary(record, EntityArchetypeCatalog.asset_of(archetype.id))
 	_warnings_by_entity[record.id] = _placement_warnings_for_cells(cells, archetype)
 	context.document.entities.entities.append(record)
 	_select(record.id, false)
 	_report_selected_warnings()
 	_commit(before, "размещение %s" % archetype.name, merge_key)
+
+
+## Разброс правит только то, о чём автор не высказался: значения, введённые в
+## кисти вручную, остаются точными. Иначе выставленный осенний цвет кроны исчезал
+## бы при первом же клике, и переключатель работал бы как «испортить настройки».
+##
+## Поворот и масштаб — исключение: они варьируются всегда, когда разброс включён,
+## потому что их «авторское значение» есть всегда (ноль и единица), и отличить
+## его от несказанного нельзя. Ради этого переключатель и включают.
+func _scatter_vary(record: MapEntityRecord, asset: WorldAssetDef) -> void:
+	if not _brush_vary or asset == null:
+		return
+	var drawn := asset.random_appearance(_vary_rng)
+	for key: Variant in drawn.keys():
+		if not record.appearance.has(key):
+			record.appearance[key] = drawn[key]
+	if asset.is_rotation_axis_allowed("y"):
+		record.yaw_degrees = _vary_rng.randf_range(0.0, 360.0)
+	if asset.scale_mode == WorldAssetDef.SCALE_FREE_UNIFORM and asset.allowed_scales.size() >= 2:
+		record.scale = asset.normalized_scale(
+			_vary_rng.randf_range(asset.allowed_scales[0], asset.allowed_scales[-1])
+		)
 
 
 func _erase_at(cell: Vector2i) -> bool:
@@ -1072,9 +1103,32 @@ func inspector_properties() -> Array[EntityPropertyDef]:
 			_initial_state_property(active_archetype),
 		]
 		brush_properties.append_array(active_archetype.property_schema)
-		brush_properties.append_array(_appearance_definitions(EntityArchetypeCatalog.asset_of(active_archetype.id)))
+		var brush_asset := EntityArchetypeCatalog.asset_of(active_archetype.id)
+		var scatter_property := _scatter_property(brush_asset)
+		if scatter_property != null:
+			brush_properties.append(scatter_property)
+		brush_properties.append_array(_appearance_definitions(brush_asset))
 		return brush_properties
 	return []
+
+
+## Переключатель показывается только тем ассетам, которым есть чем отличаться:
+## варьируемый контроль или свободный масштаб. Иначе он был бы кнопкой, которая
+## ничего не делает, и автор перестал бы ей верить.
+func _scatter_property(asset: WorldAssetDef) -> EntityPropertyDef:
+	if asset == null:
+		return null
+	var free_scale := asset.scale_mode == WorldAssetDef.SCALE_FREE_UNIFORM \
+		and asset.allowed_scales.size() >= 2
+	if not asset.has_varying_controls() and not free_scale:
+		return null
+	return EntityPropertyDef.from_dict({
+		"name": INSPECTOR_SCATTER_VARY,
+		"label": "Разброс вариаций",
+		"type": "bool",
+		"section": "appearance",
+		"default": false,
+	})
 
 
 func _initial_state_property(archetype: EntityArchetype) -> EntityPropertyDef:
@@ -1137,6 +1191,7 @@ func inspector_values() -> Dictionary:
 		brush_values[INSPECTOR_ROTATION] = Vector3(_brush_pitch_degrees, _brush_yaw_degrees, _brush_roll_degrees)
 		brush_values[INSPECTOR_SCALE] = _brush_scale
 		brush_values[INSPECTOR_INITIAL_STATE] = String(_brush_initial_state)
+		brush_values[INSPECTOR_SCATTER_VARY] = _brush_vary
 		for definition: EntityPropertyDef in _appearance_definitions(EntityArchetypeCatalog.asset_of(active_archetype.id)):
 			brush_values[definition.name] = _brush_appearance.get(String(definition.name).trim_prefix(APPEARANCE_PREFIX), definition.default)
 		return brush_values
@@ -1151,6 +1206,10 @@ func apply_inspector_value(property_name: StringName, value: Variant) -> bool:
 ## значению по умолчанию — отдельный шаг отмены, даже если он пришёл сразу после
 ## ввода в то же поле.
 func _apply_value(property_name: StringName, value: Variant, mergeable: bool) -> bool:
+	# Разброс принадлежит инструменту, а не записи, поэтому он обрабатывается до
+	# ветвления по выделению: иначе выделенный объект молча съедал бы переключение.
+	if property_name == INSPECTOR_SCATTER_VARY:
+		return _apply_brush_value(property_name, value)
 	var primary := context.document.entities.by_id(_selected_id)
 	if primary == null:
 		return _apply_brush_value(property_name, value)
@@ -1209,6 +1268,13 @@ func _apply_brush_value(property_name: StringName, value: Variant) -> bool:
 	var archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
 	if archetype == null:
 		return false
+	if property_name == INSPECTOR_SCATTER_VARY:
+		var next_vary := bool(value)
+		if _brush_vary == next_vary:
+			return false
+		_brush_vary = next_vary
+		notify_ui_changed()
+		return true
 	if String(property_name).begins_with(APPEARANCE_PREFIX):
 		var asset := EntityArchetypeCatalog.asset_of(archetype.id)
 		for definition: EntityPropertyDef in _appearance_definitions(asset):
@@ -1299,6 +1365,8 @@ func begin_reference_pick(property_name: StringName, reference_type: StringName)
 
 
 func reset_inspector_value(property_name: StringName) -> bool:
+	if property_name == INSPECTOR_SCATTER_VARY:
+		return _apply_brush_value(property_name, false)
 	var primary := context.document.entities.by_id(_selected_id)
 	if primary == null:
 		var archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)

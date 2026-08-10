@@ -1,7 +1,7 @@
 class_name TestAIHelpers
 extends RefCounted
 
-const GrassSourceRecord = preload("res://game/features/production/domain/grass_source_record.gd")
+const HarvestSourceRecord = preload("res://game/features/production/domain/harvest_source_record.gd")
 const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep_goal.gd")
 const ReturnHomeWhenIdleGoalScript = preload("res://game/features/decision/domain/goals/return_home_when_idle_goal.gd")
 const MealGoalScript = preload("res://game/features/decision/domain/goals/meal_goal.gd")
@@ -237,7 +237,7 @@ class FakeGatheringSimulation extends Node:
 		var cell := cell_from_position(position)
 		if not grass_sources.has(cell):
 			return 0
-		var source: GrassSourceRecord = grass_sources[cell]
+		var source: HarvestSourceRecord = grass_sources[cell]
 		if source.remaining <= 0:
 			return 0
 		consumed_count += 1

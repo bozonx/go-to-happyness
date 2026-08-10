@@ -9,7 +9,7 @@ extends RefCounted
 ## consumer; there is no dead Resource-directory fallback or second loose-file
 ## source for editors to interpret differently.
 
-const SCENE_DIR := "res://game/features/buildings/presentation/decor/scenes"
+const SCENE_DIR := "res://game/features/content/presentation/assets"
 
 const GROUPS: Dictionary = {
 	&"world": "Мир и природа",
@@ -435,27 +435,311 @@ static func _register_builtin_assets() -> void:
 	_register_natural_assets()
 
 
+## Vegetation, minerals and wildlife (design §3.2, `map_fill_mode.md`).
+##
+## Everything here shares one authoring idea: two copies of the same asset must be
+## able to look different without becoming two assets. Size and colour are
+## `vary`-marked controls, so the fill-mode brush can draw a forest that is not a
+## row of clones (§7.6), and a season or a depleted state is a `state_variants`
+## entry rather than a colour literal in whichever service happens to notice.
 static func _register_natural_assets() -> void:
-	for data in [
-		[&"tree", "Дерево", &"vegetation", "res://game/features/world/presentation/tree.tscn", Vector3(2.0, 5.0, 2.0), true],
-		[&"grass_source", "Трава", &"vegetation", "res://game/features/world/presentation/grass_source.tscn", Vector3(1.2, 0.6, 1.2), false],
-		[&"forage_source", "Дикая пища", &"vegetation", "res://game/features/world/presentation/forage_source.tscn", Vector3(0.5, 0.5, 0.5), false],
-		[&"rabbit", "Кролик", &"creatures", "res://game/features/world/presentation/rabbit.tscn", Vector3(0.5, 0.4, 0.5), false],
-		# Fireflies are a non-physical ambient effect (a MultiMesh of glowing
-		# points), so neither a collider nor navigation blocking applies; the
-		# weather controller reaches each instance through `WorldSetup.fireflies`.
-		[&"fireflies", "Светлячки", &"ambient", "res://game/features/world/presentation/fireflies_effect.tscn", Vector3(4.0, 3.0, 4.0), false],
-	]:
-		var asset := WorldAssetDef.new(data[0], data[1], data[2], &"world", data[3], Vector3i.ONE, 1.0, [], data[4])
-		asset.scope = WorldAssetDef.SCOPE_MAP if data[0] in [&"rabbit", &"fireflies"] else WorldAssetDef.SCOPE_BOTH
-		asset.rotation_axes = ["y"]
-		# Only a scene that actually authors a physical body may claim scene
-		# collision. Grass/forage interaction selectors are Area3D concerns added by
-		# their owning module, and the current rabbit visual is not a physics actor.
-		asset.collision_policy = WorldAssetDef.COLLISION_SCENE if data[0] == &"tree" else WorldAssetDef.COLLISION_NONE
-		asset.blocking_navigation = bool(data[5])
-		asset.placement = AssetPlacementPolicy.of_surfaces([AssetPlacementPolicy.SURFACE_GROUND, AssetPlacementPolicy.SURFACE_ICE], SlopeCatalog.CLASS_MODERATE)
-		_register(asset)
+	var tree := _natural(
+		&"tree", "Дерево", &"vegetation", "tree.tscn", Vector3(2.9, 5.3, 2.6),
+		"Лиственное дерево с шапкой из нескольких крон. Даёт древесину и ветки.",
+		_foliage_controls(&"Crown", &"Wood", Color("3f7a3a"), Color("5c4432"))
+	)
+	tree.tags = [&"vegetation", &"tree", &"wood", &"forest"]
+	tree.collision_policy = WorldAssetDef.COLLISION_SCENE
+	tree.blocking_navigation = true
+	tree.supported_capabilities = [&"wood_source", &"branch_source"]
+	tree.state_variants = _foliage_states(Color("3f7a3a"), Color("2f5c34"))
+	_scalable(tree, 0.8, 1.3)
+
+	var conifer := _natural(
+		&"conifer_tree", "Хвойное дерево", &"vegetation", "conifer_tree.tscn",
+		Vector3(2.6, 4.7, 2.6),
+		"Ель с ярусами лап. Тот же источник древесины, другой силуэт: север, горы, тайга.",
+		_foliage_controls(&"Crown", &"Wood", Color("295a3e"), Color("4c3628"))
+	)
+	conifer.tags = [&"vegetation", &"tree", &"wood", &"forest", &"boreal"]
+	conifer.collision_policy = WorldAssetDef.COLLISION_SCENE
+	conifer.blocking_navigation = true
+	conifer.supported_capabilities = [&"wood_source", &"branch_source"]
+	# A spruce keeps its needles: no autumn, and winter is snow rather than a
+	# colour change. Declaring only the variants the plant really has is what
+	# stops a seasonal pass from painting evergreens orange.
+	conifer.state_variants = {
+		"summer": {"crown_color": "295a3e"},
+		"withered": {"crown_color": "6b5a3a"},
+		"winter": {"crown_color": "224834", "has_snow": true},
+	}
+	_scalable(conifer, 0.8, 1.35)
+
+	var bush_controls := _foliage_controls(
+		&"Foliage", &"Twigs", Color("4d8042"), Color("66513c"), ""
+	)
+	bush_controls.append({
+		"name": "has_twigs", "label": "Торчащие ветки", "type": "bool",
+		"default": true, "vary": 0.8,
+		"bind": [{"node": "Twigs", "prop": "visible"}],
+	})
+	var bush := _natural(
+		&"bush", "Куст", &"vegetation", "bush.tscn", Vector3(1.2, 0.95, 1.2),
+		"Низкий кустарник с торчащими ветками. Даёт только ветки, древесины в нём нет.",
+		bush_controls
+	)
+	bush.tags = [&"vegetation", &"bush", &"branches"]
+	bush.supported_capabilities = [&"branch_source"]
+	bush.state_variants = _foliage_states(Color("4d8042"), Color("3d6636"), false)
+	_scalable(bush, 0.7, 1.4)
+
+	var grass := _natural(
+		&"grass_source", "Трава", &"vegetation", "grass_source.tscn",
+		Vector3(0.6, 0.75, 0.6),
+		"Пучок травы с колосками. Сырьё для подстилок, верёвок и кровли.",
+		[
+			{
+				"name": "blade_color", "label": "Цвет травы", "type": "color",
+				"default": Color("65a34d"), "vary": 0.55,
+				"bind": [{"node": "Blades", "prop": WorldAssetDef.PROP_ALBEDO}],
+			},
+			{
+				"name": "tuft_size", "label": "Размер пучка", "type": "float",
+				"min": 0.6, "max": 1.4, "step": 0.05, "default": 1.0, "vary": 0.25,
+				"bind": [{"node": "Blades", "prop": WorldAssetDef.PROP_SCALE}],
+			},
+			{
+				"name": "has_seed_heads", "label": "Колоски", "type": "bool",
+				"default": true, "vary": 0.6,
+				"bind": [{"node": "SeedHeads", "prop": "visible"}],
+			},
+		]
+	)
+	grass.tags = [&"vegetation", &"grass", &"harvest"]
+	grass.supported_capabilities = [&"grass_source"]
+	grass.state_variants = {
+		"summer": {"blade_color": "65a34d", "has_seed_heads": true},
+		"autumn": {"blade_color": "b39a52", "has_seed_heads": true},
+		"withered": {"blade_color": "8a7a4a", "has_seed_heads": false},
+	}
+	_scalable(grass, 0.7, 1.4)
+
+	var forage := _natural(
+		&"forage_source", "Дикая пища", &"vegetation", "forage_source.tscn",
+		Vector3(0.7, 0.45, 0.7),
+		"Съедобное растение с ягодами. Один сбор — и его нет до конца сессии.",
+		[
+			{
+				"name": "berry_color", "label": "Цвет ягод", "type": "color",
+				"default": Color("c43c3d"), "vary": 0.45,
+				"bind": [{"node": "Berries", "prop": WorldAssetDef.PROP_ALBEDO}],
+			},
+			{
+				"name": "leaf_color", "label": "Цвет листвы", "type": "color",
+				"default": Color("5c8b43"), "vary": 0.4,
+				"bind": [{"node": "Foliage", "prop": WorldAssetDef.PROP_ALBEDO}],
+			},
+			{
+				"name": "has_berries", "label": "Ягоды", "type": "bool", "default": true,
+				"bind": [{"node": "Berries", "prop": "visible"}],
+			},
+		]
+	)
+	forage.tags = [&"vegetation", &"food", &"harvest"]
+	forage.supported_capabilities = [&"forage_source"]
+	forage.state_variants = {
+		"ripe": {"has_berries": true},
+		"picked": {"has_berries": false},
+	}
+	_scalable(forage, 0.8, 1.3)
+
+	var boulder := _natural(
+		&"boulder", "Валун", &"rocks_minerals", "boulder.tscn", Vector3(1.8, 0.9, 1.6),
+		"Гранёный камень с осколками у основания. Перекрывает проход.",
+		[
+			{
+				"name": "rock_color", "label": "Цвет камня", "type": "color",
+				"default": Color("7a7e83"), "vary": 0.4,
+				"bind": [{"node": "Rock", "prop": WorldAssetDef.PROP_ALBEDO}],
+			},
+			{
+				"name": "rock_size", "label": "Размер", "type": "float",
+				"min": 0.6, "max": 1.5, "step": 0.05, "default": 1.0, "vary": 0.3,
+				"bind": [{"node": "Rock", "prop": WorldAssetDef.PROP_SCALE}],
+			},
+			{
+				"name": "has_moss", "label": "Мох", "type": "bool",
+				"default": false, "vary": 0.35,
+				"bind": [{"node": "Moss", "prop": "visible"}],
+			},
+		]
+	)
+	boulder.tags = [&"rock", &"stone", &"obstacle"]
+	boulder.collision_policy = WorldAssetDef.COLLISION_SCENE
+	boulder.blocking_navigation = true
+	# A rock is the one thing that may sit in a stream bed or on a beach, so its
+	# surfaces are wider than the vegetation default.
+	boulder.placement = AssetPlacementPolicy.of_surfaces(
+		[
+			AssetPlacementPolicy.SURFACE_GROUND,
+			AssetPlacementPolicy.SURFACE_SHALLOW,
+			AssetPlacementPolicy.SURFACE_ICE,
+		],
+		SlopeCatalog.CLASS_STEEP,
+		AssetPlacementPolicy.SUBMERGED_ALLOW
+	)
+	_scalable(boulder, 0.6, 1.8)
+
+	var ore := _natural(
+		&"ore_deposit", "Залежь руды", &"rocks_minerals", "ore_deposit.tscn",
+		Vector3(1.8, 0.7, 1.5),
+		"Выход породы с жилами. Цвет жилы задаёт, что это за руда.",
+		[
+			{
+				"name": "ore_color", "label": "Цвет жилы", "type": "color",
+				"default": Color("d4963f"), "vary": 0.25,
+				"bind": [{"node": "Veins", "prop": WorldAssetDef.PROP_ALBEDO}],
+			},
+			{
+				"name": "rock_color", "label": "Цвет породы", "type": "color",
+				"default": Color("5c5e65"), "vary": 0.3,
+				"bind": [{"node": "Rock", "prop": WorldAssetDef.PROP_ALBEDO}],
+			},
+		]
+	)
+	ore.tags = [&"rock", &"ore", &"resource"]
+	ore.collision_policy = WorldAssetDef.COLLISION_SCENE
+	ore.blocking_navigation = true
+	# One asset, every ore: the vein colour is authored, so adding "оловянная
+	# руда" is a pack archetype rather than a scene and a commit here.
+	ore.state_variants = {
+		"copper": {"ore_color": "d4963f"},
+		"iron": {"ore_color": "9a5f4a"},
+		"coal": {"ore_color": "2e2c2b"},
+		"depleted": {"ore_color": "6b6b68"},
+	}
+	_scalable(ore, 0.7, 1.4)
+
+	var rabbit := _natural(
+		&"rabbit", "Кролик", &"creatures", "rabbit.tscn", Vector3(0.55, 0.45, 0.35),
+		"Дикий кролик: мясо и шкура для того, кто его догонит.",
+		[
+			{
+				"name": "fur_color", "label": "Цвет шерсти", "type": "color",
+				"default": Color("afa493"), "vary": 0.4,
+				"bind": [{"node": "Fur", "prop": WorldAssetDef.PROP_ALBEDO}],
+			},
+		]
+	)
+	rabbit.tags = [&"creature", &"food", &"hunting"]
+	rabbit.scope = WorldAssetDef.SCOPE_MAP
+
+	# Fireflies are a non-physical ambient effect (a MultiMesh of glowing points),
+	# so neither a collider nor navigation blocking applies; the weather controller
+	# reaches each instance through `WorldSetup.fireflies`. The scene stays with the
+	# weather feature that drives it — the catalog references assets, it does not
+	# have to own every file.
+	var fireflies := WorldAssetDef.new(
+		&"fireflies", "Светлячки", &"ambient", &"world",
+		"res://game/features/world/presentation/fireflies_effect.tscn",
+		Vector3i.ONE, 1.0, [], Vector3(4.0, 3.0, 4.0),
+		"Рой светлячков; количество, радиус и высота задаются свойствами сущности."
+	)
+	fireflies.tags = [&"ambient", &"light", &"night"]
+	fireflies.rotation_axes = ["y"]
+	fireflies.scope = WorldAssetDef.SCOPE_MAP
+	fireflies.placement = AssetPlacementPolicy.of_surfaces(
+		[AssetPlacementPolicy.SURFACE_GROUND, AssetPlacementPolicy.SURFACE_ICE],
+		SlopeCatalog.CLASS_CLIFF
+	)
+	_register(fireflies)
+
+
+## Colour and size knobs shared by everything that has foliage over a woody part.
+## `crown_size` is a control rather than the record's transform scale on purpose:
+## the object's own footprint must not grow with its crown, or a wide tree would
+## start refusing the cell it fits in.
+##
+## `snow_node` is empty for plants that have no snow cap authored. A control whose
+## bind target does not exist would warn on every instantiation, and the warning
+## would be right: the declaration, not the scene, would be the lie.
+static func _foliage_controls(
+	foliage_node: StringName,
+	wood_node: StringName,
+	foliage_color: Color,
+	wood_color: Color,
+	snow_node: String = "Snow"
+) -> Array[Dictionary]:
+	var controls: Array[Dictionary] = [
+		{
+			"name": "crown_color", "label": "Цвет листвы", "type": "color",
+			"default": foliage_color, "vary": 0.55,
+			"bind": [{"node": String(foliage_node), "prop": WorldAssetDef.PROP_ALBEDO}],
+		},
+		{
+			"name": "trunk_color", "label": "Цвет древесины", "type": "color",
+			"default": wood_color, "vary": 0.3,
+			"bind": [{"node": String(wood_node), "prop": WorldAssetDef.PROP_ALBEDO}],
+		},
+		{
+			"name": "crown_size", "label": "Размер кроны", "type": "float",
+			"min": 0.7, "max": 1.35, "step": 0.05, "default": 1.0, "vary": 0.2,
+			"bind": [{"node": String(foliage_node), "prop": WorldAssetDef.PROP_SCALE}],
+		},
+	]
+	if not snow_node.is_empty():
+		controls.append({
+			"name": "has_snow", "label": "Снег", "type": "bool", "default": false,
+			"bind": [{"node": snow_node, "prop": "visible"}],
+		})
+	return controls
+
+
+static func _foliage_states(summer: Color, winter: Color, with_snow: bool = true) -> Dictionary:
+	var states := {
+		"summer": {"crown_color": summer.to_html(false)},
+		"autumn": {"crown_color": "c07a2c"},
+		"withered": {"crown_color": "6b4c2a"},
+		"winter": {"crown_color": winter.to_html(false)},
+	}
+	if with_snow:
+		for state_id: String in states:
+			(states[state_id] as Dictionary)["has_snow"] = state_id == "winter"
+	return states
+
+
+static func _natural(
+	id: StringName,
+	name: String,
+	category: StringName,
+	scene_file: String,
+	size_m: Vector3,
+	description: String,
+	controls: Array[Dictionary]
+) -> WorldAssetDef:
+	var asset := WorldAssetDef.new(
+		id, name, category, &"world", SCENE_DIR.path_join(scene_file),
+		Vector3i.ONE, 1.0, controls, size_m, description
+	)
+	# Yaw only: a tree tilted onto its side is a bug, not a variation. The ground
+	# tilt these objects do take comes from the placement policy's normal
+	# alignment, which the author does not hand-author per instance.
+	asset.rotation_axes = ["y"]
+	asset.collision_policy = WorldAssetDef.COLLISION_NONE
+	asset.placement = AssetPlacementPolicy.of_surfaces(
+		[AssetPlacementPolicy.SURFACE_GROUND, AssetPlacementPolicy.SURFACE_ICE],
+		SlopeCatalog.CLASS_MODERATE
+	)
+	_register(asset)
+	return asset
+
+
+## Free-scale range for natural objects. Two firs of identical height read as
+## copy-paste, and clamping the range is what keeps "variation" from turning into
+## a bonsai next to a giant.
+static func _scalable(asset: WorldAssetDef, minimum: float, maximum: float) -> void:
+	asset.scale_mode = WorldAssetDef.SCALE_FREE_UNIFORM
+	asset.allowed_scales = [minimum, maximum]
 
 
 static func _register(asset: WorldAssetDef) -> void:

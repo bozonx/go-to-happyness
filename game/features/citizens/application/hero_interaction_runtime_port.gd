@@ -13,6 +13,7 @@ var farm_positions: Array[Vector3] = []
 var water_source_positions_getter: Callable
 var grass_sources: Dictionary = {}
 var forage_sources: Dictionary = {}
+var bush_sources: Dictionary = {}
 var rabbit_sources: Dictionary = {}
 var cell_from_position: Callable
 var consume_grass_source: Callable

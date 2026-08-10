@@ -371,6 +371,17 @@ func start_interaction(all: bool) -> void:
 			return
 		"citizen", "building":
 			return
+		"bush":
+			# Куст даёт только ветки, в любую эру: рубить в нём нечего.
+			if not simulation.hero_pocket_service.pocket_has_room():
+				simulation.update_interface(S.POCKET_FULL_SHORT)
+				return
+			interaction_action = "harvesting"
+			interaction_resource = ResourceIds.BRANCHES
+			interaction_time = 0.0
+			interaction_start_cell = simulation.cell_from_position(player_citizen.global_position)
+			interaction_repeat_all = all
+			return
 		"tree":
 			var gathering_branches: bool = int(simulation.settlement.era) < int(SettlementState.Era.WOOD)
 			if not simulation.hero_pocket_service.pocket_has_room():

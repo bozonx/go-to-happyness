@@ -3,7 +3,7 @@ class_name GatheringFactCollector
 extends RefCounted
 
 const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
-const GrassSourceRecord = preload("res://game/features/production/domain/grass_source_record.gd")
+const HarvestSourceRecord = preload("res://game/features/production/domain/harvest_source_record.gd")
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 ## Collects permanent gathering, daily gathering, and daily cleaning facts for
@@ -143,9 +143,25 @@ func _daily_gathering_targets_for(ctx: FacadeContext, actor: Citizen, role: Stri
 						&"access": access,
 						&"direct_distance": actor.global_position.distance_squared_to(access),
 					})
+			# A bush has no trunk to strip and no hand limit: its branches are simply
+			# there until they are gone. That is why it is a separate stand rather
+			# than a tree with `wood = 0`.
+			for bush_cell in ctx.simulation.bush_sources.keys():
+				var bush: HarvestSourceRecord = ctx.simulation.bush_sources.get(bush_cell)
+				if bush == null or bush.is_spent() or not is_instance_valid(bush.node):
+					continue
+				var bush_access := ctx.helpers.resource_access_position(bush.node.global_position)
+				if bush_access != Vector3.INF:
+					ctx.helpers.insert_nearby_gathering_candidate(nearby, {
+						&"id": StringName("bush:%d:%d" % [bush_cell.x, bush_cell.y]),
+						&"resource_type": ResourceIds.BRANCHES,
+						&"position": bush.node.global_position,
+						&"access": bush_access,
+						&"direct_distance": actor.global_position.distance_squared_to(bush_access),
+					})
 		"gather_grass":
 			for grass_cell in ctx.simulation.grass_sources.keys():
-				var grass_source: GrassSourceRecord = ctx.simulation.grass_sources.get(grass_cell)
+				var grass_source: HarvestSourceRecord = ctx.simulation.grass_sources.get(grass_cell)
 				if grass_source != null and grass_source.remaining > 0 and is_instance_valid(grass_source.node):
 					var access := ctx.helpers.resource_access_position(grass_source.node.global_position)
 					if access != Vector3.INF:
