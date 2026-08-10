@@ -375,8 +375,8 @@ func _on_create_requested(id: StringName, display_name: String, board_cells: int
 
 
 func _on_generate_requested(id: StringName, display_name: String, board_cells: int,
-		recipe_path: String, seed_value: int) -> void:
-	var result := generate_map(id, display_name, recipe_path, seed_value, board_cells)
+		recipe: MapRecipe, seed_value: int) -> void:
+	var result := generate_map_from(id, display_name, recipe, seed_value, board_cells)
 	_dialogs.open_generation_report(result, result.recipe)
 
 
@@ -407,10 +407,17 @@ func _on_regenerate_pressed() -> void:
 ## the best attempt and decide, which is exactly what the laboratory does.
 func generate_map(id: StringName, display_name: String, recipe_path: String, seed_value: int,
 		board_cells := MapMeta.DEFAULT_BOARD_CELLS) -> GenerationResult:
-	var next := MapDocument.create(id, display_name, board_cells)
-	var recipe := MapRecipeLibrary.load_for_board(recipe_path, next.meta.board_cells)
-	_replace_document(next, "")
-	return generate_into_current(recipe, seed_value)
+	return generate_map_from(
+		id, display_name, MapRecipeLibrary.load_for_board(recipe_path, board_cells),
+		seed_value, board_cells)
+
+
+## The same, from a recipe that may not have a file: the editor's tuning dialog
+## builds one out of live controls, and it is as valid an input as a preset.
+func generate_map_from(id: StringName, display_name: String, recipe: MapRecipe, seed_value: int,
+		board_cells := MapMeta.DEFAULT_BOARD_CELLS) -> GenerationResult:
+	_replace_document(MapDocument.create(id, display_name, board_cells), "")
+	return generate_into_current(MapRecipeLibrary.with_board(recipe, board_cells), seed_value)
 
 
 ## True while another seed of the same recipe would cost the author nothing.

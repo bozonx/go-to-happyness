@@ -53,6 +53,7 @@ func _run() -> void:
 	_test_new_map_is_unnamed_until_asked()
 	_test_save_writes_back_to_the_same_file(editor)
 	_test_read_only_source_detaches(editor)
+	_test_recipe_tuning_dialog(editor)
 	_test_generation_creates_a_map_that_stays_re_rollable(editor)
 
 	editor.queue_free()
@@ -1319,8 +1320,9 @@ func _test_generation_creates_a_map_that_stays_re_rollable(editor: Node) -> void
 	assert(not recipes.is_empty(), "the engine ships recipes to generate from")
 	var dialogs: MapEditorDialogs = editor._dialogs
 
+	var recipe := MapRecipeLibrary.load_for_board(recipes[0]["path"], MapMeta.PRESET_ARENA)
 	dialogs.generate_requested.emit(
-		&"generated_map", "Сгенерированная", MapMeta.PRESET_ARENA, recipes[0]["path"], 4242)
+		&"generated_map", "Сгенерированная", MapMeta.PRESET_ARENA, recipe, 4242)
 	assert(editor.document.meta.id == &"generated_map", "the generated document took the id")
 	assert(editor.document.board_cells() == MapMeta.PRESET_ARENA,
 		"and the board size the dialog chose, not the default: %d" % editor.document.board_cells())
@@ -1352,6 +1354,54 @@ func _test_generation_creates_a_map_that_stays_re_rollable(editor: Node) -> void
 	editor._refresh_panels()
 	assert(editor._regenerate_button.disabled, "the button went grey with it")
 	print("  generation from the new dialog ok")
+
+
+## The tuning dialog: the laboratory's own panel, embedded, with the rows the
+## editor does not own hidden — and the map's board size winning over the recipe's.
+func _test_recipe_tuning_dialog(editor: Node) -> void:
+	var dialogs: MapEditorDialogs = editor._dialogs
+	dialogs.open_new_dialog()
+	dialogs._new_generate_check.button_pressed = true
+	MapEditorDialogs._select_metadata(dialogs._new_board_option, MapMeta.PRESET_ARENA)
+
+	# The generation section must not push the dialog's own buttons off the bottom:
+	# the body scrolls instead of growing. Without this the author could not reach
+	# «Создать» at all once the section was open.
+	assert(dialogs._new_generate_box.get_parent().get_parent() is ScrollContainer,
+		"the fields live inside a scroll, so the section cannot grow the dialog")
+	var open_height := dialogs._new_dialog.get_contents_minimum_size().y
+	dialogs._new_generate_check.button_pressed = false
+	var closed_height := dialogs._new_dialog.get_contents_minimum_size().y
+	dialogs._new_generate_check.button_pressed = true
+	assert(is_equal_approx(open_height, closed_height),
+		"opening the section must not make the dialog taller: %.0f vs %.0f" % [open_height, closed_height])
+
+	var panel = dialogs._recipe_panel
+	for hidden: String in ["Row2", "Row3", "Row5", "Row7"]:
+		var row := panel.get_node("Margin/Scroll/Rows/%s" % hidden) as Control
+		assert(not row.visible, "%s is laboratory chrome and stays out of the dialog" % hidden)
+
+	dialogs._open_recipe_tuning()
+	assert(panel.board_size() == MapMeta.PRESET_ARENA,
+		"the panel opened on the map's board, not the recipe's: %d" % panel.board_size())
+
+	# Turn one knob the way the author would, then apply.
+	var raised := clampf(panel.get_node("%LandFraction").value + 0.05, 0.05, 0.95)
+	panel.get_node("%LandFraction").value = raised
+	dialogs._on_tuning_confirmed()
+	assert(dialogs._tuned_recipe != null, "the tuned recipe survived the dialog")
+	assert(is_equal_approx(dialogs._tuned_recipe.land_fraction, raised), "and carries the change")
+	assert(dialogs._current_recipe().board_size == MapMeta.PRESET_ARENA,
+		"a tuned recipe is still fitted to the map's board")
+
+	# Picking another preset means the knobs describe a recipe that is gone.
+	if dialogs._recipe_paths.size() > 1:
+		dialogs._new_recipe_option.selected = 1
+		dialogs._new_recipe_option.item_selected.emit(1)
+		assert(dialogs._tuned_recipe == null, "changing preset forgets the tuning")
+	dialogs._recipe_tune_dialog.hide()
+	dialogs._new_dialog.hide()
+	print("  recipe tuning ok")
 
 
 ## A cheap hash of the whole board, which is all "another seed is another board"

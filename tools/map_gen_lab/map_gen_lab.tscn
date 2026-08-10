@@ -4,7 +4,7 @@
 [ext_resource type="Script" path="res://game/features/world/presentation/terrain/grid_terrain_world.gd" id="2_terrain"]
 [ext_resource type="Script" path="res://game/features/routing/presentation/nav_terrain_overlay.gd" id="3_nav_overlay"]
 [ext_resource type="Script" path="res://game/features/world/presentation/water/water_world.gd" id="4_water"]
-[ext_resource type="PackedScene" path="res://tools/map_gen_lab/recipe_panel.tscn" id="5_recipe"]
+[ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/recipe_panel.tscn" id="5_recipe"]
 [ext_resource type="PackedScene" path="res://tools/map_gen_lab/metrics_panel.tscn" id="6_metrics"]
 
 [sub_resource type="Environment" id="Environment_lab"]

@@ -8,6 +8,13 @@ extends PanelContainer
 ## (AGENTS.md "Static editor UI is authored as .tscn"); this script only binds it
 ## to `MapRecipe` in both directions.
 ##
+## It has two owners: the laboratory, where it is the whole screen and drives
+## generation itself, and the map editor's tuning dialog, where the same controls
+## sit inside a modal and the dialog decides when to generate. `set_embedded` is
+## the difference between the two — see it for what the editor takes away and why.
+## It lives under `game/` rather than beside the laboratory because the shipped
+## editor needs it and `tools/` is excluded from export.
+##
 ## It reads and writes a `MapRecipe` rather than a dictionary on purpose: the
 ## validation and the shape presets of §3.3 are the recipe's own, so a panel that
 ## built raw JSON would be a second place where "an archipelago is not 80 % land"
@@ -79,6 +86,33 @@ func _ready() -> void:
 	%GenerateButton.pressed.connect(func() -> void: generate_requested.emit())
 	%SaveButton.pressed.connect(func() -> void: save_requested.emit())
 	%PresetPicker.item_selected.connect(_on_preset_selected)
+
+
+## Strips the rows the laboratory owns and the map editor does not.
+##
+## Four of them, and each for a different reason. The preset picker and the seed
+## controls are the dialog's own — they sit in «Новая карта» beside the id, where
+## the author already chose them, and a second copy that disagreed would be a
+## second answer to the same question. Generate and Save belong to a screen whose
+## whole job is generating; inside a modal the OK button is what runs. The board
+## size is not a recipe decision at all in the editor: the map's size is chosen
+## once, at creation (`map_editor.md` §6.2), and the recipe gives way to it.
+##
+## The controls are hidden, not removed: `build_recipe` still reads the board size
+## out of one of them, and the dialog sets it before opening.
+func set_embedded(embedded: bool) -> void:
+	for row: String in ["Section1", "Row2", "Row3", "Row4", "Row5", "Row7"]:
+		var node := %Shape.get_parent().get_parent().get_node_or_null(NodePath(row)) as Control
+		if node != null:
+			node.visible = not embedded
+
+
+func board_size() -> int:
+	return int(%BoardSize.value)
+
+
+func show_board_size(cells: int) -> void:
+	%BoardSize.value = cells
 
 
 func set_presets(paths: Array[String]) -> void:

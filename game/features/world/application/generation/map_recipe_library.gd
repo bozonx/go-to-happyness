@@ -43,7 +43,16 @@ static func load_for_board(path: String, board_cells: int) -> MapRecipe:
 	var source := MapRecipe.from_json_path(path)
 	if not source.errors.is_empty() and source.board_size != board_cells:
 		return source
-	var dictionary := source.to_dictionary()
+	return with_board(source, board_cells)
+
+
+## The same adjustment for a recipe that never came from a file — the one the
+## editor's tuning dialog builds out of live controls. The board size is the map's
+## answer, not the recipe's, wherever the recipe was written.
+static func with_board(recipe: MapRecipe, board_cells: int) -> MapRecipe:
+	if recipe == null or recipe.board_size == board_cells:
+		return recipe
+	var dictionary := recipe.to_dictionary()
 	(dictionary["board"] as Dictionary)["size"] = board_cells
 	return MapRecipe.from_dictionary(dictionary)
 

@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://game/features/world/presentation/editor/ui/map_editor_dialogs.gd" id="1_dialogs"]
+[ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/recipe_panel.tscn" id="2_recipe"]
 
 [node name="MapEditorDialogs" type="Control"]
 layout_mode = 3
@@ -14,7 +15,7 @@ script = ExtResource("1_dialogs")
 
 [node name="NewDialog" type="ConfirmationDialog" parent="."]
 title = "Новая карта"
-size = Vector2i(460, 380)
+size = Vector2i(460, 420)
 ok_button_text = "Создать"
 cancel_button_text = "Отмена"
 
@@ -29,73 +30,78 @@ offset_bottom = -46.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="VBox" type="VBoxContainer" parent="NewDialog/Body"]
+[node name="Scroll" type="ScrollContainer" parent="NewDialog/Body"]
 layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="VBox" type="VBoxContainer" parent="NewDialog/Body/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_constants/separation = 4
 
-[node name="IdLbl" type="Label" parent="NewDialog/Body/VBox"]
+[node name="IdLbl" type="Label" parent="NewDialog/Body/Scroll/VBox"]
 layout_mode = 2
 text = "ID карты (латиница, цифры, «_», «-»):"
 
-[node name="NewIdEdit" type="LineEdit" parent="NewDialog/Body/VBox"]
+[node name="NewIdEdit" type="LineEdit" parent="NewDialog/Body/Scroll/VBox"]
 unique_name_in_owner = true
 layout_mode = 2
 placeholder_text = "my_map"
 
-[node name="NameLbl" type="Label" parent="NewDialog/Body/VBox"]
+[node name="NameLbl" type="Label" parent="NewDialog/Body/Scroll/VBox"]
 layout_mode = 2
 text = "Название:"
 
-[node name="NewNameEdit" type="LineEdit" parent="NewDialog/Body/VBox"]
+[node name="NewNameEdit" type="LineEdit" parent="NewDialog/Body/Scroll/VBox"]
 unique_name_in_owner = true
 layout_mode = 2
 placeholder_text = "Новая карта"
 
-[node name="BoardLbl" type="Label" parent="NewDialog/Body/VBox"]
+[node name="BoardLbl" type="Label" parent="NewDialog/Body/Scroll/VBox"]
 layout_mode = 2
 text = "Размер доски (потом не меняется):"
 
-[node name="NewBoardOption" type="OptionButton" parent="NewDialog/Body/VBox"]
+[node name="NewBoardOption" type="OptionButton" parent="NewDialog/Body/Scroll/VBox"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="GenSep" type="HSeparator" parent="NewDialog/Body/VBox"]
+[node name="GenSep" type="HSeparator" parent="NewDialog/Body/Scroll/VBox"]
 layout_mode = 2
 
-[node name="NewGenerateCheck" type="CheckBox" parent="NewDialog/Body/VBox"]
+[node name="NewGenerateCheck" type="CheckBox" parent="NewDialog/Body/Scroll/VBox"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Сгенерировать ландшафт"
 
-[node name="NewGenerateBox" type="VBoxContainer" parent="NewDialog/Body/VBox"]
+[node name="NewGenerateBox" type="VBoxContainer" parent="NewDialog/Body/Scroll/VBox"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="RecipeLbl" type="Label" parent="NewDialog/Body/VBox/NewGenerateBox"]
+[node name="RecipeLbl" type="Label" parent="NewDialog/Body/Scroll/VBox/NewGenerateBox"]
 layout_mode = 2
 text = "Рецепт:"
 
-[node name="NewRecipeOption" type="OptionButton" parent="NewDialog/Body/VBox/NewGenerateBox"]
+[node name="NewRecipeOption" type="OptionButton" parent="NewDialog/Body/Scroll/VBox/NewGenerateBox"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="SeedLbl" type="Label" parent="NewDialog/Body/VBox/NewGenerateBox"]
+[node name="SeedLbl" type="Label" parent="NewDialog/Body/Scroll/VBox/NewGenerateBox"]
 layout_mode = 2
 text = "Seed:"
 
-[node name="SeedRow" type="HBoxContainer" parent="NewDialog/Body/VBox/NewGenerateBox"]
+[node name="SeedRow" type="HBoxContainer" parent="NewDialog/Body/Scroll/VBox/NewGenerateBox"]
 layout_mode = 2
 
-[node name="NewSeedSpin" type="SpinBox" parent="NewDialog/Body/VBox/NewGenerateBox/SeedRow"]
+[node name="NewSeedSpin" type="SpinBox" parent="NewDialog/Body/Scroll/VBox/NewGenerateBox/SeedRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 max_value = 2.14748365e+09
 rounded = true
 
-[node name="NewSeedRollButton" type="Button" parent="NewDialog/Body/VBox/NewGenerateBox/SeedRow"]
+[node name="NewSeedRollButton" type="Button" parent="NewDialog/Body/Scroll/VBox/NewGenerateBox/SeedRow"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(38, 0)
 layout_mode = 2
@@ -103,12 +109,49 @@ focus_mode = 0
 text = "🎲"
 tooltip_text = "Случайный seed"
 
-[node name="NewRecipeHint" type="Label" parent="NewDialog/Body/VBox/NewGenerateBox"]
+[node name="NewTuneButton" type="Button" parent="NewDialog/Body/Scroll/VBox/NewGenerateBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Тонкая настройка рецепта…"
+
+[node name="NewRecipeHint" type="Label" parent="NewDialog/Body/Scroll/VBox/NewGenerateBox"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.78, 0.9, 1)
 autowrap_mode = 3
-text = "Рецепт подгоняется под выбранный размер доски. Тонкая настройка — в лаборатории генерации; сохранённые там рецепты появляются в этом списке."
+text = "Рецепт подгоняется под выбранный размер доски. Рецепты, сохранённые в лаборатории генерации, появляются в этом списке сами."
+
+[node name="RecipeTuneDialog" type="ConfirmationDialog" parent="."]
+title = "Тонкая настройка рецепта"
+size = Vector2i(520, 640)
+ok_button_text = "Применить"
+cancel_button_text = "Отмена"
+
+[node name="Body" type="MarginContainer" parent="RecipeTuneDialog"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -46.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="RecipeTuneDialog/Body"]
+layout_mode = 2
+
+[node name="TuneErrorLabel" type="Label" parent="RecipeTuneDialog/Body/VBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.45, 0.42, 1)
+autowrap_mode = 3
+
+[node name="RecipePanel" parent="RecipeTuneDialog/Body/VBox" instance=ExtResource("2_recipe")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
 
 [node name="GenerationReportDialog" type="AcceptDialog" parent="."]
 title = "Отчёт генерации"
