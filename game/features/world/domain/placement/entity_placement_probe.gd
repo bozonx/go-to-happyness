@@ -123,3 +123,39 @@ static func surface_offset(
 	if policy != null:
 		offset += policy.vertical_offset
 	return offset
+
+
+static func aligned_basis(
+	terrain: TerrainGrid,
+	position: Vector3,
+	yaw_degrees: float,
+	policy: AssetPlacementPolicy,
+	scale := 1.0,
+) -> Basis:
+	var up := surface_normal(terrain, position, policy)
+	var basis := Basis(Vector3.UP, deg_to_rad(yaw_degrees))
+	if not up.is_equal_approx(Vector3.UP):
+		basis = Basis(Quaternion(Vector3.UP, up)) * basis
+	return basis.scaled(Vector3.ONE * scale)
+
+
+static func surface_normal(
+	terrain: TerrainGrid,
+	position: Vector3,
+	policy: AssetPlacementPolicy,
+) -> Vector3:
+	if terrain == null or policy == null \
+			or policy.align_to_normal == AssetPlacementPolicy.ALIGN_NONE:
+		return Vector3.UP
+	var sample := maxf(terrain.cell_size * 0.25, 0.05)
+	var west := position - Vector3(sample, 0.0, 0.0)
+	var east := position + Vector3(sample, 0.0, 0.0)
+	var north := position - Vector3(0.0, 0.0, sample)
+	var south := position + Vector3(0.0, 0.0, sample)
+	var normal := Vector3(
+		terrain.height_at(west) - terrain.height_at(east),
+		2.0 * sample,
+		terrain.height_at(north) - terrain.height_at(south)).normalized()
+	if policy.align_to_normal == AssetPlacementPolicy.ALIGN_PARTIAL:
+		normal = Vector3.UP.slerp(normal, 0.35).normalized()
+	return normal

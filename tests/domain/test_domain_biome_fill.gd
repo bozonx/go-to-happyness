@@ -15,6 +15,7 @@ static func run_all() -> void:
 	_test_rules_only_say_what_and_how_much()
 	_test_biomes_differ_from_each_other()
 	_test_climate_window_narrows_within_a_biome()
+	_test_density_above_one_and_stable_rule_keys_are_supported()
 	print("    [PASS] Biome Fill Table Tests")
 
 
@@ -35,7 +36,7 @@ static func _test_every_rule_names_a_real_archetype() -> void:
 			"архетип «%s» из таблицы биомов не нашёл свой ассет" % archetype_id)
 
 
-## Правило говорит ЧТО и СКОЛЬКО. Где объект может стоять — ответ политики
+## Правило говорит ЧТО, СКОЛЬКО и где климатически уместно. Где объект может стоять — ответ политики
 ## размещения архетипа, и второго ответа в таблице быть не должно: разойдясь,
 ## они дадут лес генератора, не совпадающий с лесом той же кисти.
 static func _test_rules_only_say_what_and_how_much() -> void:
@@ -91,6 +92,19 @@ static func _test_climate_window_narrows_within_a_biome() -> void:
 	# Правило без архетипа или с нулевой плотностью не должно попадать в таблицу.
 	assert(not BiomeFillRule.from_dict({"density": 0.2}).is_valid())
 	assert(not BiomeFillRule.from_dict({"archetype": "core:tree"}).is_valid())
+
+
+static func _test_density_above_one_and_stable_rule_keys_are_supported() -> void:
+	var dense := BiomeFillRule.from_dict({
+		"id": "grove", "archetype": "core:tree", "density": 2.4,
+	})
+	dense.source_key = &"core/test"
+	assert(dense.is_valid() and is_equal_approx(dense.density, 2.4),
+		"density > 1 означает несколько кандидатов, а не скрытый clamp")
+	var key := dense.stable_key()
+	dense.density = 0.2
+	assert(dense.stable_key() == key,
+		"изменение плотности должно сохранять уже существующее подмножество")
 
 
 static func _total_density(biome_id: StringName) -> float:

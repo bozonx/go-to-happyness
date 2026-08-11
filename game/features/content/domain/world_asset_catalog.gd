@@ -56,6 +56,9 @@ const CATEGORIES: Dictionary = {
 }
 
 static var _assets: Dictionary = {}
+static var load_errors: Array[String] = []
+const PACK_ASSET_DIR := "assets"
+const PACK_ASSET_SUFFIX := ".gdasset.json"
 
 
 static func get_all_assets(scope: StringName = &"") -> Array[WorldAssetDef]:
@@ -196,7 +199,9 @@ static func filter_assets(
 ## Re-reads the on-disk asset directories. The editor calls this when entering
 ## decor mode so newly authored `.tres` files show up without a restart.
 static func refresh() -> void:
+	ContentIndex.invalidate()
 	_assets.clear()
+	load_errors.clear()
 	_ensure_catalog()
 
 
@@ -204,6 +209,79 @@ static func _ensure_catalog() -> void:
 	if not _assets.is_empty():
 		return
 	_register_builtin_assets()
+	_load_pack_assets()
+
+
+static func _load_pack_assets() -> void:
+	for pack in ContentIndex.shared().content_packs():
+		var root: String = pack.root_path.path_join(PACK_ASSET_DIR)
+		if not DirAccess.dir_exists_absolute(root):
+			continue
+		var files := DirAccess.get_files_at(root)
+		files.sort()
+		for file_name: String in files:
+			if not file_name.ends_with(PACK_ASSET_SUFFIX):
+				continue
+			var path := root.path_join(file_name)
+			var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+			if not parsed is Dictionary:
+				load_errors.append("Некорректный world asset: %s" % path)
+				continue
+			var asset := _asset_from_dict(parsed as Dictionary, pack.id, pack.root_path)
+			if asset == null:
+				load_errors.append("World asset без id/scene: %s" % path)
+				continue
+			if _assets.has(asset.id):
+				load_errors.append("Дубликат world asset %s: %s" % [asset.id, path])
+				continue
+			_register(asset)
+
+
+static func _asset_from_dict(source: Dictionary, pack_id: StringName, pack_root: String) -> WorldAssetDef:
+	var local_id := StringName(source.get("id", ""))
+	var scene_path := String(source.get("scene", ""))
+	if local_id == &"" or scene_path.is_empty():
+		return null
+	if not scene_path.begins_with("res://") and not scene_path.begins_with("user://"):
+		scene_path = pack_root.path_join(scene_path)
+	var asset := WorldAssetDef.new()
+	asset.id = local_id if pack_id == &"core" else StringName("%s:%s" % [pack_id, local_id])
+	asset.name = String(source.get("name", local_id))
+	asset.category = StringName(source.get("category", "world_props"))
+	asset.scene_path = scene_path
+	asset.size_m = _vector3(source.get("size_m", []), Vector3.ONE)
+	asset.size_in_blocks = Vector3i(_vector3(source.get("size_in_blocks", []), Vector3.ONE))
+	asset.description = String(source.get("description", ""))
+	asset.scope = StringName(source.get("scope", WorldAssetDef.SCOPE_MAP))
+	asset.scale_mode = String(source.get("scale_mode", WorldAssetDef.SCALE_LOCKED))
+	asset.collision_policy = String(source.get("collision", WorldAssetDef.COLLISION_NONE))
+	asset.blocking_navigation = bool(source.get("blocking_navigation", false))
+	var raw_scales: Variant = source.get("allowed_scales", null)
+	if raw_scales is Array:
+		asset.allowed_scales.clear()
+		for value: Variant in raw_scales:
+			asset.allowed_scales.append(float(value))
+	var raw_controls: Variant = source.get("appearance", null)
+	if raw_controls is Array:
+		asset.appearance_controls.assign(raw_controls)
+	var raw_tags: Variant = source.get("tags", null)
+	if raw_tags is Array:
+		for value: Variant in raw_tags:
+			asset.tags.append(StringName(value))
+	var raw_axes: Variant = source.get("rotation_axes", null)
+	if raw_axes is Array:
+		for value: Variant in raw_axes:
+			asset.rotation_axes.append(String(value))
+	var raw_placement: Variant = source.get("placement", null)
+	if raw_placement is Dictionary:
+		asset.placement = AssetPlacementPolicy.from_dict(raw_placement)
+	return asset
+
+
+static func _vector3(value: Variant, fallback: Vector3) -> Vector3:
+	if not value is Array or (value as Array).size() < 3:
+		return fallback
+	return Vector3(float(value[0]), float(value[1]), float(value[2]))
 
 
 static func _register_builtin_assets() -> void:

@@ -29,6 +29,7 @@ static func run_all() -> void:
 	_test_foreign_or_truncated_layer_is_refused()
 	print("    [PASS] Map Terrain Codec Tests")
 	_test_package_round_trip_on_disk()
+	_test_declared_scatter_cannot_disappear_silently()
 	_test_zone_layer_round_trips()
 	_test_zone_layer_reports_structural_errors()
 	_test_zone_layer_reports_warnings()
@@ -395,6 +396,21 @@ static func _test_package_round_trip_on_disk() -> void:
 
 	assert(service.load_package(TEST_ROOT.path_join("no_such.gdmap")) == null)
 	assert(not service.last_error.is_empty())
+
+
+static func _test_declared_scatter_cannot_disappear_silently() -> void:
+	var service := _service()
+	var document := MapDocument.create(&"scatter_guard", "Scatter guard", BOARD_CELLS)
+	var record := MapScatterLayer.Record.new()
+	record.archetype_index = document.scatter.archetype_index_of(&"core:tree")
+	record.cell = Vector2i(-3, -4)
+	document.scatter.add(record)
+	var path := _save_to(service, document)
+	assert(FileAccess.file_exists(path.path_join(MapDocumentService.OBJECTS_BIN)))
+	assert(DirAccess.remove_absolute(path.path_join(MapDocumentService.OBJECTS_BIN)) == OK)
+	assert(service.load_package(path) == null,
+		"объявленный лес без objects.bin нельзя открыть как пустой")
+	assert("objects.bin" in service.last_error)
 
 
 ## `areas`, `anchors` and `routes` are authored data, not opaque future sections:

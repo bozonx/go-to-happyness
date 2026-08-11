@@ -88,7 +88,7 @@ static func stroke(
 	terrain: TerrainGrid,
 	water: WaterGrid,
 	centre: Vector2i,
-	occupied: Dictionary
+	occupied: ScatterSpacingIndex
 ) -> Array[MapScatterLayer.Record]:
 	var placed: Array[MapScatterLayer.Record] = []
 	if settings == null or not settings.is_ready() or terrain == null or layer == null:
@@ -115,31 +115,47 @@ static func stroke(
 			if rng.randf() >= settings.density:
 				continue
 			var archetype_id := settings.mix.pick(rng.randf())
+			var archetype := EntityArchetypeCatalog.get_archetype(archetype_id)
 			var asset := EntityArchetypeCatalog.asset_of(archetype_id)
 			if asset == null:
+				continue
+			var exclusive_cell := archetype != null \
+				and archetype.has_component(&"settlement_natural")
+			if exclusive_cell and occupied.is_exclusive_cell_claimed(cell):
 				continue
 			var policy := asset.placement_policy()
 			if not EntityPlacementProbe.accepts_cells(
 					policy, terrain, water, Rect2i(cell, policy.footprint_cells)):
 				continue
-			var spacing := _spacing_cells(settings, policy, cell_size)
-			if _is_crowded(occupied, archetype_id, cell, spacing):
+			var record := _record(layer, archetype_id, asset, cell, rng, settings.vary)
+			var spacing := _spacing_metres(settings, policy) * record.scale
+			if occupied.is_crowded(archetype_id, record, spacing):
 				continue
-			_occupy(occupied, archetype_id, cell)
-			placed.append(_record(layer, archetype_id, asset, cell, rng, settings.vary))
+			occupied.add(archetype_id, record, spacing)
+			if exclusive_cell:
+				occupied.claim_exclusive_cell(cell)
+			placed.append(record)
 	return placed
 
 
 ## Клетки, уже занятые каждым архетипом слоя. Строится один раз на мазок:
 ## перебирать весь слой на каждую клетку кисти — это радиус² проходов по лесу.
-static func occupancy_of(layer: MapScatterLayer) -> Dictionary:
-	var occupied: Dictionary = {}
+static func occupancy_of(layer: MapScatterLayer, cell_size := 1.0) -> ScatterSpacingIndex:
+	var occupied := ScatterSpacingIndex.new()
+	occupied.configure(cell_size)
 	if layer == null:
 		return occupied
 	for record: MapScatterLayer.Record in layer.records:
 		if record.is_empty():
 			continue
-		_occupy(occupied, layer.archetype_of(record), record.cell)
+		var archetype_id := layer.archetype_of(record)
+		var archetype := EntityArchetypeCatalog.get_archetype(archetype_id)
+		var asset := EntityArchetypeCatalog.asset_of(archetype_id)
+		var spacing := asset.placement_policy().scatter_min_spacing_m * record.scale \
+			if asset != null else 0.0
+		occupied.add(archetype_id, record, spacing)
+		if archetype != null and archetype.has_component(&"settlement_natural"):
+			occupied.claim_exclusive_cell(record.cell)
 	return occupied
 
 
@@ -170,31 +186,8 @@ static func _record(
 	return record
 
 
-static func _spacing_cells(settings: Settings, policy: AssetPlacementPolicy, cell_size: float) -> int:
-	var metres := settings.min_spacing_m if settings.min_spacing_m > 0.0 else policy.scatter_min_spacing_m
-	return maxi(0, int(ceilf(metres / cell_size)) - 1)
-
-
-static func _is_crowded(
-	occupied: Dictionary,
-	archetype_id: StringName,
-	cell: Vector2i,
-	spacing: int
-) -> bool:
-	var taken: Dictionary = occupied.get(archetype_id, {})
-	if taken.has(cell):
-		return true
-	for dz in range(-spacing, spacing + 1):
-		for dx in range(-spacing, spacing + 1):
-			if taken.has(cell + Vector2i(dx, dz)):
-				return true
-	return false
-
-
-static func _occupy(occupied: Dictionary, archetype_id: StringName, cell: Vector2i) -> void:
-	var taken: Dictionary = occupied.get(archetype_id, {})
-	taken[cell] = true
-	occupied[archetype_id] = taken
+static func _spacing_metres(settings: Settings, policy: AssetPlacementPolicy) -> float:
+	return settings.min_spacing_m if settings.min_spacing_m > 0.0 else policy.scatter_min_spacing_m
 
 
 ## Стирание тем же кругом: кисть, которая только добавляет, заставляет автора

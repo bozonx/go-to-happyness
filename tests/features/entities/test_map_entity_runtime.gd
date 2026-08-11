@@ -20,6 +20,10 @@ func _run() -> void:
 	entity.position = Vector3(3.5, 0.0, 3.5)
 	entity.initial_state = &"cold"
 	map.entities.entities.append(entity)
+	var obstacle := MapScatterLayer.Record.new()
+	obstacle.archetype_index = map.scatter.archetype_index_of(&"core:boulder")
+	obstacle.cell = Vector2i(-10, -10)
+	map.scatter.add(obstacle)
 	var launch_manager := root.get_node_or_null("GameLaunchManager")
 	assert(launch_manager != null)
 	launch_manager.active_session = GameSessionConfig.create(definition, &"editor:preview", map)
@@ -35,6 +39,10 @@ func _run() -> void:
 	assert(view != null and view.get_meta("map_entity_state") == &"cold")
 	var fire := view.get_node_or_null("Fire") as Node3D
 	assert(fire != null and not fire.visible, "cold state reached the launched view")
+	assert(simulation.world_session.nav_grid.is_blocked(Vector2i(-10, -10)),
+		"blocking_navigation массового объекта не дошёл до базового NavGrid")
+	assert(_has_collision_proxy(setup.map_scatter_world),
+		"scene-owned коллизия массового препятствия не поднята в runtime")
 	runtime.stop_session()
 	root.remove_child(runtime)
 	runtime.free()
@@ -42,3 +50,14 @@ func _run() -> void:
 	await physics_frame
 	print("--- test_map_entity_runtime.gd PASSED ---")
 	quit(0)
+
+
+static func _has_collision_proxy(root_node: Node) -> bool:
+	if root_node == null:
+		return false
+	if String(root_node.name).begins_with("ScatterCollision_"):
+		return true
+	for child: Node in root_node.get_children():
+		if _has_collision_proxy(child):
+			return true
+	return false

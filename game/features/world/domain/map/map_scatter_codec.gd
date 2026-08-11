@@ -65,10 +65,19 @@ static func encode(layer: MapScatterLayer) -> PackedByteArray:
 ## Наполняет слой. Таблица архетипов обязана быть прочитана ДО этого вызова, из
 ## заголовка `map.json`: запись без архетипа — это запись, которую нечем
 ## нарисовать, и молча превращать её в первый попавшийся архетип нельзя.
-static func decode_into(buffer: PackedByteArray, layer: MapScatterLayer) -> bool:
+static func decode_into(
+	buffer: PackedByteArray,
+	layer: MapScatterLayer,
+	enforce_declared_header := false,
+) -> bool:
 	if layer == null or not is_valid(buffer):
 		return false
 	var count := record_count_of(buffer)
+	if enforce_declared_header and layer.expected_count >= 0 and count != layer.expected_count:
+		return false
+	if enforce_declared_header and layer.expected_revision >= 0 \
+			and revision_of(buffer) != layer.expected_revision:
+		return false
 	var records: Array[MapScatterLayer.Record] = []
 	var offset := HEADER_BYTES
 	for _index in count:
@@ -87,6 +96,8 @@ static func decode_into(buffer: PackedByteArray, layer: MapScatterLayer) -> bool
 		offset += BYTES_PER_RECORD
 	layer.records = records
 	layer.revision = revision_of(buffer)
+	layer.expected_count = count
+	layer.expected_revision = layer.revision
 	return true
 
 

@@ -193,6 +193,22 @@ func base_navigation_blocked_cells() -> Dictionary:
 	var blocked := entity_navigation_blocked_cells()
 	if map_document == null or world_setup == null or world_setup.terrain_grid == null:
 		return blocked
+	# Anonymous generated objects obey the same asset contract as named entities.
+	# Keeping this derivation here avoids a second authored "blocked cells" list.
+	for record: MapScatterLayer.Record in map_document.scatter.records:
+		if record.is_empty():
+			continue
+		var asset := EntityArchetypeCatalog.asset_of(
+			map_document.scatter.archetype_of(record))
+		if asset == null or not asset.blocking_navigation:
+			continue
+		var span := asset.placement_cell_span(record.scale, record.yaw_degrees)
+		var first := record.cell - Vector2i(span.x / 2, span.y / 2)
+		for x in range(first.x, first.x + span.x):
+			for z in range(first.y, first.y + span.y):
+				var cell := Vector2i(x, z)
+				if world_setup.terrain_grid.is_inside(cell):
+					blocked[cell] = true
 	for record: MapPlacementRecord in map_document.placements.placements:
 		for cell: Vector2i in BuildingPlacementService.footprint_of(record).cells():
 			if world_setup.terrain_grid.is_inside(cell):

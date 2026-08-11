@@ -10,10 +10,9 @@ extends RefCounted
 ## давно лежит в `terrain.bin`, вода — в `water.bin`. Здесь — `objects.bin`,
 ## шестнадцать байт на объект.
 ##
-## **Правило разделения одно и оно проверяемое:** как только у объекта появляется
-## имя, авторское свойство или ссылка на него, он переезжает в `entities[]`.
-## Переезд делает редактор в тот момент, когда автор задал первое свойство; автор
-## об этом не думает — он просто не платит за безымянное дерево.
+## **Правило разделения одно и оно проверяемое:** как только объекту нужны имя,
+## авторское свойство или ссылка, он переезжает в `entities[]`. Редактор делает
+## этот атомарный перенос командой promotion (`P`) для выбранной записи.
 ##
 ## **Удаление не сжимает таблицу.** Идентичность записи — это пара «слой, индекс»
 ## (§8.3), и она стабильна ровно до тех пор, пока индексы не поехали. Убранный
@@ -57,6 +56,10 @@ var records: Array[Record] = []
 ## Поднимается уплотнением. Сейв сверяет её и отказывается накладывать свою
 ## дельту на слой, у которого индексы разъехались.
 var revision := 0
+## Values declared by map.json while loading. They are kept until objects.bin is
+## decoded so a stale binary from another revision cannot be accepted silently.
+var expected_count := -1
+var expected_revision := -1
 
 
 func is_empty() -> bool:
@@ -143,6 +146,9 @@ func first_at(cell: Vector2i) -> int:
 func clear() -> void:
 	archetypes.clear()
 	records.clear()
+	revision = 0
+	expected_count = -1
+	expected_revision = -1
 
 
 ## Заголовок для `map.json` (§8.1): таблица архетипов, число записей и ревизия.
@@ -163,6 +169,8 @@ func read_header(source: Dictionary) -> void:
 		for entry: Variant in raw as Array:
 			archetypes.append(StringName(entry))
 	revision = int(source.get("revision", 0))
+	expected_count = int(source.get("count", 0))
+	expected_revision = revision
 
 
 ## Архетипы, на которые слой действительно ссылается. Идёт в `required_content`

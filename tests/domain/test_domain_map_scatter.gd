@@ -14,6 +14,7 @@ static func run_all() -> void:
 	_test_deleting_does_not_move_the_neighbours()
 	_test_compaction_is_explicit_and_bumps_the_revision()
 	_test_a_damaged_or_foreign_file_is_refused()
+	_test_declared_header_must_match_the_binary()
 	_test_the_layer_is_cheaper_than_named_records()
 	print("    [PASS] Map Scatter Layer Tests")
 
@@ -131,6 +132,23 @@ static func _test_a_damaged_or_foreign_file_is_refused() -> void:
 	var short_table := MapScatterLayer.new()
 	short_table.archetype_index_of(&"core:tree")
 	assert(not MapScatterCodec.decode_into(buffer, short_table))
+
+
+static func _test_declared_header_must_match_the_binary() -> void:
+	var layer := _forest()
+	var buffer := MapScatterCodec.encode(layer)
+	var wrong_count := MapScatterLayer.new()
+	var header := layer.to_header()
+	header["count"] = layer.records.size() + 1
+	wrong_count.read_header(header)
+	assert(not MapScatterCodec.decode_into(buffer, wrong_count, true),
+		"map.json и objects.bin с разным count нельзя склеивать")
+	var wrong_revision := MapScatterLayer.new()
+	header = layer.to_header()
+	header["revision"] = layer.revision + 1
+	wrong_revision.read_header(header)
+	assert(not MapScatterCodec.decode_into(buffer, wrong_revision, true),
+		"бинарник другой ревизии нельзя принять как текущий слой")
 
 
 ## Ради этого слой и существует: тридцать тысяч деревьев в JSON — мегабайты и

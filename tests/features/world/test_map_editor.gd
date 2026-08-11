@@ -1004,6 +1004,19 @@ func _test_scatter_brush(editor: Node, fill_ctrl: FillModeController) -> void:
 	editor._redo()
 	assert(editor.document.scatter.live_count() == placed_count, "повтор вернул мазок")
 
+	# Конкретную запись можно выбрать и повысить до entities[] без скачка
+	# transform; обе стороны переноса отменяются одним Ctrl+Z.
+	var promoted_cell: Vector2i = editor.document.scatter.records[0].cell
+	editor._brush.hovered_cell = promoted_cell
+	fill_ctrl.handle_input(_click(MOUSE_BUTTON_LEFT, true, false, true))
+	var named_before_promotion: int = editor.document.entities.entities.size()
+	assert(fill_ctrl.handle_input(_key(KEY_P)))
+	assert(editor.document.scatter.live_count() == placed_count - 1)
+	assert(editor.document.entities.entities.size() == named_before_promotion + 1)
+	editor._undo()
+	assert(editor.document.scatter.live_count() == placed_count)
+	assert(editor.document.entities.entities.size() == named_before_promotion)
+
 	assert(fill_ctrl.apply_inspector_value(FillModeController.INSPECTOR_SCATTER_MODE, false))
 	while editor.history.undo_depth() > 0:
 		editor._undo()

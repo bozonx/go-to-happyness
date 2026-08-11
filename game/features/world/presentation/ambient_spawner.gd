@@ -38,6 +38,8 @@ class NaturalEntry:
 	## сейва и записи карты за ним не стоит.
 	var entity_id: StringName = &""
 	var archetype: EntityArchetype = null
+	var yaw_degrees := 0.0
+	var scale := 1.0
 
 
 ## Ноды, построенные из записей карты, по id записи. Нужны ровно для одного:
@@ -134,6 +136,41 @@ func _entities_where(predicate: Callable) -> Array[NaturalEntry]:
 		entry.entity_id = placed.id
 		entry.archetype = archetype
 		result.append(entry)
+	# Interactive anonymous objects use the same component adapters as named map
+	# entities. Their record index is their stable identity; ScatterWorld skips
+	# these components so there is exactly one visual and one gameplay owner.
+	for index in map_document.scatter.records.size():
+		var placed := map_document.scatter.records[index]
+		if placed.is_empty():
+			continue
+		var archetype_id := map_document.scatter.archetype_of(placed)
+		var archetype := EntityArchetypeCatalog.get_archetype(archetype_id)
+		if archetype == null or not bool(predicate.call(archetype)):
+			continue
+		var entry := NaturalEntry.new()
+		var centre := map_document.terrain.cell_center(placed.cell)
+		entry.position = Vector3(
+			centre.x + placed.offset.x * map_document.terrain.cell_size,
+			0.0,
+			centre.z + placed.offset.y * map_document.terrain.cell_size)
+		entry.position.y = simulation.terrain_height_at(
+			entry.position.x, entry.position.z, 0.0)
+		var asset := EntityArchetypeCatalog.asset_of(archetype_id)
+		entry.position.y += EntityPlacementProbe.surface_offset(
+			asset.placement_policy() if asset != null else null,
+			map_document.terrain, map_document.water, placed.cell, entry.position)
+		entry.props = archetype.default_properties()
+		entry.asset_id = archetype.asset_id
+		entry.yaw_degrees = placed.yaw_degrees
+		entry.scale = placed.scale
+		if archetype.has_component(&"wander"):
+			entry.habit = WanderHabit.from_component(archetype.component_data(&"wander"))
+		if archetype.has_component(&"settlement_natural"):
+			entry.kind = StringName(
+				archetype.component_data(&"settlement_natural").get("kind", ""))
+		entry.entity_id = StringName("scatter:%d:%d" % [map_document.scatter.revision, index])
+		entry.archetype = archetype
+		result.append(entry)
 	return result
 
 
@@ -194,6 +231,7 @@ func _create_tree(entry: NaturalEntry, refresh_navigation := true) -> void:
 		return
 	var tree: Node3D = scene.instantiate()
 	tree.position = entry.position
+	_apply_transform_variation(tree, entry)
 	var initial_wood := int(entry.props.get(&"wood", simulation.random.randi_range(4, 7)))
 	var initial_branches := int(entry.props.get(&"branches", simulation.random.randi_range(5, 9)))
 
@@ -259,6 +297,7 @@ func _instantiate_source(
 		return null
 	var node: Node3D = scene.instantiate()
 	node.position = entry.position + Vector3.UP * 0.05
+	_apply_transform_variation(node, entry)
 	simulation.building_visuals.add_selector_to_node(node, selector_group, selector_size, selector_offset)
 	simulation.world_navigation_controller.add_landscape_object(node)
 	_apply_appearance(node, entry)
@@ -316,6 +355,7 @@ func _create_creature(entry: NaturalEntry) -> Node3D:
 	# (`AmbientLifeService.GROUND_SNAP`). Прибавлять её ещё и здесь значило бы,
 	# что каждый цикл сохранения приподнимает зверя над землёй.
 	node.position = entry.position
+	_apply_transform_variation(node, entry)
 	if entry.kind == &"rabbit":
 		simulation.building_visuals.add_selector_to_node(
 			node, "rabbit_selector", Vector3(0.5, 0.5, 0.5), Vector3.UP * 0.25)
@@ -328,6 +368,16 @@ func _create_creature(entry: NaturalEntry) -> Node3D:
 		# Стая — это те, у кого совпадает вид: олени держатся оленей.
 		simulation.ambient_life_service.register(node, entry.habit, entry.kind)
 	return node
+
+
+func _apply_transform_variation(node: Node3D, entry: NaturalEntry) -> void:
+	if node == null:
+		return
+	var asset := WorldAssetCatalog.get_asset(entry.asset_id)
+	var policy := asset.placement_policy() if asset != null else null
+	var terrain := map_document.terrain if map_document != null else null
+	node.basis = EntityPlacementProbe.aligned_basis(
+		terrain, entry.position, entry.yaw_degrees, policy, entry.scale) * node.basis
 
 
 ## Wild food no longer respawns: a harvested bush or a caught rabbit is gone for

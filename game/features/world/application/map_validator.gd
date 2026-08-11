@@ -28,10 +28,34 @@ static func validate(document: MapDocument, terrain: TerrainGrid, water: WaterGr
 		_validate_anchor_place(anchor, terrain, water, errors)
 	_validate_coverage(document, terrain, water, errors)
 	_validate_entities(document, terrain, errors)
+	_validate_scatter(document, terrain, errors)
 	_validate_placements(document, terrain, nav_grid, errors)
 	_validate_scenario(document, errors)
 	_validate_starts(document, errors)
 	return errors
+
+
+static func _validate_scatter(
+	document: MapDocument, terrain: TerrainGrid, errors: Array[String],
+) -> void:
+	if document == null:
+		return
+	for index in document.scatter.records.size():
+		var record := document.scatter.records[index]
+		if record.is_empty():
+			continue
+		if record.archetype_index < 0 \
+				or record.archetype_index >= document.scatter.archetypes.size():
+			errors.append("objects.bin: запись %d ссылается на архетип вне таблицы" % index)
+			continue
+		if terrain == null:
+			continue
+		if not terrain.is_inside(record.cell):
+			errors.append("objects.bin: запись %d стоит вне доски: %s" % [index, record.cell])
+		elif terrain.is_hole(record.cell):
+			errors.append("objects.bin: запись %d стоит в вырезе террейна" % index)
+		if record.scale <= 0.0:
+			errors.append("objects.bin: запись %d задаёт небезопасный масштаб" % index)
 
 
 ## Buildings standing on the map (`building_placement.md` §14).
@@ -352,6 +376,7 @@ static func warnings(document: MapDocument, nav_grid: NavGrid) -> Array[String]:
 	_warn_about_scenario(document, warnings)
 	_warn_about_starts(document, warnings)
 	_warn_about_placements(document, warnings)
+	_warn_about_scatter(document, warnings)
 	if nav_grid == null:
 		return warnings
 	_warn_about_separated_buildings(document, nav_grid, warnings)
@@ -367,6 +392,35 @@ static func warnings(document: MapDocument, nav_grid: NavGrid) -> Array[String]:
 	for route in document.zones.routes:
 		_warn_if_route_breaks(route, document, nav_grid, warnings)
 	return warnings
+
+
+static func _warn_about_scatter(document: MapDocument, warnings: Array[String]) -> void:
+	if document == null or document.terrain == null:
+		return
+	var natural_cells: Dictionary = {}
+	for index in document.scatter.records.size():
+		var record := document.scatter.records[index]
+		if record.is_empty():
+			continue
+		var archetype_id := document.scatter.archetype_of(record)
+		var asset := EntityArchetypeCatalog.asset_of(archetype_id)
+		var archetype := EntityArchetypeCatalog.get_archetype(archetype_id)
+		if archetype != null and archetype.has_component(&"settlement_natural"):
+			if natural_cells.has(record.cell):
+				warnings.append("массовые игровые объекты %d и %d делят клетку %s" % [
+					natural_cells[record.cell], index, record.cell])
+			else:
+				natural_cells[record.cell] = index
+		if asset == null:
+			continue # required_content reports the missing pack separately
+		var policy := asset.placement_policy()
+		var span := asset.placement_cell_span(record.scale, record.yaw_degrees)
+		var first := record.cell - Vector2i(span.x / 2, span.y / 2)
+		var placement_warnings := EntityPlacementProbe.warnings_for_cells(
+			policy, document.terrain, document.water, Rect2i(first, span))
+		if not placement_warnings.is_empty():
+			warnings.append("массовый объект %d (%s): %s" % [
+				index, archetype_id, "; ".join(placement_warnings)])
 
 
 ## Scenario problems a map still launches with (map_editor.md §11). Each of them

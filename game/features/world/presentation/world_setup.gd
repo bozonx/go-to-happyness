@@ -203,7 +203,9 @@ func _build_map_scatter() -> void:
 		map_scatter_world = ScatterWorld.new()
 		map_scatter_world.name = "MapScatter"
 	_territory.add_landscape_object(map_scatter_world)
-	map_scatter_world.configure(_map_document.scatter, terrain_grid)
+	map_scatter_world.configure(
+		_map_document.scatter, terrain_grid, water_grid, _claimed_components, true)
+	map_scatter_world.bind_services(terrain_service, water_service)
 
 
 func _build_map_placements() -> void:

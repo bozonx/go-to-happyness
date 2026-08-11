@@ -187,8 +187,9 @@ func load_map(key: StringName) -> MapDocument:
 
 
 ## Opens a package folder. Returns null and sets `last_error` on a map that is not
-## there or whose header is unreadable; a missing or mismatched terrain layer is
-## NOT fatal — the board simply stays flat, which is what an untouched layer means.
+## there or whose header is unreadable. A declared scatter layer is also fatal
+## when its binary is missing/corrupt: opening it as an empty forest and saving
+## would destroy content while pretending the operation succeeded.
 func load_package(path: String) -> MapDocument:
 	last_error = ""
 	var parsed := _read_json(path.path_join(MAP_JSON))
@@ -244,11 +245,16 @@ func load_package(path: String) -> MapDocument:
 	# архетип вне таблицы, отвергает весь файл целиком — половина леса хуже, чем
 	# его отсутствие, потому что «половина» не видна.
 	var objects_path := path.path_join(OBJECTS_BIN)
+	var scatter_declared := document.scatter.expected_count > 0
 	if FileAccess.file_exists(objects_path):
 		var objects_buffer := FileAccess.get_file_as_bytes(objects_path)
-		if not MapScatterCodec.decode_into(objects_buffer, document.scatter):
-			document.scatter.records.clear()
-			push_warning("[map] objects.bin не читается: %s" % objects_path)
+		if not MapScatterCodec.decode_into(objects_buffer, document.scatter, true):
+			last_error = "objects.bin повреждён или не соответствует map.json: %s" % objects_path
+			return null
+	elif scatter_declared:
+		last_error = "map.json объявляет %d записей, но objects.bin отсутствует: %s" % [
+			document.scatter.expected_count, objects_path]
+		return null
 	document.dirty = water_repaired
 	return document
 
@@ -343,6 +349,10 @@ func save_map_to(document: MapDocument, final_path: String, preview: Image = nul
 
 	# ...и карта без леса не несёт слоя наполнения.
 	var object_bytes := MapScatterCodec.encode(document.scatter)
+	if not document.scatter.is_empty() and object_bytes.is_empty():
+		last_error = "не удалось закодировать objects.bin"
+		_remove_directory(staging_path)
+		return ""
 	if not object_bytes.is_empty():
 		if not _write_bytes(staging_path.path_join(OBJECTS_BIN), object_bytes):
 			_remove_directory(staging_path)

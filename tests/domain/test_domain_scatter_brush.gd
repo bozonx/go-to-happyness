@@ -16,6 +16,7 @@ static func run_all() -> void:
 	_test_the_same_seed_gives_the_same_stroke()
 	_test_placement_policy_is_not_re_implemented()
 	_test_a_mix_respects_its_weights()
+	_test_spacing_uses_real_positions_and_stays_per_archetype()
 	_test_erasing_uses_the_same_circle()
 	print("    [PASS] Scatter Brush Tests")
 
@@ -41,8 +42,10 @@ static func _stroke(
 	water: WaterGrid,
 	centre: Vector2i
 ) -> Array[MapScatterLayer.Record]:
+	var occupied := ScatterSpacingIndex.new()
+	occupied.configure(terrain.cell_size)
 	return ScatterBrush.stroke(
-		settings, MapScatterLayer.new(), terrain, water, centre, {})
+		settings, MapScatterLayer.new(), terrain, water, centre, occupied)
 
 
 static func _test_a_stroke_is_round_and_bounded() -> void:
@@ -162,7 +165,10 @@ static func _test_a_mix_respects_its_weights() -> void:
 	var settings := _settings(1.0, 12)
 	settings.mix = mix
 	var layer := MapScatterLayer.new()
-	var placed := ScatterBrush.stroke(settings, layer, terrain, null, Vector2i(-2, -2), {})
+	var occupied := ScatterSpacingIndex.new()
+	occupied.configure(terrain.cell_size)
+	var placed := ScatterBrush.stroke(
+		settings, layer, terrain, null, Vector2i(-2, -2), occupied)
 	var on_ground: Dictionary = {}
 	for record: MapScatterLayer.Record in placed:
 		var archetype_id := layer.archetypes[record.archetype_index]
@@ -173,12 +179,30 @@ static func _test_a_mix_respects_its_weights() -> void:
 	assert(int(on_ground.get(&"core:birch_tree", 0)) > 0, "редкий вид не встретился ни разу")
 
 
+static func _test_spacing_uses_real_positions_and_stays_per_archetype() -> void:
+	var index := ScatterSpacingIndex.new()
+	index.configure(2.0)
+	var existing := MapScatterLayer.Record.new()
+	existing.cell = Vector2i.ZERO
+	existing.offset = Vector2(0.49, 0.0)
+	index.add(&"core:tree", existing, 4.0)
+	var candidate := MapScatterLayer.Record.new()
+	candidate.cell = Vector2i(2, 0)
+	candidate.offset = Vector2(-0.49, 0.0)
+	assert(index.is_crowded(&"core:tree", candidate, 1.0),
+		"offset сблизил центры, а большой интервал существующего экземпляра потерян")
+	assert(not index.is_crowded(&"core:birch_tree", candidate, 4.0),
+		"интервал одного архетипа не должен выталкивать другой")
+
+
 static func _test_erasing_uses_the_same_circle() -> void:
 	var terrain := _terrain()
 	var layer := MapScatterLayer.new()
 	var settings := _settings(1.0, 6)
+	var occupied := ScatterSpacingIndex.new()
+	occupied.configure(terrain.cell_size)
 	for record: MapScatterLayer.Record in ScatterBrush.stroke(
-			settings, layer, terrain, null, Vector2i(-3, -3), {}):
+			settings, layer, terrain, null, Vector2i(-3, -3), occupied):
 		layer.add(record)
 	var before := layer.live_count()
 	assert(before > 0)

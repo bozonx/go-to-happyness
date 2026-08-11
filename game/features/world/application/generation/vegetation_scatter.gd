@@ -39,6 +39,9 @@ class Outcome:
 	var refused_by_policy: Dictionary = {}
 	var refused_by_spacing := 0
 	var refused_by_climate := 0
+	var refused_by_water := 0
+	var missing_content: Dictionary = {}
+	var placed_by_rule: Dictionary = {}
 	var milliseconds := 0
 
 	func note(reason: StringName, archetype_id: StringName) -> void:
@@ -49,13 +52,24 @@ class Outcome:
 				refused_by_spacing += 1
 			&"climate":
 				refused_by_climate += 1
+			&"water":
+				refused_by_water += 1
+			&"missing":
+				missing_content[archetype_id] = int(missing_content.get(archetype_id, 0)) + 1
+
+	func note_placed(rule_key: StringName) -> void:
+		var key := String(rule_key)
+		placed_by_rule[key] = int(placed_by_rule.get(key, 0)) + 1
 
 	func to_metrics() -> Dictionary:
 		return {
 			"scatter_placed": placed,
 			"scatter_refused_spacing": refused_by_spacing,
 			"scatter_refused_climate": refused_by_climate,
+			"scatter_refused_near_water": refused_by_water,
 			"scatter_refused_policy": refused_by_policy.duplicate(),
+			"scatter_missing_content": missing_content.duplicate(),
+			"scatter_placed_by_rule": placed_by_rule.duplicate(),
 			"scatter_milliseconds": milliseconds,
 		}
 
@@ -83,10 +97,27 @@ static func populate(
 	var stream := seeds.stream_seed(&"vegetation")
 	var rng := RandomNumberGenerator.new()
 
-	# Занятые клетки — по архетипу. Общего «здесь уже что-то стоит» нет
+	# Занятость — по архетипу. Общего «здесь уже что-то стоит» нет
 	# намеренно: трава под деревом — это нормальная сцена, а два дерева в одной
 	# клетке — нет, и разбирается это интервалом самого правила.
-	var occupied: Dictionary = {}
+	var occupied := ScatterSpacingIndex.new()
+	occupied.configure(cell_size)
+	# Catalog, stable-key formatting and policy resolution are content work, not
+	# per-column work. A 512² board must not repeat them a quarter-million times.
+	var rule_data: Dictionary = {}
+	for biome_id: StringName in BiomeFillCatalog.biomes():
+		for rule: BiomeFillRule in BiomeFillCatalog.rules_for(biome_id):
+			if rule_data.has(rule):
+				continue
+			var asset := EntityArchetypeCatalog.asset_of(rule.archetype_id)
+			var archetype := EntityArchetypeCatalog.get_archetype(rule.archetype_id)
+			rule_data[rule] = {
+				"key": rule.stable_key(),
+				"asset": asset,
+				"policy": asset.placement_policy() if asset != null else null,
+				"exclusive_cell": archetype != null \
+					and archetype.has_component(&"settlement_natural"),
+			}
 
 	for index in context.cell_count:
 		var cell := context.cell_of_index(index)
@@ -99,35 +130,54 @@ static func populate(
 		var temperature := context.temperature[index] if index < context.temperature.size() else 0.0
 		var moisture := context.moisture[index] if index < context.moisture.size() else 0.5
 
-		for rule_index in rules.size():
-			var rule := rules[rule_index]
+		for rule: BiomeFillRule in rules:
+			var cached: Dictionary = rule_data[rule]
+			var rule_key: StringName = cached["key"]
 			if not rule.accepts_climate(temperature, moisture):
 				outcome.note(&"climate", rule.archetype_id)
 				continue
-			# Бросок посеян клеткой И правилом: два правила в одной клетке — два
-			# независимых броска, а не один общий, иначе трава и дерево всегда
-			# выпадали бы вместе.
-			rng.seed = hash([stream, cell.x, cell.y, rule_index])
-			if rng.randf() >= rule.density:
+			var whole := floori(rule.density)
+			var candidates := whole
+			rng.seed = hash([stream, cell.x, cell.y, rule_key, &"count"])
+			if rng.randf() < rule.density - float(whole):
+				candidates += 1
+			if candidates == 0:
 				continue
-			if rule.near_water_cells > 0 and not _has_water_near(
+			if rule.near_water_cells > 0 and not _has_near_water(
 					terrain, water, cell, mini(rule.near_water_cells, MAX_WATER_SEARCH)):
+				for _candidate in candidates:
+					outcome.note(&"water", rule.archetype_id)
 				continue
-			var asset := EntityArchetypeCatalog.asset_of(rule.archetype_id)
+			var asset: WorldAssetDef = cached["asset"]
 			if asset == null:
+				for _candidate in candidates:
+					outcome.note(&"missing", rule.archetype_id)
 				continue
-			var policy := asset.placement_policy()
+			var policy: AssetPlacementPolicy = cached["policy"]
 			var footprint := Rect2i(cell, policy.footprint_cells)
 			if not EntityPlacementProbe.accepts_cells(policy, terrain, water, footprint):
-				outcome.note(&"policy", rule.archetype_id)
+				for _candidate in candidates:
+					outcome.note(&"policy", rule.archetype_id)
 				continue
-			var spacing := _spacing_cells(rule, policy, cell_size)
-			if _is_crowded(occupied, rule.archetype_id, cell, spacing):
-				outcome.note(&"spacing", rule.archetype_id)
-				continue
-			_occupy(occupied, rule.archetype_id, cell)
-			document.scatter.add(_record_for(document.scatter, rule, asset, cell, rng))
-			outcome.placed += 1
+			for candidate_index in candidates:
+				# Seed адресует правило, а не его позицию в таблице: соседняя новая
+				# строка не перекрашивает и не передвигает существующий вид.
+				rng.seed = hash([stream, cell.x, cell.y, rule_key, candidate_index])
+				var record := _record_for(document.scatter, rule, asset, cell, rng)
+				if bool(cached["exclusive_cell"]) \
+						and occupied.is_exclusive_cell_claimed(record.cell):
+					outcome.note(&"spacing", rule.archetype_id)
+					continue
+				var spacing_metres := _spacing_metres(rule, policy) * record.scale
+				if occupied.is_crowded(rule.archetype_id, record, spacing_metres):
+					outcome.note(&"spacing", rule.archetype_id)
+					continue
+				occupied.add(rule.archetype_id, record, spacing_metres)
+				if bool(cached["exclusive_cell"]):
+					occupied.claim_exclusive_cell(record.cell)
+				document.scatter.add(record)
+				outcome.placed += 1
+				outcome.note_placed(rule_key)
 
 	outcome.milliseconds = Time.get_ticks_msec() - started
 	return outcome
@@ -160,49 +210,26 @@ static func _record_for(
 	return record
 
 
-## Интервал в клетках. Ноль в правиле значит «взять у ассета» — там он объявлен
+## Интервал в метрах. Ноль в правиле значит «взять у ассета» — там он объявлен
 ## вместе с остальной политикой разброса.
-static func _spacing_cells(rule: BiomeFillRule, policy: AssetPlacementPolicy, cell_size: float) -> int:
-	var metres := rule.min_spacing_m if rule.min_spacing_m > 0.0 else policy.scatter_min_spacing_m
-	return maxi(0, int(ceilf(metres / cell_size)) - 1)
-
-
-static func _is_crowded(
-	occupied: Dictionary,
-	archetype_id: StringName,
-	cell: Vector2i,
-	spacing: int
-) -> bool:
-	var taken: Dictionary = occupied.get(archetype_id, {})
-	if taken.has(cell):
-		return true
-	for dz in range(-spacing, spacing + 1):
-		for dx in range(-spacing, spacing + 1):
-			if taken.has(cell + Vector2i(dx, dz)):
-				return true
-	return false
-
-
-static func _occupy(occupied: Dictionary, archetype_id: StringName, cell: Vector2i) -> void:
-	var taken: Dictionary = occupied.get(archetype_id, {})
-	taken[cell] = true
-	occupied[archetype_id] = taken
+static func _spacing_metres(rule: BiomeFillRule, policy: AssetPlacementPolicy) -> float:
+	return rule.min_spacing_m if rule.min_spacing_m > 0.0 else policy.scatter_min_spacing_m
 
 
 ## Есть ли мокрая клетка в радиусе. Дороже, чем хочется, поэтому спрашивается
 ## только правилами, которые об этом попросили: камышу без этого разрешено расти
 ## посреди луга, потому что политика размещения ему сушу не запрещает.
-static func _has_water_near(
+static func _has_near_water(
 	terrain: TerrainGrid,
 	water: WaterGrid,
 	cell: Vector2i,
-	radius: int
+	radius: int,
 ) -> bool:
 	if water == null:
 		return false
 	for dz in range(-radius, radius + 1):
 		for dx in range(-radius, radius + 1):
-			var probe := cell + Vector2i(dx, dz)
-			if terrain.is_inside(probe) and water.is_wet(terrain, probe):
+			var nearby := cell + Vector2i(dx, dz)
+			if terrain.is_inside(nearby) and water.is_wet(terrain, nearby):
 				return true
 	return false

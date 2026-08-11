@@ -11,6 +11,7 @@ signal document_change_requested()
 ## перестройка чанков наполнения — это ровно одна нода, и звать ради неё общий
 ## пересбор значило бы платить всей картой за один мазок.
 signal scatter_changed()
+signal scatter_chunks_changed(chunks: Array)
 
 ## Everything a mode is allowed to reach (map_editor.md §3.5).
 ##
@@ -129,6 +130,10 @@ func set_edit_label(label: String) -> void:
 
 func notify_scatter_changed() -> void:
 	scatter_changed.emit()
+
+
+func notify_scatter_chunks_changed(chunks: Array) -> void:
+	scatter_chunks_changed.emit(chunks)
 
 
 func set_status_message(message: String, is_error: bool = false) -> void:

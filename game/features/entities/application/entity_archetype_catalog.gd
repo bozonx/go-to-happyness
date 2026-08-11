@@ -14,9 +14,6 @@ extends RefCounted
 ## it. That is what will let the future archetype editor (§14.1) add a mechanic
 ## without a commit in GDScript.
 
-const PACK_ROOTS: Array[String] = [
-	"res://game/content", "user://content/projects", "user://content/installed",
-]
 const ARCHETYPE_DIR := "archetypes"
 
 static var _archetypes: Dictionary = {}
@@ -27,6 +24,7 @@ static var load_errors: Array[String] = []
 
 
 static func reload() -> void:
+	ContentIndex.invalidate()
 	_archetypes.clear()
 	load_errors.clear()
 	_loaded = false
@@ -106,11 +104,8 @@ static func _ensure_loaded() -> void:
 	if _loaded:
 		return
 	_loaded = true
-	for root: String in PACK_ROOTS:
-		if not DirAccess.dir_exists_absolute(root):
-			continue
-		for pack_dir: String in DirAccess.get_directories_at(root):
-			_load_pack(root.path_join(pack_dir), StringName(pack_dir))
+	for pack in ContentIndex.shared().content_packs():
+		_load_pack(pack.root_path, pack.id)
 
 
 static func _load_pack(pack_root: String, pack_id: StringName) -> void:
@@ -137,6 +132,11 @@ static func _register(
 	pack_id: StringName,
 	path: String
 ) -> void:
+	if pack_id != &"core" and archetype.asset_id != &"" \
+			and not String(archetype.asset_id).contains(":"):
+		var pack_asset := qualified_id(pack_id, archetype.asset_id)
+		if WorldAssetCatalog.has_asset(pack_asset):
+			archetype.asset_id = pack_asset
 	archetype.id = qualified_id(pack_id, archetype.id)
 	if _archetypes.has(archetype.id):
 		load_errors.append("Дубликат архетипа %s: %s" % [archetype.id, path])

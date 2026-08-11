@@ -32,6 +32,7 @@ const INSPECTOR_SCATTER_MODE := &"editor_scatter_mode"
 const INSPECTOR_SCATTER_RADIUS := &"editor_scatter_radius"
 const INSPECTOR_SCATTER_DENSITY := &"editor_scatter_density"
 const INSPECTOR_SCATTER_SEED := &"editor_scatter_seed"
+const INSPECTOR_SCATTER_MIX := &"editor_scatter_mix"
 const TRANSFORM_PROPERTIES: Array[StringName] = [INSPECTOR_CELL, INSPECTOR_CELL_X, INSPECTOR_CELL_Z, INSPECTOR_ELEVATION, INSPECTOR_OFFSET, INSPECTOR_PITCH, INSPECTOR_YAW, INSPECTOR_ROLL, INSPECTOR_ROTATION, INSPECTOR_SCALE]
 ## Действие «заменить выделенное на выбранный в палитре архетип».
 const OPTION_REPLACE := &"fill_replace"
@@ -58,11 +59,17 @@ var _vary_rng := RandomNumberGenerator.new()
 ## наполнения ведёт себя ровно как раньше — один клик, один объект.
 var _scatter_mode := false
 var _scatter_settings := ScatterBrush.Settings.new()
+var _scatter_mix_text := ""
 ## Занятость слоя на время одной протяжки. Пересчитывать её на каждый кадр
 ## значило бы проходить по всему лесу за каждое движение мыши.
-var _scatter_occupancy: Dictionary = {}
+var _scatter_occupancy: ScatterSpacingIndex = null
 var _scatter_merge_key: StringName = &""
 var _scatter_stroke_serial := 0
+var _scatter_before := PackedByteArray()
+var _scatter_before_archetypes: Array[StringName] = []
+var _scatter_placed_total := 0
+var _active_scatter_command: MapScatterCommand = null
+var _selected_scatter_index := -1
 var _pending_reference_property: StringName = &""
 var _selected_id: StringName = &""
 var _additional_selected: Array[StringName] = []
@@ -106,6 +113,8 @@ func configure(next_context: MapEditorContext) -> void:
 
 func activate() -> void:
 	WorldAssetCatalog.refresh()
+	EntityArchetypeCatalog.reload()
+	BiomeFillCatalog.reload()
 	BuildingBlueprintLibrary.refresh()
 	rebuild_views()
 
@@ -114,6 +123,7 @@ func deactivate() -> void:
 	_selected_id = &""
 	_additional_selected.clear()
 	_placement.deselect()
+	_selected_scatter_index = -1
 	_hide_ghost()
 
 
@@ -155,6 +165,8 @@ func handle_input(event: InputEvent) -> bool:
 			return false
 		match key.keycode:
 			KEY_DELETE:
+				if _selected_scatter_index >= 0:
+					return _delete_selected_scatter()
 				if _placement.has_selection():
 					return _placement.remove(_placement.selected_record())
 				return _delete_selected()
@@ -170,6 +182,8 @@ func handle_input(event: InputEvent) -> bool:
 				return _rotate_selection("x", -1 if key.shift_pressed else 1)
 			KEY_Z:
 				return _rotate_selection("z", -1 if key.shift_pressed else 1)
+			KEY_P:
+				return _promote_selected_scatter()
 			KEY_ESCAPE:
 				if _placement.is_engaged():
 					_placement.clear_brush()
@@ -199,11 +213,15 @@ func pick_from_cell() -> bool:
 func _handle_mouse(event: InputEventMouseButton) -> bool:
 	if event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 		var consumed := _placing_stroke or _dragging_selection
+		if _placing_stroke and _scatter_mode:
+			_finish_scatter_stroke()
 		_placing_stroke = false
 		_dragging_selection = false
 		return consumed
 	if not event.pressed or not context.brush.has_hover:
 		return false
+	if _placing_stroke and _scatter_mode:
+		_finish_scatter_stroke()
 	_placing_stroke = false
 	var cell := context.brush.hovered_cell
 	# Shift+ПКМ — обратное действие, как во всех режимах редактора карт
@@ -221,6 +239,16 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 		return _erase_at(cell)
 	if event.button_index != MOUSE_BUTTON_LEFT:
 		return false
+	if _scatter_mode and event.ctrl_pressed:
+		_selected_scatter_index = context.document.scatter.first_at(cell)
+		if _selected_scatter_index >= 0:
+			var record := context.document.scatter.records[_selected_scatter_index]
+			context.set_status_message(
+				"Выбран массовый объект %d (%s). Delete — удалить, P — сделать именованным." % [
+					_selected_scatter_index, context.document.scatter.archetype_of(record)])
+		else:
+			context.set_status_message("В этой клетке нет массового объекта.", true)
+		return true
 	if event.shift_pressed:
 		if _placement.pick_at(cell):
 			notify_ui_changed()
@@ -256,8 +284,17 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 			return true
 		_scatter_stroke_serial += 1
 		_scatter_merge_key = StringName("fill_scatter/%d" % _scatter_stroke_serial)
-		_scatter_occupancy = ScatterBrush.occupancy_of(context.document.scatter)
+		_scatter_occupancy = ScatterBrush.occupancy_of(
+			context.document.scatter, context.terrain.cell_size)
+		_scatter_before = MapScatterCodec.encode(context.document.scatter)
+		_scatter_before_archetypes = context.document.scatter.archetypes.duplicate()
+		_scatter_placed_total = 0
 		_scatter_at(cell)
+		if _scatter_placed_total > 0:
+			_active_scatter_command = MapScatterCommand.of(
+				context.document, _scatter_before, _scatter_before_archetypes,
+				"разброс объектов")
+			context.history.push(_active_scatter_command, _scatter_merge_key)
 		_placing_stroke = true
 		_last_placed_cell = cell
 		return true
@@ -504,17 +541,31 @@ func _scatter_at(cell: Vector2i) -> void:
 	if not settings.is_ready():
 		context.set_status_message("Кисть-разброс: нужен ассет и ненулевая плотность.", true)
 		return
-	var before := MapScatterCodec.encode(context.document.scatter)
-	var before_archetypes := context.document.scatter.archetypes.duplicate()
 	var placed := ScatterBrush.stroke(
 		settings, context.document.scatter, context.terrain, context.water, cell, _scatter_occupancy)
 	if placed.is_empty():
 		return
 	for record: MapScatterLayer.Record in placed:
 		context.document.scatter.add(record)
-	_commit_scatter(before, before_archetypes, "разброс %d объектов" % placed.size())
+	_scatter_placed_total += placed.size()
+	var chunks: Array = []
+	for record: MapScatterLayer.Record in placed:
+		var chunk := context.terrain.chunk_of(record.cell)
+		if chunk not in chunks:
+			chunks.append(chunk)
+	context.notify_scatter_chunks_changed(chunks)
 	context.set_status_message("Разброс: поставлено %d, всего в слое %d."
-		% [placed.size(), context.document.scatter.live_count()])
+		% [_scatter_placed_total, context.document.scatter.live_count()])
+
+
+func _finish_scatter_stroke() -> void:
+	if _scatter_placed_total <= 0:
+		return
+	if _active_scatter_command != null:
+		_active_scatter_command.capture_after()
+		_active_scatter_command.label = "разброс %d объектов" % _scatter_placed_total
+	_active_scatter_command = null
+	_scatter_placed_total = 0
 
 
 func _scatter_along(from_cell: Vector2i, to_cell: Vector2i) -> void:
@@ -539,11 +590,102 @@ func _scatter_erase(cell: Vector2i) -> bool:
 	if removed == 0:
 		context.set_status_message("Под кистью нет объектов массового слоя.", true)
 		return true
-	_scatter_occupancy = ScatterBrush.occupancy_of(context.document.scatter)
+	_scatter_occupancy = ScatterBrush.occupancy_of(
+		context.document.scatter, context.terrain.cell_size)
 	_commit_scatter(before, before_archetypes, "стёрто %d объектов" % removed)
 	context.set_status_message("Стёрто %d, осталось %d."
 		% [removed, context.document.scatter.live_count()])
 	return true
+
+
+func _delete_selected_scatter() -> bool:
+	var index := _selected_scatter_index
+	if index < 0 or index >= context.document.scatter.records.size():
+		_selected_scatter_index = -1
+		return false
+	var before := MapScatterCodec.encode(context.document.scatter)
+	var before_archetypes := context.document.scatter.archetypes.duplicate()
+	if not context.document.scatter.remove_at(index):
+		_selected_scatter_index = -1
+		return false
+	_selected_scatter_index = -1
+	_scatter_stroke_serial += 1
+	_scatter_merge_key = StringName("fill_scatter_delete/%d" % _scatter_stroke_serial)
+	_commit_scatter(before, before_archetypes, "удаление массового объекта")
+	return true
+
+
+## Giving an anonymous record a name moves it between storage models without
+## moving it on the board. Both layer edits are one history action.
+func _promote_selected_scatter() -> bool:
+	var index := _selected_scatter_index
+	if index < 0 or index >= context.document.scatter.records.size():
+		return false
+	var source := context.document.scatter.records[index]
+	if source.is_empty():
+		return false
+	var archetype_id := context.document.scatter.archetype_of(source)
+	var archetype := EntityArchetypeCatalog.get_archetype(archetype_id)
+	if archetype == null:
+		context.set_status_message("Нельзя именовать объект: архетип не установлен.", true)
+		return true
+	var entities_before := context.document.entities.to_json()
+	var scatter_before := MapScatterCodec.encode(context.document.scatter)
+	var scatter_archetypes_before := context.document.scatter.archetypes.duplicate()
+	var named := MapEntityRecord.new()
+	named.id = _next_id(String(archetype_id).get_slice(":", 1))
+	named.archetype_id = archetype_id
+	var centre := context.terrain.cell_center(source.cell)
+	named.offset = Vector3(
+		source.offset.x * context.terrain.cell_size, 0.0,
+		source.offset.y * context.terrain.cell_size)
+	named.position = Vector3(centre.x, 0.0, centre.z) + named.offset
+	var asset := EntityArchetypeCatalog.asset_of(archetype_id)
+	named.position.y = EntityPlacementProbe.surface_offset(
+		asset.placement_policy() if asset != null else null,
+		context.terrain, context.water, source.cell, named.position)
+	named.yaw_degrees = source.yaw_degrees
+	named.scale = source.scale
+	if asset != null:
+		named.appearance = _scatter_appearance_of(asset, source)
+	context.document.entities.entities.append(named)
+	context.document.scatter.remove_at(index)
+	var entity_command := MapEntityCommand.of(
+		context.document, entities_before, context.document.entities.to_json(),
+		"именование массового объекта").mark_applied()
+	var scatter_command := MapScatterCommand.of(
+		context.document, scatter_before, scatter_archetypes_before,
+		"именование массового объекта").mark_applied()
+	context.history.push(MapEditorCompositeCommand.of(
+		[scatter_command, entity_command], "именование массового объекта"))
+	_selected_scatter_index = -1
+	_select(named.id, false)
+	rebuild_views()
+	notify_ui_changed()
+	context.set_status_message("Объект получил id %s и перенесён в entities[]." % named.id)
+	return true
+
+
+## MultiMesh displays exactly the first varying colour control. Promotion must
+## carry that same draw into the named record; drawing every varying bool/float
+## here would make details appear that the anonymous instance never showed.
+static func _scatter_appearance_of(
+	asset: WorldAssetDef, source: MapScatterLayer.Record,
+) -> Dictionary:
+	for control: Dictionary in asset.appearance_controls:
+		if String(control.get("type", "")) != WorldAssetDef.TYPE_COLOR \
+				or float(control.get("vary", 0.0)) <= 0.0:
+			continue
+		var name := String(control.get("name", ""))
+		if name.is_empty():
+			continue
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash([source.cell.x, source.cell.y, source.variant])
+		var colour := WorldAssetDef.jittered_color(
+			WorldAssetDef.to_color(control.get("default", Color.WHITE)),
+			float(control.get("vary", 0.0)), rng)
+		return {name: FillObjectRecord.json_safe_value(colour)}
+	return {}
 
 
 ## Настройки мазка: смесь берётся из палитры. Один архетип — это смесь из одного,
@@ -551,7 +693,13 @@ func _scatter_erase(cell: Vector2i) -> bool:
 ## позволит её собрать, и код кисти для этого менять не придётся.
 func _current_scatter_settings() -> ScatterBrush.Settings:
 	_scatter_settings.mix = ScatterBrush.Mix.new()
-	if _archetype_id != &"":
+	for raw_entry: String in _scatter_mix_text.split(",", false):
+		var parts := raw_entry.strip_edges().split("=", false, 1)
+		var id := StringName(parts[0].strip_edges()) if not parts.is_empty() else &""
+		var weight := float(parts[1]) if parts.size() > 1 and parts[1].is_valid_float() else 1.0
+		if id != &"" and EntityArchetypeCatalog.get_archetype(id) != null:
+			_scatter_settings.mix.add(id, weight)
+	if _scatter_settings.mix.is_empty() and _archetype_id != &"":
 		_scatter_settings.mix.add(_archetype_id)
 	_scatter_settings.vary = _brush_vary
 	return _scatter_settings
@@ -567,7 +715,6 @@ func _commit_scatter(
 	var command := MapScatterCommand.of(
 		context.document, before, before_archetypes, command_label)
 	context.history.push(command, _scatter_merge_key)
-	context.notify_scatter_changed()
 	notify_ui_changed()
 
 
@@ -1237,6 +1384,10 @@ func _scatter_brush_properties(asset: WorldAssetDef) -> Array[EntityPropertyDef]
 		"section": "brush", "min": 0, "max": 999999, "step": 1.0,
 		"default": _scatter_settings.seed_value,
 	}))
+	properties.append(EntityPropertyDef.from_dict({
+		"name": INSPECTOR_SCATTER_MIX, "label": "Смесь (id=вес)", "type": "string",
+		"section": "brush", "default": _scatter_mix_text,
+	}))
 	return properties
 
 
@@ -1324,6 +1475,7 @@ func inspector_values() -> Dictionary:
 		brush_values[INSPECTOR_SCATTER_RADIUS] = _scatter_settings.radius_cells
 		brush_values[INSPECTOR_SCATTER_DENSITY] = _scatter_settings.density
 		brush_values[INSPECTOR_SCATTER_SEED] = _scatter_settings.seed_value
+		brush_values[INSPECTOR_SCATTER_MIX] = _scatter_mix_text
 		for definition: EntityPropertyDef in _appearance_definitions(EntityArchetypeCatalog.asset_of(active_archetype.id)):
 			brush_values[definition.name] = _brush_appearance.get(String(definition.name).trim_prefix(APPEARANCE_PREFIX), definition.default)
 		return brush_values
@@ -1445,6 +1597,13 @@ func _apply_brush_value(property_name: StringName, value: Variant) -> bool:
 		if _scatter_settings.seed_value == next_seed:
 			return false
 		_scatter_settings.seed_value = next_seed
+		notify_ui_changed()
+		return true
+	if property_name == INSPECTOR_SCATTER_MIX:
+		var next_mix := String(value).strip_edges()
+		if _scatter_mix_text == next_mix:
+			return false
+		_scatter_mix_text = next_mix
 		notify_ui_changed()
 		return true
 	if String(property_name).begins_with(APPEARANCE_PREFIX):

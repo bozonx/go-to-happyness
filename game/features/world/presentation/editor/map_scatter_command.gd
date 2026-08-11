@@ -50,6 +50,18 @@ func undo() -> bool:
 	return true
 
 
+func mark_applied() -> MapScatterCommand:
+	_first_apply = false
+	return self
+
+
+func capture_after() -> void:
+	if _document == null:
+		return
+	_after = MapScatterCodec.encode(_document.scatter)
+	_after_archetypes = _document.scatter.archetypes.duplicate()
+
+
 ## Склейка протяжки: «было» от первого кадра, «стало» от последнего. Автор вёл
 ## мышью один раз — и Ctrl+Z обязан отменить один мазок, а не семнадцать кадров.
 func absorb(next: MapEditorCommand) -> bool:

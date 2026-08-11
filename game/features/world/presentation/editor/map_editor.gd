@@ -282,7 +282,7 @@ func _build_services() -> void:
 		_scatter_world = ScatterWorld.new()
 		_scatter_world.name = "Scatter"
 		add_child(_scatter_world)
-	_scatter_world.configure(document.scatter, document.terrain)
+	_scatter_world.configure(document.scatter, document.terrain, document.water)
 	_build_hover_marker()
 	_refresh_camera_framing()
 
@@ -319,12 +319,19 @@ func _build_services() -> void:
 		_context.document_change_requested.connect(_notify_document_changed)
 	if not _context.scatter_changed.is_connected(_rebuild_scatter_world):
 		_context.scatter_changed.connect(_rebuild_scatter_world)
+	if not _context.scatter_chunks_changed.is_connected(_refresh_scatter_chunks):
+		_context.scatter_chunks_changed.connect(_refresh_scatter_chunks)
 	_context.confirm_handler = Callable(self, "confirm_action")
 	ramp_preview.configure(document.terrain)
 	if water_highlight != null:
 		water_highlight.configure(document.water, document.terrain)
 	if water_flood_preview != null:
 		water_flood_preview.configure(document.water, document.terrain)
+
+
+func _refresh_scatter_chunks(chunks: Array) -> void:
+	if _scatter_world != null:
+		_scatter_world.refresh_chunks(chunks)
 
 
 func _on_status_message_changed(message: String, is_error: bool) -> void:
@@ -481,6 +488,9 @@ func generate_into_current(recipe: MapRecipe, seed_value: int) -> GenerationResu
 	water_world.configure_border(document.meta.border_kind, document.meta.border_level)
 	terrain_world.rebuild_pending_now()
 	water_world.rebuild_pending_now()
+	# Generation replaces the contents of the existing layer object. Rebuilding
+	# the terrain does not notify its separate MultiMesh projection.
+	_rebuild_scatter_world()
 	for mode: MapEditorMode in _modes:
 		mode.configure(_context)
 	_refresh_camera_framing()

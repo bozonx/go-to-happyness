@@ -19,9 +19,6 @@ extends RefCounted
 ## затирают друг друга: пак с бабочками добавляет бабочек в луг, а не заменяет
 ## собой луг.
 
-const PACK_ROOTS: Array[String] = [
-	"res://game/content", "user://content/projects", "user://content/installed",
-]
 const BIOME_DIR := "biomes"
 const FILE_SUFFIX := ".gdbiomefill.json"
 
@@ -33,6 +30,7 @@ static var load_errors: Array[String] = []
 
 
 static func reload() -> void:
+	ContentIndex.invalidate()
 	_rules.clear()
 	load_errors.clear()
 	_loaded = false
@@ -76,14 +74,11 @@ static func _ensure_loaded() -> void:
 	if _loaded:
 		return
 	_loaded = true
-	for root: String in PACK_ROOTS:
-		if not DirAccess.dir_exists_absolute(root):
-			continue
-		for pack_dir: String in DirAccess.get_directories_at(root):
-			_load_pack(root.path_join(pack_dir))
+	for pack in ContentIndex.shared().content_packs():
+		_load_pack(pack.root_path, String(pack.id))
 
 
-static func _load_pack(pack_root: String) -> void:
+static func _load_pack(pack_root: String, pack_id: String) -> void:
 	var root := pack_root.path_join(BIOME_DIR)
 	if not DirAccess.dir_exists_absolute(root):
 		return
@@ -94,10 +89,11 @@ static func _load_pack(pack_root: String) -> void:
 	for file_name: String in file_names:
 		if not file_name.ends_with(FILE_SUFFIX):
 			continue
-		_load_file(root.path_join(file_name))
+		_load_file(
+			root.path_join(file_name), "%s/%s" % [pack_id, file_name], StringName(pack_id))
 
 
-static func _load_file(path: String) -> void:
+static func _load_file(path: String, source_key: String, pack_id: StringName) -> void:
 	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 	if not (parsed is Dictionary):
 		load_errors.append("Некорректная таблица биома: %s" % path)
@@ -116,8 +112,11 @@ static func _load_file(path: String) -> void:
 		if not (raw is Dictionary):
 			continue
 		var rule := BiomeFillRule.from_dict(raw as Dictionary)
+		if rule.archetype_id != &"" and not String(rule.archetype_id).contains(":"):
+			rule.archetype_id = EntityArchetypeCatalog.qualified_id(pack_id, rule.archetype_id)
 		if not rule.is_valid():
 			load_errors.append("Правило без архетипа или с нулевой плотностью: %s" % path)
 			continue
+		rule.source_key = StringName(source_key)
 		bucket.append(rule)
 	_rules[biome_id] = bucket

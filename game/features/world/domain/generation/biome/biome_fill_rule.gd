@@ -4,10 +4,10 @@ extends RefCounted
 ## Одна строка таблицы «что растёт в этом биоме»
 ## (`procedural_map_generation.md` §11.4, слой 4).
 ##
-## Правило говорит ровно две вещи: ЧТО ставить и СКОЛЬКО. Где именно объект
+## Правило говорит ЧТО ставить, СКОЛЬКО и в какой части климата это уместно. Где именно объект
 ## может стоять — уклон, поверхность, вода — здесь не повторяется ни одним
 ## полем: на это отвечает `placement` архетипа через `EntityPlacementProbe`.
-## Спецификация требует этого дословно — «настоящая `placement`-политика
+## Спецификация требует одной `placement`-политики
 ## архетипа, без облегчённой копии правил», — и причина простая: копия начнёт
 ## расходиться с оригиналом, и лес генератора перестанет совпадать с лесом,
 ## который автор ставит той же кистью.
@@ -17,11 +17,14 @@ extends RefCounted
 ## сырая низина, и папоротник принадлежит второй, хотя политика размещения
 ## разрешает ему обе.
 
-## Сколько объектов приходится на клетку доски в среднем. Не вероятность и не
-## штука: разброс расставляет кандидатов по площади, а не по клеткам, поэтому
-## значение больше единицы осмысленно (трава гуще одной на клетку).
+## Сколько объектов приходится на клетку доски в среднем. Дробная часть —
+## вероятность ещё одного кандидата; значение больше единицы осмысленно.
 var density := 0.0
 var archetype_id: StringName = &""
+## Необязательный устойчивый id строки. Если его нет, каталог строит ключ из
+## файла и содержимого правила. Seed никогда не зависит от позиции строки.
+var id: StringName = &""
+var source_key: StringName = &""
 ## Минимальный интервал между объектами ОДНОГО правила, в метрах. Ноль — взять
 ## у ассета (`placement.scatter.min_spacing_m`).
 var min_spacing_m := 0.0
@@ -44,6 +47,8 @@ func accepts_climate(temperature: float, moisture: float) -> bool:
 
 func to_dict() -> Dictionary:
 	var result: Dictionary = {"archetype": String(archetype_id), "density": density}
+	if id != &"":
+		result["id"] = String(id)
 	if min_spacing_m > 0.0:
 		result["min_spacing_m"] = min_spacing_m
 	if temperature_range != Vector2(-100.0, 100.0):
@@ -59,6 +64,7 @@ func to_dict() -> Dictionary:
 ## поздней сборкой, обязана открыться и здесь (`map_fill_mode.md` §11).
 static func from_dict(source: Dictionary) -> BiomeFillRule:
 	var rule := BiomeFillRule.new()
+	rule.id = StringName(source.get("id", ""))
 	rule.archetype_id = StringName(source.get("archetype", ""))
 	rule.density = maxf(0.0, float(source.get("density", 0.0)))
 	rule.min_spacing_m = maxf(0.0, float(source.get("min_spacing_m", 0.0)))
@@ -78,3 +84,16 @@ static func _range_of(raw: Variant, fallback: Vector2) -> Vector2:
 
 func is_valid() -> bool:
 	return archetype_id != &"" and density > 0.0
+
+
+## Устойчивый ключ для посева кандидатов. Изменение density сохраняет уже
+## существующее подмножество, а вставка соседней строки не двигает этот вид.
+func stable_key() -> StringName:
+	if id != &"":
+		return StringName("%s/%s" % [source_key, id])
+	return StringName("%s/%s/%.3f:%.3f/%.3f:%.3f/w%d/s%.3f" % [
+		source_key, archetype_id,
+		temperature_range.x, temperature_range.y,
+		moisture_range.x, moisture_range.y,
+		near_water_cells, min_spacing_m,
+	])

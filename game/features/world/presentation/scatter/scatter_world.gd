@@ -14,10 +14,10 @@ extends Node3D
 ## своих записей, а не всей карты, и `VisualInstance3D` целого леса не отсекается
 ## камерой никогда.
 ##
-## **Ноды у объектов нет вовсе.** Ленивая нода из §9.4 — это следующий разговор:
-## она нужна тому, с чем взаимодействуют, а безымянному дереву из слоя наполнения
-## не нужна, пока никто не попросил его срубить. Механика, которой нода
-## понадобится, поднимет запись в `entities[]` — там нода есть всегда.
+## Игровой host может забрать архетипы по компонентам: они исключаются из
+## MultiMesh и получают живые ноды у adapter-а. Для остальных scene-owned
+## коллизий эта проекция поднимает невидимые collision proxy, сохраняя визуал
+## батчированным. Произвольной ленивой activation/LOD-системы здесь нет.
 
 ## Тень от травинки стоит столько же, сколько тень от дома, поэтому мелочь её не
 ## отбрасывает. Порог в метрах по наибольшему габариту ассета.
@@ -25,15 +25,80 @@ const SHADOW_MIN_SIZE := 1.2
 
 var _layer: MapScatterLayer = null
 var _terrain: TerrainGrid = null
+var _water: WaterGrid = null
+var _excluded_components: Array[StringName] = []
 var _chunks: Dictionary = {}
+var _collision_chunks: Dictionary = {}
+var _build_scene_collisions := false
+var _terrain_service: TerrainService = null
+var _water_service: WaterService = null
 
 
 ## Полная перестройка. Вызывается при загрузке карты и после генерации — то есть
 ## тогда, когда изменилось всё.
-func configure(layer: MapScatterLayer, terrain: TerrainGrid) -> void:
+func configure(
+	layer: MapScatterLayer,
+	terrain: TerrainGrid,
+	water: WaterGrid = null,
+	excluded_components: Array[StringName] = [],
+	build_scene_collisions := false,
+) -> void:
 	_layer = layer
 	_terrain = terrain
+	_water = water
+	_excluded_components = excluded_components.duplicate()
+	_build_scene_collisions = build_scene_collisions
 	rebuild_all()
+
+
+func bind_services(terrain_service: TerrainService, water_service: WaterService) -> void:
+	_unbind_services()
+	_terrain_service = terrain_service
+	_water_service = water_service
+	if _terrain_service != null:
+		_terrain_service.edit_committed.connect(_on_terrain_edited)
+	if _water_service != null:
+		_water_service.edit_committed.connect(_on_water_edited)
+
+
+func _exit_tree() -> void:
+	_unbind_services()
+
+
+func _unbind_services() -> void:
+	if _terrain_service != null \
+			and _terrain_service.edit_committed.is_connected(_on_terrain_edited):
+		_terrain_service.edit_committed.disconnect(_on_terrain_edited)
+	if _water_service != null \
+			and _water_service.edit_committed.is_connected(_on_water_edited):
+		_water_service.edit_committed.disconnect(_on_water_edited)
+	_terrain_service = null
+	_water_service = null
+
+
+func _on_terrain_edited(delta: TerrainDelta) -> void:
+	if delta == null or not delta.changes_geometry():
+		return
+	var affected: Array[Vector2i] = []
+	for cell: Vector2i in delta.cells:
+		# A record samples the neighboring height for normal alignment.
+		for dz in [-1, 0, 1]:
+			for dx in [-1, 0, 1]:
+				var chunk := _terrain.chunk_of(cell + Vector2i(dx, dz))
+				if chunk not in affected:
+					affected.append(chunk)
+	refresh_chunks(affected)
+
+
+func _on_water_edited(delta: WaterDelta) -> void:
+	if delta == null:
+		return
+	var affected: Array[Vector2i] = []
+	for cell: Vector2i in delta.cells:
+		var chunk := _terrain.chunk_of(cell)
+		if chunk not in affected:
+			affected.append(chunk)
+	refresh_chunks(affected)
 
 
 func rebuild_all() -> void:
@@ -41,6 +106,7 @@ func rebuild_all() -> void:
 		remove_child(child)
 		child.queue_free()
 	_chunks.clear()
+	_collision_chunks.clear()
 	if _layer == null or _terrain == null or _layer.is_empty():
 		return
 	var by_chunk: Dictionary = {}
@@ -87,13 +153,18 @@ func instance_count() -> int:
 
 
 func _clear_chunk(chunk: Vector2i) -> void:
-	if not _chunks.has(chunk):
-		return
-	for instance: MultiMeshInstance3D in _chunks[chunk]:
-		if is_instance_valid(instance):
-			remove_child(instance)
-			instance.queue_free()
-	_chunks.erase(chunk)
+	if _chunks.has(chunk):
+		for instance: MultiMeshInstance3D in _chunks[chunk]:
+			if is_instance_valid(instance):
+				remove_child(instance)
+				instance.queue_free()
+		_chunks.erase(chunk)
+	if _collision_chunks.has(chunk):
+		for proxy: Node3D in _collision_chunks[chunk]:
+			if is_instance_valid(proxy):
+				remove_child(proxy)
+				proxy.queue_free()
+		_collision_chunks.erase(chunk)
 
 
 func _build_chunk(chunk: Vector2i, record_indices: Array) -> void:
@@ -106,6 +177,8 @@ func _build_chunk(chunk: Vector2i, record_indices: Array) -> void:
 
 	var built: Array[MultiMeshInstance3D] = []
 	for archetype_id: StringName in by_archetype:
+		if _is_claimed(archetype_id):
+			continue
 		var instance := _build_bucket(archetype_id, by_archetype[archetype_id])
 		if instance != null:
 			instance.name = "Scatter_%d_%d_%s" % [chunk.x, chunk.y, String(archetype_id).replace(":", "_")]
@@ -113,6 +186,34 @@ func _build_chunk(chunk: Vector2i, record_indices: Array) -> void:
 			built.append(instance)
 	if not built.is_empty():
 		_chunks[chunk] = built
+	_build_collision_proxies(chunk, record_indices)
+
+
+func _build_collision_proxies(chunk: Vector2i, record_indices: Array) -> void:
+	if not _build_scene_collisions:
+		return
+	var proxies: Array[Node3D] = []
+	for index: int in record_indices:
+		var record := _layer.records[index]
+		var archetype_id := _layer.archetype_of(record)
+		if _is_claimed(archetype_id):
+			continue
+		var asset := EntityArchetypeCatalog.asset_of(archetype_id)
+		if asset == null or asset.collision_policy != WorldAssetDef.COLLISION_SCENE \
+				or not ResourceLoader.exists(asset.scene_path):
+			continue
+		var scene := load(asset.scene_path) as PackedScene
+		var proxy := scene.instantiate() as Node3D if scene != null else null
+		if proxy == null:
+			continue
+		proxy.name = "ScatterCollision_%d" % index
+		proxy.transform = transform_of(record)
+		proxy.visible = false
+		proxy.process_mode = Node.PROCESS_MODE_DISABLED
+		add_child(proxy)
+		proxies.append(proxy)
+	if not proxies.is_empty():
+		_collision_chunks[chunk] = proxies
 
 
 func _build_bucket(archetype_id: StringName, record_indices: Array) -> MultiMeshInstance3D:
@@ -132,7 +233,7 @@ func _build_bucket(archetype_id: StringName, record_indices: Array) -> MultiMesh
 	var slot := 0
 	for index: int in record_indices:
 		var record := _layer.records[index]
-		multimesh.set_instance_transform(slot, _transform_of(record))
+		multimesh.set_instance_transform(slot, transform_of(record))
 		if multimesh.use_colors:
 			multimesh.set_instance_color(slot, _colour_of(baked, record))
 		slot += 1
@@ -149,7 +250,10 @@ func _build_bucket(archetype_id: StringName, record_indices: Array) -> MultiMesh
 	return instance
 
 
-func _transform_of(record: MapScatterLayer.Record) -> Transform3D:
+func transform_of(record: MapScatterLayer.Record) -> Transform3D:
+	var archetype_id := _layer.archetype_of(record)
+	var asset := EntityArchetypeCatalog.asset_of(archetype_id)
+	var policy := asset.placement_policy() if asset != null else null
 	var centre := _terrain.cell_center(record.cell)
 	var position := Vector3(
 		centre.x + record.offset.x * _terrain.cell_size,
@@ -158,8 +262,23 @@ func _transform_of(record: MapScatterLayer.Record) -> Transform3D:
 	# Высота — у рельефа, всегда. Объект, помнящий свою мировую Y, отрывается от
 	# земли при первой же правке ландшафта (§9.3).
 	position.y = _terrain.height_at(position)
-	var basis := Basis(Vector3.UP, deg_to_rad(record.yaw_degrees)).scaled(Vector3.ONE * record.scale)
+	position.y += EntityPlacementProbe.surface_offset(
+		policy, _terrain, _water, record.cell, position)
+	var basis := EntityPlacementProbe.aligned_basis(
+		_terrain, position, record.yaw_degrees, policy, record.scale)
 	return Transform3D(basis, position)
+
+
+func _is_claimed(archetype_id: StringName) -> bool:
+	if _excluded_components.is_empty():
+		return false
+	var archetype := EntityArchetypeCatalog.get_archetype(archetype_id)
+	if archetype == null:
+		return false
+	for component: StringName in _excluded_components:
+		if archetype.has_component(component):
+			return true
+	return false
 
 
 ## Цвет экземпляра — тот же разброс `vary`, что у одиночной постановки, посеянный

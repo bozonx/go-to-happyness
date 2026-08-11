@@ -17,6 +17,7 @@ func _init() -> void:
 	_test_baking_flattens_a_scene_into_one_mesh()
 	_test_records_become_instances_in_chunks()
 	_test_a_touched_chunk_rebuilds_alone()
+	_test_asset_vertical_offset_reaches_the_instance()
 	_test_missing_content_does_not_take_the_map_down()
 	print("--- test_scatter_world.gd PASSED ---")
 	quit(0)
@@ -103,6 +104,27 @@ func _test_a_touched_chunk_rebuilds_alone() -> void:
 	var untouched := layer.records[layer.records.size() - 1].cell
 	world.refresh_chunks([terrain.chunk_of(untouched)])
 	assert(world.instance_count() == before - 1)
+	world.free()
+
+
+func _test_asset_vertical_offset_reaches_the_instance() -> void:
+	var terrain := _terrain()
+	var layer := _layer_with(1)
+	# Ensure the pack catalog is loaded before mutating the shared asset fixture;
+	# its first load may rebuild the content index and therefore the asset cache.
+	assert(EntityArchetypeCatalog.get_archetype(&"core:tree") != null)
+	var asset := WorldAssetCatalog.get_asset(&"tree")
+	var previous := asset.placement.vertical_offset
+	asset.placement.vertical_offset = 1.25
+	assert(EntityArchetypeCatalog.asset_of(&"core:tree") == asset)
+	assert(is_equal_approx(EntityPlacementProbe.surface_offset(
+		asset.placement, terrain, null, layer.records[0].cell, Vector3.ZERO), 1.25))
+	var world := ScatterWorld.new()
+	world.configure(layer, terrain)
+	var transform := world.transform_of(layer.records[0])
+	assert(is_equal_approx(transform.origin.y, 1.25),
+		"vertical_offset потерян в scatter transform: %f" % transform.origin.y)
+	asset.placement.vertical_offset = previous
 	world.free()
 
 
