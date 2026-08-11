@@ -25,18 +25,13 @@ static func capture_settlement_section(game: Node) -> Dictionary:
 	var settlement_state := {}
 	if "settlement" in game and game.settlement != null:
 		var s = game.settlement
-		var res_map: Dictionary = {}
-		var ResourceIdsScript = load("res://game/features/settlement/domain/resource_ids.gd")
-		if ResourceIdsScript != null and "ALL" in ResourceIdsScript:
-			for res_id in ResourceIdsScript.ALL:
-				var amt: int = s.amount(res_id)
-				if amt > 0:
-					res_map[res_id] = amt
 		settlement_state = {
 			"money": s.money,
 			"wellbeing": s.wellbeing,
-			"resources": res_map,
-			"backpack": s.backpack.duplicate(true),
+			# Physical resources are serialized only by their owners below:
+			# warehouses in this section and ground/container inventories in
+			# `resource_piles`. Writing an aggregate here would restore a second
+			# balance before those owners and recreate the old virtual backpack.
 			"warehouses": _save_warehouses(s),
 			"warehouse_types": s.warehouse_types.duplicate(),
 			"warehouse_ever_built": s.warehouse_ever_built,
@@ -243,23 +238,27 @@ static func _save_warehouses(settlement: RefCounted) -> Array:
 	return result
 
 
-## Restores core settlement domain state (money, wellbeing, era, resources,
-## backpack, unlocked levels/systems, equipment) from a saved dictionary.
+## Restores core settlement state. `resources` and `backpack` are read-only
+## compatibility keys: new saves serialize physical inventory solely with its
+## warehouse or ResourcePile owner.
 static func restore_settlement_state(settlement: RefCounted, s_dict: Dictionary) -> void:
 	settlement.money = int(s_dict.get("money", 500))
 	settlement.wellbeing = int(s_dict.get("wellbeing", 75))
 	settlement.era = int(s_dict.get("era", 0))
 	settlement.backpack.clear()
-	if s_dict.get("backpack", {}) is Dictionary:
-		settlement.backpack.merge((s_dict.get("backpack") as Dictionary).duplicate(true), true)
+	var legacy_backpack: Variant = s_dict.get("backpack", null)
+	if legacy_backpack is Dictionary:
+		settlement.backpack.merge((legacy_backpack as Dictionary).duplicate(true), true)
 
-	var saved_res: Dictionary = s_dict.get("resources", {})
-	for res_id in ResourceIds.ALL:
-		var target_amt: int = int(saved_res.get(res_id, 0))
-		var current_amt: int = settlement.amount(res_id)
-		var diff: int = target_amt - current_amt
-		if diff != 0:
-			settlement.add(res_id, diff)
+	var legacy_resources: Variant = s_dict.get("resources", null)
+	if legacy_resources is Dictionary:
+		var saved_res := legacy_resources as Dictionary
+		for res_id in ResourceIds.ALL:
+			var target_amt: int = int(saved_res.get(res_id, 0))
+			var current_amt: int = settlement.amount(res_id)
+			var diff: int = target_amt - current_amt
+			if diff != 0:
+				settlement.add(res_id, diff)
 
 	if s_dict.has("unlocked_building_levels"):
 		var u_b: Dictionary = s_dict["unlocked_building_levels"]

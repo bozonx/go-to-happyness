@@ -185,6 +185,7 @@ func create_party_stash() -> void:
 	if game.launch_config == null or game.launch_config.map_document == null:
 		return
 	var spawn: MapEntityRecord = null
+	var inventory: Dictionary = {}
 	for entity: MapEntityRecord in game.launch_config.map_document.entities.entities:
 		if entity.function != MapEntityFunction.PARTY_STASH:
 			continue
@@ -195,20 +196,25 @@ func create_party_stash() -> void:
 		for key in props:
 			var amount := int(props[key])
 			if amount > 0:
-				game.settlement.backpack[str(key)] = int(game.settlement.backpack.get(str(key), 0)) + amount
+				inventory[str(key)] = int(inventory.get(str(key), 0)) + amount
 		if spawn == null:
 			spawn = entity
 	if spawn == null:
 		# A stash is an optional placement; without one the party starts with no
 		# ground pile, exactly as a map that never placed a backpack always did.
 		return
+	game.settlement.bind_starter_stash_inventory(inventory)
 	game.backpack_position = spawn.position
 	var terrain_height := game.terrain_height_at(game.backpack_position.x, game.backpack_position.z, 0.0)
 	if not is_nan(terrain_height):
 		game.backpack_position.y = terrain_height + 0.08
-	game.resource_pile_service.create_resource_pile(game.backpack_position, game.settlement.backpack, true)
+	game.resource_pile_service.create_resource_pile(game.backpack_position, inventory, true)
 	if not game.resource_piles.is_empty():
-		game.backpack_node = game.resource_piles[game.resource_piles.size() - 1].node
+		var stash: ResourcePile = game.resource_piles[game.resource_piles.size() - 1]
+		# ResourcePileService normalises authored values. Adopt that exact runtime
+		# inventory so every consumer mutates one physical record.
+		game.settlement.bind_starter_stash_inventory(stash.resources)
+		game.backpack_node = stash.node
 
 
 func on_ai_citizen_exiting(citizen_id: int) -> void:

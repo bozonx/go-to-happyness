@@ -212,7 +212,6 @@ func tick(delta: float) -> void:
 	game.foraging_service.update_gathering_indicators(game.is_first_person, game.interaction_action, game.interaction_resource, game.interaction_time, game.player_citizen, game.citizens)
 	if game.label_distance_fade_controller != null:
 		game.label_distance_fade_controller.update_label_distance_fading()
-	game.backpack_node = game.resource_pile_service.sync_backpack_pile(game.backpack_node)
 	if is_work_time() or game.has_active_night_work_order():
 		game.worker_poll_timer -= delta
 		if game.worker_poll_timer <= 0.0:

@@ -8,7 +8,7 @@ const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domai
 static func run_all() -> void:
 	_test_settlement_economy()
 	_test_tent_start_config()
-	_test_virtual_stockpile_migration()
+	_test_starter_stash_is_not_teleported()
 	_test_progression_and_volunteers()
 	_test_work_schedule_wellbeing()
 	_test_tent_survival_rules()
@@ -29,13 +29,11 @@ static func _test_settlement_economy() -> void:
 	assert(state.can_afford_building("warehouse"))
 	assert(state.pay_for_building("warehouse"))
 	assert(state.warehouse_ever_built)
-	state.migrate_virtual_to_warehouse(1)
-	assert(state.branches == 12 and state.grass == 4)
 	assert(state.storage_capacity(1) == 24)
 	assert(not state.reserve_storage_room_for("grass", 1, 0))
 	assert(state.reserve_storage_room_for("grass", 1, 1))
 	state.add("grass", 1)
-	assert(state.grass == 5 and state.wood == 0)
+	assert(state.grass == 1 and state.wood == 0)
 
 	# Verify Clay house costs grass instead of soil
 	state.era = SettlementState.Era.CLAY
@@ -125,55 +123,18 @@ static func _test_tent_start_config() -> void:
 	assert(int(decay.food) == 2 and int(decay.grass) == 1)
 
 
-static func _test_virtual_stockpile_migration() -> void:
+static func _test_starter_stash_is_not_teleported() -> void:
 	var state := SettlementState.new()
 	state.apply_tent_start()
-	assert(state.uses_virtual_storage())
-	state.add("branches", 3)
-	assert(state.amount("branches") == 3)
+	assert(state.uses_starter_stash_storage())
+	var physical_inventory := {"branches": 3}
+	state.bind_starter_stash_inventory(physical_inventory)
 	state.add_warehouse("warehouse")
-	var overflow := state.migrate_virtual_to_warehouse(1)
-	assert(not state.uses_virtual_storage())
-	assert(state.branches == 3)
-	assert(overflow.is_empty())
-	assert(state.virtual_stock.is_empty())
-
-	var small_overflow_state := SettlementState.new()
-	small_overflow_state.apply_tent_start()
-	small_overflow_state.add(ResourceIds.FOOD, 16)
-	small_overflow_state.add(ResourceIds.WATER, 8)
-	small_overflow_state.add(ResourceIds.TARP, 1)
-	small_overflow_state.add("branches", 4)
-	small_overflow_state.add_warehouse("warehouse")
-	var small_overflow := small_overflow_state.migrate_virtual_to_warehouse(1)
-	assert(small_overflow.has("tarp"))
-	assert(small_overflow["tarp"] == 1)
-
-	var overflow_state := SettlementState.new()
-	overflow_state.apply_tent_start()
-	overflow_state.add("branches", 200)
-	overflow_state.add_warehouse("warehouse")
-	var big_overflow := overflow_state.migrate_virtual_to_warehouse(1)
-	assert(big_overflow.has("branches"))
-	assert(big_overflow["branches"] == 176)
-	assert(overflow_state.branches <= overflow_state.storage_capacity(1))
-
-	var debug_state := SettlementState.new()
-	debug_state.apply_tent_start()
-	var debug_grants := {"branches": 36, "grass": 20, "water": 24, "food": 18, "hides": 8, "goods": 8, "logs": 16, "wood": 10, "soil": 28, "clay": 22, "boards": 18, "stone": 15, "bricks": 14}
-	var starting_food := debug_state.amount("food")
-	for resource_type in debug_grants:
-		debug_state.add(resource_type, debug_grants[resource_type])
-	for i in range(13):
-		debug_state.add_warehouse("warehouse")
-	var debug_overflow := debug_state.migrate_virtual_to_warehouse(13)
-	assert(debug_overflow.is_empty())
-	for resource_type in debug_grants:
-		var expected: int = debug_grants[resource_type]
-		if resource_type == "food":
-			expected += starting_food
-		assert(debug_state.amount(resource_type) >= expected)
-	assert(debug_state.virtual_stock.is_empty())
+	state.warehouse_ever_built = true
+	assert(not state.uses_starter_stash_storage())
+	assert(int(physical_inventory["branches"]) == 3,
+		"building a warehouse must not teleport the authored stash")
+	assert(state.warehouse_amount("branches", 0) == 0)
 
 
 static func _test_progression_and_volunteers() -> void:
@@ -349,3 +310,11 @@ static func _test_backpack_invariants() -> void:
 	# Backpack starts empty; resources are filled from the map backpack entity at runtime.
 	assert(state.amount("food") == 0)
 	assert(state.amount("water") == 0)
+	var physical_inventory := {"food": 3}
+	state.bind_starter_stash_inventory(physical_inventory)
+	state.add("food", 2)
+	assert(int(physical_inventory["food"]) == 5,
+		"settlement and the physical starter stash must share one inventory")
+	physical_inventory["water"] = 4
+	assert(state.backpack_amount("water") == 4,
+		"physical inventory mutations must be visible without a sync pass")

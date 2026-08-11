@@ -778,9 +778,8 @@ static func _test_backpack_invariants() -> void:
 	assert(state.money == old_money + 50)
 	state.add_warehouse("warehouse")
 	state.warehouse_ever_built = true
-	state.migrate_virtual_to_warehouse(1)
-	assert(state.backpack_amount("branches") == 0)
-	assert(state.amount("branches") == 10)
+	assert(state.backpack_amount("branches") == 10)
+	assert(state.warehouse_amount("branches", 0) == 0)
 
 
 static func _test_warehouse_cheat_respects_accept_filters() -> void:

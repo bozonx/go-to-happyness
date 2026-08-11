@@ -48,8 +48,11 @@ func _init() -> void:
 	var envelope := SaveDataScript.new()
 	envelope.game_header = {"pack": "core", "id": "settlement", "revision": ""}
 	envelope.engine_state = {"seed": 0}
-	envelope.set_module_section(module.module_id(), module.section_version(),
-		SaveGameService.capture_settlement_section(sim_a))
+	var captured_section := SaveGameService.capture_settlement_section(sim_a)
+	var captured_settlement: Dictionary = captured_section.get("settlement", {})
+	assert(not captured_settlement.has("backpack") and not captured_settlement.has("resources"),
+		"new saves must not duplicate physical inventory in settlement aggregates")
+	envelope.set_module_section(module.module_id(), module.section_version(), captured_section)
 	assert(envelope.save_to_file(SAVE_PATH), "save_to_file should succeed")
 	await SimHelper.cleanup_simulation(self, sim_a)
 
@@ -102,6 +105,16 @@ func _init() -> void:
 		"a creature outside the four source dictionaries must survive the restore")
 	var landscape_objects := sim_b.get_node("WorldTerritory/LandscapeObjects")
 	assert(sim_b.resource_piles.any(func(pile): return bool(pile.node.get_meta("landscape_owned", false)) and pile.node.get_parent() == landscape_objects), "starter world loot must return to the terrain hierarchy")
+	var restored_stash: ResourcePile = null
+	for pile: ResourcePile in sim_b.resource_piles:
+		if pile.is_backpack:
+			restored_stash = pile
+			break
+	assert(restored_stash != null, "party stash must return after save/load")
+	var restored_food := int(restored_stash.resources.get("food", 0))
+	sim_b.settlement.add("food", 1)
+	assert(int(restored_stash.resources.get("food", 0)) == restored_food + 1,
+		"save restore must rebind settlement to the physical stash inventory")
 
 	await SimHelper.cleanup_simulation(self, sim_b)
 	print("  => Save/Load Round-Trip Test PASSED!")

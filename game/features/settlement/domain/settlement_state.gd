@@ -31,7 +31,8 @@ var storage := StorageState.new()
 
 ## Per-warehouse inventories. Each WarehouseState holds the contents of one
 ## physical warehouse; the scalar resource properties below aggregate across
-## all of them. The virtual stock is used only before the first warehouse.
+## all of them. Before the first warehouse the authored party stash is the
+## physical inventory exposed through the same aggregate properties.
 var warehouses: Array[WarehouseState]:
 	get: return storage.warehouses
 	set(value): storage.warehouses = value
@@ -209,13 +210,11 @@ static func resources_for_era(p_era: Era) -> Array[String]:
 func era_resources() -> Array[String]:
 	return era_progress.era_resources()
 
-## Physical resources before the first warehouse live in the starter backpack.
-## The backpack is a special non-replenishable ground pile shown separately in HUD.
+## Inventory of the physical starter-stash record. Kept as a settlement-facing
+## query during the first migration stage; StorageState and ResourcePile share
+## the same Dictionary rather than synchronising two balances.
 var backpack: Dictionary:
 	get: return storage.backpack
-## Backward-compatible alias used by tests and UI during the refactor.
-var virtual_stock: Dictionary:
-	get: return storage.virtual_stock
 ## Becomes true the first time any warehouse is completed and never reverts.
 var warehouse_ever_built: bool:
 	get: return storage.warehouse_ever_built
@@ -411,17 +410,12 @@ func total_stored_resources() -> int:
 	return storage.total_stored_resources()
 
 
-func uses_virtual_storage() -> bool:
-	return storage.uses_virtual_storage()
+func bind_starter_stash_inventory(inventory: Dictionary) -> void:
+	storage.bind_starter_stash_inventory(inventory)
 
 
-func migrate_backpack_to_warehouse() -> Dictionary:
-	return storage.migrate_backpack_to_warehouse()
-
-
-## Backward-compatible alias kept during the refactor.
-func migrate_virtual_to_warehouse(_warehouses: int) -> Dictionary:
-	return storage.migrate_virtual_to_warehouse(_warehouses)
+func uses_starter_stash_storage() -> bool:
+	return storage.uses_starter_stash_storage()
 
 
 func can_afford_building(building_type: String) -> bool:

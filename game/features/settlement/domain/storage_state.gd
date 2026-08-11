@@ -1,9 +1,9 @@
 class_name StorageState
 extends RefCounted
 
-## Warehouse and backpack storage for settlement resources.
+## Warehouse storage and the inventory of the authored starter stash.
 ## Manages physical inventories, capacity, delivery reservations,
-## and the transition from starter backpack to warehouse storage.
+## and the transition from the initial camp to warehouse logistics.
 
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 const STORED_RESOURCES = ResourceIds.ALL
@@ -15,12 +15,10 @@ const STORAGE_WEIGHTS = ResourceIds.STORAGE_WEIGHTS
 var warehouses: Array[WarehouseState] = []
 var warehouse_types: Array[String] = []
 
-## Physical resources before the first warehouse live in the starter backpack.
-## The backpack is a special non-replenishable ground pile shown separately in HUD.
-var backpack: Dictionary[StringName, int] = {}
-## Backward-compatible alias used by tests and UI during the refactor.
-var virtual_stock: Dictionary:
-	get: return backpack
+## Inventory of the physical `core:party_stash` runtime record. Settlement keeps
+## this reference so its existing economy rules and the ResourcePile mutate the
+## same Dictionary; it is not a second, virtual stockpile.
+var backpack: Dictionary = {}
 ## Becomes true the first time any warehouse is completed and never reverts.
 var warehouse_ever_built: bool = false
 var warehouse_tarp_covered: bool = false
@@ -31,6 +29,12 @@ var balanced_warehouse_mode: bool = false
 
 func storage_weight(resource_type: String) -> float:
 	return float(STORAGE_WEIGHTS.get(resource_type, 1.0))
+
+
+## Adopts the inventory owned by the physical starter-stash record. Dictionary
+## identity matters: copying here would recreate the former double write-owner.
+func bind_starter_stash_inventory(inventory: Dictionary) -> void:
+	backpack = inventory
 
 
 func can_cover_warehouse_with_tarp() -> bool:
@@ -402,29 +406,5 @@ func total_stored_resources() -> int:
 	return total
 
 
-func uses_virtual_storage() -> bool:
+func uses_starter_stash_storage() -> bool:
 	return not warehouse_ever_built
-
-
-func migrate_backpack_to_warehouse() -> Dictionary:
-	warehouse_ever_built = true
-	var overflow := {}
-	if warehouses.is_empty():
-		overflow = backpack.duplicate()
-	else:
-		for resource_type in STORED_RESOURCES:
-			var backpack_count := int(backpack.get(resource_type, 0))
-			var remaining := backpack_count
-			for warehouse in warehouses:
-				remaining = warehouse.add(resource_type, remaining, STORAGE_WEIGHTS)
-				if remaining <= 0:
-					break
-			if remaining > 0:
-				overflow[resource_type] = remaining
-	backpack.clear()
-	return overflow
-
-
-## Backward-compatible alias kept during the refactor.
-func migrate_virtual_to_warehouse(_warehouse_count: int) -> Dictionary:
-	return migrate_backpack_to_warehouse()

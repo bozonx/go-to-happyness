@@ -370,16 +370,16 @@ func _deliver_all_pocket_to_warehouse(warehouse_index := -1) -> void:
 		var amount := game.hero_pocket_service.pocket_amount(resource_type) if game.hero_pocket_service != null else 0
 		if amount <= 0:
 			continue
-		if warehouse_index >= 0 and not game.settlement.uses_virtual_storage() and not game.settlement.warehouse_accepts(warehouse_index, resource_type):
+		if warehouse_index >= 0 and not game.settlement.uses_starter_stash_storage() and not game.settlement.warehouse_accepts(warehouse_index, resource_type):
 			game.update_interface(S.WAREHOUSE_REJECTS_FORMAT % resource_type)
 			continue
 		var to_deliver := amount
-		if not game.settlement.uses_virtual_storage():
+		if not game.settlement.uses_starter_stash_storage():
 			to_deliver = mini(amount, game.settlement.storage_room_for(resource_type))
 		if to_deliver <= 0:
 			continue
 		var overflow := 0
-		if warehouse_index >= 0 and not game.settlement.uses_virtual_storage():
+		if warehouse_index >= 0 and not game.settlement.uses_starter_stash_storage():
 			overflow = game.settlement.add_to_warehouse(resource_type, to_deliver, warehouse_index)
 		else:
 			game.settlement.add(resource_type, to_deliver)
@@ -405,17 +405,17 @@ func _deliver_one_pocket_to_warehouse(warehouse_index := -1) -> void:
 	var amount := game.hero_pocket_service.pocket_amount(resource_type) if game.hero_pocket_service != null else 0
 	if amount <= 0:
 		return
-	if warehouse_index >= 0 and not game.settlement.uses_virtual_storage() and not game.settlement.warehouse_accepts(warehouse_index, resource_type):
+	if warehouse_index >= 0 and not game.settlement.uses_starter_stash_storage() and not game.settlement.warehouse_accepts(warehouse_index, resource_type):
 		game.update_interface(S.WAREHOUSE_REJECTS_FORMAT % resource_type)
 		return
 	var to_deliver := 1
-	if not game.settlement.uses_virtual_storage():
+	if not game.settlement.uses_starter_stash_storage():
 		to_deliver = mini(1, game.settlement.storage_room_for(resource_type))
 	if to_deliver <= 0:
 		game.update_interface(S.WAREHOUSE_NO_ROOM_FOR_RESOURCE % resource_type)
 		return
 	var overflow := 0
-	if warehouse_index >= 0 and not game.settlement.uses_virtual_storage():
+	if warehouse_index >= 0 and not game.settlement.uses_starter_stash_storage():
 		overflow = game.settlement.add_to_warehouse(resource_type, to_deliver, warehouse_index)
 	else:
 		game.settlement.add(resource_type, to_deliver)

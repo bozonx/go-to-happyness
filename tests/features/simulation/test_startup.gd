@@ -62,6 +62,19 @@ func _init() -> void:
 	assert((wind["direction"] as Vector2).length() > 0.9, "ветер мира не опубликован")
 	assert(float(wind["strength"]) >= WorldWind.MINIMUM_STIRRING)
 	assert(simulation.resource_piles.any(func(pile): return pile.node.get_parent() == landscape_objects))
+	var starter_stash: ResourcePile = null
+	for pile: ResourcePile in simulation.resource_piles:
+		if pile.is_backpack:
+			starter_stash = pile
+			break
+	assert(starter_stash != null, "the authored party stash must have a physical runtime record")
+	var food_before := int(starter_stash.resources.get("food", 0))
+	starter_stash.resources["food"] = food_before - 1
+	assert(simulation.settlement.backpack_amount("food") == food_before - 1,
+		"the physical stash and settlement must not own duplicate inventories")
+	simulation.settlement.add("food", 1)
+	assert(int(starter_stash.resources.get("food", 0)) == food_before,
+		"settlement mutations must update the physical stash without a sync tick")
 
 	# The runtime count of every natural kind matches the map's authored records
 	# exactly — no startup fabrication, nothing dropped.

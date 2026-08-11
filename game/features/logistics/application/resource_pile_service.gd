@@ -83,31 +83,6 @@ func remove_backpack_pile(backpack_node: Node3D) -> Node3D:
 	backpack_node.queue_free()
 	return null
 
-func sync_backpack_pile(backpack_node: Node3D) -> Node3D:
-	if not is_instance_valid(backpack_node):
-		return backpack_node
-	if settlement != null and settlement.warehouse_ever_built:
-		return backpack_node
-	for index in range(resource_piles.size()):
-		var pile: ResourcePileScript = resource_piles[index]
-		if pile.node != backpack_node:
-			continue
-		var synced: Dictionary = {}
-		if settlement != null and settlement.backpack != null:
-			for resource_type in settlement.backpack:
-				var amount := int(settlement.backpack[resource_type])
-				if amount > 0:
-					synced[str(resource_type)] = amount
-		if synced.is_empty():
-			resource_piles.remove_at(index)
-			backpack_node.queue_free()
-			return null
-		else:
-			pile.resources = synced
-			refresh_resource_pile_label(pile)
-		break
-	return backpack_node
-
 func convert_backpack_pile_to_regular(backpack_node: Node3D) -> Node3D:
 	if not is_instance_valid(backpack_node):
 		return null
@@ -121,7 +96,9 @@ func convert_backpack_pile_to_regular(backpack_node: Node3D) -> Node3D:
 					if amount > 0:
 						synced[resource_type] = amount
 			if not synced.is_empty():
-				pile.resources = synced
+				# Detach before StorageState clears the starter-stash inventory. The
+				# remaining ground pile becomes an ordinary independent owner.
+				pile.resources = synced.duplicate(true)
 			pile.is_backpack = false
 			refresh_resource_pile_label(pile)
 			break

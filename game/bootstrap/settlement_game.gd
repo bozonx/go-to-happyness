@@ -617,7 +617,7 @@ func update_interface(message: String) -> void:
 	var displayed_resources := settlement.era_resources()
 	for resource_type in displayed_resources:
 		lines.append("%s: %d" % [resource_display_name(resource_type), settlement.amount(resource_type)])
-	if settlement.uses_virtual_storage():
+	if settlement.uses_starter_stash_storage():
 		var backpack_units := 0.0
 		for resource_type in displayed_resources:
 			backpack_units += settlement.backpack_amount(resource_type) * settlement.storage_weight(resource_type)

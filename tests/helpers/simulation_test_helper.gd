@@ -201,7 +201,7 @@ static func demolition_ready(simulation: Node, site: DemolitionSite) -> bool:
 	return simulation.building_lifecycle_service.demolition_ready(site)
 
 static func reserve_player_gather_storage(simulation: Node, resource_type: String, requested: int) -> int:
-	if simulation.settlement.uses_virtual_storage():
+	if simulation.settlement.uses_starter_stash_storage():
 		return requested
 	if simulation.warehouse_positions.is_empty():
 		return 0

@@ -215,19 +215,4 @@ func _cleaning_targets(ctx: FacadeContext, actor: Citizen) -> Array[Dictionary]:
 				&"position": pile_node.global_position,
 				&"access": pile_node.global_position,
 			})
-	# The starter backpack is a non-decaying pile that couriers can empty into warehouses.
-	if ctx.simulation.backpack_position != Vector3.ZERO and ctx.simulation.is_route_reachable(actor.global_position, ctx.simulation.backpack_position):
-		var backpack_cell: Vector2i = ctx.simulation.cell_from_position(ctx.simulation.backpack_position)
-		var backpack: Dictionary = ctx.backpack_resources()
-		for resource_type in backpack:
-			var available := int(backpack.get(resource_type, 0))
-			if available <= 0 or not ctx.simulation.settlement.can_make_room_for(str(resource_type), 1, ctx.simulation.warehouse_positions.size()):
-				continue
-			targets.append({
-				&"id": StringName("backpack:%d:%d:%s" % [backpack_cell.x, backpack_cell.y, str(resource_type)]),
-				&"pile_id": StringName("backpack:%d:%d" % [backpack_cell.x, backpack_cell.y]),
-				&"resource_type": str(resource_type),
-				&"position": ctx.simulation.backpack_position,
-				&"access": ctx.simulation.backpack_position,
-			})
 	return targets

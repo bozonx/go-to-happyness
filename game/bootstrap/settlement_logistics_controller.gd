@@ -46,22 +46,16 @@ func reconcile_repair_reservations() -> void:
 
 func construction_material_sources(resource_type: String, from_position: Vector3 = Vector3.ZERO) -> Array[Dictionary]:
 	var sources: Array[Dictionary] = []
-	if game.settlement.amount(resource_type) > 0:
-		if not game.warehouse_positions.is_empty():
-			for index in range(mini(game.warehouse_positions.size(), game.settlement.warehouses.size())):
-				if game.settlement.warehouse_amount(resource_type, index) <= 0:
-					continue
-				var position := game.warehouse_positions[index]
-				# The position keeps task identity stable enough to invalidate a task when
-				# warehouses are demolished; the index makes pickup remove the same stock.
-				sources.append({"kind": "storage", "id": "storage_%s" % game.cell_from_position(position), "position": position, "warehouse_index": index})
-		else:
-			# Before the first warehouse is built, all resources live in the starter
-			# backpack. It is represented visually by a pile too, so only publish this
-			# virtual source and skip backpack piles below to avoid double counting.
-			sources.append({"kind": "open_storage", "id": "open_storage", "position": get_nearest_delivery_position(from_position)})
+	if not game.warehouse_positions.is_empty():
+		for index in range(mini(game.warehouse_positions.size(), game.settlement.warehouses.size())):
+			if game.settlement.warehouse_amount(resource_type, index) <= 0:
+				continue
+			var position := game.warehouse_positions[index]
+			# The position keeps task identity stable enough to invalidate a task when
+			# warehouses are demolished; the index makes pickup remove the same stock.
+			sources.append({"kind": "storage", "id": "storage_%s" % game.cell_from_position(position), "position": position, "warehouse_index": index})
 	for pile: ResourcePile in game.resource_piles:
-		if pile == null or pile.is_backpack or not is_instance_valid(pile.node):
+		if pile == null or not is_instance_valid(pile.node):
 			continue
 		if int(pile.resources.get(resource_type, 0)) <= 0:
 			continue

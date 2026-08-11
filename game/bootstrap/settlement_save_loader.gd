@@ -236,6 +236,8 @@ func restore(p_game: SettlementGame, section: Dictionary) -> bool:
 			pile_node.set_meta("landscape_owned", true)
 			game.world_navigation_controller.add_landscape_object(pile_node)
 		if bool(p_dict.get("is_backpack", false)):
+			var stash: ResourcePile = game.resource_piles[game.resource_piles.size() - 1]
+			game.settlement.bind_starter_stash_inventory(stash.resources)
 			game.backpack_node = pile_node
 
 	# 8b. Restore Forest state (felled trees, branch/wood depletion)
