@@ -82,6 +82,8 @@ var _warnings_by_entity: Dictionary = {}
 var _ghost: Node3D = null
 var _ghost_archetype_id: StringName = &""
 var _ghost_material: StandardMaterial3D = null
+var _eyedropper_active := false
+var _eyedropper_hover: Node3D = null
 var _placing_stroke := false
 var _last_placed_cell := Vector2i(-999999, -999999)
 var _placement_stroke_serial := 0
@@ -125,6 +127,7 @@ func deactivate() -> void:
 	_placement.deselect()
 	_selected_scatter_index = -1
 	_hide_ghost()
+	set_eyedropper_active(false)
 
 
 func document_changed() -> void:
@@ -145,6 +148,7 @@ func hover_brush() -> BaseBrushController:
 
 func process(_delta: float) -> void:
 	context.brush.update_hover(context.camera, context.space_state(), context.mouse_position())
+	_refresh_eyedropper_hover()
 	if _placement.has_brush():
 		# Одна кисть за раз: призрак здания и призрак ассета над одной клеткой —
 		# это два обещания о том, что случится по клику.
@@ -208,6 +212,29 @@ func pick_from_cell() -> bool:
 		notify_ui_changed()
 		return true
 	return false
+
+
+func set_eyedropper_active(active: bool) -> void:
+	_eyedropper_active = active
+	if active:
+		_hide_ghost()
+	_refresh_eyedropper_hover()
+
+
+func _refresh_eyedropper_hover() -> void:
+	var record: MapEntityRecord = null
+	if _eyedropper_active and context != null and context.brush != null and context.brush.has_hover:
+		var entity_id := _entity_at(context.brush.hovered_cell)
+		record = context.document.entities.by_id(entity_id)
+	if record == null:
+		if _eyedropper_hover != null:
+			_eyedropper_hover.visible = false
+		return
+	if _eyedropper_hover == null:
+		_eyedropper_hover = EditorFillConventions.make_ring_marker(EditorFillConventions.COLOR_HOVER)
+		_root.add_child(_eyedropper_hover)
+	_eyedropper_hover.position = _world_position(record.position) + Vector3.UP * 0.05
+	_eyedropper_hover.visible = true
 
 
 func _handle_mouse(event: InputEventMouseButton) -> bool:
@@ -933,7 +960,7 @@ func rebuild_views() -> void:
 		# Призрак живёт в том же корне и не является видом записи: пересборка
 		# видов не должна освобождать его — иначе следующий кадр обратится к
 		# уже уничтоженному инстансу.
-		if child == _ghost:
+		if child == _ghost or child == _eyedropper_hover:
 			continue
 		child.queue_free()
 	_views.clear()
@@ -1026,7 +1053,7 @@ func _add_selection_ring(view: Node3D) -> void:
 
 
 func _refresh_ghost() -> void:
-	if _archetype_id == &"" or context.brush == null or not context.brush.has_hover:
+	if _eyedropper_active or _archetype_id == &"" or context.brush == null or not context.brush.has_hover:
 		_hide_ghost()
 		return
 	var archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)

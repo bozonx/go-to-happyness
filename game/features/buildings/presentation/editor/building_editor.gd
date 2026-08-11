@@ -59,6 +59,7 @@ var _dirty: bool = false
 
 ## The walk-through (`F5`), built on first use and kept for the session.
 var walkthrough: BuildingWalkthrough = null
+var _camera_before_walkthrough: Dictionary = {}
 ## Where a walk starts, when the author would rather not walk there
 ## (`EditorTestPoints`). Editor state in a sidecar beside the blueprint file, the
 ## same mechanism and the same file format the map editor uses.
@@ -112,6 +113,7 @@ var _orbiting: bool = false
 @onready var _eyedropper_btn: Button = %EyedropperBtn
 @onready var _walk_btn: Button = %WalkBtn
 @onready var _textures_btn: Button = %TexturesBtn
+@onready var _compass: EditorViewportCompass = %Compass
 
 ## Prevent value_changed callbacks from overwriting one footprint dimension
 ## with the stale value of the other while a loaded blueprint updates both UI
@@ -207,6 +209,9 @@ func _process(delta: float) -> void:
 		_camera_controller.update(delta)
 	if walkthrough != null and walkthrough.is_active():
 		return
+	if _compass != null and _camera_controller != null:
+		_compass.update_from_camera(_camera_controller.camera)
+	_refresh_walk_button_hint()
 	_update_cursor()
 	if current_mode == EditMode.FILL:
 		fill_mode.refresh_ghost()
@@ -366,6 +371,12 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 				else:
 					_update_cursor()
 					if cursor_valid:
+						# Neutral frame state is Pick & Build: clicking a block
+						# samples it, while empty space leaves the cursor clean.
+						if current_mode == EditMode.FRAME and current_tool == Tool.PLACE \
+								and current_block_id.is_empty():
+							frame_mode.pick_single_block()
+							return
 						begin_history_group("frame_stroke")
 						frame_mode.begin_paint_stroke()
 			else:
@@ -788,11 +799,12 @@ func _start_walkthrough(from_cursor := false) -> void:
 		add_child(walkthrough)
 	var start := _cursor_walk_position() if from_cursor else _walk_start_position()
 	var sources: Array[Node] = [get_node_or_null("BlocksRoot"), fill_mode]
+	_camera_before_walkthrough = _camera_state()
 	_set_eyedropper_active(false)
 	cursor_valid = false
 	frame_mode.hide_cursor_feedback()
 	fill_mode.hide_cursor_feedback()
-	walkthrough.enter(sources, start)
+	walkthrough.enter(sources, start, 0.0 if from_cursor else _walk_start_yaw())
 	_editor_ui.visible = false
 	if _test_point_views != null:
 		_test_point_views.visible = false
@@ -814,8 +826,31 @@ func _on_walkthrough_exited() -> void:
 func _restore_editor_camera() -> void:
 	if _camera_controller == null or _camera_controller.camera == null:
 		return
+	if not _camera_before_walkthrough.is_empty():
+		_apply_camera_state(_camera_before_walkthrough)
 	_camera_controller.apply_position()
 	_camera_controller.camera.make_current()
+
+
+func _camera_state() -> Dictionary:
+	if _camera_controller == null:
+		return {}
+	return {
+		"target": _camera_controller.camera_target,
+		"distance": _camera_controller.camera_distance,
+		"yaw": _camera_controller.camera_yaw,
+		"pitch": _camera_controller.camera_pitch,
+	}
+
+
+func _apply_camera_state(state: Dictionary) -> void:
+	if _camera_controller == null or state.is_empty():
+		return
+	_camera_controller.camera_target = state.get("target", _camera_controller.camera_target)
+	_camera_controller.camera_distance = float(state.get("distance", _camera_controller.camera_distance))
+	_camera_controller.camera_yaw = float(state.get("yaw", _camera_controller.camera_yaw))
+	_camera_controller.camera_pitch = float(state.get("pitch", _camera_controller.camera_pitch))
+	_camera_controller.apply_position()
 
 
 ## Where the walk starts, in this order:
@@ -825,7 +860,7 @@ func _restore_editor_camera() -> void:
 ## 2. the first `door` anchor, standing just outside it looking in, because that
 ##    is where a person arrives from and the doorway is the first thing worth
 ##    checking;
-## 3. the middle of the footprint, for a building with neither.
+## 3. outside the front edge, for a building with neither.
 func _walk_start_position() -> Vector3:
 	var point := test_points.selected_point()
 	if point != null:
@@ -838,7 +873,31 @@ func _walk_start_position() -> Vector3:
 		var outward := Vector3(sin(deg_to_rad(anchor.facing)), 0.0, cos(deg_to_rad(anchor.facing)))
 		return Vector3(anchor.pos.x, anchor.pos.y, anchor.pos.z) - outward * 1.5
 	var footprint: Vector2i = blueprint.footprint
-	return Vector3(float(footprint.x) * 0.5, 0.0, float(footprint.y) * 0.5)
+	return Vector3(float(footprint.x) * 0.5, 0.0, -1.5)
+
+
+func _walk_start_yaw() -> float:
+	if test_points.selected_point() != null:
+		return 0.0
+	for anchor: ZoneAnchorRecord in blueprint.anchors:
+		if anchor.is_door():
+			return fposmod(anchor.facing + 180.0, 360.0)
+	# The fallback stands north of the building and looks south, into it.
+	return 180.0
+
+
+func _refresh_walk_button_hint() -> void:
+	if _walk_btn == null or blueprint == null:
+		return
+	var point := test_points.selected_point()
+	if point != null:
+		_walk_btn.tooltip_text = "Прогулка от тест-точки «%s»" % point.display_name(test_points.selected)
+		return
+	for anchor: ZoneAnchorRecord in blueprint.anchors:
+		if anchor.is_door():
+			_walk_btn.tooltip_text = "Прогулка от входной двери «%s»" % String(anchor.id)
+			return
+	_walk_btn.tooltip_text = "Прогулка снаружи перед зданием"
 
 
 ## Middle of the cell under the cursor, on the layer being edited — where
@@ -1226,6 +1285,7 @@ func reset_history() -> void:
 
 
 func _restore_history_snapshot(snapshot: Dictionary) -> void:
+	var camera_state := _camera_state()
 	_history_replaying = true
 	blueprint = BuildingBlueprint.from_dict(snapshot)
 	grid_model.load_from_blueprint(blueprint)
@@ -1236,6 +1296,8 @@ func _restore_history_snapshot(snapshot: Dictionary) -> void:
 	_history_baseline = snapshot.duplicate(true)
 	_dirty = _history_baseline != _saved_snapshot
 	_history_replaying = false
+	# The camera is editor session state, never blueprint history.
+	_apply_camera_state(camera_state)
 
 
 func _confirm_discard_changes() -> bool:
@@ -1254,7 +1316,7 @@ func _confirm_discard_changes() -> bool:
 func _reset_fill_for_new_blueprint() -> void:
 	if fill_mode == null:
 		return
-	fill_mode.select_object("")
+	fill_mode.reset_authoring_state()
 	fill_mode.rebuild_nodes()
 	if current_mode == EditMode.FILL:
 		fill_mode.activate()

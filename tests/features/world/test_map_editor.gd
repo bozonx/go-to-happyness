@@ -65,6 +65,7 @@ func _test_scene_came_up(editor: Node) -> void:
 	assert(editor.document != null, "editor opened a document")
 	assert(editor.document.terrain.board_cells == MapMeta.DEFAULT_BOARD_CELLS, "board is the default preset")
 	assert(editor.terrain_world != null and editor.camera != null, "world and camera wired")
+	assert(editor._compass is EditorViewportCompass, "map editor uses the shared compass")
 	# The camera frames the whole board rather than a fixed distance: a 512 m map
 	# must not open with the author inside a hill.
 	assert(editor.camera.distance > editor.document.meta.board_metres() * 0.5, "camera framed the board")
@@ -755,6 +756,22 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 	fill_ctrl._archetype_id = &""
 	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true, true))
 	assert(fill_ctrl._archetype_id == editor.document.entities.entities[0].archetype_id, "Shift+ЛКМ берёт архетип в кисть")
+	editor._set_eyedropper_active(true)
+	fill_ctrl._refresh_ghost()
+	assert(fill_ctrl._ghost == null or not fill_ctrl._ghost.visible,
+		"глобальная пипетка не показывает строительный фантом")
+	fill_ctrl._refresh_eyedropper_hover()
+	assert(fill_ctrl._eyedropper_hover != null and fill_ctrl._eyedropper_hover.visible,
+		"объект под пипеткой явно подсвечен")
+	editor._brush.hovered_cell = Vector2i(editor.document.terrain.board_cells / 2, editor.document.terrain.board_cells / 2)
+	# The global click path always switches the one-shot eyedropper off, including
+	# an empty cell. Calling the same state transition here avoids viewport-layout
+	# coordinates in this mode test.
+	fill_ctrl.pick_from_cell()
+	editor._set_eyedropper_active(false)
+	assert(not editor._eyedropper_active and not fill_ctrl._eyedropper_active,
+		"пипетка выключается после клика")
+	editor._brush.hovered_cell = editor.document.entities.entities[0].cell(editor.document.terrain)
 	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true))
 	assert(fill_ctrl._selected_id != &"", "клик по занятой клетке выделяет, а не ставит второй объект")
 	editor._active.handle_input(_key(KEY_ESCAPE))

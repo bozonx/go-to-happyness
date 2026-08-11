@@ -47,6 +47,11 @@ func _test_an_empty_blueprint_refuses(editor: BuildingEditor) -> void:
 func _test_walking_a_room(editor: BuildingEditor) -> void:
 	_build_room(editor)
 	await process_frame
+	editor._camera_controller.camera_target = Vector3(2.0, 1.0, 3.0)
+	editor._camera_controller.camera_distance = 23.0
+	editor._camera_controller.camera_yaw = 117.0
+	editor._camera_controller.camera_pitch = 38.0
+	var camera_before := editor._camera_state()
 
 	editor._start_walkthrough()
 	var walk := editor.walkthrough
@@ -67,6 +72,11 @@ func _test_walking_a_room(editor: BuildingEditor) -> void:
 		"the capsule is person-sized, which is what makes a doorway test mean anything")
 	var camera := body.get_node_or_null("Camera3D") as Camera3D
 	assert(camera != null and camera.current, "the view is from inside the body")
+	assert(editor.get_node("%Ghost").visible == false, "frame cursor is hidden while walking")
+	# Even if another path touches the orbit controller, exit restores the exact
+	# editor pose captured before entering the walk.
+	editor._camera_controller.camera_target = Vector3(99.0, 0.0, 99.0)
+	editor._camera_controller.camera_yaw = 5.0
 
 	# Every input belongs to the walk while it runs: a click meant to open a door
 	# must not place a block on the wall behind the author's head.
@@ -93,6 +103,8 @@ func _test_walking_a_room(editor: BuildingEditor) -> void:
 		"colliders are thrown away rather than left to go stale under the next edit")
 	assert(editor._camera_controller.camera.current,
 		"the editor camera remains current after the walk camera is actually freed")
+	assert(editor._camera_state() == camera_before,
+		"the editor camera returns to its exact pre-walk pose")
 	assert(is_equal_approx(BuildingWalkthrough.JUMP_SPEED, HumanoidMobility.JUMP_VELOCITY),
 		"the editor walk uses the same standard jump as gameplay")
 	var jump_height := BuildingWalkthrough.JUMP_SPEED * BuildingWalkthrough.JUMP_SPEED \

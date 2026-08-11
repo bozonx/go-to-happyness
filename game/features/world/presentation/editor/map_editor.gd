@@ -44,7 +44,7 @@ var _scatter_world: ScatterWorld = null
 @onready var _scenario_map_back: Button = $UI/Screen/Middle/Workspace/ScenarioMapBar/Margin/BackButton
 @onready var _side_panel: MapEditorSidePanel = $UI/Screen/Middle/SidePanel
 @onready var _palette: EditorPalettePanel = $UI/Screen/Middle/Palette
-@onready var _compass: Label = $UI/Screen/Middle/Workspace/Viewport3D/Compass
+@onready var _compass: EditorViewportCompass = $UI/Screen/Middle/Workspace/Viewport3D/Compass
 @onready var _status_bar: EditorStatusBar = $UI/Screen/StatusBar
 @onready var _back_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/DocumentActions/BackButton
 @onready var _new_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/DocumentActions/NewButton
@@ -592,8 +592,7 @@ func _select_mode(mode_id: StringName) -> void:
 	if _active != null:
 		_active.deactivate()
 	_active = next
-	_eyedropper_active = false
-	_eyedropper_button.button_pressed = false
+	_set_eyedropper_active(false)
 	_eyedropper_button.disabled = _active is ScenarioModeController
 	_active.activate()
 	_mode_bar.set_active(_active.id)
@@ -845,7 +844,8 @@ func _on_inspector_property_reset(property_name: StringName) -> void:
 # --- Frame and input ----------------------------------------------------------
 
 func _process(delta: float) -> void:
-	camera.process_keys(delta)
+	if not _text_input_has_focus():
+		camera.process_keys(delta)
 	if _active == null:
 		return
 	# A mode only tracks the cursor when the cursor is over the map. Otherwise
@@ -870,20 +870,7 @@ func _process(delta: float) -> void:
 func _update_compass() -> void:
 	if _compass == null:
 		return
-	# Asked of the camera's own basis rather than of its yaw: the arrow then stays
-	# right whatever the camera controller does with its angles.
-	var offset := SlopeCatalog.direction_offset(SlopeCatalog.DIR_N)
-	var north := Vector3(float(offset.x), 0.0, float(offset.y))
-	var basis := camera.global_transform.basis
-	var screen := Vector2(basis.x.dot(north), basis.y.dot(north))
-	if screen.length_squared() < 0.0001:
-		return
-	var clockwise_from_up := fposmod(rad_to_deg(atan2(screen.x, screen.y)), 360.0)
-	_compass.text = "N %s" % _ARROWS[int(round(clockwise_from_up / 45.0)) % _ARROWS.size()]
-
-
-## Clockwise from up, one per 45°.
-const _ARROWS: Array[String] = ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"]
+	_compass.update_from_camera(camera)
 
 
 ## Keeps the last cell the cursor was actually over, so a top-bar button can act
@@ -949,8 +936,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		if not _is_pointer_over_view():
 			return
 		if _eyedropper_active and button.pressed and button.button_index == MOUSE_BUTTON_LEFT:
-			if _active != null and _active.pick_from_cell():
-				_set_eyedropper_active(false)
+			if _active != null:
+				_active.pick_from_cell()
+			_set_eyedropper_active(false)
 			_refresh_panels()
 			return
 		if camera.handle_mouse_button(button):
@@ -1057,6 +1045,8 @@ func _on_eyedropper_pressed() -> void:
 func _set_eyedropper_active(active: bool) -> void:
 	_eyedropper_active = active and _active != null and not (_active is ScenarioModeController)
 	_eyedropper_button.button_pressed = _eyedropper_active
+	if _active != null and _active.has_method("set_eyedropper_active"):
+		_active.call("set_eyedropper_active", _eyedropper_active)
 	_message = "пипетка: выберите объект" if _eyedropper_active else "пипетка выключена"
 	_refresh_panels()
 

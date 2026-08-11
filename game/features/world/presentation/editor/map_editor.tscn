@@ -15,6 +15,7 @@
 [ext_resource type="Script" path="res://game/features/world/presentation/water/water_body_highlight.gd" id="14_water_highlight"]
 [ext_resource type="Script" path="res://game/features/world/presentation/water/water_flood_preview.gd" id="15_water_flood_preview"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_scenario_workspace.tscn" id="16_scenario_workspace"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor_viewport_compass.tscn" id="17_compass"]
 
 [sub_resource type="Environment" id="env_map_editor"]
 background_mode = 1
@@ -105,21 +106,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="Compass" type="Label" parent="UI/Screen/Middle/Workspace/Viewport3D"]
-layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -78.0
-offset_top = 10.0
-offset_right = -10.0
-offset_bottom = 34.0
-grow_horizontal = 0
-mouse_filter = 2
-horizontal_alignment = 1
-vertical_alignment = 1
-theme_override_font_sizes/font_size = 13
-text = "N ↑"
+[node name="Compass" parent="UI/Screen/Middle/Workspace/Viewport3D" instance=ExtResource("17_compass")]
 
 [node name="ScenarioWorkspace" parent="UI/Screen/Middle/Workspace" instance=ExtResource("16_scenario_workspace")]
 visible = false

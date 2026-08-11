@@ -1,4 +1,4 @@
-[gd_scene load_steps=15 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://game/features/buildings/presentation/editor/building_editor.gd" id="1_editor"]
 [ext_resource type="Theme" path="res://game/features/ui/presentation/theme/ui_theme.tres" id="2_theme"]
@@ -13,6 +13,7 @@
 [ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor/editor_history_actions.tscn" id="10_history_actions"]
 [ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor/editor_palette_panel.tscn" id="11_palette"]
 [ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor/editor_searchable_list.tscn" id="12_searchable_list"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor_viewport_compass.tscn" id="13_compass"]
 
 [sub_resource type="PlaneMesh" id="mesh_ground"]
 size = Vector2(64, 64)
@@ -81,6 +82,11 @@ anchors_preset = 10
 anchor_right = 1.0
 offset_bottom = 52.0
 grow_horizontal = 2
+
+[node name="Compass" parent="EditorUI/Root" instance=ExtResource("13_compass")]
+unique_name_in_owner = true
+offset_top = 62.0
+offset_bottom = 86.0
 
 [node name="DocumentActions" parent="EditorUI/Root/TopBar/Margin/Scroll/Row" instance=ExtResource("9_document_actions")]
 layout_mode = 2

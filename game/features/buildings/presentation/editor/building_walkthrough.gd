@@ -57,12 +57,12 @@ func is_active() -> bool:
 ## nodes whose visible geometry becomes solid — the block root and the fill root,
 ## so furniture blocks the way exactly as a wall does. Which nodes those are is
 ## the editor's business; this asks only for meshes.
-func enter(sources: Array[Node], start: Vector3) -> void:
+func enter(sources: Array[Node], start: Vector3, start_yaw_degrees := 0.0) -> void:
 	if _active:
 		return
 	_active = true
 	_build_colliders(sources)
-	_build_body(start)
+	_build_body(start, start_yaw_degrees)
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	set_physics_process(true)
 
@@ -128,7 +128,7 @@ func _collide_subtree(node: Node) -> void:
 		_collide_subtree(child)
 
 
-func _build_body(start: Vector3) -> void:
+func _build_body(start: Vector3, start_yaw_degrees: float) -> void:
 	_body = CharacterBody3D.new()
 	_body.name = "WalkBody"
 	var collider := CollisionShape3D.new()
@@ -147,6 +147,7 @@ func _build_body(start: Vector3) -> void:
 	# orbit camera rendering while the author walks blind.
 	_camera.make_current()
 	_body.global_position = start + Vector3(0.0, BODY_HEIGHT * 0.5 + DROP_HEIGHT, 0.0)
+	_body.rotation_degrees.y = start_yaw_degrees
 	_pitch = 0.0
 	_velocity = Vector3.ZERO
 

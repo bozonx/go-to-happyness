@@ -67,6 +67,7 @@ func _run() -> void:
 	assert(editor.get_node("%FillToolbar").visible, "fill toolbar visible")
 	assert(not editor.get_node("%FrameToolbar").visible, "frame toolbar hidden")
 	assert(not editor.get_node("%Ghost").visible, "frame ghost hidden outside frame mode")
+	assert(editor.get_node("%Compass") is EditorViewportCompass, "building editor uses the shared compass")
 	print("  mode switch ok, asset=", fill.current_asset_id)
 
 	# Постановка идёт по клеткам: якорь 1×1-объекта — центр клетки под курсором.
@@ -76,6 +77,13 @@ func _run() -> void:
 	snapped = fill.snapped_position(Vector3(3.9, 0.0, 2.1), &"campfire")
 	assert(snapped.is_equal_approx(Vector3(3.5, 0.0, 2.5)), "cell anchor rounds to its own cell -> %s" % snapped)
 	print("  cell snapping ok")
+
+	# Moving above the initial document height grows it instead of imposing a
+	# floor limit chosen by the editor.
+	editor._set_layer(12)
+	assert(editor.active_layer == 12 and editor.blueprint.grid_bounds.y == 13,
+		"building height follows the author's layer")
+	editor._set_layer(0)
 
 	# Place two objects through the real click path.
 	editor.cursor_valid = true
@@ -111,6 +119,19 @@ func _run() -> void:
 	assert(editor.get_node_or_null("%FillDuplicateBtn") == null, "duplicate is not repeated in inspector")
 	assert(editor.get_node_or_null("%FillDeleteBtn") == null, "delete remains in the top toolbar only")
 	print("  selection ok ->", fill.selected_object_id)
+	var selected_record = fill.find_record(fill.selected_object_id)
+	var selected_cells: Rect2i = fill.occupied_cells(
+		selected_record.anchor_pos(), selected_record.asset_id, selected_record.scale.x, selected_record.rot.y)
+	fill._pos_x_spin.value = selected_cells.position.x + 1
+	var after_x: Rect2i = fill.occupied_cells(
+		selected_record.anchor_pos(), selected_record.asset_id, selected_record.scale.x, selected_record.rot.y)
+	assert(after_x.position == selected_cells.position + Vector2i(1, 0),
+		"инспектор X двигает только X выбранного объекта")
+	fill._pos_z_spin.value = after_x.position.y + 1
+	var after_z: Rect2i = fill.occupied_cells(
+		selected_record.anchor_pos(), selected_record.asset_id, selected_record.scale.x, selected_record.rot.y)
+	assert(after_z.position == selected_cells.position + Vector2i(1, 1),
+		"инспектор Z двигает только Z выбранного объекта")
 
 	# Drag it.
 	var before: Vector3 = editor.blueprint.objects[0].pos
@@ -151,8 +172,10 @@ func _run() -> void:
 	assert(editor.blueprint.objects.size() == 2, "redo re-applied the delete")
 	fill.undo()
 	assert(editor.blueprint.objects.size() == 3, "undo restored the delete again")
+	var camera_before_undo: Dictionary = editor._camera_state()
 	fill.undo()
 	assert(editor.blueprint.objects.size() == 2, "undo restored the placement")
+	assert(editor._camera_state() == camera_before_undo, "undo does not restore camera state")
 	print("  eyedropper copy + undo/redo ok")
 
 	# Collision overlay: toggling on builds overlays, toggling off clears them.

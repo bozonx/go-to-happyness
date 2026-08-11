@@ -695,6 +695,22 @@ func cancel_current_action() -> void:
 	_editor.set_status("Ничего не выбрано.")
 
 
+func reset_authoring_state() -> void:
+	_dragging = false
+	_drag_started = false
+	_placing_stroke = false
+	select_object("")
+	_catalog_panel.clear_asset_selection()
+	_brush_appearance.clear()
+	current_offset = Vector3.ZERO
+	current_pitch_deg = 0.0
+	current_yaw_deg = 0.0
+	current_roll_deg = 0.0
+	current_scale = 1.0
+	_hide_ghost()
+	_update_hover_marker()
+
+
 ## Monotonic-enough suffix for generated ids. `Time.get_ticks_msec()` alone
 ## collides when two objects are placed inside the same millisecond (duplicate
 ## then move), which would make two records share one node.
@@ -1268,6 +1284,12 @@ func _on_zone_selected(index: int) -> void:
 ## Show diagnostic badges for the selected object.
 func _update_badges(record: FillObjectRecord, asset: Variant) -> void:
 	var badges: Array[String] = []
+	badges.append("Запись: %s" % record.id)
+	badges.append("Ассет ID: %s" % String(record.asset_id))
+	if asset != null:
+		badges.append("Размер: %d×%d×%d м" % [
+			asset.size_in_blocks.x, asset.size_in_blocks.y, asset.size_in_blocks.z])
+		badges.append("Коллизия: %s" % String(asset.collision_policy))
 	if asset != null and asset.scale_mode != WorldAssetDef.SCALE_LOCKED:
 		badges.append("Масштаб: %s" % String(asset.scale_mode))
 	if asset != null and asset.blocking_navigation:
