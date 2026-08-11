@@ -1,0 +1,39 @@
+{
+	"version": 1,
+	"biome": "savanna",
+	"note": "Акации по травяному морю.",
+	"rules": [
+		{
+			"archetype": "core:acacia_tree",
+			"density": 0.045
+		},
+		{
+			"archetype": "core:grass_source",
+			"density": 0.17
+		},
+		{
+			"archetype": "core:bush",
+			"density": 0.03
+		},
+		{
+			"archetype": "core:boulder",
+			"density": 0.01
+		},
+		{
+			"archetype": "core:stone_outcrop",
+			"density": 0.006
+		},
+		{
+			"archetype": "core:bones",
+			"density": 0.001
+		},
+		{
+			"archetype": "core:deer",
+			"density": 0.002
+		},
+		{
+			"archetype": "core:bird",
+			"density": 0.0016
+		}
+	]
+}

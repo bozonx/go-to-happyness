@@ -1,0 +1,36 @@
+{
+	"version": 1,
+	"biome": "wetland",
+	"note": "Камыш у воды, сухостой в топи; поэтому у камыша есть near_water_cells.",
+	"rules": [
+		{
+			"archetype": "core:reeds",
+			"density": 0.15,
+			"near_water_cells": 3
+		},
+		{
+			"archetype": "core:grass_source",
+			"density": 0.09
+		},
+		{
+			"archetype": "core:bush",
+			"density": 0.03
+		},
+		{
+			"archetype": "core:dead_tree",
+			"density": 0.012
+		},
+		{
+			"archetype": "core:fern",
+			"density": 0.04
+		},
+		{
+			"archetype": "core:bird",
+			"density": 0.004
+		},
+		{
+			"archetype": "core:boar",
+			"density": 0.001
+		}
+	]
+}

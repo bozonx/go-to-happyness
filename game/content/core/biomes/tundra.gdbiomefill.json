@@ -1,0 +1,43 @@
+{
+	"version": 1,
+	"biome": "tundra",
+	"note": "Мхи, редкий сухостой и валуны; трава только там, где есть влага.",
+	"rules": [
+		{
+			"archetype": "core:moss_patch",
+			"density": 0.06
+		},
+		{
+			"archetype": "core:boulder",
+			"density": 0.014
+		},
+		{
+			"archetype": "core:rock_cluster",
+			"density": 0.01
+		},
+		{
+			"archetype": "core:dead_tree",
+			"density": 0.006
+		},
+		{
+			"archetype": "core:stone_outcrop",
+			"density": 0.006
+		},
+		{
+			"archetype": "core:grass_source",
+			"density": 0.03,
+			"moisture": [
+				0.35,
+				1.0
+			]
+		},
+		{
+			"archetype": "core:deer",
+			"density": 0.0015
+		},
+		{
+			"archetype": "core:wolf",
+			"density": 0.0004
+		}
+	]
+}

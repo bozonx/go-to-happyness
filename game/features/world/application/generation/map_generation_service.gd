@@ -69,6 +69,14 @@ func generate_into(document: MapDocument, recipe: MapRecipe, seed_value: int) ->
 
 	apply_border(document.meta, recipe)
 	document.meta.biomes = biome_ids_of(result)
+	# Слой 4: земля есть, климат посчитан — можно населять. Стадия идёт здесь, а
+	# не в конвейере, потому что ей нужны настоящие сетки и каталог контента;
+	# конвейер до сих пор был арифметикой над буферами и остаётся ею.
+	if result.context != null:
+		var scattered := VegetationScatter.populate(
+			document, result.context, GenerationSeed.new(seed_value))
+		if result.report != null:
+			result.report.metrics.merge(scattered.to_metrics(), true)
 	document.mark_dirty()
 	if result.report != null and document.meta.start.starts.is_empty():
 		result.report.notes.append(MISSING_START_NOTE)

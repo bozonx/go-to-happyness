@@ -36,6 +36,7 @@ static func run_all() -> void:
 	_test_save_replaces_the_package_atomically()
 	_test_runtime_keys_namespace_player_maps()
 	_test_builtin_water_survives_sanitation()
+	_test_preview_is_drawn_from_the_layers()
 	print("    [PASS] Map Package Tests")
 	_cleanup()
 
@@ -295,6 +296,52 @@ static func _test_foreign_or_truncated_layer_is_refused() -> void:
 	foreign[0] = "X".unicode_at(0)
 	assert(not MapTerrainCodec.is_valid(foreign))
 	assert(not MapTerrainCodec.decode_into(PackedByteArray(), target))
+
+
+## Превью читалось меню и не писалось никем: у каждой карты в списке была одна и
+## та же пустая рамка. Рисуется оно из слоёв, а не снимком с камеры, — иначе
+## встроенные карты, которые пекутся headless, остались бы без превью навсегда.
+static func _test_preview_is_drawn_from_the_layers() -> void:
+	var service := _service()
+	var document := MapDocument.create(&"previewed", "Превью", BOARD_CELLS)
+	# Озеро в углу: превью обязано отличаться от превью сухой карты, иначе оно
+	# рисует что угодно, только не эту карту.
+	var body := document.water.create_body(WaterBody.Type.LAKE, 0)
+	document.water.add_body(body)
+	for z in range(-8, -2):
+		for x in range(-8, -2):
+			assert(document.terrain.set_height(Vector2i(x, z), -2))
+			assert(document.water.set_cell(Vector2i(x, z), body.id, 0))
+
+	var image := MapPreviewImage.render(document)
+	assert(image != null and image.get_width() == MapPreviewImage.SIZE
+		and image.get_height() == MapPreviewImage.SIZE, "превью должно быть квадратом объявленного размера")
+
+	var dry := MapDocument.create(&"dry", "Сухая", BOARD_CELLS)
+	var dry_image := MapPreviewImage.render(dry)
+	assert(not image.get_data() == dry_image.get_data(),
+		"карта с озером и пустая доска не могут выглядеть одинаково")
+	# Клетки центрированы на начале координат, и пиксель считается от `min_cell()`.
+	# Проверка «0 <= cell < board_cells» выглядела бы здесь верной и тихо роняла бы
+	# три четверти карты, поэтому адрес пикселя выводится из той же арифметики.
+	var offset := Vector2i(-5, -5) - document.terrain.min_cell()
+	var lake_pixel := image.get_pixel(
+		offset.x * MapPreviewImage.SIZE / BOARD_CELLS,
+		offset.y * MapPreviewImage.SIZE / BOARD_CELLS)
+	assert(lake_pixel.b > lake_pixel.r,
+		"вода не попала в превью там, где она лежит на доске: %s" % lake_pixel)
+	# ...и суша осталась сушей: заливка всей картинки водой прошла бы проверку выше.
+	var shore := Vector2i(8, 8) - document.terrain.min_cell()
+	var dry_pixel := image.get_pixel(
+		shore.x * MapPreviewImage.SIZE / BOARD_CELLS,
+		shore.y * MapPreviewImage.SIZE / BOARD_CELLS)
+	assert(dry_pixel.g > dry_pixel.b, "сухая половина доски не должна быть синей: %s" % dry_pixel)
+
+	var path := service.save_map_to(document, _package_path(String(document.meta.id)), image)
+	assert(not path.is_empty(), "сохранение с превью: %s" % service.last_error)
+	assert(FileAccess.file_exists(path.path_join(MapDocumentService.PREVIEW_PNG)),
+		"preview.png не записан в пакет")
+	_cleanup()
 
 
 # --- Package ------------------------------------------------------------------

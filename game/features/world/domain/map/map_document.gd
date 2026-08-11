@@ -29,6 +29,10 @@ const OBJECT_SECTIONS: Array[String] = []
 ## back out of it on save, so the registry has exactly one owner. The cells
 ## themselves live in `water.bin`, not here.
 const WATER_SECTION := "water"
+## Заголовок слоя массового наполнения (§8.1, `scatter_layers[]`). Как и у воды,
+## здесь только то, что читается глазами и попадает в `required_content`; записи
+## лежат в `objects.bin`.
+const SCATTER_SECTION := "scatter_layers"
 
 var meta: MapMeta = MapMeta.new()
 ## The board itself. Always configured to `meta.board_cells`, flat until a
@@ -49,8 +53,14 @@ var coverage: CoverageLayer = CoverageLayer.new()
 ## by the editor and have one typed owner, `MapZoneLayer`.
 var zones: MapZoneLayer = MapZoneLayer.new()
 
-## Named authored entities; anonymous scatter remains a later binary layer.
+## Named authored entities. Всё, у чего есть имя, авторское свойство или ссылка
+## на него, живёт здесь (§8.2).
 var entities: MapEntityLayer = MapEntityLayer.new()
+
+## Безымянное массовое наполнение: лес, трава, осыпь (§8.2). Заголовок — таблица
+## архетипов и ревизия — лежит в `map.json`, сами записи в `objects.bin`, ровно
+## как рельеф и вода. Пустой слой не пишет файла вовсе.
+var scatter: MapScatterLayer = MapScatterLayer.new()
 
 ## Buildings standing on the map (`building_placement.md` §12). Interpreted, not
 ## carried: a record references a blueprint and names the level that was applied,
@@ -113,6 +123,7 @@ static func from_json(source: Dictionary) -> MapDocument:
 	for key: String in source:
 		if _is_meta_key(key) or key == WATER_SECTION or key == PLACEMENTS_SECTION \
 				or key in MapScenario.SECTIONS \
+				or key == SCATTER_SECTION \
 				or key in ["areas", "anchors", "routes", "spawn_groups", "entities", "natural_scatter"]:
 			continue
 		document.sections[key] = _duplicated(source[key])
@@ -121,6 +132,7 @@ static func from_json(source: Dictionary) -> MapDocument:
 	document.placements.from_json(source.get(PLACEMENTS_SECTION, []))
 	document.scenario = MapScenario.from_json(source)
 	document._read_water_registry(source.get(WATER_SECTION, []))
+	document._read_scatter_header(source.get(SCATTER_SECTION, []))
 	return document
 
 
@@ -128,6 +140,7 @@ func to_json() -> Dictionary:
 	var result := meta.to_dict()
 	result["format_version"] = MapMeta.FORMAT_VERSION
 	result[WATER_SECTION] = _water_registry_json()
+	result[SCATTER_SECTION] = _scatter_header_json()
 	for key: String in zones.to_json():
 		result[key] = zones.to_json()[key]
 	result["entities"] = entities.to_json()
@@ -161,6 +174,22 @@ func section(key: String) -> Array:
 ## bytes. Always written, empty list included, for the same reason the declared
 ## sections are: a map file should read the same whether or not its author ever
 ## opened the water mode.
+## Заголовков слоёв в формате может быть несколько (§8.1 говорит о массиве), но
+## слой сейчас ровно один. Массив всё равно пишется массивом: добавить второй
+## слой позже — это новая запись, а не смена формы поля.
+func _scatter_header_json() -> Array:
+	var header := scatter.to_header()
+	return [] if header.is_empty() else [header]
+
+
+func _read_scatter_header(source: Variant) -> void:
+	if not (source is Array) or (source as Array).is_empty():
+		return
+	var first: Variant = (source as Array)[0]
+	if first is Dictionary:
+		scatter.read_header(first as Dictionary)
+
+
 func _water_registry_json() -> Array:
 	var entries: Array = []
 	for body: WaterBody in water.bodies():

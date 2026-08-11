@@ -32,7 +32,9 @@ func _init() -> void:
 	if valley.water.body_count() == 0:
 		_author_green_valley_water(valley.terrain, valley.water)
 
-	var path := service.save_map_to(valley, package)
+	# Превью рисуется здесь же, headless: это и есть причина, по которой оно
+	# рисуется из слоёв, а не снимается с камеры (`MapPreviewImage`).
+	var path := service.save_map_to(valley, package, MapPreviewImage.render(valley))
 	if path.is_empty():
 		printerr("[maps] не записано: ", service.last_error)
 		quit(1)

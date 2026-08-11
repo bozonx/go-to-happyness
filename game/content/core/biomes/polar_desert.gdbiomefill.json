@@ -1,0 +1,23 @@
+{
+	"version": 1,
+	"biome": "polar_desert",
+	"note": "Голый камень и кости. Пусто — это не недоделанная таблица, а полярная пустыня.",
+	"rules": [
+		{
+			"archetype": "core:boulder",
+			"density": 0.01
+		},
+		{
+			"archetype": "core:rock_cluster",
+			"density": 0.008
+		},
+		{
+			"archetype": "core:stone_outcrop",
+			"density": 0.006
+		},
+		{
+			"archetype": "core:bones",
+			"density": 0.0015
+		}
+	]
+}

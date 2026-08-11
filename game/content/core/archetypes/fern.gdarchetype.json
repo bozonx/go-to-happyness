@@ -1,1 +1,1 @@
-{"version":1,"id":"fern","name":"Папоротник","asset":"fern","content_class":"decor","category":"vegetation"}
+{"version":1,"id":"fern","name":"Папоротник","asset":"fern","content_class":"decor","category":"vegetation","states":{"default":"seasonal","list":[{"id":"summer","name":"Лето","visual":{"variant":"summer"}},{"id":"autumn","name":"Осень","visual":{"variant":"autumn"}}],"transitions":{"season":{"spring":"summer","summer":"summer","autumn":"autumn","winter":"autumn"}}}}

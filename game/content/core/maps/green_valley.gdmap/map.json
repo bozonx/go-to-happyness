@@ -58,10 +58,21 @@
 			"archetype": "core:tree",
 			"id": "tree_01",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-15.5,
 					0.0,
 					-14.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -71,10 +82,21 @@
 			"archetype": "core:tree",
 			"id": "tree_02",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-14.5,
 					0.0,
 					-17.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -84,10 +106,21 @@
 			"archetype": "core:tree",
 			"id": "tree_03",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-17.5,
 					0.0,
 					-11.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -97,10 +130,21 @@
 			"archetype": "core:tree",
 			"id": "tree_04",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-11.5,
 					0.0,
 					-18.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -110,10 +154,21 @@
 			"archetype": "core:tree",
 			"id": "tree_05",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					16.5,
 					0.0,
 					-14.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -123,10 +178,21 @@
 			"archetype": "core:tree",
 			"id": "tree_06",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					15.5,
 					0.0,
 					-17.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -136,10 +202,21 @@
 			"archetype": "core:tree",
 			"id": "tree_07",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					18.5,
 					0.0,
 					-11.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -149,10 +226,21 @@
 			"archetype": "core:tree",
 			"id": "tree_08",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					12.5,
 					0.0,
 					-18.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -162,10 +250,21 @@
 			"archetype": "core:tree",
 			"id": "tree_09",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-15.5,
 					0.0,
 					15.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -175,10 +274,21 @@
 			"archetype": "core:tree",
 			"id": "tree_10",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-14.5,
 					0.0,
 					18.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -188,10 +298,21 @@
 			"archetype": "core:tree",
 			"id": "tree_11",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-17.5,
 					0.0,
 					12.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -201,10 +322,21 @@
 			"archetype": "core:tree",
 			"id": "tree_12",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-11.5,
 					0.0,
 					19.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -214,10 +346,21 @@
 			"archetype": "core:tree",
 			"id": "tree_13",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					16.5,
 					0.0,
 					15.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -227,10 +370,21 @@
 			"archetype": "core:tree",
 			"id": "tree_14",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					15.5,
 					0.0,
 					18.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -240,10 +394,21 @@
 			"archetype": "core:tree",
 			"id": "tree_15",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					18.5,
 					0.0,
 					12.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -253,10 +418,21 @@
 			"archetype": "core:tree",
 			"id": "tree_16",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					12.5,
 					0.0,
 					19.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -266,10 +442,21 @@
 			"archetype": "core:tree",
 			"id": "tree_17",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-19.5,
 					0.0,
 					-4.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -279,10 +466,21 @@
 			"archetype": "core:tree",
 			"id": "tree_18",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-19.5,
 					0.0,
 					5.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -292,10 +490,21 @@
 			"archetype": "core:tree",
 			"id": "tree_19",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					20.5,
 					0.0,
 					-4.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -305,10 +514,21 @@
 			"archetype": "core:tree",
 			"id": "tree_20",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					20.5,
 					0.0,
 					5.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -318,10 +538,21 @@
 			"archetype": "core:tree",
 			"id": "tree_21",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-4.5,
 					0.0,
 					-19.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -331,10 +562,21 @@
 			"archetype": "core:tree",
 			"id": "tree_22",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					5.5,
 					0.0,
 					-19.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -344,10 +586,21 @@
 			"archetype": "core:tree",
 			"id": "tree_23",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-4.5,
 					0.0,
 					20.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -357,10 +610,21 @@
 			"archetype": "core:tree",
 			"id": "tree_24",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					5.5,
 					0.0,
 					20.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -371,15 +635,26 @@
 			"function": "core:party_stash",
 			"id": "starter_backpack",
 			"props": {
-				"food": 16,
-				"tarp": 1,
-				"water": 8
+				"food": 16.0,
+				"tarp": 1.0,
+				"water": 8.0
 			},
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-24.0,
 					0.0,
 					4.19999980926514
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -389,10 +664,21 @@
 			"archetype": "core:rabbit",
 			"id": "rabbit_01",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-11.5,
 					0.0,
 					-14.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -402,10 +688,21 @@
 			"archetype": "core:rabbit",
 			"id": "rabbit_02",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-10.5,
 					0.0,
 					-17.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -415,10 +712,21 @@
 			"archetype": "core:rabbit",
 			"id": "rabbit_03",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-13.5,
 					0.0,
 					-11.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -428,10 +736,21 @@
 			"archetype": "core:rabbit",
 			"id": "rabbit_04",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-7.5,
 					0.0,
 					-18.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -441,10 +760,21 @@
 			"archetype": "core:rabbit",
 			"id": "rabbit_05",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					20.5,
 					0.0,
 					-14.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -454,10 +784,21 @@
 			"archetype": "core:rabbit",
 			"id": "rabbit_06",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					19.5,
 					0.0,
 					-17.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -467,10 +808,21 @@
 			"archetype": "core:rabbit",
 			"id": "rabbit_07",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					22.5,
 					0.0,
 					-11.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -480,10 +832,21 @@
 			"archetype": "core:rabbit",
 			"id": "rabbit_08",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					16.5,
 					0.0,
 					-18.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -497,10 +860,21 @@
 				"grass": 11.0
 			},
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-9.5,
 					0.0,
 					-2.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -514,10 +888,21 @@
 				"grass": 9.0
 			},
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					7.5,
 					0.0,
 					12.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -531,10 +916,21 @@
 				"grass": 13.0
 			},
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-13.5,
 					0.0,
 					6.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -548,10 +944,21 @@
 				"grass": 6.0
 			},
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					5.5,
 					0.0,
 					-11.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -561,10 +968,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-14_-15",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-13.5,
 					0.0,
 					-14.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -574,10 +992,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-18_-14",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-17.5,
 					0.0,
 					-13.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -587,10 +1016,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-15_-17",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-14.5,
 					0.0,
 					-16.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -600,10 +1040,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-13_-14",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-12.5,
 					0.0,
 					-13.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -613,10 +1064,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-19_-16",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-18.5,
 					0.0,
 					-15.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -626,10 +1088,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-13_-18",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-12.5,
 					0.0,
 					-17.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -639,10 +1112,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-17_-17",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-16.5,
 					0.0,
 					-16.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -652,10 +1136,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-14_-20",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-13.5,
 					0.0,
 					-19.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -665,10 +1160,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-12_-17",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-11.5,
 					0.0,
 					-16.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -678,10 +1184,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-18_-19",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-17.5,
 					0.0,
 					-18.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -691,10 +1208,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-16_-12",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-15.5,
 					0.0,
 					-11.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -704,10 +1232,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-20_-11",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-19.5,
 					0.0,
 					-10.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -717,10 +1256,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-17_-14",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-16.5,
 					0.0,
 					-13.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -730,10 +1280,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-15_-11",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-14.5,
 					0.0,
 					-10.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -743,10 +1304,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-21_-13",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-20.5,
 					0.0,
 					-12.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -756,10 +1328,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-10_-19",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-9.5,
 					0.0,
 					-18.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -769,10 +1352,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-14_-18",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-13.5,
 					0.0,
 					-17.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -782,10 +1376,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-11_-21",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-10.5,
 					0.0,
 					-20.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -795,10 +1400,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-9_-18",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-8.5,
 					0.0,
 					-17.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -808,10 +1424,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-15_-20",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-14.5,
 					0.0,
 					-19.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -821,10 +1448,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_18_-15",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					18.5,
 					0.0,
 					-14.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -834,10 +1472,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_14_-14",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					14.5,
 					0.0,
 					-13.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -847,10 +1496,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_17_-17",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					17.5,
 					0.0,
 					-16.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -860,10 +1520,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_19_-14",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					19.5,
 					0.0,
 					-12.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -873,10 +1544,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_13_-16",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					13.5,
 					0.0,
 					-15.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -886,10 +1568,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_17_-18",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					17.5,
 					0.0,
 					-17.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -899,10 +1592,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_13_-17",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					13.5,
 					0.0,
 					-16.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -912,10 +1616,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_16_-20",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					16.5,
 					0.0,
 					-19.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -925,10 +1640,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_18_-17",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					18.5,
 					0.0,
 					-16.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -938,10 +1664,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_20_-12",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					20.5,
 					0.0,
 					-11.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -951,10 +1688,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_16_-11",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					16.5,
 					0.0,
 					-10.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -964,10 +1712,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_19_-14",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					19.5,
 					0.0,
 					-13.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -977,10 +1736,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_21_-11",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					21.5,
 					0.0,
 					-10.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -990,10 +1760,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_15_-13",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					15.5,
 					0.0,
 					-12.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1003,10 +1784,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_14_-19",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					14.5,
 					0.0,
 					-18.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1016,10 +1808,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_10_-18",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					10.5,
 					0.0,
 					-17.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1029,10 +1832,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_13_-21",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					13.5,
 					0.0,
 					-20.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1042,10 +1856,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_9_-20",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					9.5,
 					0.0,
 					-19.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1055,10 +1880,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-14_15",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-13.5,
 					0.0,
 					15.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1068,10 +1904,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-18_16",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-17.5,
 					0.0,
 					16.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1081,10 +1928,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-15_13",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-14.5,
 					0.0,
 					14.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1094,10 +1952,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-13_16",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-12.5,
 					0.0,
 					16.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1107,10 +1976,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-19_14",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-18.5,
 					0.0,
 					14.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1120,10 +2000,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-13_18",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-12.5,
 					0.0,
 					18.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1133,10 +2024,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-17_19",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-16.5,
 					0.0,
 					19.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1146,10 +2048,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-14_16",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-13.5,
 					0.0,
 					16.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1159,10 +2072,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-18_17",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-17.5,
 					0.0,
 					17.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1172,10 +2096,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-16_12",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-15.5,
 					0.0,
 					12.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1185,10 +2120,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-20_13",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-19.5,
 					0.0,
 					13.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1198,10 +2144,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-17_10",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-16.5,
 					0.0,
 					10.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1211,10 +2168,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-15_13",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-14.5,
 					0.0,
 					13.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1224,10 +2192,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-21_11",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-20.5,
 					0.0,
 					11.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1237,10 +2216,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-10_19",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-9.5,
 					0.0,
 					19.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1250,10 +2240,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-14_20",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-13.5,
 					0.0,
 					20.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1263,10 +2264,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-11_17",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-10.5,
 					0.0,
 					17.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1276,10 +2288,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-9_20",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-8.5,
 					0.0,
 					20.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1289,10 +2312,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_18_15",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					18.5,
 					0.0,
 					15.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1302,10 +2336,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_14_16",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					14.5,
 					0.0,
 					16.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1315,10 +2360,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_17_13",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					17.5,
 					0.0,
 					13.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1328,10 +2384,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_19_16",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					19.5,
 					0.0,
 					16.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1341,10 +2408,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_13_14",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					13.5,
 					0.0,
 					14.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1354,10 +2432,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_17_18",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					17.5,
 					0.0,
 					18.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1367,10 +2456,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_13_19",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					13.5,
 					0.0,
 					19.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1380,10 +2480,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_16_16",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					16.5,
 					0.0,
 					16.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1393,10 +2504,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_18_19",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					18.5,
 					0.0,
 					19.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1406,10 +2528,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_12_17",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					12.5,
 					0.0,
 					17.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1419,10 +2552,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_20_12",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					20.5,
 					0.0,
 					12.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1432,10 +2576,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_16_13",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					16.5,
 					0.0,
 					13.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1445,10 +2600,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_19_10",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					19.5,
 					0.0,
 					10.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1458,10 +2624,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_21_13",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					21.5,
 					0.0,
 					13.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1471,10 +2648,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_15_11",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					15.5,
 					0.0,
 					11.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1484,10 +2672,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_14_19",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					14.5,
 					0.0,
 					19.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1497,10 +2696,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_10_20",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					10.5,
 					0.0,
 					20.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1510,10 +2720,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_13_17",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					13.5,
 					0.0,
 					17.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1523,10 +2744,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_15_20",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					15.5,
 					0.0,
 					20.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1536,10 +2768,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_9_18",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					9.5,
 					0.0,
 					18.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1549,10 +2792,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-18_-5",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-17.5,
 					0.0,
 					-4.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1562,10 +2816,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-22_-4",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-21.5,
 					0.0,
 					-3.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1575,10 +2840,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-19_-7",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-18.5,
 					0.0,
 					-6.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1588,10 +2864,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-17_-4",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-16.5,
 					0.0,
 					-3.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1601,10 +2888,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-23_-6",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-22.5,
 					0.0,
 					-5.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1614,10 +2912,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-18_5",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-17.5,
 					0.0,
 					5.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1627,10 +2936,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-22_6",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-21.5,
 					0.0,
 					6.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1640,10 +2960,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-19_3",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-18.5,
 					0.0,
 					3.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1653,10 +2984,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-17_6",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-16.5,
 					0.0,
 					6.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1666,10 +3008,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-23_4",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-22.5,
 					0.0,
 					4.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1679,10 +3032,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_22_-5",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					22.5,
 					0.0,
 					-4.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1692,10 +3056,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_18_-4",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					18.5,
 					0.0,
 					-3.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1705,10 +3080,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_21_-7",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					21.5,
 					0.0,
 					-6.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1718,10 +3104,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_23_-4",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					23.5,
 					0.0,
 					-3.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1731,10 +3128,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_17_-6",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					17.5,
 					0.0,
 					-5.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1744,10 +3152,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_22_5",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					22.5,
 					0.0,
 					5.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1757,10 +3176,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_18_6",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					18.5,
 					0.0,
 					6.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1770,10 +3200,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_21_3",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					21.5,
 					0.0,
 					3.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1783,10 +3224,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_23_6",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					23.5,
 					0.0,
 					6.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1796,10 +3248,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_17_4",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					17.5,
 					0.0,
 					4.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1809,10 +3272,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-3_-20",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-2.5,
 					0.0,
 					-19.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1822,10 +3296,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-7_-19",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-6.5,
 					0.0,
 					-18.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1835,10 +3320,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-4_-22",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-3.5,
 					0.0,
 					-21.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1848,10 +3344,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-2_-19",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-1.5,
 					0.0,
 					-18.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1861,10 +3368,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-8_-21",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-7.5,
 					0.0,
 					-20.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1874,10 +3392,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_7_-20",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					7.5,
 					0.0,
 					-19.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1887,10 +3416,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_3_-19",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					3.5,
 					0.0,
 					-18.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1900,10 +3440,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_6_-22",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					6.5,
 					0.0,
 					-21.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1913,10 +3464,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_8_-19",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					8.5,
 					0.0,
 					-18.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1926,10 +3488,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_2_-21",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					2.5,
 					0.0,
 					-20.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1939,10 +3512,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-3_20",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-2.5,
 					0.0,
 					20.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1952,10 +3536,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-7_21",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-6.5,
 					0.0,
 					21.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1965,10 +3560,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_-4_18",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-3.5,
 					0.0,
 					18.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1978,10 +3584,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-2_21",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-1.5,
 					0.0,
 					21.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -1991,10 +3608,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_-8_19",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-7.5,
 					0.0,
 					19.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -2004,10 +3632,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_7_20",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					7.5,
 					0.0,
 					20.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -2017,10 +3656,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_3_21",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					3.5,
 					0.0,
 					21.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -2030,10 +3680,21 @@
 			"archetype": "core:grass_source",
 			"id": "grass_6_18",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					6.5,
 					0.0,
 					18.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -2043,10 +3704,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_8_21",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					8.5,
 					0.0,
 					21.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -2056,10 +3728,21 @@
 			"archetype": "core:forage_source",
 			"id": "forage_2_19",
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					2.5,
 					0.0,
 					19.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -2074,10 +3757,21 @@
 				"radius": 4.4
 			},
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-14.75,
 					1.0,
 					-15.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -2092,10 +3786,21 @@
 				"radius": 4.4
 			},
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					15.75,
 					1.0,
 					-15.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -2110,10 +3815,21 @@
 				"radius": 4.4
 			},
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-14.75,
 					1.0,
 					16.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -2128,10 +3844,21 @@
 				"radius": 4.4
 			},
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					15.75,
 					1.0,
 					16.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -2146,10 +3873,21 @@
 				"radius": 3.6
 			},
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					-19.5,
 					1.0,
 					0.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -2164,10 +3902,21 @@
 				"radius": 3.6
 			},
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					20.5,
 					1.0,
 					0.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -2182,10 +3931,21 @@
 				"radius": 3.6
 			},
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					0.5,
 					1.0,
 					-19.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -2200,10 +3960,21 @@
 				"radius": 3.6
 			},
 			"transform": {
+				"elevation": 0,
+				"offset": [
+					0.0,
+					0.0,
+					0.0
+				],
 				"position": [
 					0.5,
 					1.0,
 					20.5
+				],
+				"rotation": [
+					0.0,
+					0.0,
+					0.0
 				],
 				"scale": 1.0,
 				"yaw": 0.0
@@ -2220,6 +3991,14 @@
 	"players": 1,
 	"required_content": [
 		{
+			"id": "backpack",
+			"kind": "asset"
+		},
+		{
+			"id": "core:backpack",
+			"kind": "archetype"
+		},
+		{
 			"id": "core:fireflies",
 			"kind": "archetype"
 		},
@@ -2233,10 +4012,6 @@
 		},
 		{
 			"id": "core:rabbit",
-			"kind": "archetype"
-		},
-		{
-			"id": "core:backpack",
 			"kind": "archetype"
 		},
 		{
@@ -2268,13 +4043,14 @@
 			"kind": "asset"
 		}
 	],
-	"revision": "6a6e8d59a001",
+	"revision": "6a7a7d3fecf3",
 	"routes": [],
 	"rules": [],
 	"spawn_groups": [
 		{
 			"capacity": 12,
 			"fallback": "nearest_valid",
+			"formation": "loose",
 			"id": "legacy_party",
 			"name": {
 				"ru": "Старт отряда"
@@ -2303,12 +4079,15 @@
 					"id": "slot_3",
 					"order": 3
 				}
-			]
+			],
+			"spacing": 1.5
 		}
 	],
 	"start": {
+		"climate": "temperate",
 		"day_of_year": 120,
 		"default_start": "default",
+		"dynamic": true,
 		"game_definition": "core:settlement",
 		"latitude": 54.0,
 		"module_settings": {},

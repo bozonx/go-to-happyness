@@ -1,0 +1,39 @@
+{
+	"version": 1,
+	"biome": "shrubland",
+	"note": "Кустарник и сухие остовы; дерева почти нет.",
+	"rules": [
+		{
+			"archetype": "core:bush",
+			"density": 0.12
+		},
+		{
+			"archetype": "core:grass_source",
+			"density": 0.09
+		},
+		{
+			"archetype": "core:dead_tree",
+			"density": 0.01
+		},
+		{
+			"archetype": "core:rock_cluster",
+			"density": 0.014
+		},
+		{
+			"archetype": "core:boulder",
+			"density": 0.01
+		},
+		{
+			"archetype": "core:clay_pit",
+			"density": 0.003
+		},
+		{
+			"archetype": "core:boar",
+			"density": 0.0012
+		},
+		{
+			"archetype": "core:bird",
+			"density": 0.0018
+		}
+	]
+}

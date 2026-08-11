@@ -18,6 +18,7 @@ func _init() -> void:
 	_test_wind_reaches_the_shader_globals()
 	_test_snapshot_wind_is_normalised_and_never_dead_still()
 	_test_terrain_gets_the_same_wind()
+	_test_a_board_built_later_still_gets_the_wind()
 	_test_foliage_uses_the_shared_shader()
 	_test_shader_foliage_can_still_be_tinted()
 	print("--- test_world_wind.gd PASSED ---")
@@ -81,6 +82,23 @@ func _test_terrain_gets_the_same_wind() -> void:
 	var material := tall_grass.material()
 	assert((material.get_shader_parameter(&"wind_direction") as Vector2).is_equal_approx(axis))
 	assert(is_equal_approx(float(material.get_shader_parameter(&"wind_strength")), 0.6))
+
+
+## Редакторы и лаборатории строят доску один раз и не публикуют снимок погоды
+## ни разу. Пока `attach` не существовал, трава там стояла неподвижно рядом с
+## качающимися кустами — один параметр мира с двумя разными ответами на экране.
+func _test_a_board_built_later_still_gets_the_wind() -> void:
+	WorldWind.set_wind(Vector2(0.0, -1.0), 0.42)
+	var terrain := GridTerrainWorld.new()
+	WorldWind.attach(terrain)
+	var current := WorldWind.current()
+	assert((current["direction"] as Vector2).is_equal_approx(Vector2(0.0, -1.0)),
+		"поздняя доска не должна менять направление уже опубликованного ветра")
+	assert(is_equal_approx(float(current["strength"]), 0.42))
+	terrain.free()
+
+	# Отсутствующая доска — не ошибка: у погодной лаборатории её нет вовсе.
+	WorldWind.attach(null)
 
 
 func _test_foliage_uses_the_shared_shader() -> void:

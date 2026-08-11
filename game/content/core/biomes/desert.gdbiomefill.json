@@ -1,0 +1,36 @@
+{
+	"version": 1,
+	"biome": "desert",
+	"note": "Кактусы и песчаные проплешины; пальма — только у воды, то есть в оазисе.",
+	"rules": [
+		{
+			"archetype": "core:cactus",
+			"density": 0.03
+		},
+		{
+			"archetype": "core:sand_patch",
+			"density": 0.045
+		},
+		{
+			"archetype": "core:boulder",
+			"density": 0.012
+		},
+		{
+			"archetype": "core:rock_cluster",
+			"density": 0.01
+		},
+		{
+			"archetype": "core:bones",
+			"density": 0.002
+		},
+		{
+			"archetype": "core:palm_tree",
+			"density": 0.02,
+			"near_water_cells": 3,
+			"moisture": [
+				0.25,
+				1.0
+			]
+		}
+	]
+}

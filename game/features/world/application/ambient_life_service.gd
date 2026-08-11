@@ -31,9 +31,15 @@ class Creature:
 
 var _creatures: Array[Creature] = []
 var _rng: RandomNumberGenerator = null
-## Внешний мир, каким его видит служба. Ровно четыре вопроса — этого достаточно,
+## Внешний мир, каким его видит служба. Ровно три вопроса — этого достаточно,
 ## и это граница, за которую службе знать не нужно.
-var is_blocked: Callable
+##
+## Вопрос о движении задаётся ШАГОМ, а не точкой, и это не косметика. Точка
+## отвечает только «стоит ли тут объект»; обрыв, брод и глубокая вода — свойства
+## перехода между клетками, и спросить о них про одну точку нельзя. Пока
+## спрашивали про точку, олень поднимался по отвесной скале (высоту ему всё равно
+## выставлял террейн) и уходил гулять по поверхности озера.
+var can_step: Callable
 var terrain_height_at: Callable
 var threat_positions: Callable
 var _flock_centres: Dictionary = {}
@@ -41,12 +47,12 @@ var _flock_centres: Dictionary = {}
 
 func configure(
 	rng: RandomNumberGenerator,
-	blocked_query: Callable,
+	step_query: Callable,
 	height_query: Callable = Callable(),
 	threats_query: Callable = Callable()
 ) -> void:
 	_rng = rng
-	is_blocked = blocked_query
+	can_step = step_query
 	terrain_height_at = height_query
 	threat_positions = threats_query
 
@@ -146,7 +152,7 @@ func _step(creature: Creature, delta: float) -> void:
 		creature.heading = _steer_to_flock(creature)
 
 	var next := position + creature.heading * speed * delta
-	if is_blocked.is_valid() and bool(is_blocked.call(next)):
+	if can_step.is_valid() and not bool(can_step.call(position, next)):
 		# Развернуться, а не встать: существо, упёршееся в дерево и замершее
 		# навсегда, читается как повисшее.
 		creature.heading = -creature.heading

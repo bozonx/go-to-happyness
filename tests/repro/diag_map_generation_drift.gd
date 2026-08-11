@@ -16,7 +16,7 @@ const CASES: Array = [
 func _init() -> void:
 	for case_entry: Array in CASES:
 		var recipe := MapRecipe.from_json_path(
-			"res://tools/map_gen_lab/presets/%s.gdmapgen.json" % case_entry[0])
+			"res://game/content/mapgen/presets/%s.gdmapgen.json" % case_entry[0])
 		print("=== %s seed %d  target mean %d, max %d" % [
 			case_entry[0], case_entry[1], recipe.land_mean_height, recipe.land_max_height])
 		_replay(recipe, case_entry[1])

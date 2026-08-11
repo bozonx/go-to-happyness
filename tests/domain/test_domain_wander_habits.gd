@@ -17,6 +17,7 @@ static func run_all() -> void:
 	_test_skittish_creature_runs_from_a_threat()
 	_test_still_creature_is_never_registered()
 	_test_service_forgets_freed_creatures()
+	_test_creature_does_not_walk_up_a_cliff()
 	print("    [PASS] Wander Habit Tests")
 
 
@@ -79,7 +80,7 @@ static func _test_blocked_creature_turns_instead_of_freezing() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
 	# Стена по x > 1: за неё нельзя, и упереться в неё существо обязано не насмерть.
-	service.configure(rng, func(position: Vector3) -> bool: return position.x > 1.0)
+	service.configure(rng, func(_from: Vector3, to: Vector3) -> bool: return to.x <= 1.0)
 	var node := Node3D.new()
 	service.register(node, WanderHabit.preset(WanderHabit.HABIT_PROWLING))
 	for step in 400:
@@ -98,7 +99,7 @@ static func _test_skittish_creature_runs_from_a_threat() -> void:
 	rng.seed = 11
 	service.configure(
 		rng,
-		func(_position: Vector3) -> bool: return false,
+		func(_from: Vector3, _to: Vector3) -> bool: return true,
 		Callable(),
 		func() -> Array[Vector3]: return [threat] as Array[Vector3]
 	)
@@ -141,9 +142,50 @@ static func _test_service_forgets_freed_creatures() -> void:
 	assert(service.count() == 0, "освобождённое существо должно уйти с учёта")
 
 
+## Обрыв — это свойство перехода между клетками, и увидеть его можно только
+## спросив о шаге. Пока служба спрашивала «занята ли точка», зверь поднимался по
+## отвесной стене: высоту ему исправно выставлял террейн, а препятствием стена не
+## считалась, потому что на ней ничего не стояло.
+static func _test_creature_does_not_walk_up_a_cliff() -> void:
+	var terrain := TerrainGrid.new()
+	terrain.configure(1.0, 32)
+	# Стена в четыре ступени по x >= 2 — выше всего, что берёт пешеход.
+	for z in range(-16, 16):
+		for x in range(2, 16):
+			assert(terrain.set_height(Vector2i(x, z), 4))
+	var nav := NavGrid.new()
+	nav.configure(terrain.cell_size, 32)
+	TerrainNavigationPublisher.publish(terrain, nav)
+	assert(not nav.is_step_passable(Vector2i(1, 0), Vector2i(2, 0)),
+		"фикстура обязана быть непроходимой, иначе тест ничего не проверяет")
+
+	var service := AmbientLifeService.new()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	service.configure(
+		rng,
+		func(from: Vector3, to: Vector3) -> bool:
+			var from_cell := nav.cell_from_position(from)
+			var to_cell := nav.cell_from_position(to)
+			return from_cell == to_cell or nav.is_step_passable(from_cell, to_cell),
+		func(x: float, z: float, _y: float) -> float:
+			return terrain.height_at(Vector3(x, 0.0, z))
+	)
+	var node := Node3D.new()
+	node.position = Vector3(0.5, 0.0, 0.5)
+	# Хищник обходит самый большой участок — если стену вообще можно перейти, он
+	# дойдёт до неё раньше всех.
+	service.register(node, WanderHabit.preset(WanderHabit.HABIT_PROWLING))
+	for step in 600:
+		service.tick(0.1)
+		assert(node.position.x < 2.0,
+			"существо забралось на стену: x = %f, y = %f" % [node.position.x, node.position.y])
+	node.free()
+
+
 static func _service() -> AmbientLifeService:
 	var service := AmbientLifeService.new()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 3
-	service.configure(rng, func(_position: Vector3) -> bool: return false)
+	service.configure(rng, func(_from: Vector3, _to: Vector3) -> bool: return true)
 	return service

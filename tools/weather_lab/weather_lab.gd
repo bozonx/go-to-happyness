@@ -404,6 +404,11 @@ func _apply_state() -> void:
 		snapshot.precipitation = EnvironmentSnapshot.Precipitation.NONE
 	snapshot.cloud_seed = cloud_pattern_seed
 	controller.update_daylight(snapshot, runtime_seconds)
+	# Ветер — часть снимка, и лаборатория обязана рисовать его так же, как игра
+	# (`world_environment.md` §9). Без этой строки шторм в лаборатории выглядел
+	# штилем: облака неслись, а листва под ними стояла, — и снимок переставал быть
+	# свидетельством об игре.
+	WorldWind.apply(snapshot)
 
 
 func _process_capture() -> void:

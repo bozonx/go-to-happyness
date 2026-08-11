@@ -52,6 +52,14 @@ var environment := EnvironmentDirector.new()
 var environment_accumulation := EnvironmentAccumulationService.new()
 ## The environment's actions, flags and moments inside the map scenario (§14).
 var environment_scenario := EnvironmentScenarioVocabulary.new()
+## Сезонные состояния сущностей карты (`map_fill_mode.md` §6.1). Живёт здесь по
+## той же причине, что и директор окружения: сезон есть у мира, а не у игры.
+var seasonal_entities := SeasonalEntityService.new()
+## Components the attached game module executes itself, declared before `build`.
+## Entities carrying one of them are the module's to instantiate, so the generic
+## presenter leaves them alone — otherwise a creature exists twice, once inert.
+## Empty means "no module claimed anything": every entity gets its generic view.
+var claimed_entity_components: Array[StringName] = []
 
 
 func _init(
@@ -95,12 +103,19 @@ func build(
 		push_error("[world] session requires scene host, camera and map")
 		return null
 	world_setup = WorldSetupScene.instantiate() as WorldSetup
-	world_setup.setup(camera, cell_size, board_cells, trail_field, map_document, start_option)
+	world_setup.setup(
+		camera, cell_size, board_cells, trail_field, map_document, start_option,
+		claimed_entity_components,
+	)
 	scene_host.add_child(world_setup)
 	world_setup.build(scene_host)
 	entity_runtime = world_setup.map_entity_runtime
 	if not entity_runtime.entity_changed.is_connected(_on_entity_changed):
 		entity_runtime.entity_changed.connect(_on_entity_changed)
+	# Лес, расставленный летом, обязан пожелтеть в октябре сам (§6.1). Подключается
+	# здесь, а не в игре: сезон принадлежит миру, и карта, запущенная любым
+	# модулем, стареет одинаково.
+	seasonal_entities.configure(entity_runtime, environment)
 	publish_navigation()
 	return world_setup
 

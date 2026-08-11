@@ -42,6 +42,10 @@ void vertex() {
 }
 
 void fragment() {
-	ALBEDO = albedo_color.rgb;
+	// Цвет экземпляра. У одиночного объекта COLOR равен белому, и множитель
+	// ничего не меняет; у массового слоя материал один на тысячу деревьев, и
+	// разноцветными их делает `MultiMesh.set_instance_color` — иначе вариация
+	// стоила бы материала на дерево (`ScatterMeshBaker`).
+	ALBEDO = albedo_color.rgb * COLOR.rgb;
 	ROUGHNESS = roughness_value;
 }

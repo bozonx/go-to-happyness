@@ -1,0 +1,39 @@
+{
+	"version": 1,
+	"biome": "alpine",
+	"note": "Скалы и осыпи; ель поднимается сюда лишь там, где не слишком холодно.",
+	"rules": [
+		{
+			"archetype": "core:stone_outcrop",
+			"density": 0.03
+		},
+		{
+			"archetype": "core:rock_cluster",
+			"density": 0.024
+		},
+		{
+			"archetype": "core:boulder",
+			"density": 0.02
+		},
+		{
+			"archetype": "core:moss_patch",
+			"density": 0.02,
+			"moisture": [
+				0.4,
+				1.0
+			]
+		},
+		{
+			"archetype": "core:conifer_tree",
+			"density": 0.01,
+			"temperature": [
+				-4.0,
+				100.0
+			]
+		},
+		{
+			"archetype": "core:ore_deposit",
+			"density": 0.004
+		}
+	]
+}

@@ -1,6 +1,6 @@
 extends SceneTree
 func _init() -> void:
-	var recipe := MapRecipe.from_json_path("res://tools/map_gen_lab/presets/mountain_basin.gdmapgen.json")
+	var recipe := MapRecipe.from_json_path("res://game/content/mapgen/presets/mountain_basin.gdmapgen.json")
 	var grid := TerrainGrid.new(); var water := WaterGrid.new()
 	var ts := TerrainService.new(); var ws := WaterService.new()
 	var nav := NavGrid.new(); var pub := TerrainNavigationPublisher.new()

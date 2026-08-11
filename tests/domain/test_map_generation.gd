@@ -45,7 +45,27 @@ static func run_all() -> void:
 	_test_surface_follows_the_biome()
 	_test_arid_climate_holds_no_lakes()
 	_test_audit_contracts_are_explicit()
+	_test_builtin_recipes_ship_with_the_game()
 	print("    [PASS] Map Generation Tests")
+
+
+## Встроенные рецепты обязаны попадать в сборку. Лежали они рядом с
+## лабораторией, а `tools/*` исключён из экспорта — в собранной игре список
+## рецептов оказывался пуст, и флажок «Сгенерировать ландшафт» гас без единого
+## сообщения. Здесь проверяется не путь ради пути, а то, что ровно один каталог
+## отвечает за встроенные рецепты и он экспортируемый.
+static func _test_builtin_recipes_ship_with_the_game() -> void:
+	assert(not MapRecipeLibrary.BUILTIN_DIRECTORY.begins_with("res://tools/"),
+		"`tools/*` не экспортируется: встроенные рецепты оттуда не доедут до игрока")
+	var builtin: Array[Dictionary] = []
+	for entry: Dictionary in MapRecipeLibrary.list():
+		if bool(entry.get("builtin", false)):
+			builtin.append(entry)
+	assert(not builtin.is_empty(), "встроенных рецептов нет ни одного")
+	for entry: Dictionary in builtin:
+		var recipe := MapRecipe.from_json_path(String(entry["path"]))
+		assert(recipe.errors.is_empty(),
+			"встроенный рецепт %s не читается: %s" % [entry["id"], ", ".join(recipe.errors)])
 
 
 # --- Building blocks ---------------------------------------------------------
@@ -768,6 +788,55 @@ static func _test_generation_fills_a_map_document() -> void:
 	assert(not document.meta.biomes.is_empty(), "the header says what kind of world this is")
 	assert(result.report.notes.has(MapGenerationService.MISSING_START_NOTE),
 		"a map with no start option has to say so")
+
+	# --- Слой 4: карта населена ------------------------------------------------
+	# Земля без единого дерева — не «пока не сделано», а пустая карта: генератор,
+	# доходящий только до поверхности, отдаёт автору доску, которую всё равно
+	# засаживать руками.
+	assert(document.scatter.live_count() > 0, "сгенерированная карта осталась голой")
+	assert(not document.scatter.archetypes.is_empty())
+	for archetype_id: StringName in document.scatter.referenced_archetypes():
+		assert(EntityArchetypeCatalog.get_archetype(archetype_id) != null,
+			"слой ссылается на архетип, которого нет: %s" % archetype_id)
+	# Где стоит объект — ответ политики размещения, тот же, что у кисти автора.
+	for record: MapScatterLayer.Record in document.scatter.records:
+		if record.is_empty():
+			continue
+		var asset := EntityArchetypeCatalog.asset_of(document.scatter.archetype_of(record))
+		assert(asset != null)
+		assert(EntityPlacementProbe.accepts_cells(
+			asset.placement_policy(), document.terrain, document.water,
+			Rect2i(record.cell, asset.placement_policy().footprint_cells)),
+			"объект %s встал там, где его же политика этого не разрешает: %s"
+				% [asset.id, record.cell])
+
+	# Тот же seed — та же карта, включая лес: иначе сохранённая карта и
+	# перегенерированная перестают быть сравнимыми (§4.1).
+	var twin := MapDocument.create(&"twin", "Двойник", BOARD)
+	var twin_harness := Harness.new()
+	twin_harness.grid = twin.terrain
+	twin_harness.water = twin.water
+	twin.terrain.configure(1.0, BOARD)
+	twin.water.configure(1.0, BOARD)
+	twin_harness.terrain_service.configure(twin.terrain)
+	twin_harness.water_service.configure(twin.water, twin.terrain)
+	twin_harness.publisher.configure(
+		twin.terrain, twin_harness.nav, twin_harness.terrain_service, twin.water, twin_harness.water_service)
+	twin_harness.service.configure(
+		twin.terrain, twin.water, twin_harness.terrain_service, twin_harness.water_service,
+		twin_harness.publisher, twin_harness.nav)
+	var twin_service := MapGenerationService.new()
+	twin_service.configure(twin_harness.service)
+	twin_service.generate_into(twin, _recipe(), 4242)
+	assert(MapScatterCodec.encode(twin.scatter) == MapScatterCodec.encode(document.scatter),
+		"тот же seed обязан дать тот же лес байт в байт: %d против %d записей"
+			% [twin.scatter.live_count(), document.scatter.live_count()])
+
+	# Наполнение — записи, а не правило: убрав одно дерево, автор не должен
+	# сдвинуть остальные (§9.2).
+	var before_removal := document.scatter.live_count()
+	assert(document.scatter.remove_at(0))
+	assert(document.scatter.live_count() == before_removal - 1)
 
 	# The size of a map is chosen once, at creation (map_editor.md §6.2): a recipe
 	# for another board is refused rather than quietly resizing the document.

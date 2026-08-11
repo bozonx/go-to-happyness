@@ -18,7 +18,7 @@ func _init() -> void:
 			seed_filter = int(argument.trim_prefix("--seed="))
 		elif argument.begins_with("--board="):
 			board_override = int(argument.trim_prefix("--board="))
-	var directory := DirAccess.open("res://tools/map_gen_lab/presets")
+	var directory := DirAccess.open("res://game/content/mapgen/presets")
 	var names := directory.get_files()
 	names.sort()
 	var failure_counts: Dictionary = {}
@@ -28,7 +28,7 @@ func _init() -> void:
 			continue
 		if not preset_filter.is_empty() and name.get_basename().get_basename() != preset_filter:
 			continue
-		var recipe := MapRecipe.from_json_path("res://tools/map_gen_lab/presets/%s" % name)
+		var recipe := MapRecipe.from_json_path("res://game/content/mapgen/presets/%s" % name)
 		if board_override > 0:
 			recipe = MapRecipeLibrary.with_board(recipe, board_override)
 		var seed_values: Array[int] = []

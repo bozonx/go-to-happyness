@@ -145,6 +145,9 @@ func _ready() -> void:
 	water_service.configure(water, grid)
 	wear_service.configure(service)
 	terrain.configure(grid, camera)
+	# Ветер — общий параметр мира: доска, появившаяся после публикации, должна
+	# получить тот же ветер, что и всё остальное (`world_environment.md` §9).
+	WorldWind.attach(terrain)
 	_connect_smoothing_controls()
 	water_world.configure(water, grid, water_service, service)
 	# Binds the grids and keeps the field current: every committed edit — ground or

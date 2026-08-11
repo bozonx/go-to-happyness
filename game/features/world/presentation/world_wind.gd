@@ -60,6 +60,24 @@ static func set_wind(
 		terrain.set_wind(axis, amount)
 
 
+## Hands the wind that is already blowing to a board that has only just appeared.
+##
+## The global shader parameters are process-wide and reach foliage the moment it
+## is drawn, but `GridTerrainWorld` keeps the wind in its own grass MultiMeshes and
+## therefore has to be told. In a session `apply` does that every frame; the
+## editors and the laboratories build a board once and never publish a snapshot,
+## so without this call their grass stands still while the bushes right beside it
+## move — the same parameter, visibly disagreeing with itself.
+## Публикуется именно через `set_wind`, а не напрямую в доску: иначе трава
+## получила бы последнее опубликованное значение, а глобальные параметры шейдера
+## остались бы на значении из `project.godot` — те же два ответа на один вопрос,
+## только тише.
+static func attach(terrain: GridTerrainWorld) -> void:
+	if terrain == null or not is_instance_valid(terrain):
+		return
+	set_wind(_direction, _strength, terrain)
+
+
 ## What the shaders are currently being told, for tests and for the labs' readouts.
 static func current() -> Dictionary:
 	return {"direction": _direction, "strength": _strength}

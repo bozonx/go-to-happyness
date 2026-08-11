@@ -1,0 +1,43 @@
+{
+	"version": 1,
+	"biome": "temperate_grassland",
+	"note": "Степь: трава, редкий куст, совсем редкое дерево.",
+	"rules": [
+		{
+			"archetype": "core:grass_source",
+			"density": 0.23
+		},
+		{
+			"archetype": "core:bush",
+			"density": 0.035
+		},
+		{
+			"archetype": "core:tree",
+			"density": 0.012
+		},
+		{
+			"archetype": "core:boulder",
+			"density": 0.008
+		},
+		{
+			"archetype": "core:forage_source",
+			"density": 0.014,
+			"moisture": [
+				0.4,
+				1.0
+			]
+		},
+		{
+			"archetype": "core:rabbit",
+			"density": 0.0034
+		},
+		{
+			"archetype": "core:deer",
+			"density": 0.0014
+		},
+		{
+			"archetype": "core:bird",
+			"density": 0.0026
+		}
+	]
+}

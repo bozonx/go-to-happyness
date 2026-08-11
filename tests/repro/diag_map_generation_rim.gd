@@ -9,7 +9,7 @@ extends SceneTree
 ## prints profiles — a few slices inland from one side, with the height of every
 ## column, the contours marked and the risers measured.
 
-const PRESET := "res://tools/map_gen_lab/presets/mountain_basin.gdmapgen.json"
+const PRESET := "res://game/content/mapgen/presets/mountain_basin.gdmapgen.json"
 const SLICES := 6
 const DEPTH := 26
 

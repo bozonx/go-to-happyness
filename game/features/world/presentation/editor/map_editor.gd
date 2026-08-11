@@ -25,6 +25,9 @@ extends Node3D
 const PLANNED_MODES: Array = []
 
 @onready var terrain_world: GridTerrainWorld = $Terrain
+## Чанковый рендер массового наполнения. Строится кодом, а не объявлен в сцене,
+## потому что он не нужен карте без наполнения и ничего не стоит, пока пуст.
+var _scatter_world: ScatterWorld = null
 @onready var water_world: WaterWorld = $Water
 @onready var nav_overlay: NavTerrainOverlay = $NavOverlay
 @onready var hover_marker: MeshInstance3D = $HoverMarker
@@ -154,6 +157,8 @@ func _ready() -> void:
 	_build_modes()
 	_connect_ui()
 	history.changed.connect(_refresh_panels)
+	# Отмена мазка обязана убрать лес с экрана, а не только из данных.
+	history.changed.connect(_rebuild_scatter_world)
 	get_viewport().size_changed.connect(_refresh_camera_framing)
 	_select_mode(_modes[0].id)
 	# After the world exists: the markers hang off `terrain_world`, which
@@ -231,6 +236,14 @@ func _adopt_path(path: String) -> void:
 	test_start_option = &""
 
 
+## Перестраивает чанки массового наполнения. Полная пересборка, а не точечная:
+## отмена и повтор двигают весь слой целиком, и «какие чанки задеты» после них
+## пришлось бы вычислять сравнением снимков.
+func _rebuild_scatter_world() -> void:
+	if _scatter_world != null:
+		_scatter_world.rebuild_all()
+
+
 func _build_services() -> void:
 	_terrain_service.configure(document.terrain)
 	_wear_service.configure(_terrain_service)
@@ -258,6 +271,18 @@ func _build_services() -> void:
 	nav_overlay.visible = false
 	terrain_world.rebuild_pending_now()
 	water_world.rebuild_pending_now()
+	# У редактора нет ни часов, ни погоды, но ветер — общий параметр мира, а не
+	# принадлежность сессии: без этого трава доски стояла бы неподвижно рядом с
+	# качающимися кустами, поставленными в том же режиме наполнения.
+	WorldWind.attach(terrain_world)
+	# Массовое наполнение автор обязан видеть: сгенерированный лес живёт в
+	# `objects.bin`, у его объектов нет нод, и без этого редактор показывал бы
+	# голую землю там, где карта уже засажена.
+	if _scatter_world == null:
+		_scatter_world = ScatterWorld.new()
+		_scatter_world.name = "Scatter"
+		add_child(_scatter_world)
+	_scatter_world.configure(document.scatter, document.terrain)
 	_build_hover_marker()
 	_refresh_camera_framing()
 
@@ -292,6 +317,8 @@ func _build_services() -> void:
 		_context.status_message_changed.connect(_on_status_message_changed)
 	if not _context.document_change_requested.is_connected(_notify_document_changed):
 		_context.document_change_requested.connect(_notify_document_changed)
+	if not _context.scatter_changed.is_connected(_rebuild_scatter_world):
+		_context.scatter_changed.connect(_rebuild_scatter_world)
 	_context.confirm_handler = Callable(self, "confirm_action")
 	ramp_preview.configure(document.terrain)
 	if water_highlight != null:
@@ -326,10 +353,7 @@ func _save() -> void:
 	if current_path.is_empty() or not _service.can_write(current_path):
 		_open_save_as()
 		return
-	# The `preview` argument is the reserved hook for map thumbnails
-	# (map_editor.md §3.2.1). Nothing renders one yet, and passing null keeps the
-	# call shape final so adding the snapshot later touches only this line.
-	var path := _service.save_map_to(document, current_path, null)
+	var path := _service.save_map_to(document, current_path, MapPreviewImage.render(document))
 	if path.is_empty():
 		_message = "не сохранено: %s" % _service.last_error
 	else:
@@ -347,7 +371,7 @@ func _open_save_as() -> void:
 func _on_save_as_requested(id: StringName) -> void:
 	document.meta.id = id
 	var previous_path := current_path
-	var path := _service.save_map(document, &"", null)
+	var path := _service.save_map(document, &"", MapPreviewImage.render(document))
 	if path.is_empty():
 		_message = "не сохранено: %s" % _service.last_error
 	else:

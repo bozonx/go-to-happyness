@@ -1,0 +1,39 @@
+{
+	"version": 1,
+	"biome": "tropical_forest",
+	"note": "Пальмы, широколистные деревья и сплошной подлесок.",
+	"rules": [
+		{
+			"archetype": "core:palm_tree",
+			"density": 0.075
+		},
+		{
+			"archetype": "core:tree",
+			"density": 0.11
+		},
+		{
+			"archetype": "core:fern",
+			"density": 0.11
+		},
+		{
+			"archetype": "core:bush",
+			"density": 0.085
+		},
+		{
+			"archetype": "core:forage_source",
+			"density": 0.04
+		},
+		{
+			"archetype": "core:moss_patch",
+			"density": 0.045
+		},
+		{
+			"archetype": "core:boar",
+			"density": 0.0016
+		},
+		{
+			"archetype": "core:bird",
+			"density": 0.004
+		}
+	]
+}

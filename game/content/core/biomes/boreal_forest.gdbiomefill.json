@@ -1,0 +1,55 @@
+{
+	"version": 1,
+	"biome": "boreal_forest",
+	"note": "Тайга: хвоя густо, берёза примесью, мох по земле.",
+	"rules": [
+		{
+			"archetype": "core:conifer_tree",
+			"density": 0.19
+		},
+		{
+			"archetype": "core:birch_tree",
+			"density": 0.045
+		},
+		{
+			"archetype": "core:bush",
+			"density": 0.06
+		},
+		{
+			"archetype": "core:moss_patch",
+			"density": 0.07
+		},
+		{
+			"archetype": "core:stump",
+			"density": 0.012
+		},
+		{
+			"archetype": "core:boulder",
+			"density": 0.014
+		},
+		{
+			"archetype": "core:grass_source",
+			"density": 0.055
+		},
+		{
+			"archetype": "core:forage_source",
+			"density": 0.02,
+			"moisture": [
+				0.45,
+				1.0
+			]
+		},
+		{
+			"archetype": "core:deer",
+			"density": 0.0022
+		},
+		{
+			"archetype": "core:wolf",
+			"density": 0.0006
+		},
+		{
+			"archetype": "core:bird",
+			"density": 0.003
+		}
+	]
+}

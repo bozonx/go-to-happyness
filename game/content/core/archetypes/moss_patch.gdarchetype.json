@@ -1,1 +1,1 @@
-{"version":1,"id":"moss_patch","name":"Мох","asset":"moss_patch","content_class":"decor","category":"vegetation"}
+{"version":1,"id":"moss_patch","name":"Мох","asset":"moss_patch","content_class":"decor","category":"vegetation","states":{"default":"seasonal","list":[{"id":"summer","name":"Лето","visual":{"variant":"summer"}},{"id":"winter","name":"Зима","visual":{"variant":"winter"}}],"transitions":{"season":{"spring":"summer","summer":"summer","autumn":"summer","winter":"winter"}}}}

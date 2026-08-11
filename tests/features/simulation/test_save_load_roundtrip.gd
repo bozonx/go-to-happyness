@@ -60,6 +60,16 @@ func _init() -> void:
 	assert(not sim_b.world_resource_state.tree_at(felled_cell).felled, "fresh tree must start standing")
 	assert(sim_b.settlement.money != 4321, "fresh money should differ from saved value")
 
+	# Существо, которое сейв не восстанавливает: оно не лежит ни в одном из четырёх
+	# словарей источников, как олень, кабан или волк. Восстановление обязано его не
+	# трогать. Раньше оно снимало с учёта ВСЮ службу, а регистрировало обратно
+	# только кроликов, и зверь навсегда замирал там, где его застала загрузка.
+	var bystander := Node3D.new()
+	bystander.position = Vector3(3.0, 0.0, 3.0)
+	sim_b.add_child(bystander)
+	sim_b.ambient_life_service.register(bystander, WanderHabit.preset(WanderHabit.HABIT_GRAZING))
+	var registered_before: int = sim_b.ambient_life_service.count()
+
 	var loaded := SaveDataScript.new()
 	assert(loaded.load_from_file(SAVE_PATH), "load_from_file should succeed")
 	assert(SettlementSaveLoader.new().restore(sim_b, loaded.module_section(module.module_id())),
@@ -81,6 +91,15 @@ func _init() -> void:
 	assert(not sim_b.forage_sources.has(forage_cell), "harvested forage must not come back")
 	assert(sim_b.rabbit_sources.has(rabbit_cell), "rabbit source missing after restore")
 	assert(sim_b.rabbit_sources[rabbit_cell].node.global_position.distance_to(rabbit_position) < 0.01, "rabbit position not restored")
+	# Восстановленный кролик снова бродит: без постановки на учёт он выглядит
+	# точно так же, как правильно загруженный, и молча стоит до конца партии.
+	assert(sim_b.ambient_life_service.heading_of(sim_b.rabbit_sources[rabbit_cell].node) != Vector3.ZERO,
+		"restored rabbit must be registered with the ambient life service")
+	# Повадка приходит из архетипа, а не из константы в загрузчике.
+	assert(sim_b.ambient_life_service.count() == registered_before,
+		"restore must not unregister creatures it does not recreate")
+	assert(sim_b.ambient_life_service.heading_of(bystander) != Vector3.ZERO,
+		"a creature outside the four source dictionaries must survive the restore")
 	var landscape_objects := sim_b.get_node("WorldTerritory/LandscapeObjects")
 	assert(sim_b.resource_piles.any(func(pile): return bool(pile.node.get_meta("landscape_owned", false)) and pile.node.get_parent() == landscape_objects), "starter world loot must return to the terrain hierarchy")
 

@@ -26,6 +26,12 @@ const INSPECTOR_INITIAL_STATE := &"editor_initial_state"
 ## Настройка кисти, а не свойство записи: сорок деревьев, поставленных подряд,
 ## не должны быть сорока копиями одного (`map_fill_mode.md` §9.2.1).
 const INSPECTOR_SCATTER_VARY := &"editor_scatter_vary"
+## Кисть-разброс (§9.2). Тоже настройки инструмента, а не свойства записи:
+## радиус, плотность и seed не сохраняются в карту — сохраняется мазок.
+const INSPECTOR_SCATTER_MODE := &"editor_scatter_mode"
+const INSPECTOR_SCATTER_RADIUS := &"editor_scatter_radius"
+const INSPECTOR_SCATTER_DENSITY := &"editor_scatter_density"
+const INSPECTOR_SCATTER_SEED := &"editor_scatter_seed"
 const TRANSFORM_PROPERTIES: Array[StringName] = [INSPECTOR_CELL, INSPECTOR_CELL_X, INSPECTOR_CELL_Z, INSPECTOR_ELEVATION, INSPECTOR_OFFSET, INSPECTOR_PITCH, INSPECTOR_YAW, INSPECTOR_ROLL, INSPECTOR_ROTATION, INSPECTOR_SCALE]
 ## Действие «заменить выделенное на выбранный в палитре архетип».
 const OPTION_REPLACE := &"fill_replace"
@@ -48,6 +54,15 @@ var _brush_offset := Vector3.ZERO
 ## историю отмены: выключив его, автор не «отменяет» уже поставленные объекты.
 var _brush_vary := false
 var _vary_rng := RandomNumberGenerator.new()
+## Кисть-разброс: включена ли она и с какими настройками. Пока выключена, режим
+## наполнения ведёт себя ровно как раньше — один клик, один объект.
+var _scatter_mode := false
+var _scatter_settings := ScatterBrush.Settings.new()
+## Занятость слоя на время одной протяжки. Пересчитывать её на каждый кадр
+## значило бы проходить по всему лесу за каждое движение мыши.
+var _scatter_occupancy: Dictionary = {}
+var _scatter_merge_key: StringName = &""
+var _scatter_stroke_serial := 0
 var _pending_reference_property: StringName = &""
 var _selected_id: StringName = &""
 var _additional_selected: Array[StringName] = []
@@ -198,6 +213,8 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 			return false
 		# Здание под курсором сносится тем же жестом, что и объект: жест один,
 		# а инструмент выбирается по тому, что там стоит.
+		if _scatter_mode:
+			return _scatter_erase(cell)
 		if _placement.erase_at(cell):
 			notify_ui_changed()
 			return true
@@ -233,6 +250,17 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 		return true
 	if event.ctrl_pressed:
 		return false
+	if _scatter_mode:
+		if _archetype_id == &"":
+			context.set_status_message("Выберите ассет в палитре: кисти-разбросу нечем красить.", true)
+			return true
+		_scatter_stroke_serial += 1
+		_scatter_merge_key = StringName("fill_scatter/%d" % _scatter_stroke_serial)
+		_scatter_occupancy = ScatterBrush.occupancy_of(context.document.scatter)
+		_scatter_at(cell)
+		_placing_stroke = true
+		_last_placed_cell = cell
+		return true
 	if _archetype_id == &"":
 		_select(&"", false)
 		context.set_status_message("Выберите ассет в палитре или щёлкните по объекту.", true)
@@ -254,6 +282,12 @@ func _continue_placement_stroke() -> bool:
 		return false
 	var cell := context.brush.hovered_cell
 	if cell == _last_placed_cell:
+		return true
+	if _scatter_mode:
+		# Разброс идёт по пройденным клеткам так же, как одиночная постановка:
+		# быстрое движение мыши не должно оставлять пунктир из полян.
+		_scatter_along(_last_placed_cell, cell)
+		_last_placed_cell = cell
 		return true
 	# Fill every crossed cell so fast mouse movement cannot leave a dotted trail.
 	var delta := cell - _last_placed_cell
@@ -416,12 +450,7 @@ func _cells_free_ignoring(
 
 ## Все клетки прямоугольника внутри доски и ни одна не попадает в вырез.
 func _cells_placeable(cells: Rect2i) -> bool:
-	for x in range(cells.position.x, cells.end.x):
-		for z in range(cells.position.y, cells.end.y):
-			var cell := Vector2i(x, z)
-			if not context.terrain.is_inside(cell) or context.terrain.is_hole(cell):
-				return false
-	return true
+	return EntityPlacementProbe.are_cells_placeable(context.terrain, cells)
 
 
 ## Якорь — центр занятого прямоугольника клеток, поднятый на свою поверхность.
@@ -466,6 +495,82 @@ func _place(cell: Vector2i, merge_key: StringName = &"") -> void:
 	_commit(before, "размещение %s" % archetype.name, merge_key)
 
 
+# --- Кисть-разброс -------------------------------------------------------------
+
+## Один мазок. Запекает записи в `objects.bin` карты, а не оставляет правило:
+## иначе автор не смог бы убрать одно дерево, не сдвинув остальные (§9.2).
+func _scatter_at(cell: Vector2i) -> void:
+	var settings := _current_scatter_settings()
+	if not settings.is_ready():
+		context.set_status_message("Кисть-разброс: нужен ассет и ненулевая плотность.", true)
+		return
+	var before := MapScatterCodec.encode(context.document.scatter)
+	var before_archetypes := context.document.scatter.archetypes.duplicate()
+	var placed := ScatterBrush.stroke(
+		settings, context.document.scatter, context.terrain, context.water, cell, _scatter_occupancy)
+	if placed.is_empty():
+		return
+	for record: MapScatterLayer.Record in placed:
+		context.document.scatter.add(record)
+	_commit_scatter(before, before_archetypes, "разброс %d объектов" % placed.size())
+	context.set_status_message("Разброс: поставлено %d, всего в слое %d."
+		% [placed.size(), context.document.scatter.live_count()])
+
+
+func _scatter_along(from_cell: Vector2i, to_cell: Vector2i) -> void:
+	var delta := to_cell - from_cell
+	var steps := maxi(absi(delta.x), absi(delta.y))
+	for index in range(1, steps + 1):
+		_scatter_at(Vector2i(
+			roundi(lerpf(from_cell.x, to_cell.x, float(index) / steps)),
+			roundi(lerpf(from_cell.y, to_cell.y, float(index) / steps))))
+
+
+func _scatter_erase(cell: Vector2i) -> bool:
+	# Своя серия: иначе стирание склеилось бы с предыдущим мазком по его ключу, и
+	# один Ctrl+Z отменял бы обоих — то есть возвращал бы стёртое вместе с тем,
+	# что автор ставил отдельным жестом.
+	_scatter_stroke_serial += 1
+	_scatter_merge_key = StringName("fill_scatter_erase/%d" % _scatter_stroke_serial)
+	var before := MapScatterCodec.encode(context.document.scatter)
+	var before_archetypes := context.document.scatter.archetypes.duplicate()
+	var removed := ScatterBrush.erase(
+		context.document.scatter, context.terrain, cell, _scatter_settings.radius_cells)
+	if removed == 0:
+		context.set_status_message("Под кистью нет объектов массового слоя.", true)
+		return true
+	_scatter_occupancy = ScatterBrush.occupancy_of(context.document.scatter)
+	_commit_scatter(before, before_archetypes, "стёрто %d объектов" % removed)
+	context.set_status_message("Стёрто %d, осталось %d."
+		% [removed, context.document.scatter.live_count()])
+	return true
+
+
+## Настройки мазка: смесь берётся из палитры. Один архетип — это смесь из одного,
+## а не отдельный случай; смесь из нескольких появится вместе с UI, который
+## позволит её собрать, и код кисти для этого менять не придётся.
+func _current_scatter_settings() -> ScatterBrush.Settings:
+	_scatter_settings.mix = ScatterBrush.Mix.new()
+	if _archetype_id != &"":
+		_scatter_settings.mix.add(_archetype_id)
+	_scatter_settings.vary = _brush_vary
+	return _scatter_settings
+
+
+## Вся протяжка склеивается в одну запись истории по общему ключу: автор вёл
+## мышью один раз, и Ctrl+Z обязан отменить один мазок.
+func _commit_scatter(
+	before: PackedByteArray,
+	before_archetypes: Array[StringName],
+	command_label: String
+) -> void:
+	var command := MapScatterCommand.of(
+		context.document, before, before_archetypes, command_label)
+	context.history.push(command, _scatter_merge_key)
+	context.notify_scatter_changed()
+	notify_ui_changed()
+
+
 ## Разброс правит только то, о чём автор не высказался: значения, введённые в
 ## кисти вручную, остаются точными. Иначе выставленный осенний цвет кроны исчезал
 ## бы при первом же клике, и переключатель работал бы как «испортить настройки».
@@ -504,6 +609,10 @@ func _erase_at(cell: Vector2i) -> bool:
 	return true
 
 
+## Правила «где это может стоять» живут в `EntityPlacementProbe`, а не здесь.
+## Кисть-разброс и стадия растительности генератора спрашивают ровно то же
+## самое; вторая копия этих десяти строк — это ровно тот способ, которым два
+## редактора уже однажды разошлись (`active_zones.md` §19).
 func _surface_position(cell: Vector2i, archetype: EntityArchetype) -> Vector3:
 	var position := context.terrain.cell_center(cell)
 	# MapEntityRecord stores Y relative to the terrain at its X/Z. Keeping that
@@ -512,48 +621,25 @@ func _surface_position(cell: Vector2i, archetype: EntityArchetype) -> Vector3:
 	position.y = 0.0
 	var asset := EntityArchetypeCatalog.asset_of(archetype.id)
 	if asset != null:
-		var policy := asset.placement_policy()
-		var surface := _surface_kind(cell)
-		if surface in [AssetPlacementPolicy.SURFACE_SHALLOW, AssetPlacementPolicy.SURFACE_WATER, AssetPlacementPolicy.SURFACE_ICE, AssetPlacementPolicy.SURFACE_LAVA]:
-			# Water levels are absolute, while the stored value is relative to
-			# ground. This makes the projection land exactly on the water surface.
-			position.y = context.water.surface_metres_at(cell) - context.terrain.height_at(position)
-		position.y += policy.vertical_offset
+		position.y = EntityPlacementProbe.surface_offset(
+			asset.placement_policy(), context.terrain, context.water, cell, position)
 	return position
-
-
-func _surface_kind(cell: Vector2i) -> StringName:
-	if not context.water.is_wet(context.terrain, cell):
-		return AssetPlacementPolicy.SURFACE_GROUND
-	if context.water.is_lava(cell):
-		return AssetPlacementPolicy.SURFACE_LAVA
-	if context.water.is_frozen(cell):
-		return AssetPlacementPolicy.SURFACE_ICE
-	if context.water.depth_steps_at(context.terrain, cell) <= WaterGrid.FORD_MAX_DEPTH_STEPS:
-		return AssetPlacementPolicy.SURFACE_SHALLOW
-	return AssetPlacementPolicy.SURFACE_WATER
 
 
 func _placement_warnings(cell: Vector2i, archetype: EntityArchetype) -> Array[String]:
 	var asset := EntityArchetypeCatalog.asset_of(archetype.id)
 	if asset == null:
 		return ["архетип не нашёл свой ассет: будет показана заглушка"]
-	var submerged := context.water.is_wet(context.terrain, cell) and context.water.depth_steps_at(context.terrain, cell) > 0
-	return asset.placement_policy().warnings_for({
-		"surface": _surface_kind(cell),
-		"slope_class": context.terrain.slope_class_at(cell),
-		"submerged": submerged,
-	})
+	return EntityPlacementProbe.warnings_at(
+		asset.placement_policy(), context.terrain, context.water, cell)
 
 
 func _placement_warnings_for_cells(cells: Rect2i, archetype: EntityArchetype) -> Array[String]:
-	var warnings: Array[String] = []
-	for x in range(cells.position.x, cells.end.x):
-		for z in range(cells.position.y, cells.end.y):
-			for warning: String in _placement_warnings(Vector2i(x, z), archetype):
-				if warning not in warnings:
-					warnings.append(warning)
-	return warnings
+	var asset := EntityArchetypeCatalog.asset_of(archetype.id)
+	if asset == null:
+		return ["архетип не нашёл свой ассет: будет показана заглушка"]
+	return EntityPlacementProbe.warnings_for_cells(
+		asset.placement_policy(), context.terrain, context.water, cells)
 
 
 func _forget(entity_id: StringName) -> void:
@@ -1117,9 +1203,41 @@ func inspector_properties() -> Array[EntityPropertyDef]:
 		var scatter_property := _scatter_property(brush_asset)
 		if scatter_property != null:
 			brush_properties.append(scatter_property)
+		brush_properties.append_array(_scatter_brush_properties(brush_asset))
 		brush_properties.append_array(_appearance_definitions(brush_asset))
 		return brush_properties
 	return []
+
+
+## Настройки кисти-разброса. Показываются только тем ассетам, которым политика
+## размещения разрешила разброс (`placement.scatter.allowed`): предлагать
+## засадить карту костром — это предлагать автору ошибку.
+func _scatter_brush_properties(asset: WorldAssetDef) -> Array[EntityPropertyDef]:
+	var properties: Array[EntityPropertyDef] = []
+	if asset == null or not asset.placement_policy().scatter_allowed:
+		return properties
+	properties.append(EntityPropertyDef.from_dict({
+		"name": INSPECTOR_SCATTER_MODE, "label": "Кисть-разброс", "type": "bool",
+		"section": "brush", "default": false,
+	}))
+	if not _scatter_mode:
+		return properties
+	properties.append(EntityPropertyDef.from_dict({
+		"name": INSPECTOR_SCATTER_RADIUS, "label": "Радиус", "type": "int",
+		"section": "brush", "unit": "кл", "min": 1, "max": 32, "step": 1.0,
+		"default": _scatter_settings.radius_cells,
+	}))
+	properties.append(EntityPropertyDef.from_dict({
+		"name": INSPECTOR_SCATTER_DENSITY, "label": "Плотность", "type": "float",
+		"section": "brush", "min": 0.01, "max": 1.0, "step": 0.05,
+		"default": _scatter_settings.density,
+	}))
+	properties.append(EntityPropertyDef.from_dict({
+		"name": INSPECTOR_SCATTER_SEED, "label": "Seed", "type": "int",
+		"section": "brush", "min": 0, "max": 999999, "step": 1.0,
+		"default": _scatter_settings.seed_value,
+	}))
+	return properties
 
 
 ## Переключатель показывается только тем ассетам, которым есть чем отличаться:
@@ -1202,6 +1320,10 @@ func inspector_values() -> Dictionary:
 		brush_values[INSPECTOR_SCALE] = _brush_scale
 		brush_values[INSPECTOR_INITIAL_STATE] = String(_brush_initial_state)
 		brush_values[INSPECTOR_SCATTER_VARY] = _brush_vary
+		brush_values[INSPECTOR_SCATTER_MODE] = _scatter_mode
+		brush_values[INSPECTOR_SCATTER_RADIUS] = _scatter_settings.radius_cells
+		brush_values[INSPECTOR_SCATTER_DENSITY] = _scatter_settings.density
+		brush_values[INSPECTOR_SCATTER_SEED] = _scatter_settings.seed_value
 		for definition: EntityPropertyDef in _appearance_definitions(EntityArchetypeCatalog.asset_of(active_archetype.id)):
 			brush_values[definition.name] = _brush_appearance.get(String(definition.name).trim_prefix(APPEARANCE_PREFIX), definition.default)
 		return brush_values
@@ -1218,7 +1340,11 @@ func apply_inspector_value(property_name: StringName, value: Variant) -> bool:
 func _apply_value(property_name: StringName, value: Variant, mergeable: bool) -> bool:
 	# Разброс принадлежит инструменту, а не записи, поэтому он обрабатывается до
 	# ветвления по выделению: иначе выделенный объект молча съедал бы переключение.
-	if property_name == INSPECTOR_SCATTER_VARY:
+	if property_name == INSPECTOR_SCATTER_VARY \
+			or property_name == INSPECTOR_SCATTER_MODE \
+			or property_name == INSPECTOR_SCATTER_RADIUS \
+			or property_name == INSPECTOR_SCATTER_DENSITY \
+			or property_name == INSPECTOR_SCATTER_SEED:
 		return _apply_brush_value(property_name, value)
 	var primary := context.document.entities.by_id(_selected_id)
 	if primary == null:
@@ -1283,6 +1409,42 @@ func _apply_brush_value(property_name: StringName, value: Variant) -> bool:
 		if _brush_vary == next_vary:
 			return false
 		_brush_vary = next_vary
+		notify_ui_changed()
+		return true
+	# Настройки кисти-разброса в документ не попадают и в историю отмены не идут:
+	# seed — это состояние инструмента для повторяемости эксперимента, а не
+	# свойство карты (§9.2).
+	if property_name == INSPECTOR_SCATTER_MODE:
+		var next_mode := bool(value)
+		if _scatter_mode == next_mode:
+			return false
+		_scatter_mode = next_mode
+		# Выделение и разброс — разные занятия: оставленное выделение сделало бы
+		# следующий клик переносом объекта вместо мазка.
+		if _scatter_mode:
+			_select(&"", false)
+			rebuild_views()
+		notify_ui_changed()
+		return true
+	if property_name == INSPECTOR_SCATTER_RADIUS:
+		var next_radius := clampi(int(value), 1, 32)
+		if _scatter_settings.radius_cells == next_radius:
+			return false
+		_scatter_settings.radius_cells = next_radius
+		notify_ui_changed()
+		return true
+	if property_name == INSPECTOR_SCATTER_DENSITY:
+		var next_density := clampf(float(value), 0.01, 1.0)
+		if is_equal_approx(_scatter_settings.density, next_density):
+			return false
+		_scatter_settings.density = next_density
+		notify_ui_changed()
+		return true
+	if property_name == INSPECTOR_SCATTER_SEED:
+		var next_seed := maxi(0, int(value))
+		if _scatter_settings.seed_value == next_seed:
+			return false
+		_scatter_settings.seed_value = next_seed
 		notify_ui_changed()
 		return true
 	if String(property_name).begins_with(APPEARANCE_PREFIX):

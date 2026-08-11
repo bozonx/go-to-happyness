@@ -26,9 +26,14 @@ const TERRAIN_BIN := "terrain.bin"
 const WATER_BIN := "water.bin"
 const SURFACE_BIN := "surface.bin"
 const PREVIEW_PNG := "preview.png"
+## Безымянное массовое наполнение (`map_fill_mode.md` §8.2). Как и остальные
+## бинарные слои, файла нет вовсе, если слой пуст.
+const OBJECTS_BIN := "objects.bin"
 ## Every file a package may contain, so a save that omits an untouched layer still
 ## knows not to treat the rest as strays when cleaning up.
-const KNOWN_FILES: Array[String] = [MAP_JSON, TERRAIN_BIN, WATER_BIN, SURFACE_BIN, PREVIEW_PNG]
+const KNOWN_FILES: Array[String] = [
+	MAP_JSON, TERRAIN_BIN, WATER_BIN, SURFACE_BIN, OBJECTS_BIN, PREVIEW_PNG,
+]
 
 var last_error := ""
 ## Populated by every listing: duplicate ids and unreadable packages, so the editor
@@ -234,6 +239,16 @@ func load_package(path: String) -> MapDocument:
 			push_warning("[map] surface.bin не подходит к доске %d: %s" % [
 				document.meta.board_cells, surface_path,
 			])
+	# Массовое наполнение читается последним и ни на что не влияет: его таблица
+	# архетипов уже прочитана из `map.json`, поэтому запись, ссылающаяся на
+	# архетип вне таблицы, отвергает весь файл целиком — половина леса хуже, чем
+	# его отсутствие, потому что «половина» не видна.
+	var objects_path := path.path_join(OBJECTS_BIN)
+	if FileAccess.file_exists(objects_path):
+		var objects_buffer := FileAccess.get_file_as_bytes(objects_path)
+		if not MapScatterCodec.decode_into(objects_buffer, document.scatter):
+			document.scatter.records.clear()
+			push_warning("[map] objects.bin не читается: %s" % objects_path)
 	document.dirty = water_repaired
 	return document
 
@@ -326,6 +341,13 @@ func save_map_to(document: MapDocument, final_path: String, preview: Image = nul
 			_remove_directory(staging_path)
 			return ""
 
+	# ...и карта без леса не несёт слоя наполнения.
+	var object_bytes := MapScatterCodec.encode(document.scatter)
+	if not object_bytes.is_empty():
+		if not _write_bytes(staging_path.path_join(OBJECTS_BIN), object_bytes):
+			_remove_directory(staging_path)
+			return ""
+
 	if preview != null:
 		preview.save_png(staging_path.path_join(PREVIEW_PNG))
 
@@ -380,6 +402,16 @@ static func _populate_required_content(document: MapDocument) -> void:
 		if asset != null:
 			var asset_ref := {"kind": "asset", "id": String(asset.id)}
 			found[JSON.stringify(asset_ref)] = asset_ref
+	# Массовое наполнение — такая же зависимость: тридцать тысяч безымянных
+	# деревьев ссылаются на архетип ровно так же, как одно именованное, просто
+	# через таблицу слоя.
+	for archetype_id: StringName in document.scatter.referenced_archetypes():
+		var scattered_ref := {"kind": "archetype", "id": String(archetype_id)}
+		found[JSON.stringify(scattered_ref)] = scattered_ref
+		var scattered_asset := EntityArchetypeCatalog.asset_of(archetype_id)
+		if scattered_asset != null:
+			var scattered_asset_ref := {"kind": "asset", "id": String(scattered_asset.id)}
+			found[JSON.stringify(scattered_asset_ref)] = scattered_asset_ref
 	# Coverage laid on the map is a dependency like any other: the layer stores an
 	# index, and an index means nothing without the entry it points at. Shipped
 	# surfaces are listed too — a reference to `core:` costs one line and makes the

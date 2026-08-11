@@ -5,7 +5,7 @@ extends SceneTree
 ## Print-only companion to `diag_map_generation_presets.gd`.
 
 func _init() -> void:
-	var recipe := MapRecipe.from_json_path("res://tools/map_gen_lab/presets/continent_east_ranges.gdmapgen.json")
+	var recipe := MapRecipe.from_json_path("res://game/content/mapgen/presets/continent_east_ranges.gdmapgen.json")
 	var grid := TerrainGrid.new()
 	var water := WaterGrid.new()
 	var terrain_service := TerrainService.new()

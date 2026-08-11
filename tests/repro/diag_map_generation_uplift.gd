@@ -15,7 +15,7 @@ const CASES: Array = [
 func _init() -> void:
 	for case_entry: Array in CASES:
 		var recipe := MapRecipe.from_json_path(
-			"res://tools/map_gen_lab/presets/%s.gdmapgen.json" % case_entry[0])
+			"res://game/content/mapgen/presets/%s.gdmapgen.json" % case_entry[0])
 		var context := GenerationContext.new()
 		context.configure(recipe, GenerationSeed.new(case_entry[1]))
 		BorderShaper.classify(context)

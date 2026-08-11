@@ -8,7 +8,21 @@ var _views: Dictionary = {}
 var _runtime: MapEntityRuntime = null
 
 
-func present(runtime: MapEntityRuntime, territory: TerritoryBase) -> void:
+## Components the host module instantiates itself. An entity whose archetype
+## declares any of them is left alone here.
+##
+## The list is a parameter and not a constant in this file for two reasons. It is
+## the settlement that knows `settlement_natural` and `wander` mean "AmbientSpawner
+## builds this one", and an engine presenter may not know those words
+## (`multi_purpose_engine.md` §7). And it has to be ONE list: while the presenter
+## skipped `settlement_natural` and the spawner claimed `wander`, a creature
+## archetype that declared only `wander` got two bodies — an inert view here and a
+## live one there — and nothing in the codebase said which was the real animal.
+func present(
+	runtime: MapEntityRuntime,
+	territory: TerritoryBase,
+	claimed_components: Array[StringName] = []
+) -> void:
 	clear()
 	if runtime == null or territory == null:
 		return
@@ -18,15 +32,23 @@ func present(runtime: MapEntityRuntime, territory: TerritoryBase) -> void:
 	for entity: MapEntityRuntime.RuntimeEntity in runtime.all():
 		if not entity.active:
 			continue
-		# Interactive natural entities are instantiated by AmbientSpawner, which
-		# also registers them with harvesting and foraging services. A generic
-		# visual here would create a second, inert copy. Test this before creating
-		# a scene instance: the former order leaked every skipped view as an orphan.
-		if entity.archetype.has_component(&"settlement_natural"):
+		# Test this before creating a scene instance: the former order leaked every
+		# skipped view as an orphan.
+		if _is_claimed(entity, claimed_components):
 			continue
 		var view := _make_view(entity)
 		territory.add_landscape_object(view)
 		_views[entity.id] = view
+
+
+static func _is_claimed(
+	entity: MapEntityRuntime.RuntimeEntity,
+	claimed_components: Array[StringName]
+) -> bool:
+	for component: StringName in claimed_components:
+		if entity.archetype.has_component(component):
+			return true
+	return false
 
 
 func view_for(entity_id: StringName) -> Node3D:
@@ -89,20 +111,10 @@ func _make_view(entity: MapEntityRuntime.RuntimeEntity) -> Node3D:
 	return view
 
 
+## Общий с `AmbientSpawner` код: карта строится двумя руками, а выглядеть должна
+## одинаково (`EntityStateAppearance`).
 func _apply_state_appearance(view: Node3D, entity: MapEntityRuntime.RuntimeEntity, asset: WorldAssetDef) -> void:
-	if asset == null or not view.has_method("apply_decor_properties"):
-		return
-	var appearance := asset.default_appearance()
-	var state := entity.archetype.states.get_state(entity.state)
-	if state != null and state.visual_kind == EntityStateDef.VISUAL_VARIANT:
-		appearance.merge(asset.state_appearance(state.visual_value), true)
-	# Gameplay props intentionally do not overwrite visual state: a cold campfire
-	# must remain cold even if an old author override set the flame control.
-	view.call("apply_decor_properties", appearance)
-	# A freshly-instanced DecorObjectController applies its defaults in `_ready`.
-	# Repeat state one turn later so authored initial state wins regardless of
-	# whether the presenter ran before or after the child entered the scene tree.
-	view.call_deferred("apply_decor_properties", appearance)
+	EntityStateAppearance.apply(view, entity.archetype, entity.state, asset)
 
 
 func _placeholder(entity_id: StringName) -> Node3D:

@@ -953,6 +953,61 @@ func _test_scatter_variation(editor: Node) -> void:
 	while editor.history.undo_depth() > 0:
 		editor._undo()
 	print("  fill scatter variation ok")
+	_test_scatter_brush(editor, fill_ctrl)
+
+
+## Кисть-разброс: один жест — много объектов, и всё это одна запись отмены
+## (`map_fill_mode.md` §9.2). Отдельно от §9.2.1 намеренно: тот разброс меняет
+## вид ОДНОГО поставленного объекта, а этот ставит много.
+func _test_scatter_brush(editor: Node, fill_ctrl: FillModeController) -> void:
+	fill_ctrl.select_palette_entry(&"core:tree")
+	fill_ctrl._select(&"", false)
+	# Настройки кисти видны в инспекторе только тогда, когда политика ассета
+	# разрешила разброс: предлагать засадить карту костром — предлагать ошибку.
+	assert(_has_inspector_property(fill_ctrl, FillModeController.INSPECTOR_SCATTER_MODE),
+		"дереву кисть-разброс положена")
+	assert(fill_ctrl.apply_inspector_value(FillModeController.INSPECTOR_SCATTER_MODE, true))
+	assert(_has_inspector_property(fill_ctrl, FillModeController.INSPECTOR_SCATTER_RADIUS),
+		"включённая кисть обязана показать радиус")
+	# Значение, отличное от умолчания: инспектор отвечает `false` на «поставить то,
+	# что уже стоит», и проверять этим ответом нужно настоящее изменение.
+	assert(fill_ctrl.apply_inspector_value(FillModeController.INSPECTOR_SCATTER_RADIUS, 6))
+	assert(fill_ctrl.apply_inspector_value(FillModeController.INSPECTOR_SCATTER_DENSITY, 0.8))
+
+	var named_before: int = editor.document.entities.entities.size()
+	var undo_before: int = editor.history.undo_depth()
+	editor._brush.hovered_cell = Vector2i(-12, -12)
+	editor._brush.has_hover = true
+	fill_ctrl.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	var placed_count: int = editor.document.scatter.live_count()
+	assert(placed_count > 5, "мазок поставил %d объектов" % placed_count)
+	# Массовое наполнение не превращается в именованные записи: ради этого слой и
+	# заведён (§8.2).
+	assert(editor.document.entities.entities.size() == named_before,
+		"кисть-разброс не должна плодить записи entities[]")
+	assert(editor.history.undo_depth() == undo_before + 1,
+		"один жест — одна запись отмены")
+
+	# И лес виден, а не только записан: слой рисуется чанковыми MultiMesh.
+	assert(editor._scatter_world.instance_count() == placed_count,
+		"нарисовано %d из %d" % [editor._scatter_world.instance_count(), placed_count])
+
+	# Стирание тем же кругом.
+	fill_ctrl.handle_input(_click(MOUSE_BUTTON_RIGHT, true, true))
+	assert(editor.document.scatter.live_count() < placed_count, "Shift+ПКМ стирает разброс")
+
+	editor._undo()
+	assert(editor.document.scatter.live_count() == placed_count, "отмена вернула стёртое")
+	editor._undo()
+	assert(editor.document.scatter.live_count() == 0, "отмена убрала весь мазок")
+	assert(editor._scatter_world.instance_count() == 0, "отменённый лес обязан исчезнуть с экрана")
+	editor._redo()
+	assert(editor.document.scatter.live_count() == placed_count, "повтор вернул мазок")
+
+	assert(fill_ctrl.apply_inspector_value(FillModeController.INSPECTOR_SCATTER_MODE, false))
+	while editor.history.undo_depth() > 0:
+		editor._undo()
+	print("  fill scatter brush ok")
 
 
 func _has_inspector_property(fill_ctrl: FillModeController, property_name: StringName) -> bool:

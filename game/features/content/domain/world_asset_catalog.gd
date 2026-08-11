@@ -1525,6 +1525,14 @@ static func _natural(
 		[AssetPlacementPolicy.SURFACE_GROUND, AssetPlacementPolicy.SURFACE_ICE],
 		SlopeCatalog.CLASS_MODERATE
 	)
+	# Природа — это то, что ставят помногу: кистью-разбросом (§9.2) и стадией
+	# растительности генератора. Костёр, телега и колодец разброса не получают, и
+	# это не забывчивость — засаженная кострами поляна не бывает нужна никому.
+	#
+	# Интервал берётся от габарита самого объекта: два дуба не растут вплотную, а
+	# мох стелется сплошь, и оба числа уже сказаны размером ассета.
+	asset.placement.scatter_allowed = true
+	asset.placement.scatter_min_spacing_m = maxf(size_m.x, size_m.z) * 0.75
 	_register(asset)
 	return asset
 

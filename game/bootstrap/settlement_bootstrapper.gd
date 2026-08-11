@@ -184,6 +184,10 @@ func _setup_ai_and_navigation() -> void:
 	# hour the citizens work by and the hour the sun is drawn from the same number.
 	game.clock.bind(game.world_session.environment)
 	game.world_session.environment.minutes_per_second = game.GAME_MINUTES_PER_SECOND
+	# Дерево, трава и зверь на этой карте — работа `AmbientSpawner`: он вешает на
+	# них сборы, охоту и повадку. Объявляем это ДО create_world(), иначе общий
+	# презентер успеет построить рядом вторую, мёртвую копию каждого из них.
+	game.world_session.claimed_entity_components = AmbientSpawner.CLAIMED_COMPONENTS
 	game.nav_grid = game.world_session.nav_grid
 	# Adopted, not created: the world session already seeded it from the map's
 	# coverage layer, and a second service would be a second write-owner of road
@@ -840,6 +844,11 @@ func _setup_controllers_and_world() -> void:
 	game.ambient_spawner = AmbientSpawner.new()
 	game.add_child(game.ambient_spawner)
 	game.ambient_spawner.setup(game, game.launch_config.map_document, game.launch_config.start_option)
+	# Спавнер строит половину карты и обязан слышать про её записи: сезонный
+	# перевод (`SeasonalEntityService`) меняет состояние в runtime, а крону
+	# перекрашивает тот, кто эту крону построил.
+	if game.world_session != null:
+		game.ambient_spawner.observe(game.world_session.entity_runtime)
 	game.player_controller = PlayerController.new()
 	game.add_child(game.player_controller)
 	game.player_controller.setup(game)
@@ -872,8 +881,17 @@ func _setup_ambient_life() -> void:
 	game.ambient_life_service = AmbientLifeService.new()
 	game.ambient_life_service.configure(
 		game.random,
-		func(position: Vector3) -> bool:
-			return game.navigation_blocked_cells.has(game.cell_from_position(position)),
+		func(from: Vector3, to: Vector3) -> bool:
+			var from_cell := game.cell_from_position(from)
+			var to_cell := game.cell_from_position(to)
+			if game.navigation_blocked_cells.has(to_cell):
+				return false
+			if from_cell == to_cell:
+				return true
+			# Та же проходимость, по которой ходят жители: обрыв, глубокая вода и
+			# лава отказывают здесь по одному правилу с маршрутизацией, а не по
+			# второму, написанному для зверей (`grid_terrain_system.md` §10).
+			return game.nav_grid == null or game.nav_grid.is_step_passable(from_cell, to_cell),
 		game.terrain_height_at,
 		func() -> Array[Vector3]:
 			# Угроза для дикого зверя — человек. Герой уже среди жителей, поэтому

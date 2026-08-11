@@ -6,6 +6,11 @@ signal status_message_changed(message: String, is_error: bool)
 ## a captured multi-layer action (see `begin_capture`). The editor answers it by
 ## telling every mode to rebuild, which is what it does after undo anyway.
 signal document_change_requested()
+## Массовое наполнение изменилось (кисть-разброс, §9.2). Отдельный сигнал, а не
+## `document_change_requested`: тот заставляет перестроиться КАЖДЫЙ режим, а
+## перестройка чанков наполнения — это ровно одна нода, и звать ради неё общий
+## пересбор значило бы платить всей картой за один мазок.
+signal scatter_changed()
 
 ## Everything a mode is allowed to reach (map_editor.md §3.5).
 ##
@@ -120,6 +125,10 @@ func space_state() -> PhysicsDirectSpaceState3D:
 
 func set_edit_label(label: String) -> void:
 	pending_edit_label = label
+
+
+func notify_scatter_changed() -> void:
+	scatter_changed.emit()
 
 
 func set_status_message(message: String, is_error: bool = false) -> void:

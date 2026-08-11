@@ -1,0 +1,67 @@
+{
+	"version": 1,
+	"biome": "temperate_forest",
+	"note": "Смешанный лес. Ель — только в холодной его части, папоротник — только в сырой.",
+	"rules": [
+		{
+			"archetype": "core:tree",
+			"density": 0.17
+		},
+		{
+			"archetype": "core:birch_tree",
+			"density": 0.06
+		},
+		{
+			"archetype": "core:conifer_tree",
+			"density": 0.035,
+			"temperature": [
+				-100.0,
+				9.0
+			]
+		},
+		{
+			"archetype": "core:bush",
+			"density": 0.08
+		},
+		{
+			"archetype": "core:fern",
+			"density": 0.07,
+			"moisture": [
+				0.45,
+				1.0
+			]
+		},
+		{
+			"archetype": "core:grass_source",
+			"density": 0.075
+		},
+		{
+			"archetype": "core:forage_source",
+			"density": 0.03
+		},
+		{
+			"archetype": "core:stump",
+			"density": 0.01
+		},
+		{
+			"archetype": "core:boulder",
+			"density": 0.01
+		},
+		{
+			"archetype": "core:deer",
+			"density": 0.0024
+		},
+		{
+			"archetype": "core:boar",
+			"density": 0.0014
+		},
+		{
+			"archetype": "core:rabbit",
+			"density": 0.003
+		},
+		{
+			"archetype": "core:bird",
+			"density": 0.0034
+		}
+	]
+}

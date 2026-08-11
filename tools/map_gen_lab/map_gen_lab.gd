@@ -36,7 +36,10 @@ extends Node3D
 ## every kind of map at once instead of on the one that happened to be open.
 
 const CELL_SIZE := 1.0
-const PRESET_DIRECTORY := "res://tools/map_gen_lab/presets"
+## Где лежат встроенные рецепты, знает библиотека, а не лаборатория: пресеты
+## переехали в `game/content`, потому что `tools/*` не попадает в экспорт и в
+## собранной игре список рецептов редактора оказывался пуст.
+const PRESET_DIRECTORY := MapRecipeLibrary.BUILTIN_DIRECTORY
 
 const CAMERA_MIN_DISTANCE := 10.0
 const CAMERA_MAX_DISTANCE := 320.0
@@ -131,6 +134,9 @@ var _capture_records: Array = []
 
 func _ready() -> void:
 	terrain.configure(grid, camera)
+	# Ветер — общий параметр мира: доска, появившаяся после публикации, должна
+	# получить тот же ветер, что и всё остальное (`world_environment.md` §9).
+	WorldWind.attach(terrain)
 	water_world.configure(water, grid, water_service, terrain_service)
 	nav_publisher.configure(grid, nav_grid, terrain_service, water, water_service)
 	nav_overlay.configure(nav_grid, NAV_PROFILES[_nav_profile_index])

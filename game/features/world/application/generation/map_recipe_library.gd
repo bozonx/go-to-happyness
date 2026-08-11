@@ -11,8 +11,16 @@ extends RefCounted
 ## carry one would have to declare it in `pack.json` and version it, and nothing
 ## consumes a recipe at runtime — generation happens once, at authoring time, and
 ## what ships is the map it produced.
+##
+## The built-ins live under `game/content` and not beside the laboratory that
+## reads them, because `tools/*` is excluded from the export (`export_presets.cfg`)
+## and the map editor ships inside the game. From `tools/` the list was complete
+## while developing and empty in every built copy: the "Сгенерировать ландшафт"
+## checkbox simply went dark, and nothing said why. A folder without `pack.json`
+## is not a pack (`ContentIndex._index_pack`), so these stay engine content rather
+## than becoming pack content by accident.
 
-const BUILTIN_DIRECTORY := "res://tools/map_gen_lab/presets"
+const BUILTIN_DIRECTORY := "res://game/content/mapgen/presets"
 const USER_DIRECTORY := "user://map_gen_lab/recipes"
 const SUFFIX := ".gdmapgen.json"
 

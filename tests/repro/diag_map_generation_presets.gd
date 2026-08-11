@@ -11,7 +11,7 @@ const SEEDS: Array[int] = [1, 2, 3]
 
 
 func _init() -> void:
-	var directory := DirAccess.open("res://tools/map_gen_lab/presets")
+	var directory := DirAccess.open("res://game/content/mapgen/presets")
 	if directory == null:
 		print("no presets directory")
 		quit(1)
@@ -21,7 +21,7 @@ func _init() -> void:
 	for name: String in names:
 		if not name.ends_with(".gdmapgen.json"):
 			continue
-		var recipe := MapRecipe.from_json_path("res://tools/map_gen_lab/presets/%s" % name)
+		var recipe := MapRecipe.from_json_path("res://game/content/mapgen/presets/%s" % name)
 		if not recipe.is_valid():
 			print("%-28s REFUSED: %s" % [name, "; ".join(recipe.errors)])
 			continue

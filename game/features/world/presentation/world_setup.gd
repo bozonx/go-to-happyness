@@ -53,6 +53,9 @@ var map_entity_presenter: MapEntityPresenter = null
 ## blueprint references. Their zone and routing metadata stays on the root node
 ## so the same building runtime readers used by constructed buildings can read it.
 var map_placement_presenter: MapPlacementPresenter = null
+## Безымянное массовое наполнение карты. Отдельная нода, потому что она рисует
+## буферами, а не сценами: у объектов этого слоя нод нет вовсе.
+var map_scatter_world: ScatterWorld = null
 
 var _camera: Camera3D
 var _cell_size: float
@@ -66,6 +69,9 @@ var _territory: TerritoryBase = null
 ## Entrance the session began at; entities bound to another one are not built
 ## (`map_start.md` §3.2).
 var _start_option: StringName = &""
+## Components the host module builds itself; the presenter skips their entities
+## instead of adding a second, inert copy beside the live one.
+var _claimed_components: Array[StringName] = []
 
 
 func setup(
@@ -75,6 +81,7 @@ func setup(
 	p_trail_field: RefCounted,
 	p_map_document: MapDocument,
 	p_start_option: StringName = &"",
+	p_claimed_components: Array[StringName] = [],
 ) -> void:
 	_camera = p_camera
 	_cell_size = p_cell_size
@@ -82,6 +89,7 @@ func setup(
 	_trail_field = p_trail_field
 	_map_document = p_map_document
 	_start_option = p_start_option
+	_claimed_components = p_claimed_components
 
 
 func build(parent: Node) -> void:
@@ -97,6 +105,7 @@ func build(parent: Node) -> void:
 	_build_terrain(parent)
 	_build_map_placements()
 	_build_map_entities()
+	_build_map_scatter()
 	_build_boundary(parent)
 	_build_precipitation_effect(parent)
 	_build_sky_and_weather_controller(parent)
@@ -134,6 +143,7 @@ func dispose() -> void:
 	hero_build_radius_marker = null
 	map_entity_presenter = null
 	map_placement_presenter = null
+	map_scatter_world = null
 	_territory = null
 
 
@@ -181,7 +191,19 @@ func _build_map_entities() -> void:
 		map_entity_presenter = MapEntityPresenter.new()
 		map_entity_presenter.name = "MapEntities"
 	_territory.add_landscape_object(map_entity_presenter)
-	map_entity_presenter.present(map_entity_runtime, _territory)
+	map_entity_presenter.present(map_entity_runtime, _territory, _claimed_components)
+
+
+## Массовое наполнение рисуется чанковыми `MultiMesh`, а не нодами: тридцать
+## тысяч деревьев нодами — это шестьсот тысяч нод (`map_fill_mode.md` §9.4).
+func _build_map_scatter() -> void:
+	if _territory == null or _map_document == null:
+		return
+	if map_scatter_world == null:
+		map_scatter_world = ScatterWorld.new()
+		map_scatter_world.name = "MapScatter"
+	_territory.add_landscape_object(map_scatter_world)
+	map_scatter_world.configure(_map_document.scatter, terrain_grid)
 
 
 func _build_map_placements() -> void:

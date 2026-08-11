@@ -7,6 +7,13 @@ const RabbitSourceRecord = preload("res://game/features/production/domain/rabbit
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 const WorldResourceStateScript = preload("res://game/features/world/domain/world_resource_state.gd")
 
+## Компоненты, сущности которых строит этот спавнер, а не общий презентер
+## (`WorldSession.claimed_entity_components`). Список объявлен здесь, потому что
+## здесь же он и исполняется: пока «что пропускает презентер» и «что забирает
+## спавнер» были двумя разными словами в двух файлах, архетип с одним только
+## `wander` получал два тела — живое и неподвижную копию рядом.
+const CLAIMED_COMPONENTS: Array[StringName] = [&"settlement_natural", &"wander"]
+
 var simulation: Node
 var map_document: MapDocument = null
 ## The entrance this session began at. Entities bound to another one are not
@@ -27,12 +34,67 @@ class NaturalEntry:
 	var habit: WanderHabit = null
 	## Значение `settlement_natural.kind`, если компонент есть.
 	var kind: StringName = &""
+	## Запись карты, из которой выросла эта нода. Пусто — объект восстановлен из
+	## сейва и записи карты за ним не стоит.
+	var entity_id: StringName = &""
+	var archetype: EntityArchetype = null
+
+
+## Ноды, построенные из записей карты, по id записи. Нужны ровно для одного:
+## смена состояния сущности (сезон, §6.1) обязана доезжать и до них. Презентер
+## ведёт такой же список для сущностей, которых этот спавнер НЕ забрал.
+var _views: Dictionary = {}
+var _runtime: MapEntityRuntime = null
 
 
 func setup(p_simulation: Node, map_document: MapDocument = null, p_start_option: StringName = &"") -> void:
 	simulation = p_simulation
 	self.map_document = map_document
 	start_option = p_start_option
+
+
+## Подписывается на runtime карты, чтобы построенные здесь ноды меняли вид
+## вместе с записью. Без этого сезонный перевод менял состояние в данных и
+## ничего не менял на экране — ровно у той половины карты, которую строит этот
+## спавнер.
+func observe(runtime: MapEntityRuntime) -> void:
+	_runtime = runtime
+	if runtime == null:
+		return
+	if not runtime.entity_changed.is_connected(_on_entity_changed):
+		runtime.entity_changed.connect(_on_entity_changed)
+
+
+func _on_entity_changed(entity_id: StringName, change: StringName) -> void:
+	if change != &"state":
+		return
+	_apply_entity_state(entity_id, _views.get(entity_id, null))
+
+
+## Нода, построенная из записи карты, запоминается под её id и сразу получает
+## состояние, до которого запись уже дошла: карта, запущенная в январе, обязана
+## быть зимней с первого кадра, а не с первой смены сезона.
+##
+## Восстановленные из сейва объекты записи карты не имеют и сюда не попадают —
+## их состояние принадлежит механике сбора, а не календарю.
+func _remember(entry: NaturalEntry, node: Node3D) -> void:
+	if entry.entity_id == &"" or node == null:
+		return
+	_views[entry.entity_id] = node
+	node.set_meta("map_entity_id", entry.entity_id)
+	_apply_entity_state(entry.entity_id, node)
+
+
+func _apply_entity_state(entity_id: StringName, view: Node3D) -> void:
+	if _runtime == null or not is_instance_valid(view):
+		return
+	var entity := _runtime.by_id(entity_id)
+	if entity == null:
+		return
+	view.set_meta("map_entity_state", entity.state)
+	EntityStateAppearance.apply(
+		view, entity.archetype, entity.state,
+		WorldAssetCatalog.get_asset(entity.archetype.asset_id), entity.appearance)
 
 
 func _entities_of_kind(kind: StringName) -> Array[NaturalEntry]:
@@ -69,6 +131,8 @@ func _entities_where(predicate: Callable) -> Array[NaturalEntry]:
 			entry.habit = WanderHabit.from_component(archetype.component_data(&"wander"))
 		if archetype.has_component(&"settlement_natural"):
 			entry.kind = StringName(archetype.component_data(&"settlement_natural").get("kind", ""))
+		entry.entity_id = placed.id
+		entry.archetype = archetype
 		result.append(entry)
 	return result
 
@@ -145,6 +209,7 @@ func _create_tree(entry: NaturalEntry, refresh_navigation := true) -> void:
 		interaction_selector.add_to_group("tree_selector")
 
 	_apply_appearance(tree, entry)
+	_remember(entry, tree)
 
 	simulation.terrain_blocked_cells[cell] = true
 	if refresh_navigation:
@@ -197,6 +262,7 @@ func _instantiate_source(
 	simulation.building_visuals.add_selector_to_node(node, selector_group, selector_size, selector_offset)
 	simulation.world_navigation_controller.add_landscape_object(node)
 	_apply_appearance(node, entry)
+	_remember(entry, node)
 	return node
 
 
@@ -257,6 +323,7 @@ func _create_creature(entry: NaturalEntry) -> Node3D:
 			RabbitSourceRecord.new(node)
 	simulation.world_navigation_controller.add_landscape_object(node)
 	_apply_appearance(node, entry)
+	_remember(entry, node)
 	if entry.habit != null and simulation.ambient_life_service != null:
 		# Стая — это те, у кого совпадает вид: олени держатся оленей.
 		simulation.ambient_life_service.register(node, entry.habit, entry.kind)
@@ -299,9 +366,13 @@ func restore_resource_state(data: Dictionary) -> void:
 		_create_rabbit_source(WorldResourceStateScript._dict_to_vector(entry.get("position", {})))
 
 
+## Сносит только то, что сейв восстановит заново, — четыре словаря источников.
+##
+## Снимается с учёта ровно столько же. Раньше здесь стоял `clear()` всей службы:
+## он снимал и оленя с волком, которых потом никто не регистрировал обратно, —
+## их ноды в эти словари не входят, поэтому и не пересоздаются. Зверь оставался
+## стоять там, где его застала загрузка, и больше не двигался никогда.
 func _clear_natural_source_nodes() -> void:
-	if simulation.ambient_life_service != null:
-		simulation.ambient_life_service.clear()
 	for sources: Dictionary in [
 		simulation.grass_sources,
 		simulation.bush_sources,
@@ -310,6 +381,8 @@ func _clear_natural_source_nodes() -> void:
 	]:
 		for source in sources.values():
 			if is_instance_valid(source.node):
+				if simulation.ambient_life_service != null:
+					simulation.ambient_life_service.forget(source.node)
 				source.node.queue_free()
 		sources.clear()
 
@@ -345,21 +418,40 @@ func _create_forage_source(cell: Vector2i) -> void:
 ## каждую секунду, и через мгновение после загрузки от сохранённого не осталось
 ## бы ничего — служба выдаёт новый при постановке на учёт.
 func _create_rabbit_source(position: Vector3) -> void:
-	var entry := _restored_entry(&"rabbit", position)
-	entry.kind = &"rabbit"
-	entry.habit = WanderHabit.preset(WanderHabit.HABIT_SKITTISH)
-	_create_creature(entry)
+	_create_creature(_restored_entry(&"rabbit", position))
 
 
 ## A save stores where a source stands and how much is left in it, not what it
 ## looked like. Rebuilding the entry from the engine default and letting the
 ## cell-seeded draw fill the rest is what makes the restored meadow match the one
 ## the player saved.
-func _restored_entry(asset_id: StringName, position: Vector3) -> NaturalEntry:
+##
+## Вид ищется в каталоге архетипов, а не собирается здесь из констант: повадка
+## кролика объявлена в `rabbit.gdarchetype.json`, и второй её экземпляр в этом
+## файле означал бы, что перенастроенный архетип не доезжает до загруженной игры.
+## Пак без архетипа не роняет загрузку — остаётся объект без повадки.
+func _restored_entry(kind: StringName, position: Vector3) -> NaturalEntry:
 	var entry := NaturalEntry.new()
-	entry.asset_id = asset_id
+	entry.asset_id = kind
 	entry.position = position
+	var archetype := _archetype_of_kind(kind)
+	if archetype != null:
+		entry.asset_id = archetype.asset_id
+		entry.kind = kind
+		if archetype.has_component(&"wander"):
+			entry.habit = WanderHabit.from_component(archetype.component_data(&"wander"))
 	return entry
+
+
+## Архетип, объявивший этот вид. Восстановление берёт ассет и повадку оттуда же,
+## откуда их берёт первая расстановка (`_entities_of_kind`).
+static func _archetype_of_kind(kind: StringName) -> EntityArchetype:
+	for archetype: EntityArchetype in EntityArchetypeCatalog.all():
+		if not archetype.has_component(&"settlement_natural"):
+			continue
+		if StringName(archetype.component_data(&"settlement_natural").get("kind", "")) == kind:
+			return archetype
+	return null
 
 
 func _cell_position(cell: Vector2i) -> Vector3:
