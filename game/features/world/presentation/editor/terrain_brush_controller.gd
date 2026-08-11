@@ -190,8 +190,21 @@ func apply_flatten() -> void:
 
 
 func cycle_edit_mode() -> void:
-	edit_mode = (edit_mode + 1) % TerrainEditOperation.Mode.size()
+	# PLACEMENT is the internal building-footprint merge operation. It needs a
+	# per-cell height array supplied by BuildingPlacementService and is never a
+	# meaningful interactive terrain brush mode.
+	var interactive_modes: Array[int] = [
+		TerrainEditOperation.Mode.SCULPT,
+		TerrainEditOperation.Mode.TERRACE,
+		TerrainEditOperation.Mode.LEVEL,
+	]
+	var index := interactive_modes.find(edit_mode)
+	edit_mode = interactive_modes[(index + 1) % interactive_modes.size()] if index >= 0 else interactive_modes[0]
 	last_message = "режим: %s" % _mode_label()
+
+
+func edit_mode_label() -> String:
+	return _mode_label()
 
 
 func cycle_terrain_slope_class() -> void:

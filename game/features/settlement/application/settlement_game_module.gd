@@ -114,7 +114,7 @@ func _launch_config(session: GameSessionConfig) -> GameLaunchConfig:
 			launch.camera_start = MapSpawnService.new().camera_position(
 				session.map_document.zones, option.camera, session.map_document.meta.cell_size)
 	# World style is map-owned. Starting resources and equipment are map-owned too:
-	# they live on the backpack entity. Everything else arrives through the
+	# they live on authored party-stash entities. Everything else arrives through the
 	# recursively merged game/map/session parameters.
 	if session.map_document != null:
 		launch.apply_map_start()

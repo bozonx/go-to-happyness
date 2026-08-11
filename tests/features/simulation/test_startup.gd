@@ -64,13 +64,13 @@ func _init() -> void:
 	assert(simulation.resource_piles.any(func(pile): return pile.node.get_parent() == landscape_objects))
 	var starter_stash: ResourcePile = null
 	for pile: ResourcePile in simulation.resource_piles:
-		if pile.is_backpack:
+		if pile.is_party_stash:
 			starter_stash = pile
 			break
 	assert(starter_stash != null, "the authored party stash must have a physical runtime record")
 	var food_before := int(starter_stash.resources.get("food", 0))
 	starter_stash.resources["food"] = food_before - 1
-	assert(simulation.settlement.backpack_amount("food") == food_before - 1,
+	assert(simulation.settlement.starter_stash_amount("food") == food_before - 1,
 		"the physical stash and settlement must not own duplicate inventories")
 	simulation.settlement.add("food", 1)
 	assert(int(starter_stash.resources.get("food", 0)) == food_before,

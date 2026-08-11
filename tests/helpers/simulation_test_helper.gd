@@ -175,8 +175,8 @@ static func create_construction_site(simulation: Node, cell: Vector2i, building_
 static func is_construction_site(simulation: Node, node: Node3D) -> bool:
 	return simulation.construction_controller.is_construction_site(node)
 
-static func create_resource_pile(simulation: Node, position: Vector3, resources: Dictionary, is_backpack_pile := false) -> Node3D:
-	return simulation.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile)
+static func create_resource_pile(simulation: Node, position: Vector3, resources: Dictionary, is_party_stash := false) -> Node3D:
+	return simulation.resource_pile_service.create_resource_pile(position, resources, is_party_stash)
 
 static func complete_building(simulation: Node, cell: Vector2i, building_type: String, position: Vector3, building: Node3D, blueprint: Dictionary) -> void:
 	simulation.construction_controller.complete_building(cell, building_type, position, building, blueprint)

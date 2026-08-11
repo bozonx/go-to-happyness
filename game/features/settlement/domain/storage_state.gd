@@ -15,10 +15,12 @@ const STORAGE_WEIGHTS = ResourceIds.STORAGE_WEIGHTS
 var warehouses: Array[WarehouseState] = []
 var warehouse_types: Array[String] = []
 
-## Inventory of the physical `core:party_stash` runtime record. Settlement keeps
-## this reference so its existing economy rules and the ResourcePile mutate the
-## same Dictionary; it is not a second, virtual stockpile.
-var backpack: Dictionary = {}
+## Physical `core:party_stash` inventories by stable authored entity id. Values
+## are the exact dictionaries owned by ResourcePile records.
+var starter_stash_inventories: Dictionary = {}
+## Domain-only fallback for configurations without a composed world. Runtime
+## sessions normally bind at least one authored stash before simulation begins.
+var _unbound_stash: Dictionary = {}
 ## Becomes true the first time any warehouse is completed and never reverts.
 var warehouse_ever_built: bool = false
 var warehouse_tarp_covered: bool = false
@@ -31,10 +33,59 @@ func storage_weight(resource_type: String) -> float:
 	return float(STORAGE_WEIGHTS.get(resource_type, 1.0))
 
 
-## Adopts the inventory owned by the physical starter-stash record. Dictionary
-## identity matters: copying here would recreate the former double write-owner.
-func bind_starter_stash_inventory(inventory: Dictionary) -> void:
-	backpack = inventory
+## Adopts an inventory owned by a physical starter-stash record.
+func bind_starter_stash_inventory(container_id: StringName, inventory: Dictionary) -> void:
+	if container_id.is_empty():
+		return
+	starter_stash_inventories[container_id] = inventory
+	if not _unbound_stash.is_empty():
+		_add_to_dictionary(inventory, _unbound_stash)
+		_unbound_stash.clear()
+
+
+func unbind_starter_stash_inventory(container_id: StringName) -> void:
+	starter_stash_inventories.erase(container_id)
+
+
+func clear_starter_stashes() -> void:
+	starter_stash_inventories.clear()
+	_unbound_stash.clear()
+
+
+func starter_stash_resources() -> Dictionary:
+	if starter_stash_inventories.is_empty():
+		return _unbound_stash
+	var result: Dictionary = {}
+	for inventory: Dictionary in starter_stash_inventories.values():
+		_add_to_dictionary(result, inventory)
+	return result
+
+
+static func _add_to_dictionary(target: Dictionary, source: Dictionary) -> void:
+	for resource_type in source:
+		target[resource_type] = int(target.get(resource_type, 0)) + int(source[resource_type])
+
+
+func _add_to_starter_stashes(resource_type: String, value: int) -> void:
+	if starter_stash_inventories.is_empty():
+		_unbound_stash[resource_type] = maxi(0, int(_unbound_stash.get(resource_type, 0)) + value)
+		return
+	var inventories: Array = starter_stash_inventories.values()
+	if value >= 0:
+		var first := inventories[0] as Dictionary
+		first[resource_type] = int(first.get(resource_type, 0)) + value
+		return
+	var remaining := -value
+	for inventory: Dictionary in inventories:
+		var available := int(inventory.get(resource_type, 0))
+		var removed := mini(available, remaining)
+		if removed > 0:
+			inventory[resource_type] = available - removed
+			if int(inventory[resource_type]) <= 0:
+				inventory.erase(resource_type)
+			remaining -= removed
+		if remaining <= 0:
+			break
 
 
 func can_cover_warehouse_with_tarp() -> bool:
@@ -207,7 +258,8 @@ func reserve_storage_room_for(resource_type: String, count: int, warehouse_count
 
 func _set_resource_aggregate(resource_type: String, value: int) -> void:
 	if not warehouse_ever_built:
-		backpack[resource_type] = value
+		var difference := value - starter_stash_amount(resource_type)
+		_add_to_starter_stashes(resource_type, difference)
 		return
 	for i in range(warehouses.size()):
 		warehouses[i].set_amount(resource_type, value if i == 0 else 0)
@@ -215,15 +267,18 @@ func _set_resource_aggregate(resource_type: String, value: int) -> void:
 
 func amount(resource_type: String) -> int:
 	if not warehouse_ever_built:
-		return int(backpack.get(resource_type, 0))
+		return starter_stash_amount(resource_type)
 	var total := 0
 	for warehouse in warehouses:
 		total += warehouse.amount(resource_type)
 	return total
 
 
-func backpack_amount(resource_type: String) -> int:
-	return int(backpack.get(resource_type, 0))
+func starter_stash_amount(resource_type: String) -> int:
+	var total := int(_unbound_stash.get(resource_type, 0))
+	for inventory: Dictionary in starter_stash_inventories.values():
+		total += int(inventory.get(resource_type, 0))
+	return total
 
 
 func warehouse_amount(resource_type: String, index: int) -> int:
@@ -251,12 +306,12 @@ func add_to_warehouse(resource_type: String, value: int, index: int) -> int:
 ## invariant; callers that need overflow handling should use add_to_warehouse.
 func add(resource_type: String, value: int) -> void:
 	if not warehouse_ever_built:
-		backpack[resource_type] = int(backpack.get(resource_type, 0)) + value
+		_add_to_starter_stashes(resource_type, value)
 		return
 	if warehouses.is_empty():
-		# Resources received while no physical warehouse exists fall back to the backpack
+		# Resources received while no warehouse exists use the authored party stash
 		# rather than being silently lost; this matches demolition edge cases.
-		backpack[resource_type] = maxi(0, int(backpack.get(resource_type, 0)) + value)
+		_add_to_starter_stashes(resource_type, value)
 		return
 	if value >= 0:
 		_distribute_add(resource_type, value)
@@ -397,7 +452,7 @@ func _find_least_used_warehouse() -> int:
 func total_stored_resources() -> int:
 	var total := 0
 	if not warehouse_ever_built:
-		for value in backpack.values():
+		for value in starter_stash_resources().values():
 			total += int(value)
 	else:
 		for warehouse in warehouses:

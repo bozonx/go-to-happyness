@@ -271,7 +271,7 @@ class FakeTradeResourcePileService extends RefCounted:
 	func _init(p_owner: FakeTradeSimulation) -> void:
 		owner = p_owner
 
-	func create_resource_pile(position: Vector3, resources: Dictionary, _is_backpack_pile := false) -> void:
+	func create_resource_pile(position: Vector3, resources: Dictionary, _is_party_stash := false) -> void:
 		owner._create_resource_pile(position, resources)
 
 
@@ -299,7 +299,7 @@ static func run_all() -> void:
 	_test_water_collector_service()
 	_test_warehouse_reservation_at_assignment()
 	_test_balanced_warehouse_mode()
-	_test_backpack_invariants()
+	_test_party_stash_invariants()
 	_test_warehouse_cheat_respects_accept_filters()
 	_test_dump_preserves_warehouse_accept_filters()
 	_test_warehouse_accept_toggle_persists_after_refresh()
@@ -766,19 +766,19 @@ static func _test_balanced_warehouse_mode() -> void:
 	assert(index == 0)
 
 
-static func _test_backpack_invariants() -> void:
+static func _test_party_stash_invariants() -> void:
 	var state := SettlementState.new()
 	state.apply_tent_start()
 	assert(not state.warehouse_ever_built)
 	state.add("branches", 10)
-	assert(state.backpack_amount("branches") == 10)
+	assert(state.starter_stash_amount("branches") == 10)
 	assert(state.amount("branches") == 10)
 	var old_money := state.money
 	state.add("money", 50)
 	assert(state.money == old_money + 50)
 	state.add_warehouse("warehouse")
 	state.warehouse_ever_built = true
-	assert(state.backpack_amount("branches") == 10)
+	assert(state.starter_stash_amount("branches") == 10)
 	assert(state.warehouse_amount("branches", 0) == 0)
 
 

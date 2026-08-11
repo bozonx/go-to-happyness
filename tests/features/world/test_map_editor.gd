@@ -492,6 +492,9 @@ func _test_start_dialog_edits_spawn_groups(editor: Node) -> void:
 		"the only group there is becomes the new entrance's group")
 
 	dialogs._on_start_settings_confirmed()
+	# Calling the handler directly bypasses AcceptDialog's built-in hide step.
+	# Leave no exclusive child behind for the later new-map/recipe dialogs.
+	dialogs._start_dialog.hide()
 	assert(document.zones.spawn_groups.size() == 1, "the confirmed group reached the document")
 	assert(document.zones.spawn_groups[0].id == &"north_camp", "with the id the author typed")
 	assert(document.zones.spawn_groups[0].fallback == MapSpawnGroup.FALLBACK_FAIL, "and its fallback")

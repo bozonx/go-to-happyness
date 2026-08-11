@@ -8,13 +8,13 @@ const ResourcePileScene = preload("res://game/features/logistics/presentation/re
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 
-func create_visual(position: Vector3, resources: Dictionary, is_backpack_pile: bool) -> Node3D:
+func create_visual(position: Vector3, resources: Dictionary, is_party_stash: bool) -> Node3D:
 	var pile: Node3D = ResourcePileScene.instantiate()
 	pile.position = position
 
 	var label := pile.get_node("PileLabel") as Label3D
 	label.text = _format_label_text(resources)
-	label.position.y = 0.8 if is_backpack_pile else 1.7
+	label.position.y = 0.8 if is_party_stash else 1.7
 
 	var backpack_mesh := pile.get_node("BackpackMesh") as MeshInstance3D
 	var base_mesh_node := pile.get_node("BaseMesh") as MeshInstance3D
@@ -23,7 +23,7 @@ func create_visual(position: Vector3, resources: Dictionary, is_backpack_pile: b
 	var grass_pile := pile.get_node("GrassPile") as MeshInstance3D
 	var stone_pile := pile.get_node("StonePile") as MeshInstance3D
 
-	if is_backpack_pile:
+	if is_party_stash:
 		backpack_mesh.visible = true
 		base_mesh_node.visible = false
 	else:

@@ -66,9 +66,10 @@ func update_hover(camera: Camera3D, space: PhysicsDirectSpaceState3D, mouse: Vec
 	var had_hover := has_hover
 	has_hover = not hit.is_empty()
 	if has_hover:
-		# Nudge into the surface so a hit exactly on a shared edge resolves to the
-		# column the cursor is visually over.
-		var point: Vector3 = hit["position"] - (hit["normal"] as Vector3) * 0.01
+		# Resolve from the actual point under the pointer. Moving the hit along the
+		# surface normal also moves it sideways on a slope; at a low camera angle
+		# that made the selected column visibly lag behind the pointer.
+		var point: Vector3 = hit["position"]
 		hovered_cell = _pick_grid.cell_from_position(point)
 		has_hover = _pick_grid.is_inside(hovered_cell)
 	_on_hover_changed(previous, had_hover)

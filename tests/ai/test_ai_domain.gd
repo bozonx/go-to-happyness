@@ -85,8 +85,8 @@ static func run_all() -> void:
 	_test_facade_context_has_tool_true()
 	_test_facade_context_has_tool_false()
 	_test_facade_context_has_tool_no_settlement()
-	_test_facade_context_backpack_resources()
-	_test_facade_context_backpack_resources_empty()
+	_test_facade_context_starter_stash_resources()
+	_test_facade_context_starter_stash_resources_empty()
 
 
 # ============================================================
@@ -780,7 +780,10 @@ static func _test_return_home_goal_build_task_no_position() -> void:
 
 class MockSimSettlement extends RefCounted:
 	var tools: Dictionary = {}
-	var backpack: Dictionary = {}
+	var party_stash: Dictionary = {}
+
+	func starter_stash_resources() -> Dictionary:
+		return party_stash.duplicate(true)
 
 
 class MockSimulation extends Node:
@@ -811,21 +814,21 @@ static func _test_facade_context_has_tool_no_settlement() -> void:
 	assert(not ctx.has_tool("axe"))
 	sim.free()
 
-static func _test_facade_context_backpack_resources() -> void:
+static func _test_facade_context_starter_stash_resources() -> void:
 	var sim := MockSimulation.new()
 	var settlement := MockSimSettlement.new()
-	settlement.backpack = {"branches": 5, "food": 3}
+	settlement.party_stash = {"branches": 5, "food": 3}
 	sim.settlement = settlement
 	var ctx := FacadeContextScript.new(sim, null, null, 1, false, false, "")
-	var backpack := ctx.backpack_resources()
-	assert(backpack.size() == 2)
-	assert(int(backpack["branches"]) == 5)
-	assert(int(backpack["food"]) == 3)
+	var stash := ctx.starter_stash_resources()
+	assert(stash.size() == 2)
+	assert(int(stash["branches"]) == 5)
+	assert(int(stash["food"]) == 3)
 	sim.free()
 
-static func _test_facade_context_backpack_resources_empty() -> void:
+static func _test_facade_context_starter_stash_resources_empty() -> void:
 	var sim := MockSimulation.new()
 	var ctx := FacadeContextScript.new(sim, null, null, 1, false, false, "")
-	var backpack := ctx.backpack_resources()
-	assert(backpack.is_empty())
+	var stash := ctx.starter_stash_resources()
+	assert(stash.is_empty())
 	sim.free()

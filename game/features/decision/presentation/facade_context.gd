@@ -41,10 +41,9 @@ func has_tool(tool_name: String) -> bool:
 	return false
 
 
-func backpack_resources() -> Dictionary:
+func starter_stash_resources() -> Dictionary:
 	if is_instance_valid(simulation) and simulation.get("settlement") != null:
 		var settlement: Object = simulation.get("settlement")
-		var backpack: Variant = settlement.get("backpack")
-		if backpack is Dictionary:
-			return (backpack as Dictionary).duplicate(true)
+		if settlement.has_method("starter_stash_resources"):
+			return settlement.call("starter_stash_resources")
 	return {}

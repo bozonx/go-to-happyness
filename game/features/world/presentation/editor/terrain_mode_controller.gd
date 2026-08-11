@@ -89,6 +89,13 @@ func hover_brush() -> BaseBrushController:
 	return context.brush if context != null else null
 
 
+## The ramp gesture owns a purpose-built start/connection preview. Showing the
+## ordinary (possibly very large) brush footprint at the same time falsely
+## suggests that brush size and shape affect the connection.
+func wants_brush_marker() -> bool:
+	return _tool != TOOL_RAMP
+
+
 func adjust_brush_size(delta: int) -> void:
 	if context != null and context.brush != null:
 		context.brush.adjust_brush_size(delta)
@@ -322,7 +329,7 @@ func select_palette_entry(entry_id: StringName) -> void:
 func tool_options() -> Array:
 	var options: Array = []
 	if _tool == TOOL_SCULPT:
-		options.append(ToolOption.of(OPTION_MODE, "Режим: %s" % TerrainEditOperation.mode_name(context.brush.edit_mode)))
+		options.append(ToolOption.of(OPTION_MODE, "Режим: %s" % context.brush.edit_mode_label()))
 		if context.brush.edit_mode != TerrainEditOperation.Mode.TERRACE:
 			options.append(ToolOption.of(OPTION_TERRAIN_SLOPE, "Откос: %s" % _terrain_slope_label()))
 	if _tool != TOOL_RAMP:

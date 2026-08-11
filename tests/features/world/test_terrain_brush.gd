@@ -30,6 +30,7 @@ static func run_all() -> void:
 	_test_a_stroke_ends_when_the_button_is_released()
 	_test_circle_brush_drops_the_corners()
 	_test_falloff_rounds_the_shoulder_of_a_mound()
+	_test_interactive_mode_cycle_excludes_placement()
 	print("    [PASS] Terrain Brush Stroke Tests")
 	_test_ramp_cycles_stay_inside_the_catalog()
 	_test_material_picker_copies_material_and_variant()
@@ -383,6 +384,21 @@ static func _test_a_stroke_ends_when_the_button_is_released() -> void:
 		brush.set_paint_direction(1)
 		brush.set_paint_direction(0)
 	assert(grid.height_of(Vector2i(2, 2)) == 3)
+
+
+## Building placement uses the same domain operation enum, but it is not a
+## brush mode: it requires an authored per-cell height array which this tool
+## cannot provide.
+static func _test_interactive_mode_cycle_excludes_placement() -> void:
+	var brush: TerrainBrushController = _make()["brush"]
+	var visited: Array[int] = []
+	for _step in 6:
+		visited.append(brush.edit_mode)
+		brush.cycle_edit_mode()
+	assert(visited.has(TerrainEditOperation.Mode.SCULPT))
+	assert(visited.has(TerrainEditOperation.Mode.TERRACE))
+	assert(visited.has(TerrainEditOperation.Mode.LEVEL))
+	assert(not visited.has(TerrainEditOperation.Mode.PLACEMENT))
 
 
 # --- Shape and falloff --------------------------------------------------------

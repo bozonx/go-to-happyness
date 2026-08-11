@@ -82,7 +82,7 @@ func restore(p_game: SettlementGame, section: Dictionary) -> bool:
 	game.settlement.buildings.clear()
 	game.settlement.warehouses.clear()
 	game.settlement.warehouse_types.clear()
-	game.settlement.backpack.clear()
+	game.settlement.clear_starter_stashes()
 	game.settlement.warehouse_ever_built = false
 	game.settlement.construction_reservations.clear()
 
@@ -231,14 +231,16 @@ func restore(p_game: SettlementGame, section: Dictionary) -> bool:
 		if resources.is_empty():
 			continue
 		var pos = SaveData.dict_to_vector3(p_dict.get("position", {}))
-		var pile_node := game.resource_pile_service.create_resource_pile(pos, resources, bool(p_dict.get("is_backpack", false)))
+		var is_party_stash := bool(p_dict.get("is_party_stash", p_dict.get("is_backpack", false)))
+		var container_id := StringName(p_dict.get("container_id", ""))
+		var pile_node := game.resource_pile_service.create_resource_pile(
+			pos, resources, is_party_stash, container_id)
 		if pile_node != null and bool(p_dict.get("landscape_owned", false)):
 			pile_node.set_meta("landscape_owned", true)
 			game.world_navigation_controller.add_landscape_object(pile_node)
-		if bool(p_dict.get("is_backpack", false)):
+		if is_party_stash:
 			var stash: ResourcePile = game.resource_piles[game.resource_piles.size() - 1]
-			game.settlement.bind_starter_stash_inventory(stash.resources)
-			game.backpack_node = pile_node
+			game.settlement.bind_starter_stash_inventory(stash.container_id, stash.resources)
 
 	# 8b. Restore Forest state (felled trees, branch/wood depletion)
 	_restore_forest(forest_state)

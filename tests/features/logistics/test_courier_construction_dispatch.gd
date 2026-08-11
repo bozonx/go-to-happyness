@@ -25,7 +25,7 @@ func _init() -> void:
 	# Keep this fixture warehouse-only; pile selection has its own assertion in
 	# test_construction_courier.gd.
 	for pile: ResourcePile in simulation.resource_piles:
-		if pile != null and not pile.is_backpack:
+		if pile != null and not pile.is_party_stash:
 			pile.resources.clear()
 	var nearest_warehouse := Vector3(11.0, 0.0, 10.0)
 	var fallback_warehouse := Vector3.ZERO

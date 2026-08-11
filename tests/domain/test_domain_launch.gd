@@ -30,7 +30,7 @@ static func test_default_tent_config() -> void:
 	assert(config.starting_money == 500)
 	assert(config.starting_wellbeing == 75)
 	assert(config.starting_population == 4)
-	# Starting resources now come from the map backpack entity, not the launch config.
+	# Starting resources now come from authored party-stash entities, not launch config.
 	assert(config.starting_resources.is_empty())
 
 
@@ -90,8 +90,8 @@ static func test_apply_launch_config_to_settlement() -> void:
 	assert(int(state.era) == 0)
 	assert(state.money == 750)
 	assert(state.wellbeing == 80)
-	assert(state.backpack_amount(ResourceIds.FOOD) == 25)
-	assert(state.backpack_amount(ResourceIds.WATER) == 15)
+	assert(state.starter_stash_amount(ResourceIds.FOOD) == 25)
+	assert(state.starter_stash_amount(ResourceIds.WATER) == 15)
 
 
 static func test_apply_launch_config_null_defaults_to_tent() -> void:
@@ -101,8 +101,8 @@ static func test_apply_launch_config_null_defaults_to_tent() -> void:
 	assert(int(state.era) == 0)
 	assert(state.money == 500)
 	assert(state.wellbeing == 75)
-	# Backpack is filled from the map backpack entity at runtime, not from launch config.
-	assert(state.backpack.is_empty())
+	# Party stashes are filled from map entities at runtime, not from launch config.
+	assert(state.starter_stash_resources().is_empty())
 
 
 static func test_apply_launch_config_reset_progress_false() -> void:
@@ -138,14 +138,14 @@ static func test_apply_tent_start_backward_compat() -> void:
 	assert(int(state.era) == 0)
 	assert(state.money == 500)
 	assert(state.wellbeing == 75)
-	# Backpack is filled from the map backpack entity at runtime, not from launch config.
-	assert(state.backpack.is_empty())
+	# Party stashes are filled from map entities at runtime, not from launch config.
+	assert(state.starter_stash_resources().is_empty())
 	# apply_tent_start must produce the same result as apply_launch_config(for_tent_era()).
 	var state2 := SettlementStateScript.new()
 	state2.apply_launch_config(GameLaunchConfigScript.for_tent_era())
 	assert(state.money == state2.money)
 	assert(state.wellbeing == state2.wellbeing)
-	assert(state.backpack_amount(ResourceIds.FOOD) == state2.backpack_amount(ResourceIds.FOOD))
+	assert(state.starter_stash_amount(ResourceIds.FOOD) == state2.starter_stash_amount(ResourceIds.FOOD))
 
 
 static func test_create_custom_default_equipment_and_params() -> void:

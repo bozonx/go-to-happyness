@@ -341,16 +341,15 @@ func _on_status_message_changed(message: String, is_error: bool) -> void:
 
 
 func _build_hover_marker() -> void:
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(document.meta.cell_size, 0.06, document.meta.cell_size)
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.no_depth_test = true
-	material.albedo_color = Color(1.0, 0.82, 0.08, 0.9)
+	material.no_depth_test = false
+	material.vertex_color_use_as_albedo = true
+	material.albedo_color = Color(1.0, 0.82, 0.08, 0.62)
 	material.render_priority = 127
-	mesh.material = material
-	hover_marker.mesh = mesh
+	hover_marker.material_override = material
+	hover_marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
 ## Ctrl+S. A document with a file of its own goes back into it, subfolder and all;
@@ -889,7 +888,11 @@ func _update_hover_marker() -> void:
 	hover_marker.visible = brush != null and brush.has_hover
 	if brush == null or not brush.has_hover:
 		return
-	var centre := document.terrain.cell_center(brush.hovered_cell)
+	if _active is TerrainModeController and not (_active as TerrainModeController).wants_brush_marker():
+		hover_marker.visible = false
+		return
+	var cursor_on_water := false
+	var cursor_height := 0.0
 	# Water-state brushes operate on the water sheet, not visually on its bed.
 	# The cell still comes from the terrain ray (open water has no collider), but
 	# its cursor is drawn where the authored water surface actually is.
@@ -899,10 +902,43 @@ func _update_hover_marker() -> void:
 		if not document.water.has_water(water_brush.hovered_cell):
 			hover_marker.visible = false
 			return
-		centre.y = float(document.water.height_of(water_brush.hovered_cell)) * TerrainGrid.HEIGHT_STEP
-	hover_marker.position = Vector3(centre.x, centre.y + 0.07, centre.z)
-	var span := float(brush.brush_size * 2 - 1)
-	hover_marker.scale = Vector3(span, 1.0, span)
+		cursor_on_water = true
+		cursor_height = float(document.water.height_of(water_brush.hovered_cell)) * TerrainGrid.HEIGHT_STEP
+	hover_marker.position = Vector3.ZERO
+	hover_marker.scale = Vector3.ONE
+	hover_marker.mesh = _brush_outline_mesh(brush, cursor_on_water, cursor_height)
+
+
+## Draws the actual raster footprint instead of scaling one square. The open
+## line cursor leaves the terrain visible and a circular brush visibly loses its
+## corner cells. Only outside edges are emitted, so a large brush stays legible.
+func _brush_outline_mesh(brush: BaseBrushController, use_fixed_height: bool, fixed_height: float) -> ImmediateMesh:
+	var cells := brush.brush_cells(brush.hovered_cell)
+	var covered := {}
+	for cell: Vector2i in cells:
+		covered[cell] = true
+	var immediate := ImmediateMesh.new()
+	immediate.surface_begin(Mesh.PRIMITIVE_LINES)
+	var half := document.terrain.cell_size * 0.5
+	var lift := 0.08
+	var directions := [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]
+	for cell: Vector2i in cells:
+		var cell_centre := document.terrain.cell_center(cell)
+		var y := (fixed_height if use_fixed_height else cell_centre.y) + lift
+		var corners := [
+			Vector3(cell_centre.x - half, y, cell_centre.z - half),
+			Vector3(cell_centre.x + half, y, cell_centre.z - half),
+			Vector3(cell_centre.x + half, y, cell_centre.z + half),
+			Vector3(cell_centre.x - half, y, cell_centre.z + half),
+		]
+		var edges := [[corners[3], corners[0]], [corners[1], corners[2]], [corners[0], corners[1]], [corners[2], corners[3]]]
+		for side in directions.size():
+			if covered.has(cell + directions[side]):
+				continue
+			immediate.surface_add_vertex(edges[side][0])
+			immediate.surface_add_vertex(edges[side][1])
+	immediate.surface_end()
+	return immediate
 
 
 ## The 3D view is the hole in the middle of the chrome. Anything over a panel

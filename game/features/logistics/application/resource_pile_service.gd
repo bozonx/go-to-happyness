@@ -12,6 +12,7 @@ var settlement: RefCounted
 ## (`world_environment.md` §2).
 var environment_getter: Callable
 var _visuals: RefCounted = null
+var _next_container_serial := 1
 
 func set_visuals(visuals_ref: RefCounted) -> void:
 	_visuals = visuals_ref
@@ -32,7 +33,12 @@ func setup(parent: Node3D, piles: Array[ResourcePileScript], settlement_ref: Ref
 	settlement = settlement_ref
 	environment_getter = environment
 
-func create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_pile := false) -> Node3D:
+func create_resource_pile(
+	position: Vector3,
+	resources: Dictionary,
+	is_party_stash := false,
+	container_id: StringName = &"",
+) -> Node3D:
 	if resources.is_empty():
 		return null
 	var normalized: Dictionary = {}
@@ -43,12 +49,29 @@ func create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_
 	if normalized.is_empty():
 		return null
 
-	var pile: Node3D = _get_visuals().create_visual(position, normalized, is_backpack_pile)
+	var pile: Node3D = _get_visuals().create_visual(position, normalized, is_party_stash)
+	var resolved_id := container_id
+	if resolved_id.is_empty():
+		resolved_id = _next_generated_container_id()
 
 	if parent_node != null:
 		parent_node.add_child(pile)
-	resource_piles.append(ResourcePileScript.new(pile, normalized, is_backpack_pile))
+	resource_piles.append(ResourcePileScript.new(pile, normalized, is_party_stash, resolved_id))
 	return pile
+
+
+func _next_generated_container_id() -> StringName:
+	while true:
+		var candidate := StringName("pile_%d" % _next_container_serial)
+		_next_container_serial += 1
+		var occupied := false
+		for pile: ResourcePileScript in resource_piles:
+			if pile.container_id == candidate:
+				occupied = true
+				break
+		if not occupied:
+			return candidate
+	return &""
 
 
 func take_resource(pile: ResourcePile, resource_type: String, max_amount: int) -> int:
@@ -69,40 +92,11 @@ func take_resource(pile: ResourcePile, resource_type: String, max_amount: int) -
 	if label != null:
 		label.text = "\n".join(labels)
 	if pile.resources.is_empty():
+		if pile.is_party_stash and settlement != null and settlement.has_method("unbind_starter_stash_inventory"):
+			settlement.unbind_starter_stash_inventory(pile.container_id)
 		resource_piles.erase(pile)
 		pile.node.queue_free()
 	return taken
-
-func remove_backpack_pile(backpack_node: Node3D) -> Node3D:
-	if not is_instance_valid(backpack_node):
-		return null
-	for index in range(resource_piles.size()):
-		if resource_piles[index].node == backpack_node:
-			resource_piles.remove_at(index)
-			break
-	backpack_node.queue_free()
-	return null
-
-func convert_backpack_pile_to_regular(backpack_node: Node3D) -> Node3D:
-	if not is_instance_valid(backpack_node):
-		return null
-	for index in range(resource_piles.size()):
-		var pile: ResourcePileScript = resource_piles[index]
-		if pile.node == backpack_node:
-			var synced: Dictionary = {}
-			if settlement != null and settlement.backpack != null:
-				for resource_type in settlement.backpack:
-					var amount := int(settlement.backpack[resource_type])
-					if amount > 0:
-						synced[resource_type] = amount
-			if not synced.is_empty():
-				# Detach before StorageState clears the starter-stash inventory. The
-				# remaining ground pile becomes an ordinary independent owner.
-				pile.resources = synced.duplicate(true)
-			pile.is_backpack = false
-			refresh_resource_pile_label(pile)
-			break
-	return null
 
 func drop_overflow_as_piles(overflow: Dictionary, base_position: Vector3) -> void:
 	if overflow.is_empty():
@@ -144,7 +138,7 @@ func decay_resource_piles() -> void:
 		is_raining = snapshot != null and snapshot.is_precipitating()
 	for index in range(resource_piles.size() - 1, -1, -1):
 		var pile: ResourcePileScript = resource_piles[index]
-		if pile.is_backpack:
+		if pile.is_party_stash:
 			continue
 		for resource_type in pile.resources.keys():
 			var remaining := int(pile.resources[resource_type])

@@ -70,7 +70,6 @@ var _refresh_navigation_grid: Callable
 var _release_placement: Callable
 var _is_construction_site: Callable
 var _activate_employment_centre: Callable
-var _convert_backpack_pile_to_regular: Callable
 var _add_building_selector: Callable
 var _add_warehouse_fill_label: Callable
 var _sawmill_stock: Callable
@@ -142,7 +141,6 @@ func configure(port: BuildingLifecycleRuntimePort) -> void:
 	_release_placement = port.release_placement
 	_is_construction_site = port.is_construction_site
 	_activate_employment_centre = port.activate_employment_centre
-	_convert_backpack_pile_to_regular = port.convert_backpack_pile_to_regular
 	_add_building_selector = port.add_building_selector
 	_add_warehouse_fill_label = port.add_warehouse_fill_label
 	_sawmill_stock = port.sawmill_stock
@@ -430,9 +428,7 @@ func register_completed_building_type_features(building_type: String, building: 
 			_settlement.add_warehouse(building_type)
 			_warehouse_positions.append(service_position)
 			if _warehouse_positions.size() == 1:
-				_convert_backpack_pile_to_regular.call()
 				_settlement.warehouse_ever_built = true
-				_settlement.backpack.clear()
 			_add_building_selector.call(building, "warehouse_selector", blueprint.footprint)
 			_add_warehouse_fill_label.call(building)
 		"sawmill":

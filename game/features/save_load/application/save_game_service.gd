@@ -135,9 +135,10 @@ static func capture_settlement_section(game: Node) -> Dictionary:
 		for pile in game.resource_piles:
 			if pile != null and is_instance_valid(pile.node):
 				piles_list.append({
+					"container_id": String(pile.container_id),
 					"resources": pile.resources.duplicate(true),
 					"position": SaveDataScript.vector3_to_dict(pile.node.global_position),
-					"is_backpack": pile.is_backpack,
+					"is_party_stash": pile.is_party_stash,
 					"landscape_owned": bool(pile.node.get_meta("landscape_owned", false)),
 				})
 
@@ -245,10 +246,11 @@ static func restore_settlement_state(settlement: RefCounted, s_dict: Dictionary)
 	settlement.money = int(s_dict.get("money", 500))
 	settlement.wellbeing = int(s_dict.get("wellbeing", 75))
 	settlement.era = int(s_dict.get("era", 0))
-	settlement.backpack.clear()
+	settlement.clear_starter_stashes()
 	var legacy_backpack: Variant = s_dict.get("backpack", null)
 	if legacy_backpack is Dictionary:
-		settlement.backpack.merge((legacy_backpack as Dictionary).duplicate(true), true)
+		for resource_type in legacy_backpack:
+			settlement.add(str(resource_type), int(legacy_backpack[resource_type]))
 
 	var legacy_resources: Variant = s_dict.get("resources", null)
 	if legacy_resources is Dictionary:

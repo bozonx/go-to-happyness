@@ -40,6 +40,18 @@ func _init() -> void:
 	sim_a.forage_sources.erase(forage_cell)
 
 	sim_a.settlement.money = 4321
+	# A second authored-style stash proves that save identity and aggregation no
+	# longer collapse every container into the first one.
+	var first_stash_position := Vector3.ZERO
+	for pile: ResourcePile in sim_a.resource_piles:
+		if pile.is_party_stash:
+			first_stash_position = pile.node.global_position
+			break
+	sim_a.resource_pile_service.create_resource_pile(
+		first_stash_position + Vector3(2.0, 0.0, 0.0), {"food": 5}, true,
+		&"test_second_stash")
+	var second_stash: ResourcePile = sim_a.resource_piles[sim_a.resource_piles.size() - 1]
+	sim_a.settlement.bind_starter_stash_inventory(second_stash.container_id, second_stash.resources)
 	var citizen_count: int = sim_a.citizens.size()
 
 	# Capture through the same service the settlement module calls, then wrap it in
@@ -106,11 +118,15 @@ func _init() -> void:
 	var landscape_objects := sim_b.get_node("WorldTerritory/LandscapeObjects")
 	assert(sim_b.resource_piles.any(func(pile): return bool(pile.node.get_meta("landscape_owned", false)) and pile.node.get_parent() == landscape_objects), "starter world loot must return to the terrain hierarchy")
 	var restored_stash: ResourcePile = null
+	var restored_stash_ids: Array[StringName] = []
 	for pile: ResourcePile in sim_b.resource_piles:
-		if pile.is_backpack:
-			restored_stash = pile
-			break
+		if pile.is_party_stash:
+			restored_stash_ids.append(pile.container_id)
+			if restored_stash == null:
+				restored_stash = pile
 	assert(restored_stash != null, "party stash must return after save/load")
+	assert(&"test_second_stash" in restored_stash_ids,
+		"independent party-stash identity must survive save/load")
 	var restored_food := int(restored_stash.resources.get("food", 0))
 	sim_b.settlement.add("food", 1)
 	assert(int(restored_stash.resources.get("food", 0)) == restored_food + 1,

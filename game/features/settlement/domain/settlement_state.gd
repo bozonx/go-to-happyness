@@ -175,13 +175,13 @@ func apply_launch_config(config: GameLaunchConfigScript, reset_progress := true)
 	campfire_story_target_role = ""
 	campfire_story_target_day = -1
 	research.clear()
-	backpack.clear()
+	storage.clear_starter_stashes()
 	warehouses.clear()
 	warehouse_types.clear()
 	warehouse_ever_built = false
 	construction_reservations.clear()
 	for res_type in config.starting_resources:
-		backpack[str(res_type)] = int(config.starting_resources[res_type])
+		storage.add(str(res_type), int(config.starting_resources[res_type]))
 	if reset_progress:
 		buildings.clear()
 		unlock_state.reset()
@@ -210,11 +210,6 @@ static func resources_for_era(p_era: Era) -> Array[String]:
 func era_resources() -> Array[String]:
 	return era_progress.era_resources()
 
-## Inventory of the physical starter-stash record. Kept as a settlement-facing
-## query during the first migration stage; StorageState and ResourcePile share
-## the same Dictionary rather than synchronising two balances.
-var backpack: Dictionary:
-	get: return storage.backpack
 ## Becomes true the first time any warehouse is completed and never reverts.
 var warehouse_ever_built: bool:
 	get: return storage.warehouse_ever_built
@@ -222,7 +217,7 @@ var warehouse_ever_built: bool:
 
 ## Resources committed to active construction sites. Maps a stable site id to
 ## a Dictionary of resource_type -> reserved amount. These resources are still on
-## a warehouse/backpack, but they cannot be spent elsewhere until delivered or
+## physical storage, but they cannot be spent elsewhere until delivered or
 ## the site is cancelled.
 var construction_reservations: ConstructionReservations = ConstructionReservations.new()
 
@@ -355,10 +350,14 @@ func set_amount(resource_type: String, value: int) -> void:
 	storage._set_resource_aggregate(resource_type, value)
 
 
-func backpack_amount(resource_type: String) -> int:
+func starter_stash_resources() -> Dictionary:
+	return storage.starter_stash_resources()
+
+
+func starter_stash_amount(resource_type: String) -> int:
 	if resource_type == "money":
 		return 0
-	return storage.backpack_amount(resource_type)
+	return storage.starter_stash_amount(resource_type)
 
 
 func warehouse_amount(resource_type: String, index: int) -> int:
@@ -410,8 +409,16 @@ func total_stored_resources() -> int:
 	return storage.total_stored_resources()
 
 
-func bind_starter_stash_inventory(inventory: Dictionary) -> void:
-	storage.bind_starter_stash_inventory(inventory)
+func bind_starter_stash_inventory(container_id: StringName, inventory: Dictionary) -> void:
+	storage.bind_starter_stash_inventory(container_id, inventory)
+
+
+func unbind_starter_stash_inventory(container_id: StringName) -> void:
+	storage.unbind_starter_stash_inventory(container_id)
+
+
+func clear_starter_stashes() -> void:
+	storage.clear_starter_stashes()
 
 
 func uses_starter_stash_storage() -> bool:

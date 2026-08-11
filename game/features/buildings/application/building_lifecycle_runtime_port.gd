@@ -62,7 +62,6 @@ var refresh_navigation_grid: Callable
 var release_placement: Callable
 var is_construction_site: Callable
 var activate_employment_centre: Callable
-var convert_backpack_pile_to_regular: Callable
 var add_building_selector: Callable
 var add_warehouse_fill_label: Callable
 var sawmill_stock: Callable

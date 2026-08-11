@@ -18,7 +18,7 @@ static func run_all() -> void:
 	_test_overtime_sources_are_independent()
 	_test_cheer_up_mechanic()
 	_test_resource_pile_decay_rates()
-	_test_backpack_invariants()
+	_test_party_stash_invariants()
 
 
 static func _test_settlement_economy() -> void:
@@ -66,7 +66,7 @@ static func _test_tent_start_config() -> void:
 	state.apply_tent_start()
 	assert(state.era == SettlementState.Era.TENT)
 	assert(state.money == SettlementState.TENT_STARTING_MONEY)
-	# Food and water now come from the map backpack entity, not from launch config.
+	# Food and water now come from an authored party-stash entity, not from launch config.
 	assert(state.amount("food") == 0)
 	assert(state.amount("water") == 0)
 	assert(state.branches == 0 and state.grass == 0)
@@ -77,7 +77,7 @@ static func _test_tent_start_config() -> void:
 	assert(state.is_building_unlocked("tent"))
 	assert(state.is_building_unlocked("cook_campfire"))
 	assert(state.is_building_unlocked("dew_collector"))
-	# Tarp now comes from the map backpack entity; add it manually for this test.
+	# Tarp now comes from an authored party-stash entity; add it manually for this test.
 	state.add(ResourceIds.TARP, 1)
 	assert(state.tarp == 1)
 	assert(state.can_cover_warehouse_with_tarp())
@@ -128,7 +128,7 @@ static func _test_starter_stash_is_not_teleported() -> void:
 	state.apply_tent_start()
 	assert(state.uses_starter_stash_storage())
 	var physical_inventory := {"branches": 3}
-	state.bind_starter_stash_inventory(physical_inventory)
+	state.bind_starter_stash_inventory(&"test_stash", physical_inventory)
 	state.add_warehouse("warehouse")
 	state.warehouse_ever_built = true
 	assert(not state.uses_starter_stash_storage())
@@ -304,17 +304,28 @@ static func _test_resource_pile_decay_rates() -> void:
 	assert(loss.has("food"))
 
 
-static func _test_backpack_invariants() -> void:
+static func _test_party_stash_invariants() -> void:
 	var state := SettlementState.new()
 	state.apply_tent_start()
-	# Backpack starts empty; resources are filled from the map backpack entity at runtime.
+	# The party stash starts empty; its physical authored entity fills it at runtime.
 	assert(state.amount("food") == 0)
 	assert(state.amount("water") == 0)
 	var physical_inventory := {"food": 3}
-	state.bind_starter_stash_inventory(physical_inventory)
+	state.bind_starter_stash_inventory(&"test_stash", physical_inventory)
+	var second_inventory := {"food": 4, "water": 2}
+	state.bind_starter_stash_inventory(&"test_cart", second_inventory)
+	assert(state.starter_stash_amount("food") == 7,
+		"starter-stash queries must aggregate independent physical containers")
 	state.add("food", 2)
-	assert(int(physical_inventory["food"]) == 5,
-		"settlement and the physical starter stash must share one inventory")
+	assert(state.starter_stash_amount("food") == 9)
+	assert(int(physical_inventory["food"]) + int(second_inventory["food"]) == 9,
+		"settlement and physical starter stashes must share their inventories")
+	state.add("food", -6)
+	assert(state.starter_stash_amount("food") == 3,
+		"consumption must drain physical containers rather than an aggregate copy")
 	physical_inventory["water"] = 4
-	assert(state.backpack_amount("water") == 4,
+	assert(state.starter_stash_amount("water") == 6,
 		"physical inventory mutations must be visible without a sync pass")
+	state.unbind_starter_stash_inventory(&"test_cart")
+	assert(state.starter_stash_amount("water") == 4,
+		"a consumed or removed container must leave the aggregate")

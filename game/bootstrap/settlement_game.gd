@@ -146,12 +146,6 @@ var last_citizen_cells: Dictionary:
 	get: return world_state.last_citizen_cells
 var resource_piles: Array[ResourcePile]:
 	get: return world_state.resource_piles
-var backpack_node: Node3D:
-	get: return world_state.backpack_node
-	set(v): world_state.backpack_node = v
-var backpack_position: Vector3:
-	get: return world_state.backpack_position
-	set(v): world_state.backpack_position = v
 
 var tree_positions: Array[Vector3]:
 	get: return world_state.tree_positions
@@ -618,10 +612,10 @@ func update_interface(message: String) -> void:
 	for resource_type in displayed_resources:
 		lines.append("%s: %d" % [resource_display_name(resource_type), settlement.amount(resource_type)])
 	if settlement.uses_starter_stash_storage():
-		var backpack_units := 0.0
+		var stash_units := 0.0
 		for resource_type in displayed_resources:
-			backpack_units += settlement.backpack_amount(resource_type) * settlement.storage_weight(resource_type)
-		lines.append("Backpack: %.1f u" % backpack_units)
+			stash_units += settlement.starter_stash_amount(resource_type) * settlement.storage_weight(resource_type)
+		lines.append("Party stash: %.1f u" % stash_units)
 	else:
 		lines.append("Storage: %d/%d" % [stored_resources(), warehouse_capacity()])
 	if not resource_piles.is_empty():
@@ -801,9 +795,6 @@ func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
 	if fixture_service != null and not building_id.is_empty():
 		fixture_service.remove_building(building_id)
 
-
-func convert_backpack_pile_to_regular() -> void:
-	backpack_node = resource_pile_service.convert_backpack_pile_to_regular(backpack_node)
 
 func warehouse_delivery_position(from: Vector3, resource_type: String, amount: int) -> Vector3:
 	return storage_routing_service.warehouse_delivery_position(from, resource_type, amount)

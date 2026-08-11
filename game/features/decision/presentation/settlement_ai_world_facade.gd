@@ -98,7 +98,7 @@ func capture(sequence: int) -> WorldSnapshot:
 		&"era": simulation.settlement.era,
 		&"settlement.wellbeing": simulation.settlement.wellbeing,
 		&"settlement.tools": simulation.settlement.tools.duplicate(true) if simulation.settlement != null else {},
-		&"settlement.backpack": simulation.settlement.backpack.duplicate(true) if simulation.settlement != null else {},
+		&"settlement.party_stash": simulation.settlement.starter_stash_resources() if simulation.settlement != null else {},
 		&"warehouse_positions_count": simulation.warehouse_positions.size() if simulation != null else 0,
 		&"workforce.world_data": workforce_world,
 		&"workforce.employment_center_position": simulation.employment_center_position(),

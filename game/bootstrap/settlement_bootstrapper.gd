@@ -129,7 +129,7 @@ func _setup_controllers() -> void:
 
 func _setup_hero_services() -> void:
 	game.hero_pocket_service = HeroPocketService.new()
-	game.hero_pocket_service.configure(func() -> Citizen: return game.player_citizen, func(position, resources, is_backpack_pile): return game.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile), game.update_interface, func(): game.hero_interaction_controller.refresh_interaction_hint())
+	game.hero_pocket_service.configure(func() -> Citizen: return game.player_citizen, func(position, resources, is_party_stash): return game.resource_pile_service.create_resource_pile(position, resources, is_party_stash), game.update_interface, func(): game.hero_interaction_controller.refresh_interaction_hint())
 	game.hero_interaction_service = HeroInteractionService.new()
 
 
@@ -521,12 +521,11 @@ func _setup_building_lifecycle() -> void:
 	port.unregister_navigation_footprint = func(center, footprint): game.service_pocket_manager.unregister_navigation_footprint(center, footprint)
 	port.refresh_boundary_markers = func(): game.world_navigation_controller.refresh_boundary_markers()
 	port.select_best_canteen = func(): game.building_management.select_best_canteen()
-	port.create_resource_pile = func(position, resources, is_backpack_pile): return game.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile)
+	port.create_resource_pile = func(position, resources, is_party_stash): return game.resource_pile_service.create_resource_pile(position, resources, is_party_stash)
 	port.refresh_navigation_grid = func(): game.world_navigation_controller.refresh_navigation_grid()
 	port.release_placement = func(building): game.building_placement_controller.release_placement(building)
 	port.is_construction_site = game.construction_controller.is_construction_site
 	port.activate_employment_centre = func(centre): game.research_controller.activate_employment_centre(centre)
-	port.convert_backpack_pile_to_regular = game.convert_backpack_pile_to_regular
 	port.add_building_selector = func(building, group_name, footprint): game.building_visuals.add_building_selector(building, group_name, footprint)
 	port.add_warehouse_fill_label = func(building): game.building_visuals.add_warehouse_fill_label(building)
 	port.sawmill_stock = game.sawmill_stock
@@ -654,7 +653,7 @@ func _setup_trade_and_logistics() -> void:
 	trade_port.request_courier_dispatch = game.request_courier_dispatch
 	trade_port.total_game_minutes = func(): return game.simulation_tick_controller.total_game_minutes()
 	trade_port.citizen_for_ai_id = func(citizen_id): return game.citizen_factory.citizen_for_ai_id(citizen_id)
-	trade_port.create_resource_pile = func(position, resources, is_backpack_pile): return game.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile)
+	trade_port.create_resource_pile = func(position, resources, is_party_stash): return game.resource_pile_service.create_resource_pile(position, resources, is_party_stash)
 	trade_port.update_workers = game.update_workers
 	game.trade_service.configure(trade_port)
 	game.storage_routing_service = StorageRoutingService.new()

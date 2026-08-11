@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Tracks resources reserved for active construction sites.
 ## Maps a stable site id to a Dictionary of resource_type -> reserved amount.
-## These resources are still in a warehouse/backpack, but they cannot be spent
+## These resources are still in physical storage, but they cannot be spent
 ## elsewhere until delivered or the site is cancelled.
 
 var _reservations: Dictionary = {}
