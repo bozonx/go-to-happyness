@@ -56,7 +56,7 @@ var _last_placed_cell := Vector2i(-999999, -999999)
 var _syncing_ui: bool = false
 
 var _panel: PanelContainer = null
-var _inspector_panel: PanelContainer = null
+var _inspector_panel: Control = null
 var _toolbar: HBoxContainer = null
 var _inspector_title: Label = null
 var _object_list: EditorSearchableList = null
@@ -238,7 +238,10 @@ func on_left_pressed(additive: bool = false) -> void:
 	_place_or_select_at(hit)
 	_placing_stroke = _editor.blueprint.objects.size() > count_before
 	if _placing_stroke:
-		selected_object_id = ""
+		# Placement continues to edit the brush. Clear selection through the normal
+		# path so the inspector and marker cannot show an object while its controls
+		# are actually changing the mouse ghost.
+		select_object("")
 	_last_placed_cell = occupied_cells(snapped_position(hit), current_asset_id, current_scale, current_yaw_deg).position
 
 
@@ -1019,7 +1022,7 @@ func _refresh_object_list() -> void:
 		var label := asset.name if asset != null else "%s (нет ассета)" % record.asset_id
 		if zone_filter != &"" and record.owner_zone_id != zone_filter:
 			continue
-		entries.append("%s  ·  %s  ·  %.1f, %.1f, %.1f" % [label, record.id, record.pos.x, record.pos.y, record.pos.z])
+		entries.append("%s  ·  этаж %s" % [label, _format_floor_height(record.pos.y)])
 		_visible_object_ids.append(record.id)
 	var selected_indices: Array[int] = []
 	for object_id: String in selected_object_ids():
@@ -1028,6 +1031,13 @@ func _refresh_object_list() -> void:
 			selected_indices.append(index)
 	_object_list.set_entries(entries, "Нет объектов в выбранной зоне", -1, [], selected_indices, true)
 	_syncing_ui = false
+
+
+func _format_floor_height(height: float) -> String:
+	var snapped_height := snappedf(height, EditorFillConventions.OFFSET_STEP)
+	if is_equal_approx(snapped_height, roundf(snapped_height)):
+		return str(int(roundf(snapped_height)))
+	return ("%.2f" % snapped_height).trim_suffix("0")
 
 
 ## The list mirrors the 3D selection, multiple rows included. The clicked row

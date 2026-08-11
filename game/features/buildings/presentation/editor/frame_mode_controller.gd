@@ -295,6 +295,9 @@ func _placement_target_from_hit(cursor_plane_cell: Vector3i, hit_info: Dictionar
 
 
 func refresh_ghost() -> void:
+	if not is_active():
+		_ghost.visible = false
+		return
 	_update_current_subgrid_anchor()
 	_ghost_cell = _editor.cursor_cell
 	_ghost_tool = _editor.current_tool

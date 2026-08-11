@@ -202,6 +202,9 @@ func _init_world() -> void:
 # ---------------------------------------------------------------------------
 
 func _process(delta: float) -> void:
+	if _editor_modal_open():
+		_suspend_viewport_interaction()
+		return
 	# CameraController polls keys instead of receiving events. Do not let WASD
 	# move the orbit camera behind a text field or behind the walk-through camera.
 	if _camera_controller != null and not _text_input_has_focus() \
@@ -223,6 +226,8 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _editor_modal_open():
+		return
 	# The walk-through owns every input while it is running, including the ones the
 	# editor would otherwise act on: a click meant to open a door must not place a
 	# block on the wall behind the author's head.
@@ -259,7 +264,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if event.keycode == KEY_ESCAPE and _eyedropper_active:
 				_set_eyedropper_active(false)
 				return
-				_handle_key(event)
+			_handle_key(event)
 
 
 ## Controls consume their own mouse-up events before `_unhandled_input` sees
@@ -267,6 +272,10 @@ func _unhandled_input(event: InputEvent) -> void:
 ## release camera and paint state, otherwise the next movement keeps orbiting or
 ## extends a completed stroke.
 func _input(event: InputEvent) -> void:
+	if _editor_modal_open():
+		if event is InputEventMouseButton and not event.pressed:
+			_release_pointer_capture(event.button_index)
+		return
 	if event is InputEventMouseButton:
 		var button := event as InputEventMouseButton
 		if not button.pressed and _pointer_over_ui():
@@ -512,6 +521,26 @@ func _text_input_has_focus() -> bool:
 	return owner is LineEdit or owner is TextEdit or owner is CodeEdit
 
 
+## Embedded subwindows are modal for GUI controls, but the editor also polls the
+## camera and receives viewport input on the scene root. Keep that second input
+## path closed while building parameters are open.
+func _editor_modal_open() -> bool:
+	return _metadata_panel != null and _metadata_panel.visible
+
+
+func _suspend_viewport_interaction() -> void:
+	_orbiting = false
+	_panning = false
+	if frame_mode != null:
+		frame_mode.painting = false
+		frame_mode.shift_erasing = false
+		frame_mode.hide_cursor_feedback()
+	if fill_mode != null:
+		fill_mode.hide_cursor_feedback()
+	if zones_mode != null:
+		zones_mode.hide_cursor_feedback()
+
+
 # ---------------------------------------------------------------------------
 # Ghost & bounds (delegated to frame_mode)
 # ---------------------------------------------------------------------------
@@ -737,6 +766,7 @@ func _on_save_as_confirmed() -> void:
 func _on_settings_pressed() -> void:
 	frame_mode.sync_metadata_fields()
 	frame_mode.refresh_cost_ui()
+	_suspend_viewport_interaction()
 	_metadata_panel.popup_centered()
 
 

@@ -35,12 +35,42 @@ func _run() -> void:
 		"building top bar preserves access to overflowing actions")
 	assert(palette.custom_minimum_size.x + inspector.custom_minimum_size.x + 16.0 <= 1280.0,
 		"building palettes and inspector fit the supported 1280 px viewport")
+	assert(inspector.custom_minimum_size.x <= 280.0, "fill inspector stays compact")
 	editor._orbiting = true
 	editor._release_pointer_capture(MOUSE_BUTTON_RIGHT)
 	assert(not editor._orbiting, "release over UI ends camera orbit")
 	editor._panning = true
 	editor._release_pointer_capture(MOUSE_BUTTON_MIDDLE)
 	assert(not editor._panning, "release over UI ends camera pan")
+
+	# Keyboard events must reach the shared router. This catches an indentation
+	# regression that disabled Z/X/C and Esc in every ordinary editor mode.
+	editor.frame_mode.select_block(&"cube", &"1")
+	editor.current_rot = 0
+	editor._unhandled_input(_key(KEY_C))
+	assert(editor.current_rot == 1, "C rotates the frame brush through real input routing")
+	editor._unhandled_input(_key(KEY_ESCAPE))
+	assert(editor.current_block_id.is_empty(), "Esc clears the frame brush through real input routing")
+
+	# The parameters window owns both mouse and keyboard while open. The editor's
+	# polled camera path and its 3D ghosts must be suspended as well.
+	editor.frame_mode.select_block(&"cube", &"1")
+	editor.cursor_valid = true
+	editor.frame_mode.refresh_ghost()
+	assert(editor.get_node("%Ghost").visible, "frame ghost visible before opening parameters")
+	editor.frame_mode.sync_metadata_fields()
+	editor.frame_mode.refresh_cost_ui()
+	editor._suspend_viewport_interaction()
+	editor._metadata_panel.show()
+	assert(editor._metadata_panel.visible and editor._metadata_panel.exclusive,
+		"building parameters are an exclusive modal")
+	var rotation_while_modal: int = editor.current_rot
+	editor._unhandled_input(_key(KEY_C))
+	editor._process(0.016)
+	assert(editor.current_rot == rotation_while_modal, "editor shortcuts are blocked by the parameters modal")
+	assert(not editor.get_node("%Ghost").visible, "frame ghost hides behind the parameters modal")
+	editor._metadata_panel.hide()
+	editor.frame_mode.clear_block_selection()
 
 	# Shared schema inspector debounces each field independently and cancels
 	# timers when selection rebuilds its controls.
@@ -67,6 +97,15 @@ func _run() -> void:
 	assert(editor.get_node("%FillToolbar").visible, "fill toolbar visible")
 	assert(not editor.get_node("%FrameToolbar").visible, "frame toolbar hidden")
 	assert(not editor.get_node("%Ghost").visible, "frame ghost hidden outside frame mode")
+	var inspector_scroll := inspector.get_node("Scroll") as ScrollContainer
+	var objects_panel := inspector.get_node("FillObjectsPanel") as Control
+	assert(inspector_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED,
+		"fill inspector has only vertical scrolling")
+	assert(editor.get_node("%FillObjectList").get_parent().get_parent().get_parent() == inspector,
+		"object list is a fixed lower block outside the inspector scroll")
+	assert(is_equal_approx(objects_panel.size.y, 300.0), "object list block keeps a fixed height")
+	assert(inspector_scroll.position.y + inspector_scroll.size.y <= objects_panel.position.y,
+		"scrolling inspector and fixed object list do not overlap")
 	assert(editor.get_node("%Compass") is EditorViewportCompass, "building editor uses the shared compass")
 	print("  mode switch ok, asset=", fill.current_asset_id)
 
@@ -96,6 +135,8 @@ func _run() -> void:
 	await process_frame
 	assert(editor.blueprint.objects.size() == 2, "two objects placed, got %d" % editor.blueprint.objects.size())
 	assert(fill._nodes.size() == 2, "two instances spawned")
+	assert(fill.selected_object_id.is_empty(),
+		"placement clears object selection consistently instead of leaving a stale selected inspector")
 	print("  placement ok, ids=", editor.blueprint.objects.map(func(r): return r.id))
 
 	# The contextual tool never stacks on an existing object: it selects it.
@@ -208,9 +249,14 @@ func _run() -> void:
 	fill._on_zone_filter_selected(0)
 	assert(fill._object_list.item_count() == 2, "all zones filter shows all objects")
 	var object_search := fill._object_list.get_node("Search") as LineEdit
-	object_search.text = fill.selected_object_id
+	var object_list_items := fill._object_list.get_node("List") as ItemList
+	assert("ID:" not in object_list_items.get_item_text(0) and "этаж" in object_list_items.get_item_text(0),
+		"object rows contain only the asset name and floor")
+	assert(fill._format_floor_height(1.24) == "1.25" and fill._format_floor_height(2.0) == "2",
+		"fractional floors are rounded to the authored height step")
+	object_search.text = object_list_items.get_item_text(0).split("  ·  ")[0]
 	object_search.text_changed.emit(object_search.text)
-	assert(fill._object_list.item_count() == 1, "shared object list searches by stable object id")
+	assert(fill._object_list.item_count() == 1, "object list searches by the displayed asset name")
 	object_search.text = ""
 	object_search.text_changed.emit("")
 	# Delete the zone — on_zone_deleted should clear owner_zone_id.
@@ -255,11 +301,11 @@ func _run() -> void:
 	# All rotation axes are authorable and Esc does not leave a pending drag.
 	fill.current_asset_id = &"campfire"
 	fill.select_object(editor.blueprint.objects[0].id)
-	fill.rotate_selection("x", 1)
-	fill.rotate_selection("z", 1)
+	editor._unhandled_input(_key(KEY_X))
+	editor._unhandled_input(_key(KEY_Z))
 	assert(not is_zero_approx(editor.blueprint.objects[0].rot.x), "X rotation applied")
 	assert(not is_zero_approx(editor.blueprint.objects[0].rot.z), "Z rotation applied")
-	fill.cancel_current_action()
+	editor._unhandled_input(_key(KEY_ESCAPE))
 	assert(fill.selected_object_id.is_empty(), "Esc clears fill selection")
 	fill.select_object(editor.blueprint.objects[0].id)
 	print("  multi-axis rotation + Esc ok")
@@ -431,3 +477,10 @@ func _run() -> void:
 	assert(not editor._metadata_panel.visible, "settings dialog stays closed outside fill mode too")
 	print("--- test_fill_mode_editor.gd PASSED ---")
 	quit(0)
+
+
+func _key(keycode: Key) -> InputEventKey:
+	var event := InputEventKey.new()
+	event.keycode = keycode
+	event.pressed = true
+	return event

@@ -747,17 +747,17 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 3
 
-[node name="FillInspectorPanel" type="PanelContainer" parent="EditorUI/Root"]
+[node name="FillInspectorPanel" type="Panel" parent="EditorUI/Root"]
 unique_name_in_owner = true
 visible = false
-custom_minimum_size = Vector2(300, 0)
+custom_minimum_size = Vector2(280, 0)
 layout_mode = 1
 anchors_preset = 11
 anchor_left = 1.0
 anchor_top = 0.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -308.0
+offset_left = -288.0
 offset_top = 60.0
 offset_right = -8.0
 offset_bottom = -48.0
@@ -765,7 +765,14 @@ grow_horizontal = 0
 grow_vertical = 2
 
 [node name="Scroll" type="ScrollContainer" parent="EditorUI/Root/FillInspectorPanel"]
-layout_mode = 2
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_bottom = -308.0
+grow_horizontal = 2
+grow_vertical = 2
+horizontal_scroll_mode = 0
 
 [node name="InspectorVBox" type="VBoxContainer" parent="EditorUI/Root/FillInspectorPanel/Scroll"]
 layout_mode = 2
@@ -804,6 +811,7 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 theme_override_font_sizes/font_size = 12
 text = ""
+autowrap_mode = 2
 
 [node name="HSepTransform" type="HSeparator" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 layout_mode = 2
@@ -1124,24 +1132,38 @@ max_value = 100.0
 step = 1.0
 value = 10.0
 
-[node name="HSepObjects" type="HSeparator" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
+[node name="FillObjectsPanel" type="PanelContainer" parent="EditorUI/Root/FillInspectorPanel"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -300.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="ObjectsVBox" type="VBoxContainer" parent="EditorUI/Root/FillInspectorPanel/FillObjectsPanel"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="HSepObjects" type="HSeparator" parent="EditorUI/Root/FillInspectorPanel/FillObjectsPanel/ObjectsVBox"]
 layout_mode = 2
 
-[node name="ObjectsLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
+[node name="ObjectsLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/FillObjectsPanel/ObjectsVBox"]
 layout_mode = 2
 text = "Объекты в чертеже:"
 
-[node name="ZoneFilterLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
+[node name="ZoneFilterLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/FillObjectsPanel/ObjectsVBox"]
 layout_mode = 2
 text = "Фильтр по зоне:"
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 theme_override_font_sizes/font_size = 12
 
-[node name="FillZoneFilterOption" type="OptionButton" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
+[node name="FillZoneFilterOption" type="OptionButton" parent="EditorUI/Root/FillInspectorPanel/FillObjectsPanel/ObjectsVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="FillObjectList" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox" instance=ExtResource("12_searchable_list")]
+[node name="FillObjectList" parent="EditorUI/Root/FillInspectorPanel/FillObjectsPanel/ObjectsVBox" instance=ExtResource("12_searchable_list")]
 unique_name_in_owner = true
 layout_mode = 2
 
@@ -1159,6 +1181,7 @@ grow_vertical = 0
 unique_name_in_owner = true
 title = "Параметры здания"
 size = Vector2i(440, 720)
+exclusive = true
 ok_button_text = "Применить"
 cancel_button_text = "Отмена"
 

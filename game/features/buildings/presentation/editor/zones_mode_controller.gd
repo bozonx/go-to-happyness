@@ -414,6 +414,11 @@ func _hide_ghost() -> void:
 		_ghost.visible = false
 
 
+func hide_cursor_feedback() -> void:
+	_hide_ghost()
+	_hide_drag_preview()
+
+
 func _hide_drag_preview() -> void:
 	if _drag_preview != null:
 		_drag_preview.visible = false
