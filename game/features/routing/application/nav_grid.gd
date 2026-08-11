@@ -54,6 +54,7 @@ var _topology_revision := 0
 var _weights_revision := 0
 var _component_topology_revision := -1
 var _walkable_components_by_profile: Dictionary = {}
+var _component_edges_by_profile: Dictionary = {}
 
 const DEFAULT_CELL_WEIGHT := 2.0
 const MIN_CELL_WEIGHT := 0.05
@@ -269,6 +270,28 @@ func get_cell_weight(cell: Vector2i, profile: StringName = PEDESTRIAN_PROFILE, p
 	return _surface_weight(cell, profile) * _slope_cost_factor(cell, profile, profile_override) * _overlay_factor(cell)
 
 
+## Directed cost of crossing an edge. Uphill work adds a penalty while downhill
+## travel keeps the surface cost, so the two directions no longer price alike.
+func get_step_weight(from: Vector2i, to: Vector2i, profile: StringName = PEDESTRIAN_PROFILE, profile_override: TravelerProfile = null) -> float:
+	var weight := get_cell_weight(to, profile, profile_override)
+	if _terrain == null:
+		return weight
+	var delta := _terrain.edge_height_delta(from, to)
+	if is_finite(delta) and delta > 0.0001:
+		weight *= 1.25
+	return weight
+
+
+func floor_max_angle_radians(profile: StringName = PEDESTRIAN_PROFILE, profile_override: TravelerProfile = null) -> float:
+	var resolved := profile_override if profile_override != null else TravelerProfile.get_profile(profile)
+	var degrees := 45.0
+	if _terrain != null:
+		degrees = _terrain.slope_angle_degrees(resolved.max_slope_class)
+	# Small tolerance for collision normals at triangle seams, derived from the
+	# same class rather than an unrelated hand-authored 52-degree limit.
+	return deg_to_rad(minf(degrees + 2.0, 89.0))
+
+
 ## The terrain material multiplier applies to bare ground only. A built road and
 ## an organic trail are surfaces in their own right and already priced as such
 ## (`terrain_materials.md` §1: player-built coverage is never a terrain material),
@@ -397,7 +420,15 @@ func is_edge_passable(from: Vector2i, to: Vector2i, profile: StringName = PEDEST
 	if _terrain == null or from == to:
 		return true
 	var resolved := profile_override if profile_override != null else TravelerProfile.get_profile(profile)
-	return _terrain.edge_class(from, to) <= resolved.max_slope_class
+	var edge_class := _terrain.edge_class(from, to)
+	if edge_class <= resolved.max_slope_class:
+		return true
+	if edge_class != NavTerrainField.CLASS_CLIFF:
+		return false
+	var height_delta := _terrain.edge_height_delta(from, to)
+	if not is_finite(height_delta) or is_zero_approx(height_delta):
+		return false
+	return height_delta <= resolved.max_step_up + 0.0001 if height_delta > 0.0 else -height_delta <= resolved.max_drop + 0.0001
 
 
 ## A diagonal step also crosses both orthogonal shoulders, so both of them must
@@ -446,7 +477,25 @@ func are_cells_connected(from: Vector2i, to: Vector2i, profile: StringName = PED
 	if not is_walkable(from, profile, profile_override) or not is_walkable(to, profile, profile_override):
 		return false
 	var components := _ensure_walkable_components(profile, profile_override)
-	return components.get(NavCell.ground(from), -1) == components.get(NavCell.ground(to), -2)
+	var from_component := int(components.get(NavCell.ground(from), -1))
+	var to_component := int(components.get(NavCell.ground(to), -2))
+	if from_component == to_component:
+		return true
+	var cache_key := _profile_cache_key(profile, profile_override)
+	var edges: Dictionary = _component_edges_by_profile.get(cache_key, {})
+	var seen: Dictionary = {from_component: true}
+	var frontier: Array[int] = [from_component]
+	var cursor := 0
+	while cursor < frontier.size():
+		var current := frontier[cursor]
+		cursor += 1
+		for neighbour: int in (edges.get(current, {}) as Dictionary):
+			if neighbour == to_component:
+				return true
+			if not seen.has(neighbour):
+				seen[neighbour] = true
+				frontier.append(neighbour)
+	return false
 
 
 ## Builds the component cache at a controlled caller-owned time instead of on
@@ -546,15 +595,16 @@ func segment_cost(from: Vector3, to: Vector3, profile: StringName = PEDESTRIAN_P
 
 	var traversed_cost := 0.0
 	var previous_t := 0.0
+	var active_weight := get_cell_weight(cell, profile, profile_override)
 	# A board is at most board_half_cells * 2 wide in each axis; the diagonal span
 	# bounds the number of cells any segment can enter, so the loop always ends.
 	var guard := board_half_cells * 4 + 4
 	while guard > 0:
 		guard -= 1
 		if cell == end_cell:
-			return traversed_cost + (1.0 - previous_t) * segment_length * get_cell_weight(cell, profile, profile_override)
+			return traversed_cost + (1.0 - previous_t) * segment_length * active_weight
 		var next_t := minf(t_max_x, t_max_z)
-		traversed_cost += (next_t - previous_t) * segment_length * get_cell_weight(cell, profile, profile_override)
+		traversed_cost += (next_t - previous_t) * segment_length * active_weight
 		previous_t = next_t
 		var previous_cell := cell
 		if is_equal_approx(t_max_x, t_max_z):
@@ -579,6 +629,7 @@ func segment_cost(from: Vector3, to: Vector3, profile: StringName = PEDESTRIAN_P
 		# when both cells it joins are perfectly standable.
 		if not is_step_passable(previous_cell, cell, profile, profile_override):
 			return INF
+		active_weight = get_step_weight(previous_cell, cell, profile, profile_override)
 	return INF
 
 
@@ -606,7 +657,7 @@ func _terrain_segment_has_clearance(from: Vector3, to: Vector3, profile: Travele
 			var right := Vector2i(boundary_x, z)
 			if not is_board_cell(left) and not is_board_cell(right):
 				continue
-			if is_edge_passable(left, right, profile.profile_id, profile):
+			if _edge_clear_for_segment_side(left, right, a, b, world_x, true, profile):
 				continue
 			var edge_a := Vector2(world_x, float(z) * cell_size)
 			var edge_b := Vector2(world_x, float(z + 1) * cell_size)
@@ -621,13 +672,27 @@ func _terrain_segment_has_clearance(from: Vector3, to: Vector3, profile: Travele
 			var south := Vector2i(x, boundary_z)
 			if not is_board_cell(north) and not is_board_cell(south):
 				continue
-			if is_edge_passable(north, south, profile.profile_id, profile):
+			if _edge_clear_for_segment_side(north, south, a, b, world_z, false, profile):
 				continue
 			var edge_a := Vector2(float(x) * cell_size, world_z)
 			var edge_b := Vector2(float(x + 1) * cell_size, world_z)
 			if _segment_distance_squared(a, b, edge_a, edge_b) < radius_squared - 0.000001:
 				return false
 	return true
+
+
+## Clearance is directional for a drop. A segment wholly on the high side asks
+## whether it may descend across the nearby boundary; it must not be held one
+## capsule radius back merely because climbing the same face is forbidden.
+func _edge_clear_for_segment_side(first: Vector2i, second: Vector2i, a: Vector2, b: Vector2, boundary: float, vertical: bool, profile: TravelerProfile) -> bool:
+	var axis_a := a.x if vertical else a.y
+	var axis_b := b.x if vertical else b.y
+	if axis_a >= boundary and axis_b >= boundary:
+		return is_edge_passable(second, first, profile.profile_id, profile)
+	if axis_a <= boundary and axis_b <= boundary:
+		return is_edge_passable(first, second, profile.profile_id, profile)
+	# A crossing is checked again by grid traversal; use its actual direction here.
+	return is_edge_passable(first, second, profile.profile_id, profile) if axis_b > axis_a else is_edge_passable(second, first, profile.profile_id, profile)
 
 
 static func _segment_distance_squared(a: Vector2, b: Vector2, c: Vector2, d: Vector2) -> float:
@@ -722,6 +787,7 @@ func _sanitize_weights(next_weights: Dictionary) -> Dictionary:
 func _ensure_walkable_components(profile: StringName, profile_override: TravelerProfile = null) -> Dictionary:
 	if _component_topology_revision != _topology_revision:
 		_walkable_components_by_profile.clear()
+		_component_edges_by_profile.clear()
 		_component_topology_revision = _topology_revision
 	var cache_key := _profile_cache_key(profile, profile_override)
 	if _walkable_components_by_profile.has(cache_key):
@@ -732,8 +798,8 @@ func _ensure_walkable_components(profile: StringName, profile_override: Traveler
 	# about every cell and all eight of its neighbours, and each of those would
 	# otherwise hit the profile registry — nine lookups per cell of the board.
 	var resolved := profile_override if profile_override != null else TravelerProfile.get_profile(profile)
-	for y in range(-board_half_cells, board_half_cells):
-		for x in range(-board_half_cells, board_half_cells):
+	for y in range(-board_half_cells, board_cells - board_half_cells):
+		for x in range(-board_half_cells, board_cells - board_half_cells):
 			var start := Vector2i(x, y)
 			if not is_walkable(start, profile, resolved) or components.has(NavCell.ground(start)):
 				continue
@@ -747,7 +813,7 @@ func _ensure_walkable_components(profile: StringName, profile_override: Traveler
 					var neighbor := current + direction
 					if not is_walkable(neighbor, profile, resolved) or components.has(NavCell.ground(neighbor)):
 						continue
-					if not is_step_passable(current, neighbor, profile, resolved):
+					if not is_step_passable(current, neighbor, profile, resolved) or not is_step_passable(neighbor, current, profile, resolved):
 						continue
 					if direction.x != 0 and direction.y != 0:
 						if not is_walkable(current + Vector2i(direction.x, 0), profile, resolved) or not is_walkable(current + Vector2i(0, direction.y), profile, resolved):
@@ -755,11 +821,28 @@ func _ensure_walkable_components(profile: StringName, profile_override: Traveler
 					components[NavCell.ground(neighbor)] = next_component
 					frontier.append(neighbor)
 			next_component += 1
+	var component_edges: Dictionary = {}
+	for y in range(-board_half_cells, board_cells - board_half_cells):
+		for x in range(-board_half_cells, board_cells - board_half_cells):
+			var cell := Vector2i(x, y)
+			var source_component := int(components.get(NavCell.ground(cell), -1))
+			if source_component < 0:
+				continue
+			for direction in CONNECTED_DIRECTIONS:
+				var neighbor := cell + direction
+				var target_component := int(components.get(NavCell.ground(neighbor), -1))
+				if target_component < 0 or target_component == source_component:
+					continue
+				if is_step_passable(cell, neighbor, profile, resolved):
+					var outgoing: Dictionary = component_edges.get(source_component, {})
+					outgoing[target_component] = true
+					component_edges[source_component] = outgoing
 	_walkable_components_by_profile[cache_key] = components
+	_component_edges_by_profile[cache_key] = component_edges
 	return components
 
 
 func _profile_cache_key(profile: StringName, profile_override: TravelerProfile) -> String:
 	if profile_override == null:
 		return String(profile)
-	return "%s:%d:%d" % [profile, profile_override.layer_mask, 1 if profile_override.allows_offroad else 0]
+	return "%s:%d:%d:%d:%.3f:%.3f" % [profile, profile_override.layer_mask, 1 if profile_override.allows_offroad else 0, profile_override.max_slope_class, profile_override.max_step_up, profile_override.max_drop]

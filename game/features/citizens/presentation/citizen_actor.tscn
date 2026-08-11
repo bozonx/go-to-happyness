@@ -13,7 +13,7 @@ height = 1.8
 [node name="CitizenActor" type="CharacterBody3D"]
 collision_layer = 2
 collision_mask = 1
-floor_max_angle = 0.907571
+floor_max_angle = 0.820305
 floor_snap_length = 0.38
 script = ExtResource("1_actor")
 

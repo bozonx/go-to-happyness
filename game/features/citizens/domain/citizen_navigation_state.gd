@@ -27,4 +27,6 @@ var route_recovery_attempt := 0
 var recovery_detour_requested := false
 var jump_cooldown := 0.0
 var ground_contact_confirmed := false
+var ground_contact_ever_confirmed := false
+var movement_applied_this_frame := false
 var blocked_by_storage := false

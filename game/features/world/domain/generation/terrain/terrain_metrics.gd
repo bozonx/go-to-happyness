@@ -294,7 +294,7 @@ static func _reach_share(nav: NavGrid, land: Array[Vector2i], profile: StringNam
 				var neighbour: Vector2i = cell + NavTerrainField.DIRECTION_OFFSETS[direction]
 				if seen.has(neighbour) or not walkable.has(neighbour):
 					continue
-				if not nav.is_edge_passable(cell, neighbour, profile):
+				if not nav.is_step_passable(cell, neighbour, profile):
 					continue
 				seen[neighbour] = true
 				queue.append(neighbour)
@@ -347,7 +347,7 @@ static func _walls_sealed(context: GenerationContext, grid: TerrainGrid, nav: Na
 			var neighbour: Vector2i = cell + NavTerrainField.DIRECTION_OFFSETS[direction]
 			if seen.has(neighbour) or not grid.is_inside(neighbour):
 				continue
-			if not nav.is_walkable(neighbour, &"pedestrian") or not nav.is_edge_passable(cell, neighbour, &"pedestrian"):
+			if not nav.is_walkable(neighbour, &"pedestrian") or not nav.is_step_passable(cell, neighbour, &"pedestrian"):
 				continue
 			seen[neighbour] = true
 			queue.append(neighbour)

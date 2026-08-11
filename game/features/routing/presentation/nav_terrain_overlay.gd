@@ -65,11 +65,10 @@ func rebuild() -> void:
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var edges := SurfaceTool.new()
 	edges.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var half := field.board_half_cells
 	var has_surface := false
 	var has_edges := false
-	for z in range(-half, half):
-		for x in range(-half, half):
+	for z in range(-field.board_half_cells, field.board_cells - field.board_half_cells):
+		for x in range(-field.board_half_cells, field.board_cells - field.board_half_cells):
 			var cell := Vector2i(x, z)
 			has_surface = _add_cell(surface, field, cell, profile) or has_surface
 			has_edges = _add_edges(edges, field, cell, profile) or has_edges
@@ -118,7 +117,7 @@ func _add_edges(edges: SurfaceTool, field: NavTerrainField, cell: Vector2i, prof
 		var neighbour := cell + offset
 		if not field.is_inside(neighbour):
 			continue
-		if grid.is_edge_passable(cell, neighbour, traveler_profile, profile):
+		if grid.is_edge_passable(cell, neighbour, traveler_profile, profile) and grid.is_edge_passable(neighbour, cell, traveler_profile, profile):
 			continue
 		var left: Vector3
 		var right: Vector3

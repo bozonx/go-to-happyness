@@ -191,14 +191,40 @@ func _restrict_horizontal_movement(delta: float) -> void:
 	var horizontal := Vector3(player_citizen.velocity.x, 0.0, player_citizen.velocity.z)
 	if horizontal.is_zero_approx():
 		return
-	var next_position := player_citizen.global_position + horizontal * delta
 	# Segment traversal checks every crossed cell, so a long frame cannot tunnel
 	# over a one-cell strip of deep water or across the board rim. It also keeps
 	# the real capsule clear of terrace faces, not merely its centre point.
 	var airborne := player_citizen.velocity.y > 0.0 or not player_citizen.is_on_floor()
-	if not direct_motion_allowed(simulation.nav_grid, player_citizen.global_position, next_position, airborne):
-		player_citizen.velocity.x = 0.0
-		player_citizen.velocity.z = 0.0
+	var restricted := restrict_direct_velocity(simulation.nav_grid, player_citizen.global_position, horizontal, delta, airborne)
+	player_citizen.velocity.x = restricted.x
+	player_citizen.velocity.z = restricted.z
+
+
+static func restrict_direct_velocity(nav_grid: NavGrid, current_position: Vector3, horizontal: Vector3, delta: float, airborne: bool) -> Vector3:
+	var next_position := current_position + horizontal * delta
+	if direct_motion_allowed(nav_grid, current_position, next_position, airborne):
+		return horizontal
+	# Project diagonal input onto the edge by testing its axes independently.
+	# This keeps forward pressure from erasing valid movement along a cliff.
+	var restricted := horizontal
+	var x_position := current_position + Vector3(horizontal.x * delta, 0.0, 0.0)
+	var z_position := current_position + Vector3(0.0, 0.0, horizontal.z * delta)
+	if not _direct_axis_motion_allowed(nav_grid, current_position, x_position, airborne):
+		restricted.x = 0.0
+	if not _direct_axis_motion_allowed(nav_grid, current_position, z_position, airborne):
+		restricted.z = 0.0
+	return restricted
+
+
+static func _direct_axis_motion_allowed(nav_grid: NavGrid, current_position: Vector3, next_position: Vector3, airborne: bool) -> bool:
+	if direct_motion_allowed(nav_grid, current_position, next_position, airborne):
+		return true
+	# Once the capsule is already inside the conservative clearance band, motion
+	# parallel to its boundary must remain possible; the physics sweep owns the
+	# actual wall contact. Crossing into another cell still uses full topology.
+	var current_cell := nav_grid.cell_from_position(current_position)
+	var next_cell := nav_grid.cell_from_position(next_position)
+	return current_cell == next_cell and nav_grid.is_walkable(next_cell)
 
 
 ## Shared, deterministic half of direct-control movement. Physics still owns the

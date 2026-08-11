@@ -84,6 +84,11 @@ func handle_unhandled_input(event: InputEvent) -> void:
 	# load from the library through RuntimeLaunchManager.launch_from_save). The
 	# settlement scene no longer wires its own save hotkeys, so there is exactly
 	# one write path for the save file.
+	if OS.is_debug_build() and event is InputEventKey and event.keycode == KEY_M and event.pressed and not event.echo:
+		game.nav_overlay.visible = not game.nav_overlay.visible
+		game.nav_overlay.rebuild()
+		game.get_viewport().set_input_as_handled()
+		return
 	if event is InputEventKey and event.keycode == KEY_F and event.ctrl_pressed and event.pressed and not event.echo:
 		if OS.is_debug_build():
 			game.grant_debug_resources()

@@ -111,7 +111,7 @@ func _search(start: Vector2i, goal: Vector2i, traveler_profile: TravelerProfile,
 			if not is_allowed_blocked_goal and not grid.is_step_passable(current, next, traveler_profile.profile_id, traveler_profile):
 				continue
 			var distance := DIAGONAL_DISTANCE if direction.x != 0 and direction.y != 0 else 1.0
-			var next_cost := float(costs[current]) + distance * grid.get_cell_weight(next, traveler_profile.profile_id, traveler_profile)
+			var next_cost := float(costs[current]) + distance * grid.get_step_weight(current, next, traveler_profile.profile_id, traveler_profile)
 			if next_cost >= float(costs.get(next, INF)):
 				continue
 			came_from[next] = current

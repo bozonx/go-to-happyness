@@ -8,6 +8,12 @@ const SimHelper = preload("res://tests/helpers/simulation_test_helper.gd")
 func _init() -> void:
 	var simulation := await SimHelper.setup_simulation(self)
 	_test_direct_control_terrain_rules()
+	assert(simulation.nav_overlay != null and not simulation.nav_overlay.visible)
+	var m_event := InputEventKey.new()
+	m_event.keycode = KEY_M
+	m_event.pressed = true
+	SimHelper.unhandled_input(simulation, m_event)
+	assert(simulation.nav_overlay.visible, "M must expose runtime navigation in debug builds")
 
 	# The game starts in hero view; R toggles between hero FPP and overview.
 	assert(simulation.is_first_person)
@@ -71,6 +77,9 @@ func _test_direct_control_terrain_rules() -> void:
 	var below_lip := Vector3(0.9, 0.0, 0.5)
 	var above_lip := Vector3(1.1, 1.0, 0.5)
 	assert(not PlayerController.direct_motion_allowed(grid, below_lip, above_lip, false), "ground input may not cross a terrace face")
+	assert(PlayerController.direct_motion_allowed(grid, above_lip, below_lip, false), "ground input may descend a safe directed drop")
+	var slid := PlayerController.restrict_direct_velocity(grid, below_lip, Vector3(1.0, 0.0, 1.0), 0.2, false)
+	assert(is_zero_approx(slid.x) and is_equal_approx(slid.z, 1.0), "blocked diagonal input must slide along the terrace")
 	assert(PlayerController.direct_motion_allowed(grid, below_lip, above_lip, true), "a jump may cross a physically jumpable terrace lip")
 
 	var recovery_terrain := TerrainGrid.new()

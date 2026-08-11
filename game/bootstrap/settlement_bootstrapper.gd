@@ -189,6 +189,7 @@ func _setup_ai_and_navigation() -> void:
 	# презентер успеет построить рядом вторую, мёртвую копию каждого из них.
 	game.world_session.claimed_entity_components = AmbientSpawner.CLAIMED_COMPONENTS
 	game.nav_grid = game.world_session.nav_grid
+	game.nav_overlay.configure(game.nav_grid)
 	# Adopted, not created: the world session already seeded it from the map's
 	# coverage layer, and a second service would be a second write-owner of road
 	# weights in the same grid (map_editor.md §5.2.3).

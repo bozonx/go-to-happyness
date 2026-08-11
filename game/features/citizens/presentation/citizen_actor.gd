@@ -658,6 +658,16 @@ var ground_contact_confirmed: bool:
 		return _navigation.ground_contact_confirmed
 	set(value):
 		_navigation.ground_contact_confirmed = value
+var ground_contact_ever_confirmed: bool:
+	get:
+		return _navigation.ground_contact_ever_confirmed
+	set(value):
+		_navigation.ground_contact_ever_confirmed = value
+var movement_applied_this_frame: bool:
+	get:
+		return _navigation.movement_applied_this_frame
+	set(value):
+		_navigation.movement_applied_this_frame = value
 var blocked_by_storage: bool:
 	get:
 		return _navigation.blocked_by_storage
@@ -812,7 +822,7 @@ func _setup_collision() -> void:
 	collision_mask = 1
 	motion_mode = CharacterBody3D.MOTION_MODE_GROUNDED
 	up_direction = Vector3.UP
-	floor_max_angle = deg_to_rad(52.0)
+	floor_max_angle = deg_to_rad(47.0)
 	floor_snap_length = 0.38
 	floor_constant_speed = true
 	floor_stop_on_slope = true
@@ -913,6 +923,8 @@ func _physics_process(delta: float) -> void:
 	_update_satisfaction(delta)
 	
 	_process_state_behavior(delta)
+	if movement_controller != null:
+		movement_controller.finish_physics(self)
 
 	if idle_indicator != null:
 		_update_idle_indicator()

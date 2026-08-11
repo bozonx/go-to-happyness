@@ -58,7 +58,6 @@ func move_to(actor: Citizen, destination: Vector3, delta: float, may_enter_desti
 	while not actor.movement_path.is_empty():
 		var waypoint: Vector3 = actor.movement_path.front()
 		var waypoint_offset := waypoint - actor.global_position
-		waypoint_offset.y = 0.0
 		var is_final_waypoint := actor.movement_path.size() == 1
 		var waypoint_radius := maxf(arrival_radius, Citizen.PHYSICAL_ARRIVAL_RADIUS) if is_final_waypoint else 0.08
 		if waypoint_offset.length() > waypoint_radius:
@@ -78,12 +77,12 @@ func move_directly_to(actor: Citizen, destination: Vector3, delta: float, record
 	if not destination.is_finite() or not actor.global_position.is_finite():
 		return false
 	var offset := destination - actor.global_position
-	offset.y = 0.0
 	if offset.length() <= arrival_distance:
 		return true
+	var horizontal_offset := Vector3(offset.x, 0.0, offset.z)
 	var direction := Vector3.ZERO
-	if offset.length_squared() > 0.0001:
-		direction = offset.normalized()
+	if horizontal_offset.length_squared() > 0.0001:
+		direction = horizontal_offset.normalized()
 	var speed_modifier := float(actor.movement_speed_modifier_query.call(actor.global_position)) if actor.movement_speed_modifier_query.is_valid() else 1.0
 	var current_walk_speed := actor.get_walk_speed() * speed_modifier
 	var desired_velocity := direction * current_walk_speed
@@ -93,6 +92,7 @@ func move_directly_to(actor: Citizen, destination: Vector3, delta: float, record
 	var position_before_move := actor.global_position
 	var distance_before_move := offset.length()
 	actor.move_and_slide()
+	actor.movement_applied_this_frame = true
 	var horizontal_progress := Vector2(actor.global_position.x - position_before_move.x, actor.global_position.z - position_before_move.z).length()
 	if record_trail and horizontal_progress > 0.01 and actor.trail_movement_recorder.is_valid():
 		actor.trail_movement_recorder.call(actor.ai_id, actor.global_position)
@@ -115,11 +115,18 @@ func move_directly_to(actor: Citizen, destination: Vector3, delta: float, record
 func apply_gravity(actor: Citizen, delta: float) -> void:
 	if actor == null:
 		return
+	actor.movement_applied_this_frame = false
 	if not actor.ground_contact_confirmed:
-		if not has_ground_below(actor):
+		if not actor.ground_contact_ever_confirmed and not has_ground_below(actor):
 			actor.velocity = Vector3.ZERO
 			return
-		actor.ground_contact_confirmed = true
+		if has_ground_below(actor):
+			actor.ground_contact_confirmed = true
+			actor.ground_contact_ever_confirmed = true
+	elif not actor.is_on_floor() and actor.velocity.y <= 0.0 and not has_ground_below(actor):
+		# Terrain can disappear after spawn. Lose the contact state again, but do
+		# not re-enter the startup freeze: a previously grounded body must fall.
+		actor.ground_contact_confirmed = false
 	if not actor.is_on_floor() or actor.velocity.y > 0.0:
 		actor.velocity.y -= Citizen.GRAVITY * delta
 	else:
@@ -127,7 +134,17 @@ func apply_gravity(actor: Citizen, delta: float) -> void:
 	if actor.state == Citizen.State.IDLE or actor.state == Citizen.State.RESTING or actor.state == Citizen.State.WAITING:
 		actor.velocity.x = 0.0
 		actor.velocity.z = 0.0
-		actor.move_and_slide()
+
+
+## Called after state behaviour. Active movement may already have moved the body;
+## every other state still gets one physics integration so gravity cannot hang.
+func finish_physics(actor: Citizen) -> void:
+	if actor == null or actor.movement_applied_this_frame:
+		return
+	if not actor.ground_contact_ever_confirmed and not actor.ground_contact_confirmed:
+		return
+	actor.move_and_slide()
+	actor.movement_applied_this_frame = true
 
 
 func process_idle_wander(actor: Citizen, delta: float) -> void:

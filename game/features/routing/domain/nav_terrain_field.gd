@@ -4,9 +4,9 @@ extends RefCounted
 ## The shape of the ground as navigation sees it (grid_terrain_system.md §10).
 ##
 ## `TerrainGrid` owns the terrain; this is the flattened, routing-shaped view of
-## it that `NavGrid` consumes. It holds three things per cell: whether there is
+## it that `NavGrid` consumes. It holds four things per cell: whether there is
 ## ground at all, the slope class of the surface a body stands on, and the slope
-## class of the transition to each of the eight neighbours.
+## class plus signed height delta of the transition to each of the eight neighbours.
 ##
 ## **Passability is a property of the edge, not of the cell** (§10.1). Two free
 ## columns say nothing about whether one can be reached from the other: a terrace
@@ -66,6 +66,7 @@ const CORNER_SW := 3
 const DIAGONAL_DISTANCE := 1.41421356237
 
 var cell_size := 1.0
+var height_step_metres := 0.5
 var board_cells := 0
 var board_half_cells := 0
 
@@ -73,6 +74,10 @@ var _ground := PackedByteArray()
 var _slope_classes := PackedByteArray()
 ## Eight entries per cell, indexed by the compass direction of the neighbour.
 var _edge_classes := PackedByteArray()
+## Signed landing-height delta in metres for every directed edge. Positive is a
+## step up, negative is a drop. It is deliberately directed even though the
+## slope class is shared by both directions.
+var _edge_height_deltas := PackedFloat32Array()
 ## Four entries per cell (NW, NE, SE, SW) in metres. Standing height is
 ## interpolated from these, so it is the same surface the mesher emits.
 var _corner_heights := PackedFloat32Array()
@@ -87,8 +92,9 @@ var _surface_weights := PackedFloat32Array()
 var _water := PackedByteArray()
 
 
-func configure(next_cell_size: float, next_board_cells: int) -> void:
+func configure(next_cell_size: float, next_board_cells: int, next_height_step_metres: float = 0.5) -> void:
 	cell_size = next_cell_size
+	height_step_metres = maxf(next_height_step_metres, 0.0001)
 	board_cells = maxi(next_board_cells, 0)
 	board_half_cells = board_cells / 2
 	var count := board_cells * board_cells
@@ -99,6 +105,8 @@ func configure(next_cell_size: float, next_board_cells: int) -> void:
 	_slope_classes.resize(count)
 	_edge_classes = PackedByteArray()
 	_edge_classes.resize(count * DIRECTION_COUNT)
+	_edge_height_deltas = PackedFloat32Array()
+	_edge_height_deltas.resize(count * DIRECTION_COUNT)
 	_corner_heights = PackedFloat32Array()
 	_corner_heights.resize(count * 4)
 	_surface_weights = PackedFloat32Array()
@@ -165,6 +173,12 @@ func set_edge_class(cell: Vector2i, direction: int, edge_class: int) -> void:
 	if not is_inside(cell) or direction < 0 or direction >= DIRECTION_COUNT:
 		return
 	_edge_classes[_index_of(cell) * DIRECTION_COUNT + direction] = clampi(edge_class, 0, CLASS_CLIFF)
+
+
+func set_edge_height_delta(cell: Vector2i, direction: int, height_delta_metres: float) -> void:
+	if not is_inside(cell) or direction < 0 or direction >= DIRECTION_COUNT:
+		return
+	_edge_height_deltas[_index_of(cell) * DIRECTION_COUNT + direction] = height_delta_metres
 
 
 # --- Reads -------------------------------------------------------------------
@@ -271,6 +285,17 @@ func edge_class(from: Vector2i, to: Vector2i) -> int:
 	return int(_edge_classes[_index_of(from) * DIRECTION_COUNT + direction])
 
 
+## Positive means `to` is above `from`; negative means it is below. Non-neighbour
+## and off-board queries return infinity so they can never look like a free step.
+func edge_height_delta(from: Vector2i, to: Vector2i) -> float:
+	if not is_inside(from) or not is_inside(to):
+		return INF
+	var direction := direction_of(to - from)
+	if direction < 0:
+		return INF
+	return _edge_height_deltas[_index_of(from) * DIRECTION_COUNT + direction]
+
+
 static func direction_of(delta: Vector2i) -> int:
 	for direction in DIRECTION_COUNT:
 		if DIRECTION_OFFSETS[direction] == delta:
@@ -299,6 +324,12 @@ static func class_from_steps_per_cell(steps_per_cell: float) -> int:
 static func speed_multiplier(slope_class: int, walks_on_foot: bool) -> float:
 	var index := clampi(slope_class, 0, CLASS_CLIFF)
 	return PEDESTRIAN_SPEED_BY_CLASS[index] if walks_on_foot else WHEELED_SPEED_BY_CLASS[index]
+
+
+func slope_angle_degrees(slope_class: int) -> float:
+	if slope_class >= CLASS_CLIFF:
+		return 90.0
+	return rad_to_deg(atan(STEPS_PER_CELL_BY_CLASS[clampi(slope_class, 0, CLASS_CLIFF)] * height_step_metres / maxf(cell_size, 0.0001)))
 
 
 ## World-space ground height in metres under a position (§10.4).

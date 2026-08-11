@@ -154,7 +154,7 @@ static func build_field(source: TerrainGrid, water_source: WaterGrid = null) -> 
 	var built := NavTerrainField.new()
 	if source == null or source.board_cells <= 0:
 		return built
-	built.configure(source.cell_size, source.board_cells)
+	built.configure(source.cell_size, source.board_cells, TerrainGrid.HEIGHT_STEP)
 	var minimum := source.min_cell()
 	var maximum := source.max_cell()
 	var corners := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
@@ -271,21 +271,27 @@ static func _write_edges(target: NavTerrainField, source: TerrainGrid, cell: Vec
 		if not source.is_inside(neighbour):
 			# Off the board is a cliff for this cell, and there is no other side.
 			target.set_edge_class(cell, direction, NavTerrainField.CLASS_CLIFF)
+			target.set_edge_height_delta(cell, direction, INF)
 			continue
 		var edge_class := NavTerrainField.CLASS_CLIFF
+		var height_delta := INF
 		if not is_hole and not source.is_hole(neighbour):
 			target.corner_heights_into(neighbour, other)
+			height_delta = target.centre_height(neighbour) - own_centre
 			if corner_gap_metres(own, other, direction) < FACE_GAP_STEPS * TerrainGrid.HEIGHT_STEP:
-				var rise_steps := absf(target.centre_height(neighbour) - own_centre) / TerrainGrid.HEIGHT_STEP
+				var rise_steps := absf(height_delta) / TerrainGrid.HEIGHT_STEP
 				edge_class = NavTerrainField.class_from_steps_per_cell(rise_steps / NavTerrainField.direction_distance(direction))
 		target.set_edge_class(cell, direction, edge_class)
+		target.set_edge_height_delta(cell, direction, height_delta)
 		target.set_edge_class(neighbour, opposite, edge_class)
+		target.set_edge_height_delta(neighbour, opposite, -height_delta)
 
 	# The other four directions are written by the neighbour on that side — except
 	# where there is no neighbour, at the south and west rim of the board.
 	for direction in range(HALF_DIRECTION_COUNT, NavTerrainField.DIRECTION_COUNT):
 		if not source.is_inside(cell + NavTerrainField.DIRECTION_OFFSETS[direction]):
 			target.set_edge_class(cell, direction, NavTerrainField.CLASS_CLIFF)
+			target.set_edge_height_delta(cell, direction, INF)
 
 
 # --- Classification ----------------------------------------------------------

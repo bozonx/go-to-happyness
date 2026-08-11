@@ -253,7 +253,7 @@ func _walkable_components(ocean_level: int) -> Array:
 						continue
 					if not _nav_grid.is_walkable(neighbour, &"pedestrian"):
 						continue
-					if not _nav_grid.is_edge_passable(cell, neighbour, &"pedestrian"):
+					if not _nav_grid.is_step_passable(cell, neighbour, &"pedestrian"):
 						continue
 					seen[neighbour] = true
 					queue.append(neighbour)

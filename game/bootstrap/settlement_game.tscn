@@ -1,9 +1,10 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://game/bootstrap/settlement_game.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/biomes/summer/summer_valley/summer_valley_territory.tscn" id="2_terrain"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/camera_controller.tscn" id="3_camera"]
 [ext_resource type="PackedScene" path="res://game/features/ui/presentation/ui_manager.tscn" id="4_ui"]
+[ext_resource type="Script" path="res://game/features/routing/presentation/nav_terrain_overlay.gd" id="5_nav_overlay"]
 
 [node name="SettlementGame" type="Node3D"]
 script = ExtResource("1_main")
@@ -13,3 +14,8 @@ script = ExtResource("1_main")
 [node name="CameraController" parent="." instance=ExtResource("3_camera")]
 
 [node name="UIManager" parent="." instance=ExtResource("4_ui")]
+
+[node name="NavOverlay" type="MeshInstance3D" parent="."]
+visible = false
+cast_shadow = 0
+script = ExtResource("5_nav_overlay")

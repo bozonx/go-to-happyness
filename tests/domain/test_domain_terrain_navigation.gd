@@ -20,6 +20,7 @@ static func run_all() -> void:
 	_test_nav_cell_keys()
 	_test_slope_class_from_gradient()
 	_test_flat_terrain_leaves_routing_unchanged()
+	_test_vertical_steps_and_drops_are_directional()
 	_test_terrace_edge_blocks_and_ramp_opens_it()
 	_test_terrace_clearance_keeps_route_inside_ramp()
 	_test_ramp_too_steep_for_a_cart()
@@ -30,6 +31,7 @@ static func run_all() -> void:
 	_test_incremental_refresh_matches_full_publish()
 	_test_committed_edits_republish_themselves()
 	_test_publisher_owns_grid_geometry()
+	_test_odd_board_connectivity_includes_positive_rim()
 	print("    [PASS] Terrain Navigation Tests")
 
 
@@ -105,6 +107,31 @@ static func _test_flat_terrain_leaves_routing_unchanged() -> void:
 	assert(is_equal_approx(grid.height_at(_centre(Vector2i(2, 2))), 0.0))
 	var route := _route(grid, Vector2i(-3, 0), Vector2i(3, 0))
 	assert(route.reachable and route.waypoints.size() == 1)
+
+
+static func _test_vertical_steps_and_drops_are_directional() -> void:
+	var terrain := _terrain()
+	for z in range(-2, 3):
+		for x in range(1, 4):
+			assert(terrain.set_height(Vector2i(x, z), 1))
+	var grid := _nav_over(terrain)
+	var low := Vector2i(0, 0)
+	var high := Vector2i(1, 0)
+	assert(grid.terrain_field().edge_class(low, high) == NavTerrainField.CLASS_CLIFF)
+	assert(is_equal_approx(grid.terrain_field().edge_height_delta(low, high), 0.5))
+	assert(grid.is_edge_passable(low, high), "a pedestrian can step up one height step")
+	assert(grid.is_edge_passable(high, low), "the same face is a safe directed drop")
+	assert(grid.segment_cost(grid.cell_center(low), grid.cell_center(high)) > grid.segment_cost(grid.cell_center(high), grid.cell_center(low)))
+
+	for z in range(-2, 3):
+		for x in range(1, 4):
+			assert(terrain.set_height(Vector2i(x, z), 2))
+	TerrainNavigationPublisher.publish(terrain, grid)
+	assert(not grid.is_edge_passable(low, high), "a one-metre vertical climb exceeds max_step_up")
+	assert(grid.is_edge_passable(high, low), "a one-metre descent remains within max_drop")
+	assert(not grid.are_cells_connected(low, high))
+	assert(grid.are_cells_connected(high, low), "reachability must retain the direction of a drop")
+	assert(grid.get_step_weight(low, high) > grid.get_step_weight(high, low), "uphill travel must cost more than downhill")
 
 
 static func _test_terrace_edge_blocks_and_ramp_opens_it() -> void:
@@ -326,13 +353,19 @@ static func _test_publisher_owns_grid_geometry() -> void:
 	assert(grid.is_board_cell(Vector2i(7, 7)) and not grid.is_board_cell(Vector2i(8, 8)))
 
 
+static func _test_odd_board_connectivity_includes_positive_rim() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 5)
+	assert(grid.is_board_cell(Vector2i(2, 2)))
+	assert(grid.are_cells_connected(Vector2i(-2, -2), Vector2i(2, 2)))
+
+
 static func _assert_same_field(actual: NavTerrainField, expected: NavTerrainField) -> void:
 	assert(actual.board_cells == expected.board_cells)
-	var half := expected.board_half_cells
 	var actual_corners := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
 	var expected_corners := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
-	for z in range(-half, half):
-		for x in range(-half, half):
+	for z in range(-expected.board_half_cells, expected.board_cells - expected.board_half_cells):
+		for x in range(-expected.board_half_cells, expected.board_cells - expected.board_half_cells):
 			var cell := Vector2i(x, z)
 			assert(actual.has_ground(cell) == expected.has_ground(cell))
 			assert(actual.slope_class_at(cell) == expected.slope_class_at(cell))
@@ -342,6 +375,9 @@ static func _assert_same_field(actual: NavTerrainField, expected: NavTerrainFiel
 			for direction in NavTerrainField.DIRECTION_COUNT:
 				var neighbour: Vector2i = cell + NavTerrainField.DIRECTION_OFFSETS[direction]
 				assert(actual.edge_class(cell, neighbour) == expected.edge_class(cell, neighbour))
+				var actual_delta := actual.edge_height_delta(cell, neighbour)
+				var expected_delta := expected.edge_height_delta(cell, neighbour)
+				assert((is_inf(actual_delta) and is_inf(expected_delta)) or is_equal_approx(actual_delta, expected_delta))
 
 
 static func _crosses_cell(route: RouteResult, cell: Vector2i) -> bool:

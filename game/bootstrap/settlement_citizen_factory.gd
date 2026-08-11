@@ -159,6 +159,8 @@ func add_citizen(spawn_position: Vector3, primary_specialization := "") -> void:
 ## save restore so a new signal only needs to be registered in one place.
 func wire_citizen(citizen: Citizen) -> void:
 	citizen.setup_navigation(game.find_path_around_houses, func(from): return game.logistics_controller.get_nearest_delivery_position(from), func(citizen, destination): return game.building_queue_service.resolve(citizen, destination), game.movement_speed_modifier_at, game.navigation_revision, func(citizen_id, position_on_board): game.world_navigation_controller.record_trail_movement(citizen_id, position_on_board), game.is_route_reachable, func(citizen, destination): game.building_queue_service.complete_arrival(citizen, destination), func(citizen): game.building_queue_service.release(citizen), game.find_recovery_path, game.is_route_path_clear)
+	if game.nav_grid != null:
+		citizen.floor_max_angle = game.nav_grid.floor_max_angle_radians()
 	citizen.setup_registration_service(game.can_start_registration, game.registration_duration)
 	if game.actuator_bridge != null:
 		game.actuator_bridge.wire_citizen(citizen)

@@ -434,6 +434,7 @@ var workplace_controller: SettlementWorkplaceController
 var simulation_tick_controller: SettlementSimulationTickController
 var logistics_controller: SettlementLogisticsController
 var world_navigation_controller: SettlementWorldNavigationController
+@onready var nav_overlay: NavTerrainOverlay = $NavOverlay
 
 
 ## Module-owned session boundary. SettlementGame is not an independently

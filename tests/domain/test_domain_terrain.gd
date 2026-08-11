@@ -110,11 +110,12 @@ static func _test_catalog_lookups_agree() -> void:
 
 
 static func _test_material_repose_matches_design() -> void:
-	# §4.2, verbatim: sand 22.5°, earth and grass 45°, rock 76°.
-	assert(SlopeCatalog.angle_degrees_of(SlopeCatalog.id_of_class(TerrainMaterialCatalog.repose_class_of(TerrainMaterialCatalog.SAND))) == 22.5)
-	assert(SlopeCatalog.angle_degrees_of(SlopeCatalog.id_of_class(TerrainMaterialCatalog.repose_class_of(TerrainMaterialCatalog.DIRT))) == 45.0)
-	assert(SlopeCatalog.angle_degrees_of(SlopeCatalog.id_of_class(TerrainMaterialCatalog.repose_class_of(TerrainMaterialCatalog.GRASS))) == 45.0)
-	assert(SlopeCatalog.angle_degrees_of(SlopeCatalog.id_of_class(TerrainMaterialCatalog.repose_class_of(TerrainMaterialCatalog.STONE))) == 76.0)
+	# Repose is authored in height steps per cell. Physical angles include the
+	# real 0.5 m height step rather than assuming one vertical step is one metre.
+	assert(is_equal_approx(SlopeCatalog.angle_degrees_of(SlopeCatalog.id_of_class(TerrainMaterialCatalog.repose_class_of(TerrainMaterialCatalog.SAND))), 14.036243))
+	assert(is_equal_approx(SlopeCatalog.angle_degrees_of(SlopeCatalog.id_of_class(TerrainMaterialCatalog.repose_class_of(TerrainMaterialCatalog.DIRT))), 26.565052))
+	assert(is_equal_approx(SlopeCatalog.angle_degrees_of(SlopeCatalog.id_of_class(TerrainMaterialCatalog.repose_class_of(TerrainMaterialCatalog.GRASS))), 26.565052))
+	assert(is_equal_approx(SlopeCatalog.angle_degrees_of(SlopeCatalog.id_of_class(TerrainMaterialCatalog.repose_class_of(TerrainMaterialCatalog.STONE))), 63.434949))
 	assert(is_equal_approx(TerrainMaterialCatalog.repose_steps_per_cell_of(TerrainMaterialCatalog.SAND), 0.5))
 	assert(is_equal_approx(TerrainMaterialCatalog.repose_steps_per_cell_of(TerrainMaterialCatalog.GRASS), 1.0))
 	assert(is_equal_approx(TerrainMaterialCatalog.repose_steps_per_cell_of(TerrainMaterialCatalog.STONE), 4.0))

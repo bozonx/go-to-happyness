@@ -29,12 +29,12 @@ const CLIFF := &"cliff"
 ## Ordered by class index (0..7); the position in this array IS the slope class.
 const SLOPES: Array = [
 	{"id": FLAT, "rise": 0, "run": 1, "angle": 0.0},
-	{"id": SHALLOW, "rise": 1, "run": 8, "angle": 5.625},
-	{"id": GENTLE, "rise": 1, "run": 4, "angle": 11.25},
-	{"id": MODERATE, "rise": 1, "run": 2, "angle": 22.5},
-	{"id": STEEP, "rise": 1, "run": 1, "angle": 45.0},
-	{"id": VERY_STEEP, "rise": 2, "run": 1, "angle": 63.4},
-	{"id": PRE_CLIFF, "rise": 4, "run": 1, "angle": 76.0},
+	{"id": SHALLOW, "rise": 1, "run": 8, "angle": 3.576334},
+	{"id": GENTLE, "rise": 1, "run": 4, "angle": 7.125016},
+	{"id": MODERATE, "rise": 1, "run": 2, "angle": 14.036243},
+	{"id": STEEP, "rise": 1, "run": 1, "angle": 26.565052},
+	{"id": VERY_STEEP, "rise": 2, "run": 1, "angle": 45.0},
+	{"id": PRE_CLIFF, "rise": 4, "run": 1, "angle": 63.434949},
 	{"id": CLIFF, "rise": 0, "run": 0, "angle": 90.0},
 ]
 
@@ -50,7 +50,7 @@ const CLASS_CLIFF := 7
 ## Parallel lookups by class, so the mesher and the cascade never scan `SLOPES`.
 const RISE_BY_CLASS: Array[int] = [0, 1, 1, 1, 1, 2, 4, 0]
 const RUN_BY_CLASS: Array[int] = [1, 8, 4, 2, 1, 1, 1, 0]
-const ANGLE_BY_CLASS: Array[float] = [0.0, 5.625, 11.25, 22.5, 45.0, 63.4, 76.0, 90.0]
+const ANGLE_BY_CLASS: Array[float] = [0.0, 3.576334, 7.125016, 14.036243, 26.565052, 45.0, 63.434949, 90.0]
 const CLASS_BY_ID := {
 	FLAT: CLASS_FLAT,
 	SHALLOW: CLASS_SHALLOW,
@@ -160,6 +160,16 @@ static func run_of(slope_id: StringName) -> int:
 static func angle_degrees_of(slope_id: StringName) -> float:
 	var slope_class := slope_class_of(slope_id)
 	return 0.0 if not is_valid_class(slope_class) else ANGLE_BY_CLASS[slope_class]
+
+
+## Physical angle for a board whose vertical step or cell size differs from the
+## authored 0.5 m / 1.0 m contract.
+static func angle_degrees_of_class(slope_class: int, height_step: float = 0.5, cell_size: float = 1.0) -> float:
+	if not is_valid_class(slope_class):
+		return 90.0
+	if slope_class == CLASS_CLIFF:
+		return 90.0
+	return rad_to_deg(atan(steps_per_cell_of_class(slope_class) * height_step / maxf(cell_size, 0.0001)))
 
 
 static func is_ramp(slope_id: StringName) -> bool:
