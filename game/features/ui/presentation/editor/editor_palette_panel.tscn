@@ -28,10 +28,13 @@ size_flags_horizontal = 3
 theme_override_constants/separation = 4
 
 [node name="Separator" type="HSeparator" parent="Margin/Rows"]
+visible = false
 
 [node name="OptionsTitle" type="Label" parent="Margin/Rows"]
+visible = false
 text = "Настройки"
 theme_override_font_sizes/font_size = 14
 
 [node name="Options" type="VBoxContainer" parent="Margin/Rows"]
+visible = false
 theme_override_constants/separation = 4

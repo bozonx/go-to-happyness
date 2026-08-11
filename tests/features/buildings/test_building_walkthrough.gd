@@ -46,6 +46,13 @@ func _test_an_empty_blueprint_refuses(editor: BuildingEditor) -> void:
 
 func _test_walking_a_room(editor: BuildingEditor) -> void:
 	_build_room(editor)
+	var backpack := FillObjectRecord.make(&"backpack", Vector3(1.5, 1.0, 1.5), 1)
+	editor.blueprint.objects.append(backpack)
+	editor.fill_mode.rebuild_nodes()
+	assert(WorldAssetCatalog.get_asset(&"backpack").collision_policy == WorldAssetDef.COLLISION_NONE,
+		"small loose decor declares no physical collision")
+	assert(editor.fill_mode._nodes[backpack.id] not in editor.fill_mode.walkthrough_collision_sources(),
+		"the walk-through excludes fill objects whose collision policy is none")
 	await process_frame
 	editor._camera_controller.camera_target = Vector3(2.0, 1.0, 3.0)
 	editor._camera_controller.camera_distance = 23.0
@@ -124,6 +131,9 @@ func _test_test_points_aim_the_start(editor: BuildingEditor) -> void:
 	editor._add_test_point_here()
 	assert(editor.test_points.points.size() == 1, "the point was placed")
 	assert(editor.test_points.points[0].level == 2, "on the layer being edited, not on the ground")
+	editor._refresh_walk_button_hint()
+	assert(editor._walk_btn.text == "▶ Точка",
+		"the toolbar shows the selected walk start without requiring a tooltip")
 
 	# The marker is drawn in every mode — the point of a place the author keeps
 	# coming back to is being findable while they shape the thing around it. A

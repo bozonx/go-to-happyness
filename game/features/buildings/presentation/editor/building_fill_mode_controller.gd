@@ -79,6 +79,8 @@ var _off_x_spin: SpinBox = null
 var _off_y_spin: SpinBox = null
 var _off_z_spin: SpinBox = null
 var _zone_filter_option: OptionButton = null
+var _zone_filter_label: Label = null
+var _objects_label: Label = null
 var _zone_out_of_bounds_label: Label = null
 
 # Fixture editor — delegated to FixtureEditorPanel
@@ -104,6 +106,8 @@ func setup(editor: Node) -> void:
 	_badges_label = editor.get_node("%FillBadgesLabel")
 	_zone_out_of_bounds_label = editor.get_node("%FillZoneWarningLabel")
 	_zone_filter_option = editor.get_node("%FillZoneFilterOption")
+	_zone_filter_label = editor.get_node("%ZoneFilterLbl")
+	_objects_label = editor.get_node("EditorUI/Root/FillInspectorPanel/FillObjectsPanel/ObjectsVBox/ObjectsLbl")
 	_object_list = editor.get_node("%FillObjectList")
 	_controls_vbox = editor.get_node("%FillControlsVBox")
 	_transform_inspector = editor.get_node("%FillTransformInspector")
@@ -1016,7 +1020,7 @@ func _refresh_object_list() -> void:
 		var label := asset.name if asset != null else "%s (нет ассета)" % record.asset_id
 		if zone_filter != &"" and record.owner_zone_id != zone_filter:
 			continue
-		entries.append("%s  ·  этаж %s" % [label, _format_floor_height(record.pos.y)])
+		entries.append("%s  ·  уровень Y %s" % [label, _format_floor_height(record.pos.y)])
 		_visible_object_ids.append(record.id)
 	var selected_indices: Array[int] = []
 	for object_id: String in selected_object_ids():
@@ -1024,6 +1028,9 @@ func _refresh_object_list() -> void:
 		if index >= 0:
 			selected_indices.append(index)
 	_object_list.set_entries(entries, "Нет объектов в выбранной зоне", -1, [], selected_indices, true)
+	if _objects_label != null:
+		var suffix := "" if zone_filter == &"" else " зоны «%s»" % _zone_name_for_id(zone_filter)
+		_objects_label.text = "Объекты%s: %d" % [suffix, entries.size()]
 	_syncing_ui = false
 
 
@@ -1073,7 +1080,7 @@ func _refresh_zone_filter_options() -> void:
 	_syncing_ui = true
 	var prev_selection := _get_zone_filter_selection()
 	_zone_filter_option.clear()
-	_zone_filter_option.add_item("(все зоны)")
+	_zone_filter_option.add_item("Все зоны")
 	_zone_filter_option.set_item_metadata(0, &"")
 	var selected_idx := 0
 	if _editor != null and _editor.blueprint != null:
@@ -1085,6 +1092,10 @@ func _refresh_zone_filter_options() -> void:
 			if area.id == prev_selection:
 				selected_idx = _zone_filter_option.item_count - 1
 	_zone_filter_option.select(selected_idx)
+	var has_owning_zones := _zone_filter_option.item_count > 1
+	_zone_filter_option.visible = has_owning_zones
+	if _zone_filter_label != null:
+		_zone_filter_label.visible = has_owning_zones
 	_syncing_ui = false
 
 
@@ -1092,6 +1103,21 @@ func _on_zone_filter_selected(_index: int) -> void:
 	if _syncing_ui:
 		return
 	_refresh_object_list()
+
+
+## Visible fill roots that are physically solid during the F5 walk-through.
+## Interaction and visual presence are independent from collision: small decor
+## stays selectable without becoming an invisible curb.
+func walkthrough_collision_sources() -> Array[Node]:
+	var sources: Array[Node] = []
+	for record: FillObjectRecord in _editor.blueprint.objects:
+		var asset := WorldAssetCatalog.get_asset(record.asset_id)
+		if asset == null or asset.collision_policy == WorldAssetDef.COLLISION_NONE:
+			continue
+		var node: Node = _nodes.get(record.id, null)
+		if node != null:
+			sources.append(node)
+	return sources
 
 
 ## Updates the zone highlight overlay and out-of-zone warning for the selected object.
@@ -1628,7 +1654,7 @@ func _proposed_fill_is_free(
 
 func _update_layer_label() -> void:
 	if _layer_label != null and _editor != null:
-		_layer_label.text = "Слой %d" % _editor.active_layer
+		_layer_label.text = "Уровень Y: %d" % _editor.active_layer
 
 
 func on_layer_changed() -> void:

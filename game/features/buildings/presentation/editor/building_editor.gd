@@ -19,6 +19,7 @@ const CENTRE_BAND_COLOR := Color(1.0, 0.82, 0.18, 0.12)
 enum Tool { PLACE, ERASE }
 enum Brush { LINE, RECT }
 enum EditMode { FRAME, FINISHES, FILL, ZONES }
+enum LightingMode { NEUTRAL, INTERIOR, SUN_CHECK }
 
 @export_group("Editor")
 ## Forces developer mode when the scene is opened/run directly. The main menu
@@ -45,6 +46,7 @@ var cursor_valid: bool = false
 var cursor_hit_pos: Vector3 = Vector3.ZERO
 
 var current_mode: int = EditMode.FRAME
+var lighting_mode: int = LightingMode.NEUTRAL
 var _eyedropper_active := false
 
 ## Frame mode lives in its own controller; see frame_mode_controller.gd.
@@ -114,6 +116,12 @@ var _orbiting: bool = false
 @onready var _walk_btn: Button = %WalkBtn
 @onready var _textures_btn: Button = %TexturesBtn
 @onready var _compass: EditorViewportCompass = %Compass
+@onready var _world_environment: WorldEnvironment = $WorldEnv
+@onready var _sun: DirectionalLight3D = $Sun
+@onready var _fill_light: DirectionalLight3D = $FillLight
+@onready var _neutral_light_btn: Button = %NeutralLightBtn
+@onready var _interior_light_btn: Button = %InteriorLightBtn
+@onready var _sun_light_btn: Button = %SunLightBtn
 
 ## Prevent value_changed callbacks from overwriting one footprint dimension
 ## with the stale value of the other while a loaded blueprint updates both UI
@@ -214,6 +222,10 @@ func _process(delta: float) -> void:
 		return
 	if _compass != null and _camera_controller != null:
 		_compass.update_from_camera(_camera_controller.camera)
+	if lighting_mode == LightingMode.INTERIOR and _camera_controller != null:
+		# A camera-relative unshadowed fill keeps closed rooms readable from every
+		# orbit angle instead of leaving one permanently black side.
+		_fill_light.global_basis = _camera_controller.camera.global_basis
 	_refresh_walk_button_hint()
 	_update_cursor()
 	if current_mode == EditMode.FILL:
@@ -828,7 +840,8 @@ func _start_walkthrough(from_cursor := false) -> void:
 		walkthrough.exited.connect(_on_walkthrough_exited)
 		add_child(walkthrough)
 	var start := _cursor_walk_position() if from_cursor else _walk_start_position()
-	var sources: Array[Node] = [get_node_or_null("BlocksRoot"), fill_mode]
+	var sources: Array[Node] = [get_node_or_null("BlocksRoot")]
+	sources.append_array(fill_mode.walkthrough_collision_sources())
 	_camera_before_walkthrough = _camera_state()
 	_set_eyedropper_active(false)
 	cursor_valid = false
@@ -921,12 +934,15 @@ func _refresh_walk_button_hint() -> void:
 		return
 	var point := test_points.selected_point()
 	if point != null:
+		_walk_btn.text = "▶ Точка"
 		_walk_btn.tooltip_text = "Прогулка от тест-точки «%s»" % point.display_name(test_points.selected)
 		return
 	for anchor: ZoneAnchorRecord in blueprint.anchors:
 		if anchor.is_door():
+			_walk_btn.text = "▶ Дверь"
 			_walk_btn.tooltip_text = "Прогулка от входной двери «%s»" % String(anchor.id)
 			return
+	_walk_btn.text = "▶ Снаружи"
 	_walk_btn.tooltip_text = "Прогулка снаружи перед зданием"
 
 
@@ -994,7 +1010,7 @@ func _edit_selected_test_point() -> void:
 		_test_point_dialog = EditorTestPointDialog.new()
 		_test_point_dialog.name_changed.connect(_on_test_point_renamed)
 		add_child(_test_point_dialog)
-	_test_point_dialog.edit_point(test_points.selected, point, "этаж")
+	_test_point_dialog.edit_point(test_points.selected, point, "уровень Y")
 
 
 func _on_test_point_renamed(index: int, new_name: String) -> void:
@@ -1190,6 +1206,7 @@ func _setup_ui() -> void:
 	if not _eyedropper_btn.pressed.is_connected(_on_eyedropper_pressed):
 		_eyedropper_btn.pressed.connect(_on_eyedropper_pressed)
 	_walk_btn.pressed.connect(_start_walkthrough)
+	_setup_lighting_modes()
 	_load_list.item_activated.connect(_on_load_item_activated)
 	_save_as_dialog.confirmed.connect(_on_save_as_confirmed)
 	_metadata_panel.confirmed.connect(_on_settings_confirmed)
@@ -1209,6 +1226,38 @@ func _on_mode_selected(mode_id: StringName) -> void:
 		&"finishes": _select_mode(EditMode.FINISHES)
 		&"fill": _select_mode(EditMode.FILL)
 		&"zones": _select_mode(EditMode.ZONES)
+
+
+func _setup_lighting_modes() -> void:
+	var group := ButtonGroup.new()
+	group.allow_unpress = false
+	for button: Button in [_neutral_light_btn, _interior_light_btn, _sun_light_btn]:
+		button.button_group = group
+	_neutral_light_btn.pressed.connect(_set_lighting_mode.bind(LightingMode.NEUTRAL))
+	_interior_light_btn.pressed.connect(_set_lighting_mode.bind(LightingMode.INTERIOR))
+	_sun_light_btn.pressed.connect(_set_lighting_mode.bind(LightingMode.SUN_CHECK))
+	_set_lighting_mode(LightingMode.NEUTRAL)
+
+
+func _set_lighting_mode(mode: int) -> void:
+	lighting_mode = mode
+	_neutral_light_btn.button_pressed = mode == LightingMode.NEUTRAL
+	_interior_light_btn.button_pressed = mode == LightingMode.INTERIOR
+	_sun_light_btn.button_pressed = mode == LightingMode.SUN_CHECK
+	var environment := _world_environment.environment
+	match mode:
+		LightingMode.INTERIOR:
+			environment.ambient_light_energy = 1.0
+			_sun.light_energy = 0.35
+			_fill_light.light_energy = 1.15
+		LightingMode.SUN_CHECK:
+			environment.ambient_light_energy = 0.35
+			_sun.light_energy = 1.15
+			_fill_light.light_energy = 0.15
+		_:
+			environment.ambient_light_energy = 0.8
+			_sun.light_energy = 0.9
+			_fill_light.light_energy = 0.65
 
 
 func _mode_id(mode: int) -> StringName:
@@ -1241,13 +1290,13 @@ func _update_shortcut_tooltip() -> void:
 	var text := "Общее\n• ПКМ — камера · СКМ — панорама · Колесо — зум\n• WASD / Q E — перемещение камеры\n• P — пипетка · Esc — отмена / очистить выбор\n• Ctrl+Z / Ctrl+Shift+Z (Ctrl+Y) — отмена / повтор\n• 1–4 — выбор режима\n\nПрогулка по зданию\n• F5 — походить от выбранной цели · Shift+F5 — от клетки под курсором\n• WASD, мышь, Shift — бегом, Пробел — прыжок, Esc — выход\n• F6 — тест-точка здесь · Shift+F6 — свойства · Ctrl+F6 — удалить\n• Alt+1…9 — выбрать тест-точку · Alt+0 — вход здания\n\n"
 	match current_mode:
 		EditMode.FRAME:
-			text += "Каркас:\n• 🔨 / 🧹 (E) — режим строительства / ластик\n• 📏 (L) — линия · 🔲 (M) — прямоугольник\n• 🔄 (Z / X / C или R) — поворот блока (оси Z, X, Y)\n• ➖ / ➕ (PageDown / PageUp) — смена слоя Y\n• Alt+PageUp / Alt+PageDown — дробный сдвиг Y (0.25 м)\n• Shift+ЛКМ — пипетка блока под курсором\n• Shift+ПКМ — быстрый ластик при зажатии"
+			text += "Каркас:\n• 🔨 / 🧹 (E) — режим строительства / ластик\n• 📏 (L) — линия · 🔲 (M) — прямоугольник\n• 🔄 (Z / X / C или R) — поворот блока (оси Z, X, Y)\n• ➖ / ➕ (PageDown / PageUp) — смена уровня Y\n• Alt+PageUp / Alt+PageDown — дробный сдвиг Y (0.25 м)\n• Shift+ЛКМ — пипетка блока под курсором\n• Shift+ПКМ — быстрый ластик при зажатии"
 		EditMode.FINISHES:
 			text += "Отделка (в разработке):\n• Выбор и нанесение материалов отделки"
 		EditMode.FILL:
-			text += "Наполнение:\n• ЛКМ — разместить из каталога или выбрать и перетащить объект\n• Ctrl+ЛКМ — добавить к выделению\n• Shift+ЛКМ — пипетка со смещением, масштабом и внешним видом\n• Z / X / C (или R для Y) — поворот по осям\n• Delete / Shift+ПКМ — удалить объект\n• PageDown / PageUp — смена слоя Y\n• Esc — снять выделение"
+			text += "Наполнение:\n• ЛКМ — разместить из каталога или выбрать и перетащить объект\n• Ctrl+ЛКМ — добавить к выделению\n• Shift+ЛКМ — пипетка со смещением, масштабом и внешним видом\n• Z / X / C (или R для Y) — поворот по осям\n• Delete / Shift+ПКМ — удалить объект\n• PageDown / PageUp — смена уровня Y\n• Esc — снять выделение"
 		EditMode.ZONES:
-			text += "Зоны:\n• Q — рисование области · W — установка точек\n• Tab — следующая роль зоны\n• F — поворот точки на 90°\n• ➖ / ➕ — смена слоя Y\n• Shift+ПКМ — стереть клетку зоны\n• Delete — удалить выбранное\n• Esc — очистить выделение / в режим выбора"
+			text += "Зоны:\n• Q — рисование области · W — установка точек\n• Tab — следующая роль зоны\n• F — поворот точки на 90°\n• ➖ / ➕ — смена уровня Y\n• Shift+ПКМ — стереть клетку зоны\n• Delete — удалить выбранное\n• Esc — очистить выделение / в режим выбора"
 	_status_bar.set_shortcuts(text)
 
 

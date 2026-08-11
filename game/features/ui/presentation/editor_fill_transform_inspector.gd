@@ -25,6 +25,8 @@ var roll_spin: SpinBox
 var scale_spin: SpinBox
 var _body: VBoxContainer
 var _header: Button
+var _fine_body: VBoxContainer
+var _fine_header: Button
 var _reset_buttons: Array[Button] = []
 var _syncing := false
 
@@ -54,11 +56,28 @@ func _init() -> void:
 	# quantize an authored 1.0 to 1.05 when the value is displayed.
 	scale_spin = _spin(EditorFillConventions.SCALE_STEP, 0.1, EditorFillConventions.SCALE_MAX)
 
-	_body.add_child(_heading("Положение"))
+	_body.add_child(_heading("Положение на сетке"))
 	_body.add_child(_axis_row([["X", pos_x_spin], ["Z", pos_z_spin]]))
-	_body.add_child(_single_row("Высота", height_spin, HEIGHT))
-	_body.add_child(_heading("Смещение", OFFSET))
-	_body.add_child(_axis_row([["X", off_x_spin], ["Y", off_y_spin], ["Z", off_z_spin]]))
+	_body.add_child(_single_row("Уровень Y", height_spin, HEIGHT))
+	_fine_header = Button.new()
+	_fine_header.flat = true
+	_fine_header.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_fine_header.text = "▶ Тонкая настройка"
+	_fine_header.tooltip_text = "Смещение модели внутри занятых клеток"
+	_fine_header.pressed.connect(_toggle_fine)
+	_body.add_child(_fine_header)
+	_fine_body = VBoxContainer.new()
+	_fine_body.visible = false
+	_fine_body.add_theme_constant_override("separation", 5)
+	_fine_body.add_child(_heading("Смещение внутри клетки"))
+	_fine_body.add_child(_axis_row([["X", off_x_spin], ["Y", off_y_spin], ["Z", off_z_spin]]))
+	var center := Button.new()
+	center.text = "По центру"
+	center.tooltip_text = "Убрать смещение и поставить модель по центру занятых клеток"
+	center.pressed.connect(func(): property_reset_requested.emit(OFFSET))
+	_reset_buttons.append(center)
+	_fine_body.add_child(center)
+	_body.add_child(_fine_body)
 	_body.add_child(_heading("Поворот", ROTATION))
 	_body.add_child(_axis_row([["X", pitch_spin], ["Y", yaw_spin], ["Z", roll_spin]]))
 	_body.add_child(_single_row("Масштаб", scale_spin, SCALE))
@@ -100,6 +119,11 @@ func set_reset_enabled(enabled: bool) -> void:
 func _toggle() -> void:
 	_body.visible = not _body.visible
 	_header.text = ("▼ " if _body.visible else "▶ ") + "Трансформ"
+
+
+func _toggle_fine() -> void:
+	_fine_body.visible = not _fine_body.visible
+	_fine_header.text = ("▼ " if _fine_body.visible else "▶ ") + "Тонкая настройка"
 
 
 func _spin(step: float, minimum: float, maximum: float) -> SpinBox:

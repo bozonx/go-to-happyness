@@ -503,7 +503,9 @@ static func _register_builtin_assets() -> void:
 	backpack.tags = [&"storage", &"equipment", &"outdoor", &"camping"]
 	backpack.scale_mode = WorldAssetDef.SCALE_UNIFORM_STEPS
 	backpack.allowed_scales = [0.8, 1.0, 1.2, 1.5]
-	backpack.collision_policy = WorldAssetDef.COLLISION_SCENE
+	# A loose backpack is selectable and interactive, but it is too small to be a
+	# meaningful physical or routing obstacle. Interaction does not require a body.
+	backpack.collision_policy = WorldAssetDef.COLLISION_NONE
 	backpack.scope = WorldAssetDef.SCOPE_BOTH
 	backpack.placement = AssetPlacementPolicy.of_surfaces(
 		[AssetPlacementPolicy.SURFACE_GROUND, AssetPlacementPolicy.SURFACE_ICE],

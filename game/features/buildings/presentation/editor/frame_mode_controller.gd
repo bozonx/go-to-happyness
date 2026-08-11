@@ -1291,7 +1291,7 @@ func refresh_layer_plane() -> void:
 	if _layer_plane != null:
 		_layer_plane.position = Vector3(0.0, float(_editor.active_layer), 0.0)
 	if _layer_label != null:
-		_layer_label.text = "Слой %d" % _editor.active_layer
+		_layer_label.text = "Уровень Y: %d" % _editor.active_layer
 
 
 func _on_footprint_changed(_value: float) -> void:

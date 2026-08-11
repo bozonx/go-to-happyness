@@ -486,7 +486,7 @@ func _get_ghost_material() -> StandardMaterial3D:
 
 func on_layer_changed() -> void:
 	if _layer_label != null and _editor != null:
-		_layer_label.text = "Слой Y: %d" % _editor.active_layer
+		_layer_label.text = "Уровень Y: %d" % _editor.active_layer
 	_refresh_visuals()
 
 
@@ -705,7 +705,7 @@ func _place_anchor_at_cursor() -> void:
 	if anchor.is_queue():
 		var target := _nearest_slot(anchor.pos, anchor.owner_id)
 		if target == null:
-			_editor.set_status("Сначала поставьте место на этом этаже и в этой комнате.")
+			_editor.set_status("Сначала поставьте место на этом уровне Y и в этой комнате.")
 			return
 		anchor.target_id = target.id
 		anchor.index = _next_queue_index(target.id)

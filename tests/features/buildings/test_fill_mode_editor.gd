@@ -35,6 +35,20 @@ func _run() -> void:
 	assert(top_bar.get_combined_minimum_size().y <= 55.0, "building top bar keeps its compact height")
 	assert(settings_button.text == "⚙" and settings_button.tooltip_text == "Параметры здания",
 		"building parameters use a compact gear button with a descriptive tooltip")
+	var frame_palette := editor.get_node("%PalettePanel") as EditorPalettePanel
+	assert(not frame_palette.get_node("Margin/Rows/OptionsTitle").visible,
+		"empty frame palette options do not leave a misleading Settings heading")
+	assert(editor.get_node("%NeutralLightBtn").button_pressed,
+		"neutral editor lighting is the default")
+	editor._set_lighting_mode(editor.LightingMode.INTERIOR)
+	assert(editor.get_node("%InteriorLightBtn").button_pressed
+		and editor.get_node("FillLight").light_energy > editor.get_node("Sun").light_energy,
+		"interior mode selects a strong camera-side fill")
+	editor._set_lighting_mode(editor.LightingMode.SUN_CHECK)
+	assert(editor.get_node("%SunLightBtn").button_pressed
+		and editor.get_node("Sun").light_energy > editor.get_node("FillLight").light_energy,
+		"sun-check mode restores directional contrast")
+	editor._set_lighting_mode(editor.LightingMode.NEUTRAL)
 	assert(top_scroll.horizontal_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED,
 		"building top bar preserves access to overflowing actions")
 	assert(palette.custom_minimum_size.x + inspector.custom_minimum_size.x + 16.0 <= 1280.0,
@@ -102,6 +116,10 @@ func _run() -> void:
 	assert(not editor.get_node("%FrameToolbar").visible, "frame toolbar hidden")
 	assert(not editor.get_node("%Ghost").visible, "frame ghost hidden outside frame mode")
 	assert(not inspector.visible, "fill inspector stays hidden without an object selection")
+	var transform_inspector := editor.get_node("%FillTransformInspector") as EditorFillTransformInspector
+	assert(not transform_inspector._fine_body.visible
+		and transform_inspector._fine_header.text.contains("Тонкая настройка"),
+		"offset controls start inside a collapsed fine-tuning section")
 	var inspector_scroll := inspector.get_node("Scroll") as ScrollContainer
 	var objects_panel := inspector.get_node("FillObjectsPanel") as Control
 	assert(inspector_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED,
@@ -256,6 +274,8 @@ func _run() -> void:
 	zone.add_rect(Rect2i(2, 2, 1, 1))
 	editor.blueprint.areas.append(zone)
 	fill._refresh_zone_filter_options()
+	assert(fill._zone_filter_option.visible and fill._zone_filter_label.visible,
+		"zone filter appears only once the blueprint has an owning zone")
 	# Assign selected object to the zone.
 	fill.find_record(fill.selected_object_id).owner_zone_id = &"test_zone_1"
 	fill._refresh_inspector()
@@ -270,10 +290,10 @@ func _run() -> void:
 	assert(fill._object_list.item_count() == 2, "all zones filter shows all objects")
 	var object_search := fill._object_list.get_node("Search") as LineEdit
 	var object_list_items := fill._object_list.get_node("List") as ItemList
-	assert("ID:" not in object_list_items.get_item_text(0) and "этаж" in object_list_items.get_item_text(0),
-		"object rows contain only the asset name and floor")
+	assert("ID:" not in object_list_items.get_item_text(0) and "уровень Y" in object_list_items.get_item_text(0),
+		"object rows contain only the asset name and Y level")
 	assert(fill._format_floor_height(1.24) == "1.25" and fill._format_floor_height(2.0) == "2",
-		"fractional floors are rounded to the authored height step")
+		"fractional Y levels are rounded to the authored height step")
 	object_search.text = object_list_items.get_item_text(0).split("  ·  ")[0]
 	object_search.text_changed.emit(object_search.text)
 	assert(fill._object_list.item_count() == 1, "object list searches by the displayed asset name")
