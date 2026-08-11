@@ -67,6 +67,7 @@ var _refresh_boundary_markers: Callable
 var _select_best_canteen: Callable
 var _create_resource_pile: Callable
 var _refresh_navigation_grid: Callable
+var _release_placement: Callable
 var _is_construction_site: Callable
 var _activate_employment_centre: Callable
 var _convert_backpack_pile_to_regular: Callable
@@ -138,6 +139,7 @@ func configure(port: BuildingLifecycleRuntimePort) -> void:
 	_select_best_canteen = port.select_best_canteen
 	_create_resource_pile = port.create_resource_pile
 	_refresh_navigation_grid = port.refresh_navigation_grid
+	_release_placement = port.release_placement
 	_is_construction_site = port.is_construction_site
 	_activate_employment_centre = port.activate_employment_centre
 	_convert_backpack_pile_to_regular = port.convert_backpack_pile_to_regular
@@ -244,6 +246,8 @@ func finish_demolition(site: DemolitionSite) -> void:
 	for citizen in _citizens:
 		citizen.finish_construction(building)
 	remove_building_services(building, building_type)
+	if _release_placement.is_valid():
+		_release_placement.call(building)
 	var removed_record = _building_registry.remove_node(building)
 	if removed_record != null:
 		_unregister_navigation_footprint.call(removed_record.center, removed_record.footprint)
@@ -349,6 +353,8 @@ func remove_expired_temporary_tents() -> void:
 		_cancel_arrivals_for_house.call(tent)
 		_unregister_service_pockets.call(tent)
 		remove_building_services(tent, "tent")
+		if _release_placement.is_valid():
+			_release_placement.call(tent)
 		var removed_record = _building_registry.remove_node(tent)
 		if removed_record != null:
 			_unregister_navigation_footprint.call(removed_record.center, removed_record.footprint)

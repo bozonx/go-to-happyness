@@ -34,9 +34,12 @@ func restore(p_game: SettlementGame, section: Dictionary) -> bool:
 			citizen.queue_free()
 	game.citizens.clear()
 
-	# 2. Despawn current buildings and clear the long-lived building registry.
-	# Replacing it would strand every runtime port and terrain-anchor signal on the
-	# old object.
+	# 2. Release session-owned placement records before despawning their nodes.
+	# Authored map placements remain in the runtime layer; player construction is
+	# replayed below from the save through BuildingPlacementService.
+	game.building_placement_controller.reset_session_placements()
+	# Clear the long-lived registry rather than replacing it: runtime ports retain
+	# this instance.
 	for record in game.building_registry.records():
 		if is_instance_valid(record.node):
 			record.node.queue_free()
@@ -116,7 +119,16 @@ func restore(p_game: SettlementGame, section: Dictionary) -> bool:
 		b_type = resolved.type
 		var blueprint: Dictionary = resolved.blueprint
 		if not blueprint.is_empty():
-			var occupied_footprint = game.building_placement_controller.rotated_footprint(blueprint.footprint, rot_quarters) if game.building_placement_controller != null else blueprint.footprint
+			var restored := game.building_placement_controller.restore_placement(
+				b_type, b_dict.get("placement", {}), pos, rot_quarters, MapPlacementRecord.STATE_READY)
+			if restored.is_empty():
+				push_warning("SettlementSaveLoader: placement refused for building '%s' at %s" % [b_type, cell])
+				continue
+			var placement_record: MapPlacementRecord = restored.record
+			pos = restored.position
+			cell = restored.cell
+			rot_quarters = restored.orientation
+			var occupied_footprint: Vector2i = restored.footprint
 			game.building_registry.reserve(cell, pos, occupied_footprint)
 			var site_node: Node3D = game.construction._get_site_scene().instantiate()
 			site_node.position = pos
@@ -128,6 +140,7 @@ func restore(p_game: SettlementGame, section: Dictionary) -> bool:
 			game.add_child(site_node)
 			for module in blueprint.modules:
 				site_node.add_child(BuildingBlueprints.create_module(module))
+			game.building_placement_controller.bind_placement(site_node, placement_record)
 			for child_name in ["ConstructionTerritory", "ConstructionProgressBack", "ConstructionProgressFill", "SupplyLabel", "ConstructionSelector", "ConstructionEntrance"]:
 				var child := site_node.get_node_or_null(child_name)
 				if child != null:
@@ -164,11 +177,26 @@ func restore(p_game: SettlementGame, section: Dictionary) -> bool:
 		b_type = resolved.type
 		var blueprint: Dictionary = resolved.blueprint
 		if not blueprint.is_empty():
-			var occupied_footprint = game.building_placement_controller.rotated_footprint(blueprint.footprint, rot_quarters) if game.building_placement_controller != null else blueprint.footprint
+			var occupied_footprint: Vector2i
+			var placement_record: MapPlacementRecord = null
 			if upgrade_from_type.is_empty():
+				var restored := game.building_placement_controller.restore_placement(
+					b_type, c_dict.get("placement", {}), pos, rot_quarters, &"construction_site")
+				if restored.is_empty():
+					push_warning("SettlementSaveLoader: placement refused for construction site '%s' at %s" % [b_type, cell])
+					continue
+				placement_record = restored.record
+				pos = restored.position
+				cell = restored.cell
+				rot_quarters = restored.orientation
+				occupied_footprint = restored.footprint
 				game.building_registry.reserve(cell, pos, occupied_footprint)
+			else:
+				occupied_footprint = game.building_placement_controller.rotated_footprint(blueprint.footprint, rot_quarters)
 			var site = game.construction_controller.create_construction_site(cell, b_type, pos, rot_quarters, blueprint, occupied_footprint, saved_site_id, required_materials)
 			if site != null:
+				if placement_record != null:
+					game.building_placement_controller.bind_placement(site.node, placement_record)
 				site.progress = progress
 				site.delivered_materials = delivered
 				if c_dict.has("required_payments"):

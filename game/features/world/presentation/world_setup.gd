@@ -20,9 +20,8 @@ var sky_and_weather_controller: SkyAndWeatherController
 ## ground at X" for everything else.
 var terrain_grid: TerrainGrid
 ## The one owner of writes to that ground (§13, §14). The session has one even
-## though nothing in the game sculpts yet: `TerrainAnchorService` writes anchors
-## through it, and an anchor written around the transaction boundary is an anchor
-## undo and the cascade cannot see.
+## though nothing in the game sculpts yet: `BuildingPlacementService` writes the
+## building pad and its anchors through it, so undo and the cascade see one transaction.
 var terrain_service := TerrainService.new()
 ## The board's water (§9), published beside the ground for the same reason: it is
 ## what routing and presentation both read.

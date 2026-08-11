@@ -124,15 +124,23 @@ Keep the three building concepts separate:
 - `BuildingInstance`: typed runtime gameplay state, addressed by an ID.
 - `BuildingView`: the `Node3D` and its collision/mesh representation.
 
-`BuildingRegistry` is the current application-level source of truth for reserved and
-completed footprints. Its `BuildingRecord` connects a placement cell and footprint to
-the completed runtime node. Construction, navigation and demolition must use this
-registry rather than maintain parallel position or footprint arrays.
+`BuildingPlacementService` is the source of truth for putting a blueprint on terrain:
+the dry-run plan, terrain merge, `MapPlacementRecord`, overlap and terrain anchors are
+one lifecycle. The map editor and player construction differ only by `PlacementPolicy`.
+During a session, `WorldSession.placement_layer` copies authored placements and owns
+dynamic player records without mutating the authored map.
+
+`BuildingRegistry` is the gameplay index for reserved and completed runtime nodes. Its
+`BuildingRecord` connects the placement's centre cell and footprint to a node, but it
+does not validate terrain or write anchors. Construction, navigation and demolition use
+this registry for gameplay lookup and release the corresponding placement record when
+the node leaves the world.
 
 `ConstructionService` and `DemolitionService` own typed construction and demolition
 queues. Their scene, economy, worker and completion dependencies are explicit runtime
-callbacks, not a bootstrap-controller reference. Building placement and completion
-effects remain the next building subsystems to move behind the same narrow boundary.
+callbacks, not a bootstrap-controller reference. `BuildingPlacementController` is the
+session adapter that resolves authored blueprints and supplies settlement policy to the
+world-owned placement service; it contains no second placement calculation.
 
 `building_blueprints.gd` is presentation code. It builds authored geometry and collision,
 but it must not decide costs, unlocks, production or staffing. Do not use `Node3D`

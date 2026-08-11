@@ -86,6 +86,9 @@ func destroy_building_to_pile(building: Node3D, building_type: String, citizens:
 	var remove_services: Callable = callbacks.get("remove_services", Callable())
 	if remove_services.is_valid():
 		remove_services.call(building, building_type)
+	var release_placement: Callable = callbacks.get("release_placement", Callable())
+	if release_placement.is_valid():
+		release_placement.call(building)
 
 	var removed_record: RefCounted = null
 	if building_registry != null:

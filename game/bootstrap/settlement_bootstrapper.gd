@@ -286,10 +286,6 @@ func _setup_building_services() -> void:
 	game.building_research_service.configure(game.settlement)
 	game.village_territory_service = VillageTerritoryService.new()
 	game.village_territory_service.configure(game.building_registry, int(game.settlement.era))
-	# The ground under a footprint is pinned for as long as the registry holds it
-	# (grid_terrain_system.md §4.4). The cascade has always refused to move an
-	# anchored column; until now nothing wrote one.
-	game.terrain_anchor_service = TerrainAnchorService.new()
 	game.sawmills = SawmillService.new()
 	game.sawmills.configure(game.sawmill_stocks, game.sawmill_positions, SettlementConstants.SAWMILL_PROCESS_DURATION, game.cell_from_position)
 
@@ -309,7 +305,9 @@ func _setup_construction_and_demolition() -> void:
 	construction_runtime.navigation_changed = func(): game.world_navigation_controller.refresh_navigation_grid()
 	construction_runtime.update_supply_label = func(site): game.construction_controller.update_construction_supply_label(site)
 	construction_runtime.upgrade_completed = func(site): game.workplace_controller.complete_building_upgrade(site)
-	construction_runtime.site_cancelled = func(site): game.workplace_controller.on_construction_site_cancelled(site)
+	construction_runtime.site_cancelled = func(site):
+		game.construction_controller.on_construction_site_cancelled(site)
+		game.workplace_controller.on_construction_site_cancelled(site)
 	game.construction = ConstructionService.new()
 	game.construction.site_scene = ConstructionSiteScene
 	game.construction.entrance_post_scene = ConstructionEntrancePostScene
@@ -417,6 +415,7 @@ func _setup_building_maintenance() -> void:
 			"move_stored_resources": func(resources, warehouse_index): game.building_lifecycle_service.move_stored_resources_to_pile(resources, warehouse_index),
 			"return_supplies": func(building): game.logistics_controller.return_in_transit_building_supplies(building),
 			"remove_services": func(building, building_type): game.building_lifecycle_service.remove_building_services(building, building_type),
+			"release_placement": func(building): game.building_placement_controller.release_placement(building),
 			"unregister_nav_footprint": func(center, footprint): game.service_pocket_manager.unregister_navigation_footprint(center, footprint),
 			"refresh_boundary": func(): game.world_navigation_controller.refresh_boundary_markers(),
 			"select_best_campfire": func(): game.building_lifecycle_service.select_best_campfire(),
@@ -524,6 +523,7 @@ func _setup_building_lifecycle() -> void:
 	port.select_best_canteen = func(): game.building_management.select_best_canteen()
 	port.create_resource_pile = func(position, resources, is_backpack_pile): return game.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile)
 	port.refresh_navigation_grid = func(): game.world_navigation_controller.refresh_navigation_grid()
+	port.release_placement = func(building): game.building_placement_controller.release_placement(building)
 	port.is_construction_site = game.construction_controller.is_construction_site
 	port.activate_employment_centre = func(centre): game.research_controller.activate_employment_centre(centre)
 	port.convert_backpack_pile_to_regular = game.convert_backpack_pile_to_regular
@@ -565,7 +565,17 @@ func _setup_excavation_and_factory() -> void:
 	excavation_port.update_workers = game.update_workers
 	excavation_port.request_courier_dispatch = game.request_courier_dispatch
 	excavation_port.placement_key = game.placement_key
-	excavation_port.is_clear_of_objects = game.is_clear_of_objects
+	excavation_port.is_clear_of_objects = func(world_position: Vector3, minimum_distance: float) -> bool:
+		for occupied_position: Vector3 in game.building_registry.positions() + game.tree_positions:
+			if Vector2(occupied_position.x, occupied_position.z).distance_to(
+					Vector2(world_position.x, world_position.z)) < minimum_distance:
+				return false
+		for site: DigSiteRecord in game.dig_sites:
+			if is_instance_valid(site.node) and Vector2(
+					site.node.global_position.x, site.node.global_position.z).distance_to(
+					Vector2(world_position.x, world_position.z)) < minimum_distance:
+				return false
+		return true
 	excavation_port.employment_center_position = game.employment_center_position
 	excavation_port.show_territory_overlay = func(show): game.build_controller.show_territory_overlay(show)
 	excavation_port.move_selection = func(world_position): game.build_controller.move_selection(world_position)
@@ -597,20 +607,6 @@ func _setup_citizen_registration_and_school() -> void:
 	game.citizen_registration_service.configure(registration_port)
 	game.school_service = SchoolService.new()
 	game.school_service.configure(game.school_positions, game.citizens)
-	game.building_site_validator = BuildingSiteValidator.new()
-	var placement_port := BuildingPlacementRuntimePort.new()
-	placement_port.dig_sites = game.dig_sites
-	placement_port.terrain_blocked_cells = game.terrain_blocked_cells
-	placement_port.building_registry = game.building_registry
-	placement_port.tree_positions = game.tree_positions
-	placement_port.terrain_height_at = game.terrain_height_at
-	placement_port.max_build_slope = SettlementConstants.MAX_BUILD_SLOPE
-	# WorldSetup is built in phase 6, after this application service. The launch
-	# document already owns the exact same grids, so placement can enforce board
-	# and water constraints from its first call without depending on presentation.
-	placement_port.terrain_grid = game.launch_config.map_document.terrain
-	placement_port.water_grid = game.launch_config.map_document.water
-	game.building_site_validator.configure(placement_port)
 
 
 func _setup_citizen_needs_and_orders() -> void:
@@ -863,9 +859,6 @@ func _setup_controllers_and_world() -> void:
 	game.add_child(game.survival_event_controller)
 	game.survival_event_controller.setup(game)
 	game.create_world()
-	# WorldSetup and its TerrainService only exist after create_world(). Anchors
-	# subscribe here so every subsequently registered footprint pins its ground.
-	game.terrain_anchor_service.configure(game.world_setup.terrain_service, game.building_registry)
 	# Surface wear and regrowth need the same `TerrainService`, and the trail field
 	# they read their crossings from already exists by now.
 	game.surface_controller = SettlementSurfaceController.new()

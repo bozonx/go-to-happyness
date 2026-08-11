@@ -348,9 +348,6 @@ var citizen_lifecycle_service: CitizenLifecycleService
 var building_availability_service: BuildingAvailabilityService
 var building_research_service: BuildingResearchService
 var village_territory_service: VillageTerritoryService
-## Writes `IS_ANCHOR` under placed footprints, so the cascade refuses to move the
-## ground a building stands on (grid_terrain_system.md §4.4).
-var terrain_anchor_service: TerrainAnchorService
 var sawmills: SawmillService
 var construction: ConstructionService
 var demolition: DemolitionService
@@ -407,7 +404,6 @@ var settlement_daily_rules_service: SettlementDailyRulesService
 var territory_service: TerritoryService
 var citizen_registration_service: CitizenRegistrationService
 var school_service: SchoolService
-var building_site_validator: BuildingSiteValidator
 var citizen_daily_order_service: CitizenDailyOrderService
 var hero_pocket_service: HeroPocketService
 var hero_interaction_service: HeroInteractionService
@@ -766,9 +762,6 @@ func terrain_height_at(x: float, z: float, near_y: float) -> float:
 	var query := PhysicsRayQueryParameters3D.create(from, Vector3(x, near_y - 12.0, z))
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	return NAN if hit.is_empty() else float(hit.position.y)
-
-func is_clear_of_objects(world_position: Vector3, minimum_distance: float) -> bool:
-	return building_placement_controller.is_clear_of_objects(world_position, minimum_distance) if building_placement_controller != null else false
 
 func placement_key(world_position: Vector3) -> Vector2i:
 	return building_placement_controller.placement_key(world_position) if building_placement_controller != null else Vector2i.ZERO

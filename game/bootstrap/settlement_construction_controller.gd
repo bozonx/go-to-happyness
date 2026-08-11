@@ -60,6 +60,7 @@ func update_construction_supply_label(site: ConstructionSite) -> void:
 
 
 func complete_building(cell: Vector2i, building_type: String, position_on_board: Vector3, building: Node3D, blueprint: Dictionary) -> void:
+	game.building_placement_controller.mark_placement_ready(building)
 	game.settlement.buildings[building_type] = int(game.settlement.buildings.get(building_type, 0)) + 1
 	building.set_meta("building_type", building_type)
 	building.set_meta("condition", 100.0)
@@ -127,6 +128,11 @@ func complete_building(cell: Vector2i, building_type: String, position_on_board:
 
 func is_construction_site(node: Node3D) -> bool:
 	return is_instance_valid(node) and game.construction.has_site(node)
+
+
+func on_construction_site_cancelled(site: ConstructionSite) -> void:
+	if site != null and is_instance_valid(site.node):
+		game.building_placement_controller.release_placement(site.node)
 
 
 func cancel_selected_construction() -> void:

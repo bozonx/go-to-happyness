@@ -12,6 +12,12 @@ var map_document: MapDocument
 var world_setup: WorldSetup = null
 var nav_grid := NavGrid.new()
 var terrain_navigation_publisher := TerrainNavigationPublisher.new()
+## Runtime placement state begins as a copy of the authored map layer. Player
+## construction appends here, never to the map document, so a running game cannot
+## dirty authored content. BuildingPlacementService is the sole writer of ground
+## merge and placement anchors for both editor and session use.
+var placement_layer := MapPlacementLayer.new()
+var building_placement_service := BuildingPlacementService.new()
 ## Built coverage of the launched map, published into routing (map_editor.md
 ## §5.2.3). The session owns the service so the map seeds it exactly once and
 ## everything afterwards — construction, demolition, a save being restored — goes
@@ -113,6 +119,13 @@ func build(
 	)
 	scene_host.add_child(world_setup)
 	world_setup.build(scene_host)
+	placement_layer.from_json(map_document.placements.to_json())
+	building_placement_service.configure(
+		world_setup.terrain_grid,
+		world_setup.water_grid,
+		world_setup.terrain_service,
+		placement_layer,
+		map_document.entities)
 	entity_runtime = world_setup.map_entity_runtime
 	if not entity_runtime.entity_changed.is_connected(_on_entity_changed):
 		entity_runtime.entity_changed.connect(_on_entity_changed)

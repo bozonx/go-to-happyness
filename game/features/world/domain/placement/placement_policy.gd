@@ -25,8 +25,26 @@ var min_building_gap := 1
 ## be left is not a building on a slope but a tower on a plinth nobody authored.
 var max_border_drop := 4
 
+## Editor findings become refusals in a live game where the player cannot accept
+## an authoring warning and repair the map afterwards.
+var enforce_min_building_gap := false
+var enforce_surface_expectation := false
+
+## Optional game-module rule evaluated after the engine plan is complete. It
+## returns `{reason: StringName, message: String}` or an empty dictionary. This
+## is where territory, fog and temporary gameplay sites belong: the placement
+## algorithm stays shared while the game supplies its policy.
+var refusal_check: Callable
+
 
 ## The policy the map editor places with: warnings where the game refuses, and no
 ## economy of soil, fog or overlay audiences (§13).
 static func editor() -> PlacementPolicy:
 	return PlacementPolicy.new()
+
+
+static func session() -> PlacementPolicy:
+	var policy := PlacementPolicy.new()
+	policy.enforce_min_building_gap = true
+	policy.enforce_surface_expectation = true
+	return policy

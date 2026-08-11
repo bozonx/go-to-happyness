@@ -146,7 +146,38 @@ func plan(
 	_collect_cliff_edges(result, pad_cells, targets)
 	_collect_water(result, blueprint, pad_cells, targets)
 	_collect_neighbourhood_warnings(result, policy, ignored_placement)
+	if policy.enforce_surface_expectation and _surface_expectation_mismatch(result, blueprint):
+		result.ok = false
+		result.reason = PlacementPlan.REASON_SURFACE
+		return result
+	if policy.enforce_min_building_gap and _violates_min_gap(result.footprint, policy, ignored_placement):
+		result.ok = false
+		result.reason = PlacementPlan.REASON_MIN_GAP
+		return result
+	if policy.refusal_check.is_valid():
+		var refusal: Variant = policy.refusal_check.call(result)
+		if refusal is Dictionary and not (refusal as Dictionary).is_empty():
+			result.ok = false
+			result.reason = StringName((refusal as Dictionary).get("reason", PlacementPlan.REASON_POLICY))
+			result.custom_reason_text = str((refusal as Dictionary).get("message", ""))
 	return result
+
+
+func _surface_expectation_mismatch(plan_result: PlacementPlan, blueprint: BuildingBlueprint) -> bool:
+	if blueprint.expects_surface == BuildingBlueprint.SURFACE_ANY:
+		return false
+	var is_wet := not plan_result.submerged_cells.is_empty()
+	return is_wet != (blueprint.expects_surface == BuildingBlueprint.SURFACE_WATER)
+
+
+func _violates_min_gap(footprint: BuildingFootprint, policy: PlacementPolicy, ignored: StringName) -> bool:
+	if _layer == null or footprint == null or policy.min_building_gap <= 0:
+		return false
+	var grown := footprint.rect().grow(policy.min_building_gap)
+	for record: MapPlacementRecord in _layer.placements:
+		if record.id != ignored and footprint_of(record).rect().intersects(grown):
+			return true
+	return false
 
 
 ## §6: the pad may sit far above or below its surroundings, but only so far. Past
@@ -344,6 +375,20 @@ func release(record: MapPlacementRecord) -> bool:
 	if not _layer.remove(record.id):
 		return false
 	_release_anchors(footprint)
+	return true
+
+
+## An in-place upgrade keeps the placement identity, level and anchors but must
+## not leave the runtime layer pointing at the superseded blueprint. Footprint-
+## changing upgrades are rebuilds and are refused here as a guardrail.
+func update_blueprint_reference(record: MapPlacementRecord, blueprint: BuildingBlueprint) -> bool:
+	if record == null or blueprint == null or _layer == null or not _layer.has_id(record.id):
+		return false
+	var old_footprint := footprint_of(record)
+	var new_footprint := BuildingFootprint.of(blueprint, record.cell, record.orientation)
+	if old_footprint.span() != new_footprint.span():
+		return false
+	record.blueprint_ref = _reference_to(blueprint)
 	return true
 
 

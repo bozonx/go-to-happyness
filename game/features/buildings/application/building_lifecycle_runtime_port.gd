@@ -59,6 +59,7 @@ var refresh_boundary_markers: Callable
 var select_best_canteen: Callable
 var create_resource_pile: Callable
 var refresh_navigation_grid: Callable
+var release_placement: Callable
 var is_construction_site: Callable
 var activate_employment_centre: Callable
 var convert_backpack_pile_to_regular: Callable

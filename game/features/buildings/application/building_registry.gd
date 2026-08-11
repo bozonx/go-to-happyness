@@ -7,14 +7,6 @@ extends RefCounted
 
 const BuildingRuntimeStateScript = preload("res://game/features/buildings/application/building_runtime_state.gd")
 
-## A footprint entered or left the registry. `TerrainAnchorService` listens so the
-## ground under a building can be pinned against the cascade (grid_terrain_system.md
-## §4.4): the registry is the one place a footprint is claimed and released, so it
-## is the one place that stays honest when construction is cancelled or a building
-## is demolished.
-signal footprint_reserved(record: BuildingRecord)
-signal footprint_released(record: BuildingRecord)
-
 var _records: Array[BuildingRecord] = []
 var _records_by_cell: Dictionary = {}
 
@@ -26,7 +18,6 @@ func reserve(cell: Vector2i, center: Vector3, footprint: Vector2i) -> BuildingRe
 	var record := BuildingRecord.new(cell, center, footprint)
 	_records.append(record)
 	_records_by_cell[cell] = record
-	footprint_reserved.emit(record)
 	return record
 
 
@@ -48,8 +39,8 @@ func update_building_type(node: Node3D, building_type: String) -> bool:
 
 
 ## Empties the registry without replacing the registry object. Runtime ports and
-## terrain-anchor subscriptions deliberately keep this instance for the lifetime
-## of a session, so save restore must clear it in place.
+## runtime ports deliberately keep this instance for the lifetime of a session, so
+## save restore must clear it in place.
 func clear() -> void:
 	for index in range(_records.size() - 1, -1, -1):
 		_remove(_records[index])
@@ -129,5 +120,4 @@ func building_at_service_position(position: Vector3) -> Node3D:
 func _remove(record: BuildingRecord) -> BuildingRecord:
 	_records.erase(record)
 	_records_by_cell.erase(record.cell)
-	footprint_released.emit(record)
 	return record

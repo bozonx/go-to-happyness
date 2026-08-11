@@ -45,7 +45,6 @@ static func run_all() -> void:
 	_test_border_nothing_never_floods()
 	_test_border_lava_floods_edge_with_lava()
 	_test_access_service_finds_banks_not_water()
-	_test_building_placement_rejects_open_and_frozen_water()
 	_test_navigation_refuses_every_edge_outside_the_board()
 	print("    [PASS] Water Layer Tests")
 
@@ -694,24 +693,6 @@ static func _test_access_service_finds_banks_not_water() -> void:
 	var sea_access := WaterAccessService.new()
 	sea_access.configure(sea_water, sea_terrain)
 	assert(not sea_access.has_source())
-
-
-static func _test_building_placement_rejects_open_and_frozen_water() -> void:
-	var terrain := _terrain()
-	var water := _water_over(terrain)
-	var lake := water.create_body(WaterBody.Type.LAKE, 1)
-	assert(water.set_cell(Vector2i.ZERO, lake.id, 1))
-	var port := BuildingPlacementRuntimePort.new()
-	port.terrain_grid = terrain
-	port.water_grid = water
-	port.terrain_height_at = func(_x: float, _z: float, _fallback: float) -> float: return 0.0
-	port.max_build_slope = 0.5
-	var placement := BuildingSiteValidator.new()
-	placement.configure(port)
-	var centre := Vector3(0.5, 0.0, 0.5)
-	assert(placement.footprint_overlaps_terrain_obstacle(centre, Vector2i.ONE))
-	assert(water.set_frozen(Vector2i.ZERO, true, 2))
-	assert(placement.footprint_overlaps_terrain_obstacle(centre, Vector2i.ONE), "ice never becomes a foundation")
 
 
 static func _test_navigation_refuses_every_edge_outside_the_board() -> void:

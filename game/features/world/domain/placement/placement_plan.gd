@@ -22,6 +22,9 @@ const REASON_OVERLAP := &"overlap"
 const REASON_FOREIGN_ANCHOR := &"foreign_anchor"
 const REASON_BORDER_DROP := &"border_drop"
 const REASON_TERRAIN := &"terrain"
+const REASON_MIN_GAP := &"min_building_gap"
+const REASON_SURFACE := &"surface_mismatch"
+const REASON_POLICY := &"game_policy"
 
 const REASON_TEXTS := {
 	REASON_NO_BLUEPRINT: "чертёж не найден",
@@ -31,12 +34,16 @@ const REASON_TEXTS := {
 	REASON_FOREIGN_ANCHOR: "каскад задевает землю под чужим зданием",
 	REASON_BORDER_DROP: "перепад по границе больше допустимого",
 	REASON_TERRAIN: "рельеф не принял площадку",
+	REASON_MIN_GAP: "слишком близко к другому зданию",
+	REASON_SURFACE: "чертёж не рассчитан на эту поверхность",
+	REASON_POLICY: "правила игры запрещают строительство здесь",
 }
 
 var ok := false
 var reason: StringName = REASON_NONE
 ## Non-blocking findings (§6): the placement happens, the author is told.
 var warnings: Array[String] = []
+var custom_reason_text := ""
 
 var footprint: BuildingFootprint = null
 var level := 0
@@ -71,6 +78,8 @@ static func refused(refusal: StringName, plan_footprint: BuildingFootprint = nul
 
 
 func reason_text() -> String:
+	if not custom_reason_text.is_empty():
+		return custom_reason_text
 	return String(REASON_TEXTS.get(reason, String(reason)))
 
 

@@ -400,6 +400,8 @@ func complete_building_upgrade(site: ConstructionSite) -> void:
 					fixture_blueprint.fixtures.append(FixtureDefinition.from_dict(fixture_data))
 			game.fixture_service.initialize_for_building(building_instance_id, fixture_blueprint, int(game.game_minutes))
 	game.building_registry.update_building_type(building, target_type)
+	if not game.building_placement_controller.update_placement_blueprint(building, target_type):
+		push_warning("Upgrade completed without updating its placement blueprint: %s" % target_type)
 	game.settlement.buildings[old_type] = maxi(0, int(game.settlement.buildings.get(old_type, 0)) - 1)
 	game.settlement.buildings[target_type] = int(game.settlement.buildings.get(target_type, 0)) + 1
 	if BuildingTypes.is_warehouse(old_type) and BuildingTypes.is_warehouse(target_type):

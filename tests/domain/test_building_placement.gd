@@ -20,8 +20,11 @@ static func run_all() -> void:
 	_test_a_cascade_reaching_a_foreign_anchor_refuses_the_whole_operation()
 	_test_an_edge_with_no_room_becomes_a_wall_not_a_refusal()
 	_test_water_never_refuses_but_warns_against_the_declared_support()
+	_test_session_policy_turns_game_findings_into_refusals()
+	_test_session_policy_delegates_module_rules_without_a_second_algorithm()
 	_test_raising_a_pad_drains_and_undo_floods_it_back()
 	_test_a_placement_pins_its_ground_and_a_demolition_frees_it()
+	_test_an_in_place_upgrade_retargets_the_same_placement()
 	_test_demolition_keeps_the_graded_ground()
 	_test_placements_round_trip_with_a_missing_blueprint_and_an_unknown_state()
 	_test_the_same_placement_produces_the_same_terrain()
@@ -267,6 +270,42 @@ static func _test_water_never_refuses_but_warns_against_the_declared_support() -
 		"ожидающий воду чертёж предупреждает и об обратном несовпадении")
 
 
+static func _test_session_policy_turns_game_findings_into_refusals() -> void:
+	var world := _world()
+	var service: BuildingPlacementService = world["service"]
+	var first := _blueprint(&"session_gap_a", Vector2i(2, 2), false)
+	assert(service.commit(_plan(world, first, Vector2i(0, 0)), first) != null,
+		"первое здание создаёт соседство")
+	var second := _blueprint(&"session_gap_b", Vector2i(2, 2), false)
+	var too_close := service.plan(second, Vector2i(2, 0), 0,
+		PlacementLevel.MODE_MEDIAN, 0, PlacementPolicy.session())
+	assert(not too_close.ok and too_close.reason == PlacementPlan.REASON_MIN_GAP,
+		"сессионная политика отказывает там, где редактор только предупреждает")
+
+	var wet_world := _world(4)
+	_raise(wet_world, _rect_cells(Rect2i(-2, -2, 6, 6)), -4)
+	var water_service: WaterService = wet_world["water_service"]
+	var body := water_service.create_body(WaterBody.Type.LAKE, 2)
+	assert(water_service.flood(Vector2i(0, 0), body.id, 2), "озеро наливается")
+	var dry_only := _blueprint(&"session_dry_only", Vector2i(2, 2), false)
+	var wet_plan := (wet_world["service"] as BuildingPlacementService).plan(
+		dry_only, Vector2i(0, 0), 0, PlacementLevel.MODE_MANUAL, 0, PlacementPolicy.session())
+	assert(not wet_plan.ok and wet_plan.reason == PlacementPlan.REASON_SURFACE,
+		"сессия не ставит сухопутный чертёж на воду")
+
+
+static func _test_session_policy_delegates_module_rules_without_a_second_algorithm() -> void:
+	var world := _world()
+	var blueprint := _blueprint(&"session_policy_hook", Vector2i(2, 2), false)
+	var policy := PlacementPolicy.session()
+	policy.refusal_check = func(_plan_result: PlacementPlan) -> Dictionary:
+		return {"reason": &"outside_territory", "message": "за границей поселения"}
+	var plan := (world["service"] as BuildingPlacementService).plan(
+		blueprint, Vector2i(-4, -4), 0, PlacementLevel.MODE_MEDIAN, 0, policy)
+	assert(not plan.ok and plan.reason == &"outside_territory", "модуль сообщает свою причину")
+	assert(plan.reason_text() == "за границей поселения", "интерфейс получает точный текст политики")
+
+
 ## Water is derived from the ground, so lifting a pad above the surface drains it
 ## and undo puts the lake back — in the same author action (§3).
 static func _test_raising_a_pad_drains_and_undo_floods_it_back() -> void:
@@ -310,6 +349,20 @@ static func _test_a_placement_pins_its_ground_and_a_demolition_frees_it() -> voi
 	assert(not terrain.is_anchor(Vector2i(7, 7)), "снос отпускает землю")
 	assert((world["document"] as MapDocument).placements.placements.is_empty(),
 		"запись удалена из слоя")
+
+
+static func _test_an_in_place_upgrade_retargets_the_same_placement() -> void:
+	var world := _world()
+	var service: BuildingPlacementService = world["service"]
+	var first := _blueprint(&"upgrade_placement_1", Vector2i(2, 3), false)
+	var record := service.commit(_plan(world, first, Vector2i(-6, 4)), first)
+	var upgraded := _blueprint(&"upgrade_placement_2", Vector2i(2, 3), false)
+	assert(service.update_blueprint_reference(record, upgraded), "апгрейд того же пятна разрешён")
+	assert(BuildingPlacementService.blueprint_of(record) == upgraded,
+		"та же запись с теми же якорями ссылается на новый чертёж")
+	var wider := _blueprint(&"upgrade_placement_wider", Vector2i(3, 3), false)
+	assert(not service.update_blueprint_reference(record, wider),
+		"смена пятна требует сноса и новой постановки")
 
 
 ## Demolition does not restore the relief (§11.4). Undo does; the difference is

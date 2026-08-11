@@ -138,7 +138,11 @@ func place_building(world_position: Vector3) -> void:
 		game.update_interface("Only the hero can approve construction decisions.")
 		return
 	var bpc := game.building_placement_controller
-	world_position = bpc.snapped_build_position(world_position) if bpc != null else world_position
+	var plan := bpc.plan_placement(world_position) if bpc != null else null
+	if plan == null or not plan.ok:
+		game.update_interface(bpc.placement_message(plan) if bpc != null else "Construction is not allowed at this point.")
+		return
+	world_position = bpc.world_position_for_plan(plan)
 	var max_hero_radius := BuildingCatalog.max_hero_radius(game.build_mode)
 	if max_hero_radius > 0.0 and is_instance_valid(game.hero_citizen):
 		if game.hero_citizen.global_position.distance_to(world_position) > max_hero_radius:
@@ -147,28 +151,26 @@ func place_building(world_position: Vector3) -> void:
 	if game.build_mode in ["straw_trade_tent", "tarp_trade_tent"] and is_instance_valid(game.entrance_stone) and world_position.distance_to(game.entrance_stone.global_position) > 8.0:
 		game.update_interface("The tent market must be built beside the entrance sign.")
 		return
-	var cell := game.placement_key(world_position)
+	var cell := bpc.registry_cell_for_plan(plan)
 	var blueprint := BuildingBlueprints.get_blueprint(game.build_mode)
-	var occupied_footprint := game.rotated_footprint(blueprint.footprint)
-	var territory_reason: StringName = game.village_territory_service.placement_reason(game.build_mode, cell, occupied_footprint)
-	if territory_reason != game.village_territory_service.REASON_OK:
-		game.update_interface(game.village_territory_service.placement_message(territory_reason))
-		return
-	if not (bpc.can_place(world_position) if bpc != null else false):
-		game.update_interface("Construction is not allowed at this point.")
-		return
+	var occupied_footprint: Vector2i = plan.footprint.span()
 	if not (bpc.can_pay_building_cost(game.build_mode) if bpc != null else false):
 		var placement_state: Dictionary = game.building_availability_service.placement_state_with_inventory(game.build_mode, game.pocket)
 		game.update_interface(str(placement_state.message))
 		return
+	var placement_record := bpc.commit_placement(plan)
+	if placement_record == null:
+		game.update_interface("The terrain changed before construction could be marked. Try again.")
+		return
 
 	if BuildingCatalog.is_instant_build(game.build_mode):
-		_place_instant_building(cell, world_position, blueprint, occupied_footprint)
+		_place_instant_building(cell, world_position, blueprint, occupied_footprint, placement_record)
 		return
 
 	game.building_registry.reserve(cell, world_position, occupied_footprint)
 	game.world_navigation_controller.refresh_navigation_grid()
 	var site: ConstructionSite = game.construction_controller.create_construction_site(cell, game.build_mode, world_position, game.build_rotation_quarters, blueprint, occupied_footprint)
+	bpc.bind_placement(site.node, placement_record)
 	game.hero_interaction_controller.deliver_pocket_to_site(site, true)
 	game.building_registry.attach_node(cell, site.node, game.build_mode)
 	_reset_build_mode_visuals()
@@ -185,7 +187,10 @@ func place_building_at_crosshair() -> void:
 	place_building(terrain_point)
 
 
-func _place_instant_building(cell: Vector2i, world_position: Vector3, blueprint: Dictionary, occupied_footprint: Vector2i) -> void:
+func _place_instant_building(
+		cell: Vector2i, world_position: Vector3, blueprint: Dictionary,
+		occupied_footprint: Vector2i, placement_record: MapPlacementRecord,
+) -> void:
 	game.building_registry.reserve(cell, world_position, occupied_footprint)
 	var site_node: Node3D = game.construction._get_site_scene().instantiate()
 	site_node.position = world_position
@@ -197,6 +202,7 @@ func _place_instant_building(cell: Vector2i, world_position: Vector3, blueprint:
 	game.add_child(site_node)
 	for module in blueprint.modules:
 		site_node.add_child(BuildingBlueprints.create_module(module))
+	game.building_placement_controller.bind_placement(site_node, placement_record)
 	for child_name in ["ConstructionTerritory", "ConstructionProgressBack", "ConstructionProgressFill", "SupplyLabel", "ConstructionSelector", "ConstructionEntrance"]:
 		var child := site_node.get_node_or_null(child_name)
 		if child != null:

@@ -93,14 +93,18 @@ static func capture_settlement_section(game: Node) -> Dictionary:
 				var b_type = record.building_type
 				var blueprint_ref: Dictionary = record.node.get_meta("blueprint_ref", {})
 				var zone_state: Array = game.building_zone_service.zone_state_snapshot(record.node) if "building_zone_service" in game and game.building_zone_service != null else []
-				buildings_list.append({
+				var building_data := {
 					"cell": cell_dict,
 					"building_type": b_type,
 					"position": center_dict,
 					"rotation_y": rot_y,
 					"blueprint_ref": blueprint_ref.duplicate(true),
 					"zone_state": zone_state.duplicate(true),
-				})
+				}
+				var placement := _placement_for_node(game, record.node)
+				if placement != null:
+					building_data["placement"] = placement.to_dict()
+				buildings_list.append(building_data)
 	if "construction" in game and game.construction != null:
 		for site: ConstructionSite in game.construction.sites:
 			if not is_instance_valid(site.node):
@@ -124,6 +128,10 @@ static func capture_settlement_section(game: Node) -> Dictionary:
 			}
 			if site.is_upgrade():
 				site_data["upgrade_from_type"] = site.upgrade_from_type
+			else:
+				var placement := _placement_for_node(game, site.node)
+				if placement != null:
+					site_data["placement"] = placement.to_dict()
 			construction_sites_list.append(site_data)
 
 	# 5. Resource Piles
@@ -216,6 +224,12 @@ static func capture_settlement_section(game: Node) -> Dictionary:
 		"clock": clock_state,
 		"camera": camera_state,
 	}
+
+
+static func _placement_for_node(game: Node, node: Node3D) -> MapPlacementRecord:
+	if not ("building_placement_controller" in game) or game.building_placement_controller == null:
+		return null
+	return game.building_placement_controller.placement_for_node(node)
 
 
 static func _save_warehouses(settlement: RefCounted) -> Array:
