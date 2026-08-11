@@ -20,6 +20,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	print("--- Running test_fill_mode_editor.gd ---")
+	root.size = Vector2i(1280, 720)
 	var editor := EditorScene.instantiate()
 	root.add_child(editor)
 	await process_frame
@@ -103,9 +104,11 @@ func _run() -> void:
 		"fill inspector has only vertical scrolling")
 	assert(editor.get_node("%FillObjectList").get_parent().get_parent().get_parent() == inspector,
 		"object list is a fixed lower block outside the inspector scroll")
-	assert(is_equal_approx(objects_panel.size.y, 300.0), "object list block keeps a fixed height")
+	assert(is_equal_approx(objects_panel.size.y, 300.0),
+		"object list block keeps a fixed height, got %s" % objects_panel.size.y)
 	assert(inspector_scroll.position.y + inspector_scroll.size.y <= objects_panel.position.y,
-		"scrolling inspector and fixed object list do not overlap")
+		"scrolling inspector %s/%s and fixed object list %s do not overlap" % [
+			inspector_scroll.position.y, inspector_scroll.size.y, objects_panel.position.y])
 	assert(editor.get_node("%Compass") is EditorViewportCompass, "building editor uses the shared compass")
 	print("  mode switch ok, asset=", fill.current_asset_id)
 

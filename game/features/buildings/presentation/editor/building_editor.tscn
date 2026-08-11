@@ -1167,6 +1167,9 @@ layout_mode = 2
 unique_name_in_owner = true
 layout_mode = 2
 
+[node name="List" parent="EditorUI/Root/FillInspectorPanel/FillObjectsPanel/ObjectsVBox/FillObjectList" index="2"]
+custom_minimum_size = Vector2(0, 160)
+
 [node name="StatusBar" parent="EditorUI/Root" instance=ExtResource("4_status_bar")]
 layout_mode = 1
 anchors_preset = 12
