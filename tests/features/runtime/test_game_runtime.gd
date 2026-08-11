@@ -36,6 +36,11 @@ func _run() -> void:
 	assert(settlement.launch_config.map_document == map)
 	assert(settlement.launch_config.starting_population == 4)
 	assert(settlement.world_setup != null, "settlement module must initialize the existing game")
+	var snow_probe := Vector2i(-1, -1)
+	while not SnowRestRule.can_rest(settlement.world_setup.terrain_grid, settlement.world_setup.water_grid, snow_probe):
+		snow_probe.x += 1
+	assert(settlement.world_setup.terrain_service.set_snow_depth(
+		[snow_probe] as Array[Vector2i], 2))
 	assert(SessionSaveCoordinator.save_quicksave(runtime))
 	var settlement_save := SaveData.new()
 	assert(settlement_save.load_from_file(SessionSaveCoordinator.QUICKSAVE_PATH))
@@ -46,8 +51,12 @@ func _run() -> void:
 	assert(settlement_save.module_section_version(&"gth.settlement") == SettlementGameModule.new().section_version())
 	var saved_money := settlement.settlement.money
 	settlement.settlement.money = 1
+	assert(settlement.world_setup.terrain_service.set_snow_depth(
+		[snow_probe] as Array[Vector2i], 0))
 	assert(SessionSaveCoordinator.load_pending(runtime, SessionSaveCoordinator.QUICKSAVE_PATH))
 	assert(settlement.settlement.money == saved_money)
+	assert(settlement.world_setup.terrain_grid.snow_depth_at(snow_probe) == 2,
+		"core.world must restore accumulated terrain state, not the settlement module")
 	runtime.stop_session()
 	root.remove_child(runtime)
 	runtime.free()
@@ -82,6 +91,11 @@ func _assert_world_showcase(launch_manager: Node) -> void:
 	assert(showcase.world_setup != null)
 	assert(showcase.world_setup.terrain_grid == map.terrain)
 	assert(showcase.world_session.nav_grid.terrain_field() != null)
+	var minute_before := showcase.world_session.environment.snapshot().elapsed_minutes
+	for _frame in range(4):
+		await process_frame
+	assert(showcase.world_session.environment.snapshot().elapsed_minutes > minute_before,
+		"the generic host must advance the environment without SettlementGame")
 	assert(showcase.camera_controller.camera_target == test_spawn,
 		"a showcase test run must aim the camera at the editor's spawn override")
 	showcase.camera_controller.camera_yaw = 17.0

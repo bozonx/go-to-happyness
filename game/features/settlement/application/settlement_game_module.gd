@@ -20,6 +20,25 @@ func required_modules() -> Array[StringName]:
 	return [&"core.world"]
 
 
+func section_version() -> int:
+	return 2
+
+
+func migrate_section(from_version: int, state: Dictionary) -> Dictionary:
+	if from_version != 1:
+		return {}
+	var migrated := state.duplicate(true)
+	var world: Variant = migrated.get("world", {})
+	if world is Dictionary:
+		# Version 1 was the former write-owner of the surface. Carry its payload as
+		# an explicitly legacy overlay so upgrading a save does not erase worn paths
+		# or snow; version 2 never writes this key.
+		migrated["legacy_terrain_surface"] = String(
+			(world as Dictionary).get("terrain_surface", ""))
+		(world as Dictionary).erase("terrain_surface")
+	return migrated
+
+
 ## Party size is a `party`-scoped parameter offered to the player: a map narrows
 ## it with `restrict` and a start option proposes its own, but no map decides it
 ## by how many anchors somebody drew (`map_start.md` §5.3).
@@ -69,6 +88,12 @@ func restore_state(runtime: GameRuntime, state: Dictionary) -> bool:
 	var settlement := runtime.session_content as SettlementGame
 	if settlement == null:
 		return false
+	var legacy_surface := String(state.get("legacy_terrain_surface", ""))
+	if not legacy_surface.is_empty():
+		if settlement.world_setup == null or not TerrainSurfaceCodec.from_base64(
+			legacy_surface, settlement.world_setup.terrain_grid):
+			return false
+		settlement.world_session.terrain_navigation_publisher.publish_all()
 	return SettlementSaveLoader.new().restore(settlement, state)
 
 

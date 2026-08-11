@@ -42,6 +42,7 @@ func _ready() -> void:
 ## has them publishes its own trigger through `MapScenarioRuntime.publish`.
 func _process(delta: float) -> void:
 	if world_session != null:
+		world_session.tick_environment(delta)
 		world_session.scenario_runtime.process(delta)
 
 

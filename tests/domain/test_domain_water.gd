@@ -25,6 +25,7 @@ static func run_all() -> void:
 	_test_undo_restores_the_layer_exactly()
 	_test_freezing_refuses_lava_and_fast_water()
 	_test_codec_round_trip()
+	_test_session_ice_codec_round_trip()
 	_test_codec_rejects_damaged_cells_without_partial_decode()
 	_test_hanging_water_is_removed()
 	_test_document_round_trip_carries_the_registry()
@@ -256,6 +257,27 @@ static func _test_codec_rejects_damaged_cells_without_partial_decode() -> void:
 	restored.add_body(lake.duplicate_body())
 	assert(not MapWaterCodec.decode_into(buffer, restored))
 	assert(restored.wet_cell_count() == 0, "validation happens before the first cell write")
+
+
+static func _test_session_ice_codec_round_trip() -> void:
+	var terrain := _terrain()
+	var water := _water_over(terrain)
+	var service := WaterService.new()
+	service.configure(water, terrain)
+	var lake := service.create_body(WaterBody.Type.LAKE, 1)
+	var thin := Vector2i(-3, -2)
+	var thick := Vector2i(-2, -2)
+	assert(water.set_cell(thin, lake.id, 1))
+	assert(water.set_cell(thick, lake.id, 1))
+	assert(service.set_frozen([thin] as Array[Vector2i], true, 1))
+	assert(service.set_frozen([thick] as Array[Vector2i], true, 3))
+	var encoded := WaterIceCodec.to_base64(water)
+	assert(service.set_frozen([thin, thick] as Array[Vector2i], false))
+	assert(WaterIceCodec.from_base64(encoded, service))
+	assert(water.ice_thickness_at(thin) == 1)
+	assert(water.ice_thickness_at(thick) == 3)
+	assert(water.body_id_at(thin) == lake.id and water.height_of(thin) == 1)
+	assert(service.undo_depth() == 0, "loading accumulated state is not an undoable edit")
 
 
 static func _test_hanging_water_is_removed() -> void:

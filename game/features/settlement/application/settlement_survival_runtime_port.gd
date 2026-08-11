@@ -12,7 +12,6 @@ var random: RandomNumberGenerator
 var environment_getter: Callable
 var building_registry: BuildingRegistry
 var fire_management_service: FireManagementService
-var tent_weather_getter: Callable
 var entrance_stone_getter: Callable
 var event_service_getter: Callable
 var has_lit_communal_fire: Callable

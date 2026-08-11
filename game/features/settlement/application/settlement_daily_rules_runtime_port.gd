@@ -10,7 +10,8 @@ var trail_field: TrailFieldService
 var event_service_getter: Callable
 var citizen_needs_service: CitizenNeedsService
 var canteen_getter: Callable
-var tent_weather_getter: Callable
+## Returns the current EnvironmentSnapshot; daily cold pressure is numeric.
+var environment_getter: Callable
 var add_message: Callable
 var update_interface: Callable
 var apply_building_wear_and_repairs: Callable

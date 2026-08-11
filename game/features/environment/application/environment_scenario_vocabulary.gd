@@ -132,7 +132,7 @@ func _on_set_weather(action: Dictionary, _scenario: MapScenarioRuntime, _payload
 	if bool(action.get("hold", true)):
 		director.pin_pattern(pattern, transition)
 	else:
-		director.set_pattern(pattern)
+		director.set_pattern(pattern, -1, transition)
 
 
 func _on_force_precipitation(action: Dictionary, _scenario: MapScenarioRuntime, _payload: Dictionary) -> void:

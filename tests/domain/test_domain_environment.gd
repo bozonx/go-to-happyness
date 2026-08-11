@@ -17,12 +17,16 @@ func _init() -> void:
 static func run_tests() -> void:
 	_test_calendar_owns_time()
 	_test_calendar_only_moves_forward()
+	_test_setting_current_time_is_a_noop()
 	_test_climate_curve_and_seasons()
 	_test_solar_arc_follows_the_calendar()
 	_test_snapshot_is_a_function_of_day_minute_seed()
 	_test_temperature_decides_snow_not_a_cold_flag()
 	_test_pattern_is_not_settlement_vocabulary()
 	_test_director_override_and_release()
+	_test_same_day_pattern_change_preserves_wind_continuity()
+	_test_exact_scripted_pose_uses_the_director()
+	_test_long_jump_samples_only_the_final_bounded_window()
 	_test_forced_precipitation_expires()
 	_test_airless_climate_has_no_fog()
 	_test_cloud_caption_respects_the_storm_axis()
@@ -30,6 +34,8 @@ static func run_tests() -> void:
 	_test_save_round_trip()
 	_test_accumulation_catches_up_on_skipped_time()
 	_test_chunk_cursor_accounts_for_each_slices_elapsed_time()
+	_test_ice_advances_once_per_world_interval()
+	_test_snow_rest_rule_is_shared_physics()
 	print("test_domain_environment: OK")
 
 
@@ -60,6 +66,17 @@ static func _test_calendar_only_moves_forward() -> void:
 	assert(skipped.size() == 1 and is_equal_approx(skipped[0], 18.0 * 60.0))
 	calendar.set_day_of_year(103)
 	assert(calendar.day_of_year == 103)
+
+
+static func _test_setting_current_time_is_a_noop() -> void:
+	var calendar := WorldCalendar.new()
+	calendar.configure(12.0 * 60.0, 100, 54.0, 365)
+	var jumps: Array[float] = []
+	calendar.time_jumped.connect(func(minutes: float) -> void: jumps.append(minutes))
+	calendar.set_time_of_day(12 * 60)
+	assert(calendar.day_of_session == 1)
+	assert(calendar.day_of_year == 100)
+	assert(jumps.is_empty())
 
 
 static func _test_climate_curve_and_seasons() -> void:
@@ -180,6 +197,57 @@ static func _test_director_override_and_release() -> void:
 	assert(frozen.is_scripted())
 	frozen.tick(1.0)
 	assert(is_equal_approx(frozen.snapshot().minute_of_day, 8.0 * 60.0))
+	# A scripted pose entered while the caller had paused must not unpause it.
+	var paused := EnvironmentDirector.new()
+	paused.configure(&"temperate", 100, 8 * 60, 54.0, &"clear", 11)
+	paused.set_time_scale(0.0)
+	paused.set_sky(0.8, 0.0, 0.0)
+	paused.release(0.0)
+	assert(is_zero_approx(paused.snapshot().time_scale))
+
+
+static func _test_same_day_pattern_change_preserves_wind_continuity() -> void:
+	var model := WeatherModel.new()
+	var first_rng := RandomNumberGenerator.new()
+	first_rng.seed = 123
+	model.new_day(WeatherPatternCatalog.pattern(&"clear"), first_rng, 360)
+	var minute := 9.0 * 60.0
+	var displacement := model.wind_displacement_at(minute)
+	var bearing := model.wind_direction
+	var next_rng := RandomNumberGenerator.new()
+	next_rng.seed = 987
+	model.change_pattern(WeatherPatternCatalog.pattern(&"rain"), next_rng, 360, minute)
+	assert(model.pattern.id == &"rain")
+	assert(is_equal_approx(model.wind_direction, bearing))
+	assert(model.wind_displacement_at(minute).distance_to(displacement) < 0.001)
+
+
+static func _test_exact_scripted_pose_uses_the_director() -> void:
+	var director := EnvironmentDirector.new()
+	director.configure(&"temperate", 100, 8 * 60, 54.0, &"clear", 11)
+	director.pose_weather(0.62, 0.37, 0.71, 4.25, 0.0)
+	var snapshot := director.snapshot()
+	assert(is_equal_approx(snapshot.cloud_cover, 0.62))
+	assert(is_equal_approx(snapshot.storm_influence, 0.37))
+	assert(is_equal_approx(snapshot.precipitation_intensity, 0.71))
+	assert(is_equal_approx(snapshot.cloud_seed, 4.25))
+	assert(snapshot.is_precipitating())
+
+
+static func _test_long_jump_samples_only_the_final_bounded_window() -> void:
+	var director := EnvironmentDirector.new()
+	director.configure(&"temperate", 100, 8 * 60, 54.0, &"clear", 11)
+	var caught: Array[Dictionary] = []
+	director.time_jumped.connect(func(samples: Array[Dictionary]) -> void: caught.append_array(samples))
+	director.skip_minutes(20.0 * 24.0 * 60.0)
+	assert(caught.size() == int(EnvironmentDirector.MAX_CATCH_UP_MINUTES / 30.0))
+	var minutes := 0.0
+	for sample: Dictionary in caught:
+		minutes += float(sample.get("minutes", 0.0))
+	assert(is_equal_approx(minutes, EnvironmentDirector.MAX_CATCH_UP_MINUTES))
+	var last: EnvironmentSnapshot = caught[-1]["snapshot"]
+	assert(last.day_of_year == director.snapshot().day_of_year)
+	assert(is_equal_approx(last.minute_of_day, director.snapshot().minute_of_day))
 
 
 static func _test_forced_precipitation_expires() -> void:
@@ -296,6 +364,48 @@ static func _test_chunk_cursor_accounts_for_each_slices_elapsed_time() -> void:
 		accumulation.tick(snapshot)
 	assert(terrain.snow_depth_at(Vector2i(-15, -15)) > 0)
 	assert(terrain.snow_depth_at(Vector2i(15, 15)) > 0)
+
+
+static func _test_ice_advances_once_per_world_interval() -> void:
+	var terrain := TerrainGrid.new()
+	terrain.configure(2.0, 32)
+	var terrain_service := TerrainService.new()
+	terrain_service.configure(terrain)
+	var water := WaterGrid.new()
+	water.configure(2.0, 32)
+	var body := water.create_body(WaterBody.Type.LAKE, 1)
+	assert(body != null)
+	assert(water.set_cell(Vector2i(-4, -3), body.id, 1))
+	var water_service := WaterService.new()
+	water_service.configure(water, terrain)
+	var accumulation := EnvironmentAccumulationService.new()
+	accumulation.configure(terrain_service, water_service, terrain, water)
+	var snapshot := EnvironmentSnapshot.new()
+	snapshot.temperature = -2.0
+	accumulation.tick(snapshot)
+	for _step in 10:
+		snapshot.elapsed_minutes += 1.0
+		accumulation.tick(snapshot)
+	var progress: Dictionary = accumulation.save_state()["ice_progress"]
+	assert(is_equal_approx(float(progress[body.id]), 10.0 / EnvironmentAccumulationService.MINUTES_PER_ICE_STEP))
+
+
+static func _test_snow_rest_rule_is_shared_physics() -> void:
+	var terrain := TerrainGrid.new()
+	terrain.configure(2.0, 16)
+	var water := WaterGrid.new()
+	water.configure(2.0, 16)
+	var dry := Vector2i(-3, -2)
+	var hole := Vector2i(-2, -2)
+	var lake := Vector2i(-1, -2)
+	assert(terrain.set_hole(hole, true))
+	var body := water.create_body(WaterBody.Type.LAKE, 1)
+	assert(water.set_cell(lake, body.id, 1))
+	assert(SnowRestRule.can_rest(terrain, water, dry))
+	assert(not SnowRestRule.can_rest(terrain, water, hole))
+	assert(not SnowRestRule.can_rest(terrain, water, lake))
+	assert(water.set_frozen(lake, true, 1))
+	assert(SnowRestRule.can_rest(terrain, water, lake))
 
 
 static func _state(

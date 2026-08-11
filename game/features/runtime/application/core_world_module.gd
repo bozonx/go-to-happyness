@@ -12,6 +12,7 @@ func module_id() -> StringName:
 
 func validate_session(session: GameSessionConfig) -> Array[String]:
 	var errors: Array[String] = []
+	errors.append_array(EnvironmentContentLoader.register_all())
 	if session.map_document == null or session.map_ref.is_empty():
 		errors.append("требуется разрешённая карта")
 		return errors
@@ -23,6 +24,11 @@ func validate_session(session: GameSessionConfig) -> Array[String]:
 	))
 	errors.append_array(_missing_required_content(session.map_document))
 	errors.append_array(_missing_pack_dependencies(session))
+	var start := session.map_document.meta.start
+	if not ClimateCatalog.has_profile(start.climate):
+		errors.append("неизвестный климат %s" % start.climate)
+	if not WeatherPatternCatalog.has_pattern(start.weather_preset):
+		errors.append("неизвестный погодный паттерн %s" % start.weather_preset)
 	errors.append_array(session.map_document.meta.start.progression.validate(
 		session.definition.progression.era_ids() if session.definition != null else []))
 	return errors
@@ -32,9 +38,6 @@ func start(runtime: GameRuntime, session: GameSessionConfig) -> bool:
 	if session.map_document == null or session.map_ref.is_empty():
 		push_error("[launch] core.world requires a resolved map")
 		return false
-	var environment_errors := EnvironmentContentLoader.register_all()
-	for problem: String in environment_errors:
-		push_warning("[environment] %s" % problem)
 	runtime.world_session = WorldSession.new(
 		session.map_document, WorldSession.DEFAULT_CELL_SIZE,
 		session.start_option, session.start_flags(), session.seed)
@@ -51,15 +54,18 @@ func stop(runtime: GameRuntime) -> void:
 ## written before it restores with a default environment rather than being
 ## refused: a world with no recorded calendar is an old world, not a broken one.
 func section_version() -> int:
-	return 2
+	return 3
 
 
 func migrate_section(from_version: int, state: Dictionary) -> Dictionary:
-	if from_version != 1:
+	if from_version < 1 or from_version > 2:
 		return {}
 	var migrated := state.duplicate(true)
-	migrated["environment"] = {}
-	migrated["accumulation"] = {}
+	if from_version == 1:
+		migrated["environment"] = {}
+		migrated["accumulation"] = {}
+	migrated["terrain_surface"] = ""
+	migrated["water_ice"] = ""
 	return migrated
 
 
@@ -70,11 +76,16 @@ func save_state(runtime: GameRuntime) -> Dictionary:
 	return {
 		"entities": session.entity_runtime.lifecycle_snapshot(),
 		# Only what does not follow from time: calendar, seed, the rolled pattern
-		# and the director's override. Cloud and wind are recomputed (§16).
+		# and the director's override. Cloud and wind strength are recomputed;
+		# integrated displacement keeps only its continuity origin (§16).
 		"environment": session.environment.save_state(),
 		# Snow depth and ice live in their own layers; this is only where the
 		# sweep had got to, so a reload does not restart it from one corner.
 		"accumulation": session.environment_accumulation.save_state(),
+		"terrain_surface": TerrainSurfaceCodec.to_base64(
+			session.world_setup.terrain_grid if session.world_setup != null else null),
+		"water_ice": WaterIceCodec.to_base64(
+			session.world_setup.water_grid if session.world_setup != null else null),
 	}
 
 
@@ -87,14 +98,30 @@ func restore_state(runtime: GameRuntime, state: Dictionary) -> bool:
 	var session := runtime.world_session
 	var environment: Variant = state.get("environment", {})
 	if environment is Dictionary and not (environment as Dictionary).is_empty():
-		session.environment.restore_state(environment as Dictionary)
+		if not session.environment.restore_state(environment as Dictionary):
+			return false
+	if session.world_setup != null:
+		var surface := String(state.get("terrain_surface", ""))
+		if not surface.is_empty() and not TerrainSurfaceCodec.from_base64(
+			surface, session.world_setup.terrain_grid):
+			return false
+		var ice := String(state.get("water_ice", ""))
+		if not ice.is_empty() and not WaterIceCodec.from_base64(
+			ice, session.world_setup.water_service):
+			return false
+	runtime.world_session.entity_runtime.restore_lifecycle(entities as Dictionary)
+	if runtime.world_session.world_setup != null:
+		# Surface decode is a validated bulk overlay, not an editor transaction. One
+		# full publish makes snow/ice weights current without rebuilding services or
+		# erasing their restored progress/road state.
+		runtime.world_session.terrain_navigation_publisher.publish_all()
+		runtime.world_session.nav_grid.set_blocked_cells(
+			runtime.world_session.base_navigation_blocked_cells())
+		runtime.world_session.nav_grid.refresh_connectivity()
+		runtime.world_session.present_environment()
 	var accumulation: Variant = state.get("accumulation", {})
 	if accumulation is Dictionary:
 		session.environment_accumulation.restore_state(accumulation as Dictionary)
-	runtime.world_session.entity_runtime.restore_lifecycle(entities as Dictionary)
-	if runtime.world_session.world_setup != null:
-		runtime.world_session.nav_grid.set_blocked_cells(runtime.world_session.entity_navigation_blocked_cells())
-		runtime.world_session.nav_grid.refresh_connectivity()
 	return true
 
 

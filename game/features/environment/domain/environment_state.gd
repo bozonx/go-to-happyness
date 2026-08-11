@@ -44,19 +44,27 @@ func configure(
 	seed = p_seed
 	_rng.seed = p_seed
 	calendar.configure(float(minute_of_day), day_of_year, p_latitude, climate.days_per_year)
-	roll_day(pattern_id, minute_of_day)
+	roll_day(pattern_id, minute_of_day, true)
 
 
 ## Rolls the weather for the current day. An empty `pattern_id` means "let the
 ## climate choose", which is what an ordinary morning does; a game that owns its
 ## own forecast hands the pattern in from outside (§7).
-func roll_day(pattern_id: StringName = &"", announcement_minute := 6 * 60) -> void:
+func roll_day(
+	pattern_id: StringName = &"",
+	announcement_minute := 6 * 60,
+	calendar_day_started := false,
+) -> void:
 	var chosen := pattern_id
 	if not pinned_pattern.is_empty():
 		chosen = pinned_pattern
 	if chosen.is_empty():
 		chosen = choose_pattern(calendar.day_of_year)
-	weather.new_day(WeatherPatternCatalog.pattern(chosen), _day_rng(), announcement_minute)
+	var next_pattern := WeatherPatternCatalog.pattern(chosen)
+	if calendar_day_started:
+		weather.new_day(next_pattern, _day_rng(), announcement_minute)
+	else:
+		weather.change_pattern(next_pattern, _day_rng(), announcement_minute, calendar.minute_of_day)
 
 
 ## The climate's own choice for a day: deterministic in `(day, seed)` and

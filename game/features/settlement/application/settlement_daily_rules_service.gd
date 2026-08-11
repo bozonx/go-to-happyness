@@ -18,7 +18,7 @@ var _trail_field: Variant
 var _event_service_getter: Callable
 var _citizen_needs_service: Variant
 var _canteen_getter: Callable
-var _tent_weather_getter: Callable
+var _environment_getter: Callable
 var _add_message: Callable
 var _update_interface: Callable
 var _apply_building_wear_and_repairs: Callable
@@ -37,7 +37,7 @@ func configure(port: SettlementDailyRulesRuntimePort) -> void:
 	_event_service_getter = port.event_service_getter
 	_citizen_needs_service = port.citizen_needs_service
 	_canteen_getter = port.canteen_getter
-	_tent_weather_getter = port.tent_weather_getter
+	_environment_getter = port.environment_getter
 	_add_message = port.add_message
 	_update_interface = port.update_interface
 	_apply_building_wear_and_repairs = port.apply_building_wear_and_repairs
@@ -104,7 +104,10 @@ func apply_daily_settlement_rules() -> void:
 	_settlement.add(ResourceIds.WATER, -population)
 	var canteen: Node3D = _canteen_getter.call()
 	if not is_instance_valid(canteen):
-		_settlement.add(ResourceIds.FOOD, -TentEraSurvivalRulesScript.daily_food_consumption(population, _tent_weather_getter.call()))
+		var snapshot: EnvironmentSnapshot = _environment_getter.call()
+		var felt_temperature := snapshot.felt_temperature if snapshot != null else 12.0
+		_settlement.add(ResourceIds.FOOD, -TentEraSurvivalRulesScript.daily_food_consumption(
+			population, felt_temperature))
 	var housing: int = _total_housing_slots.call()
 	var change := SETTLEMENT_RULES.daily_wellbeing_change(housing >= population, float(_settlement.amount(ResourceIds.FOOD)) / population, float(_settlement.amount(ResourceIds.WATER)) / population, _settlement.workday_hours)
 	_settlement.wellbeing = clampi(_settlement.wellbeing + change, 0, 100)

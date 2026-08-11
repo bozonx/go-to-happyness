@@ -25,6 +25,9 @@ const WEATHER_PATTERNS := {
 	Weather.COOLING: &"cloudy",
 	Weather.RAIN: &"rain",
 }
+## Below this felt temperature an exposed sleeper and the settlement's food
+## budget pay the cold surcharge. The forecast name never enters mechanics.
+const COLD_STRESS_FELT_TEMPERATURE := 5.0
 
 
 static func weather_pattern_for(weather: int) -> StringName:
@@ -36,16 +39,21 @@ static func weather_for_day(day: int) -> int:
 	# plan around the morning forecast. A future event generator may replace it.
 	return posmod(day - 1, 3)
 
-static func hourly_wellbeing_loss(has_home: bool, has_lit_fire: bool, weather: int, is_night: bool) -> int:
+static func hourly_wellbeing_loss(
+	has_home: bool,
+	has_lit_fire: bool,
+	felt_temperature: float,
+	is_night: bool,
+) -> int:
 	var loss := 0
 	if is_night and not has_home:
-		loss += 6 if weather == Weather.COOLING else 3
+		loss += 6 if felt_temperature <= COLD_STRESS_FELT_TEMPERATURE else 3
 	if not has_lit_fire:
 		loss += 2
 	return loss
 
-static func daily_food_consumption(population: int, weather: int) -> int:
-	var multiplier := 1.25 if weather == Weather.COOLING else 1.0
+static func daily_food_consumption(population: int, felt_temperature: float) -> int:
+	var multiplier := 1.25 if felt_temperature <= COLD_STRESS_FELT_TEMPERATURE else 1.0
 	return ceili(population * multiplier)
 
 static func rain_hourly_decay_losses(amounts: Dictionary, exposed_ratio := 1.0) -> Dictionary:

@@ -60,6 +60,10 @@ var seasonal_entities := SeasonalEntityService.new()
 ## presenter leaves them alone — otherwise a creature exists twice, once inert.
 ## Empty means "no module claimed anything": every entity gets its generic view.
 var claimed_entity_components: Array[StringName] = []
+## Real elapsed seconds are presentation phase, not game time. Keeping them on
+## the world host lets every module (and the module-less showcase) animate the
+## same sky without inventing its own counter.
+var _runtime_seconds := 0.0
 
 
 func _init(
@@ -117,6 +121,7 @@ func build(
 	# модулем, стареет одинаково.
 	seasonal_entities.configure(entity_runtime, environment)
 	publish_navigation()
+	present_environment()
 	return world_setup
 
 
@@ -144,10 +149,19 @@ func _on_time_jumped(samples: Array[Dictionary]) -> void:
 ## Advances the environment and everything it drives. One call per frame from the
 ## host: nothing downstream advances time, it only reads the snapshot.
 func tick_environment(delta: float) -> void:
+	_runtime_seconds += maxf(delta, 0.0)
 	environment.tick(delta)
 	var current := environment.snapshot()
 	environment_accumulation.tick(current)
 	environment_scenario.publish_state(current)
+	present_environment()
+
+
+## Projects the current snapshot without advancing it. Public because an
+## explicit time jump needs an immediate redraw before the next host frame.
+func present_environment() -> void:
+	if world_setup != null:
+		world_setup.update_daylight(environment.snapshot(), _runtime_seconds)
 
 
 func publish_navigation() -> void:
@@ -156,8 +170,9 @@ func publish_navigation() -> void:
 	terrain_navigation_publisher.configure(
 		world_setup.terrain_grid,
 		nav_grid,
-		null,
+		world_setup.terrain_service,
 		world_setup.water_grid,
+		world_setup.water_service,
 	)
 	world_setup.water_access.configure(world_setup.water_grid, world_setup.terrain_grid, nav_grid)
 	# The map seeds the road network and stops there: no editing service is passed,

@@ -7,9 +7,11 @@ static func run_all() -> void:
 	test_session_keeps_module_values_module_scoped()
 	test_progression_is_resolved_by_the_host()
 	test_modules_declare_their_start_parameters()
+	test_settlement_surface_migration_moves_the_legacy_owner()
 	test_host_input_profiles_are_allowlisted()
 	test_definition_validation_rejects_unknown_module()
 	test_definition_validation_rejects_dangling_menu_parameter()
+	test_core_world_rejects_unknown_environment_content()
 	test_installed_user_pack_game_is_indexed_and_resolvable()
 	test_definition_round_trips_description_and_menu_parameters()
 	print("    [PASS] Game Runtime Domain Tests")
@@ -115,6 +117,14 @@ static func test_modules_declare_their_start_parameters() -> void:
 	assert(resolved["custom"] == true)
 
 
+static func test_settlement_surface_migration_moves_the_legacy_owner() -> void:
+	var migrated := SettlementGameModule.new().migrate_section(1, {
+		"world": {"terrain_surface": "legacy-bytes", "map_zones": []},
+	})
+	assert(migrated.get("legacy_terrain_surface", "") == "legacy-bytes")
+	assert(not (migrated["world"] as Dictionary).has("terrain_surface"))
+
+
 static func test_host_input_profiles_are_allowlisted() -> void:
 	assert(HostInputProfile.is_supported(&"rts"))
 	assert(not HostInputProfile.is_supported(&"first_person"))
@@ -156,6 +166,18 @@ static func test_definition_validation_rejects_dangling_menu_parameter() -> void
 	})
 	assert(GameModuleRegistry.validate_definition(era_without_eras)
 		.any(func(error: String) -> bool: return error.contains("эра")))
+
+
+static func test_core_world_rejects_unknown_environment_content() -> void:
+	var definition := GameModuleRegistry.resolve_definition(&"core:world_showcase")
+	var document := MapDocumentService.new().load_map(definition.default_map)
+	assert(document != null)
+	document.meta.start.climate = &"missing_climate"
+	document.meta.start.weather_preset = &"missing_weather"
+	var session := GameSessionConfig.create(definition, definition.default_map, document)
+	var errors := CoreWorldModule.new().validate_session(session)
+	assert(errors.any(func(error: String) -> bool: return error.contains("missing_climate")))
+	assert(errors.any(func(error: String) -> bool: return error.contains("missing_weather")))
 
 
 static func test_definition_round_trips_description_and_menu_parameters() -> void:

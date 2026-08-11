@@ -172,7 +172,6 @@ var selection_marker: MeshInstance3D:
 ## "rain has started/stopped" message can notice the edge; every other weather
 ## question goes to `simulation_tick_controller.environment()`
 ## (`world_environment.md` §2).
-var is_precipitating := false
 var ambient_spawner: AmbientSpawner
 var camera_target: Vector3:
 	get: return camera_controller.camera_target

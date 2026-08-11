@@ -237,14 +237,7 @@ func _paint_snow() -> void:
 
 
 func _snow_can_rest_on(cell: Vector2i) -> bool:
-	if not context.terrain.is_inside(cell) or context.terrain.is_hole(cell):
-		return false
-	# Open water has no ground surface for snow. Frozen water has an ice floor and
-	# is intentionally eligible: snowfall on a frozen lake is normal and its cost
-	# remains a weight, not a topology change.
-	if context.water != null and context.water.is_wet(context.terrain, cell) and not context.water.is_frozen(cell):
-		return false
-	return context.terrain.slope_class_at(cell) < SlopeCatalog.CLASS_VERY_STEEP
+	return SnowRestRule.can_rest(context.terrain, context.water, cell)
 
 
 const ACCORDION_EARTH := &"accordion_earth"

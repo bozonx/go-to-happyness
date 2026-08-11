@@ -9,6 +9,7 @@ extends RefCounted
 const S = preload("res://game/features/ui/domain/game_strings.gd")
 
 var game: SettlementGame
+var _was_precipitating := false
 
 
 func _init(p_game: SettlementGame) -> void:
@@ -27,7 +28,8 @@ func total_game_minutes() -> float:
 ## daylight and season question in the settlement goes through here — nothing
 ## assembles values from the rules itself, and nothing keeps a second copy.
 func environment() -> EnvironmentSnapshot:
-	return game.world_session.environment.snapshot() if game.world_session != null else EnvironmentSnapshot.new()
+	assert(game.world_session != null, "SettlementGame requires the core.world environment")
+	return game.world_session.environment.snapshot()
 
 
 func is_night() -> bool:
@@ -64,18 +66,14 @@ func refresh_living_status(citizen: Citizen) -> void:
 	game.citizen_living_status_service.refresh_citizen(citizen, has_lit_communal_fire(), is_night())
 
 
-func update_clock(delta: float) -> void:
+func update_clock() -> void:
 	var previous_hour := game.clock.hour()
-	var was_precipitating := game.is_precipitating
-	# The environment moves time — for this game and for every other one on the
-	# engine — and the settlement then reads what happened (§2, §4).
-	if game.world_session != null:
-		game.world_session.tick_environment(delta)
 	var events := game.day_cycle.collect_events(game.settlement.workday_hours)
-	game.is_precipitating = environment().is_precipitating()
-	if game.is_precipitating != was_precipitating:
+	var precipitating := environment().is_precipitating()
+	if precipitating != _was_precipitating:
 		var falling := "Snow" if environment().is_snowing() else "Rain"
-		game.update_interface("%s has %s." % [falling, "started" if game.is_precipitating else "stopped"])
+		game.update_interface("%s has %s." % [falling, "started" if precipitating else "stopped"])
+	_was_precipitating = precipitating
 	if game.clock.hour() != previous_hour:
 		game.settlement_survival_service.apply_hourly_tent_survival(game.clock.hour())
 		game.settlement_survival_service.apply_hourly_work_fatigue()
@@ -117,8 +115,8 @@ func _season_label(season: StringName) -> String:
 ## Pushes this frame's environment into the sky (§2). The settlement supplies the
 ## snapshot and real elapsed seconds and decides nothing else about the weather.
 func update_daylight() -> void:
-	if game.world_setup != null:
-		game.world_setup.update_daylight(environment(), game.runtime_seconds)
+	if game.world_session != null:
+		game.world_session.present_environment()
 
 
 func guard_citizen_positions() -> void:
@@ -187,7 +185,7 @@ func tick(delta: float) -> void:
 	game.construction_controller.update_construction(delta)
 	game.demolition.tick(delta)
 	game.water_collector_service.tick(delta)
-	update_clock(delta)
+	update_clock()
 	game.release_unassigned_overtime_workers()
 	if game.survival_event_controller != null:
 		game.survival_event_controller.update_survival_busy_workers()
@@ -198,7 +196,6 @@ func tick(delta: float) -> void:
 	game.world_navigation_controller.update_trail_overlay()
 	if game.surface_controller != null:
 		game.surface_controller.tick(game.day_cycle.current_day)
-	update_daylight()
 	if game.building_lifecycle_service != null:
 		game.building_lifecycle_service.update_house_lights()
 	game.canteen_service.update_canteen_delivery()

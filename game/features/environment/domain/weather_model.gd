@@ -4,9 +4,10 @@ extends RefCounted
 ## Deterministic cloud, wind and precipitation scheduling for one day
 ## (`world_environment.md` §7–§9).
 ##
-## Everything here is a pure function of `(minute, pattern, seed)` — nothing is
-## accumulated and nothing is saved but the seed and the pattern that was rolled
-## (§3). The day is chosen once in `new_day`; every question afterwards is
+## Everything visible here is a pure function of `(minute, pattern, seed)`. The
+## sole persisted continuity value is the origin of integrated wind displacement:
+## it prevents cloud/flag animation from jumping when a save crosses midnight
+## (§3, §9). The day is chosen once in `new_day`; every question afterwards is
 ## answered by evaluating a curve at a minute, which is what lets the player skip
 ## a night or a cutscene rewind time for free.
 ##
@@ -48,6 +49,32 @@ var _rolled := false
 func new_day(next_pattern: WeatherPattern, rng: RandomNumberGenerator, announcement_minute: int = 6 * 60) -> void:
 	if _rolled and not _wind_displacement_samples.is_empty():
 		_wind_displacement_origin += _wind_displacement_samples[-1]
+	_roll(next_pattern, rng, announcement_minute, true)
+
+
+## Replaces the forecast inside the current calendar day. This is deliberately
+## not `new_day`: a settlement announcing its own pattern at 06:00 must not add a
+## second day's wind displacement or choose a second prevailing bearing (§7, §9).
+func change_pattern(
+	next_pattern: WeatherPattern,
+	rng: RandomNumberGenerator,
+	announcement_minute: int,
+	current_minute: float,
+) -> void:
+	if not _rolled:
+		new_day(next_pattern, rng, announcement_minute)
+		return
+	var displacement_here := wind_displacement_at(current_minute)
+	_roll(next_pattern, rng, announcement_minute, false)
+	_wind_displacement_origin += displacement_here - wind_displacement_at(current_minute)
+
+
+func _roll(
+	next_pattern: WeatherPattern,
+	rng: RandomNumberGenerator,
+	announcement_minute: int,
+	advance_bearing: bool,
+) -> void:
 	pattern = next_pattern if next_pattern != null else WeatherPatternCatalog.pattern(WeatherPattern.DEFAULT_ID)
 	precipitation_start_minute = -1.0
 	precipitation_end_minute = -1.0
@@ -57,7 +84,7 @@ func new_day(next_pattern: WeatherPattern, rng: RandomNumberGenerator, announcem
 	if not _rolled:
 		wind_direction = rng.randf_range(0.0, TAU)
 		wind_previous_direction = wind_direction
-	else:
+	elif advance_bearing:
 		wind_previous_direction = wind_direction
 		var daily_turn := rng.randf_range(-PI * 0.42, PI * 0.42)
 		wind_direction = wrapf(wind_previous_direction + daily_turn, 0.0, TAU)

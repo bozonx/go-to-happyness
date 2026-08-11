@@ -22,7 +22,6 @@ var _random: RandomNumberGenerator
 var _environment_getter: Callable
 var _building_registry: Variant
 var _fire_management_service: Variant
-var _tent_weather_getter: Callable
 var _entrance_stone_getter: Callable
 var _event_service_getter: Callable
 var _has_lit_communal_fire: Callable
@@ -45,7 +44,6 @@ func configure(port: SettlementSurvivalRuntimePort) -> void:
 	_environment_getter = port.environment_getter
 	_building_registry = port.building_registry
 	_fire_management_service = port.fire_management_service
-	_tent_weather_getter = port.tent_weather_getter
 	_entrance_stone_getter = port.entrance_stone_getter
 	_event_service_getter = port.event_service_getter
 	_has_lit_communal_fire = port.has_lit_communal_fire
@@ -62,12 +60,15 @@ func apply_hourly_tent_survival(hour: int, survival_day := 0) -> void:
 	last_survival_hour = survival_hour
 	var night := hour >= 22 or hour < 6
 	var has_fire: bool = _has_lit_communal_fire.call()
+	var snapshot: EnvironmentSnapshot = _environment_getter.call()
+	var felt_temperature := snapshot.felt_temperature if snapshot != null else 12.0
 	var total_loss := 0
 	for citizen in _citizens:
 		if not is_instance_valid(citizen):
 			continue
 		var has_home := is_instance_valid(citizen.home)
-		total_loss += TentEraSurvivalRulesScript.hourly_wellbeing_loss(has_home, has_fire, _tent_weather_getter.call(), night)
+		total_loss += TentEraSurvivalRulesScript.hourly_wellbeing_loss(
+			has_home, has_fire, felt_temperature, night)
 	if total_loss > 0:
 		_settlement.wellbeing = maxi(0, _settlement.wellbeing - ceili(float(total_loss) / maxi(1, _citizens.size())))
 	if _settlement.wellbeing == 0 and last_zero_wellbeing_departure_day != day and (not is_skipping_night or not skip_zero_wellbeing_departure_applied):

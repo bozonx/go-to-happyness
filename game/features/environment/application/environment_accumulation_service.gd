@@ -88,10 +88,14 @@ func tick(snapshot: EnvironmentSnapshot) -> void:
 	_previous_minutes = snapshot.elapsed_minutes
 	if elapsed <= 0.0:
 		return
+	# Ice is body-wide, so it advances once for the real interval. The snow cursor
+	# below deliberately revisits slices at different rates; using that slice's
+	# elapsed time for every body used to multiply freezing by the chunk count.
+	_update_ice(snapshot, elapsed)
 	var slice_start := cursor
 	var slice_elapsed := maxf(snapshot.elapsed_minutes - float(_slice_last_minutes.get(slice_start, snapshot.elapsed_minutes - elapsed)), 0.0)
 	_slice_last_minutes[slice_start] = snapshot.elapsed_minutes
-	_advance(snapshot, slice_elapsed)
+	_advance(snapshot, slice_elapsed, false, false)
 
 
 ## Applies an interval that was skipped rather than lived — a skipped night, a
@@ -141,8 +145,14 @@ func restore_state(state: Dictionary) -> void:
 	_previous_minutes = -1.0
 
 
-func _advance(snapshot: EnvironmentSnapshot, minutes: float, whole_board := false) -> void:
-	_update_ice(snapshot, minutes)
+func _advance(
+	snapshot: EnvironmentSnapshot,
+	minutes: float,
+	whole_board := false,
+	advance_ice := true,
+) -> void:
+	if advance_ice:
+		_update_ice(snapshot, minutes)
 	var cells := _next_cells(whole_board)
 	if cells.is_empty():
 		return
@@ -195,11 +205,7 @@ func _target_depth_change(snapshot: EnvironmentSnapshot, cell: Vector2i, minutes
 ## Open water has no ground surface for snow. Frozen water does — an ice sheet is
 ## a floor — and snow on a frozen lake is normal, so it is deliberately eligible.
 func _snow_can_rest_on(cell: Vector2i) -> bool:
-	if water_grid == null:
-		return true
-	if not water_grid.is_wet(terrain_grid, cell):
-		return true
-	return water_grid.is_frozen(cell)
+	return SnowRestRule.can_rest(terrain_grid, water_grid, cell)
 
 
 ## Freezing and thawing are an ordinary `WaterService` transaction, per body and

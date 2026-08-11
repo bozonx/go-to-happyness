@@ -380,29 +380,9 @@ func _apply_state() -> void:
 	# transition so a capture is a function of the preset and not of the frame it
 	# was taken on. It never reaches into the sky controller or the weather rules —
 	# that second path is exactly what §2 exists to prevent.
-	director.set_sky(overcast, storm_influence, 0.0)
-	if rain_intensity > 0.0:
-		director.force_precipitation(600.0, 0.0)
-	else:
-		director.stop_precipitation(0.0)
+	director.pose_weather(
+		overcast, storm_influence, rain_intensity, cloud_pattern_seed, 0.0)
 	var snapshot := director.snapshot()
-	# The regulators are absolute here: a blend is what a cutscene gets, but a
-	# preset asking for 62 % cover must capture 62 % cover.
-	snapshot.cloud_cover = overcast
-	snapshot.storm_influence = storm_influence
-	snapshot.precipitation_intensity = rain_intensity
-	# The lab poses a moment rather than living through one, so the fade-in at the
-	# edge of the forced window would otherwise report "nothing is falling" at the
-	# very minute the preset asks for precipitation. What falls is still decided the
-	# one way it is decided anywhere — by the climate's snow chance (§10).
-	if rain_intensity > 0.0:
-		snapshot.precipitation = (
-			EnvironmentSnapshot.Precipitation.SNOW if snapshot.snow_chance >= 0.5
-			else EnvironmentSnapshot.Precipitation.RAIN
-		)
-	else:
-		snapshot.precipitation = EnvironmentSnapshot.Precipitation.NONE
-	snapshot.cloud_seed = cloud_pattern_seed
 	controller.update_daylight(snapshot, runtime_seconds)
 	# Ветер — часть снимка, и лаборатория обязана рисовать его так же, как игра
 	# (`world_environment.md` §9). Без этой строки шторм в лаборатории выглядел

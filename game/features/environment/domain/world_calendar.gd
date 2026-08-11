@@ -82,7 +82,9 @@ func jump_minutes(minutes: float) -> void:
 func set_time_of_day(minute: int) -> void:
 	var target := fposmod(float(minute), float(MINUTES_PER_DAY))
 	var delta := target - minute_of_day
-	if delta <= 0.0:
+	if is_zero_approx(delta):
+		return
+	if delta < 0.0:
 		delta += float(MINUTES_PER_DAY)
 	jump_minutes(delta)
 

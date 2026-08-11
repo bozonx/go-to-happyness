@@ -436,7 +436,6 @@ func _setup_settlement_survival_and_daily_rules() -> void:
 	survival_port.environment_getter = func() -> EnvironmentSnapshot: return game.simulation_tick_controller.environment()
 	survival_port.building_registry = game.building_registry
 	survival_port.fire_management_service = game.fire_management_service
-	survival_port.tent_weather_getter = func() -> int: return game.tent_weather
 	survival_port.entrance_stone_getter = func() -> Node3D: return game.entrance_stone
 	survival_port.event_service_getter = func() -> Variant: return game.event_service
 	survival_port.has_lit_communal_fire = func(): return game.simulation_tick_controller.has_lit_communal_fire()
@@ -453,7 +452,7 @@ func _setup_settlement_survival_and_daily_rules() -> void:
 	daily_port.event_service_getter = func() -> Variant: return game.event_service
 	daily_port.citizen_needs_service = game.citizen_needs_service
 	daily_port.canteen_getter = func() -> Node3D: return game.canteen
-	daily_port.tent_weather_getter = func() -> int: return game.tent_weather
+	daily_port.environment_getter = func() -> EnvironmentSnapshot: return game.simulation_tick_controller.environment()
 	daily_port.add_message = game.add_message
 	daily_port.update_interface = game.update_interface
 	daily_port.apply_building_wear_and_repairs = game.apply_building_wear_and_repairs

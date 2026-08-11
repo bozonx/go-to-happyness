@@ -243,9 +243,10 @@ static func _test_work_schedule_wellbeing() -> void:
 static func _test_tent_survival_rules() -> void:
 	assert(TentEraSurvivalRulesScript.weather_for_day(1) == TentEraSurvivalRulesScript.Weather.WARMING)
 	assert(TentEraSurvivalRulesScript.weather_for_day(2) == TentEraSurvivalRulesScript.Weather.COOLING)
-	assert(TentEraSurvivalRulesScript.hourly_wellbeing_loss(false, true, TentEraSurvivalRulesScript.Weather.COOLING, true) == 6)
-	assert(TentEraSurvivalRulesScript.hourly_wellbeing_loss(true, false, TentEraSurvivalRulesScript.Weather.WARMING, false) == 2)
-	assert(TentEraSurvivalRulesScript.daily_food_consumption(4, TentEraSurvivalRulesScript.Weather.COOLING) == 5)
+	assert(TentEraSurvivalRulesScript.hourly_wellbeing_loss(false, true, 2.0, true) == 6)
+	assert(TentEraSurvivalRulesScript.hourly_wellbeing_loss(true, false, 12.0, false) == 2)
+	assert(TentEraSurvivalRulesScript.daily_food_consumption(4, 2.0) == 5)
+	assert(TentEraSurvivalRulesScript.daily_food_consumption(4, 12.0) == 4)
 	var rain_loss: Dictionary = TentEraSurvivalRulesScript.rain_hourly_decay_losses({"food": 16, "branches": 1})
 	assert(int(rain_loss.food) == 1 and int(rain_loss.branches) == 1)
 
