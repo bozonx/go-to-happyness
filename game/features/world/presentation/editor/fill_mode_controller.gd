@@ -1026,17 +1026,17 @@ func _apply_record_appearance(view: Node3D, record: MapEntityRecord) -> void:
 	if archetype != null and view.has_method("apply_entity_props"):
 		view.call("apply_entity_props", archetype.resolved_properties(record.props))
 	_enable_authoring_preview(view)
-	if archetype == null or asset == null or not view.has_method("apply_decor_properties"):
+	if archetype == null or asset == null or not view.has_method("apply_fill_properties"):
 		return
 	var appearance := asset.default_appearance()
 	var state := archetype.states.get_state(record.initial_state)
 	if state != null and state.visual_kind == EntityStateDef.VISUAL_VARIANT:
 		appearance.merge(asset.state_appearance(state.visual_value), true)
 	appearance.merge(record.appearance, true)
-	view.call("apply_decor_properties", appearance)
-	# DecorObjectController applies asset defaults in `_ready`; repeat after the
+	view.call("apply_fill_properties", appearance)
+	# FillObjectController applies asset defaults in `_ready`; repeat after the
 	# node enters the tree so the authored initial state remains visible.
-	view.call_deferred("apply_decor_properties", appearance)
+	view.call_deferred("apply_fill_properties", appearance)
 
 
 func _world_position(local_position: Vector3) -> Vector3:
@@ -1076,14 +1076,14 @@ func _refresh_ghost() -> void:
 	if _ghost.has_method("apply_entity_props"):
 		_ghost.call("apply_entity_props", archetype.resolved_properties(_brush_props))
 	_enable_authoring_preview(_ghost)
-	if _ghost.has_method("apply_decor_properties"):
+	if _ghost.has_method("apply_fill_properties"):
 		var asset := EntityArchetypeCatalog.asset_of(archetype.id)
 		if asset != null:
 			var appearance := asset.default_appearance()
 			var state := archetype.states.get_state(_brush_initial_state)
 			if state != null and state.visual_kind == EntityStateDef.VISUAL_VARIANT:
 				appearance.merge(asset.state_appearance(state.visual_value), true)
-			_ghost.call("apply_decor_properties", appearance)
+			_ghost.call("apply_fill_properties", appearance)
 	_ghost.visible = true
 	var cells := _brush_cells(cell)
 	_ghost.position = _world_position(_anchor_position(cells, archetype) + Vector3.UP * _brush_elevation_blocks + _brush_offset)

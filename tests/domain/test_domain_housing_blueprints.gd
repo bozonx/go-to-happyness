@@ -12,7 +12,7 @@ const BuildingCatalogScript = preload("res://game/features/buildings/domain/buil
 
 const BUILDINGS_ROOT := "res://game/content/core/buildings"
 
-# Interactive landmarks keep their intentional fixture and decor layouts.
+# Interactive landmarks keep their intentional fixture and fill layouts.
 const FEATURED_IDS: Array[String] = [
 	"campfire", "campfire_lvl2", "campfire_lvl3",
 	"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3",

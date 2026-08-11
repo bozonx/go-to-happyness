@@ -773,8 +773,8 @@ func _spawn_node(record: FillObjectRecord) -> void:
 	add_child(instance)
 	_nodes[record.id] = instance
 	_apply_transform_to_node(record)
-	if instance.has_method("apply_decor_properties"):
-		instance.call("apply_decor_properties", record.appearance)
+	if instance.has_method("apply_fill_properties"):
+		instance.call("apply_fill_properties", record.appearance)
 
 
 ## Deliberately a placeholder, not a second asset system — the same marker the
@@ -1106,7 +1106,7 @@ func _on_zone_filter_selected(_index: int) -> void:
 
 
 ## Visible fill roots that are physically solid during the F5 walk-through.
-## Interaction and visual presence are independent from collision: small decor
+## Interaction and visual presence are independent from collision: small fill
 ## stays selectable without becoming an invisible curb.
 func walkthrough_collision_sources() -> Array[Node]:
 	var sources: Array[Node] = []
@@ -1259,8 +1259,8 @@ func _set_property(property_name: String, value: Variant) -> void:
 		return
 	record.appearance[property_name] = value
 	var node: Node3D = _nodes.get(record.id, null)
-	if node != null and node.has_method("set_decor_property"):
-		node.call("set_decor_property", property_name, value)
+	if node != null and node.has_method("set_fill_property"):
+		node.call("set_fill_property", property_name, value)
 	# One property of one object is one merge key: a slider dragged through
 	# twenty values is one author action, but two different fields never merge.
 	_editor.mark_dirty_coalesced("fill_prop/%s/%s" % [record.id, property_name])

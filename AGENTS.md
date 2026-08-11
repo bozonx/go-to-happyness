@@ -141,7 +141,7 @@ no-map fallback. See `design_docs/engine/map_editor.md`.
 - Static editor UI is authored as `.tscn` under `editor/ui/`, one scene per panel. Build
   nodes in code only for genuinely dynamic children.
 - One undo stack across all modes (`MapEditorHistory`), deliberately unlike the building
-  editor's per-mode decor stack. Terrain commands delegate to `TerrainService`'s delta
+  editor's per-mode fill stack. Terrain commands delegate to `TerrainService`'s delta
   stack rather than copying it.
 - `MapDocument` carries sections this build does not interpret (rules, markers,
   placements) and writes them back untouched. A phase-1 editor must not eat the rules of a

@@ -253,14 +253,14 @@ static func modules_of(bp: BuildingBlueprint) -> Array:
 			"rot_z": block.rot_z,
 			"kind": "block",
 		})
-	for decor in bp.objects:
+	for fill in bp.objects:
 		entries.append({
-			"position": decor.pos - center,
-			"rotation": decor.rot,
-			"scale": decor.scale,
-			"asset_id": decor.asset_id,
-			"appearance": decor.appearance,
-			"kind": "decor",
+			"position": fill.pos - center,
+			"rotation": fill.rot,
+			"scale": fill.scale,
+			"asset_id": fill.asset_id,
+			"appearance": fill.appearance,
+			"kind": "fill",
 		})
 	entries.sort_custom(_compare_module_height)
 	return entries

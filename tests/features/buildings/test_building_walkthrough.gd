@@ -50,7 +50,7 @@ func _test_walking_a_room(editor: BuildingEditor) -> void:
 	editor.blueprint.objects.append(backpack)
 	editor.fill_mode.rebuild_nodes()
 	assert(WorldAssetCatalog.get_asset(&"backpack").collision_policy == WorldAssetDef.COLLISION_NONE,
-		"small loose decor declares no physical collision")
+		"small loose fill declares no physical collision")
 	assert(editor.fill_mode._nodes[backpack.id] not in editor.fill_mode.walkthrough_collision_sources(),
 		"the walk-through excludes fill objects whose collision policy is none")
 	await process_frame

@@ -231,7 +231,7 @@ static func _test_core_pack_archetypes_load() -> void:
 		assert(EntityArchetypeCatalog.asset_of(archetype.id) != null, "archetype %s declares an asset it cannot resolve" % archetype.id)
 
 	assert(not EntityArchetypeCatalog.of_class(EntityArchetype.CLASS_OBJECT).is_empty())
-	assert(not EntityArchetypeCatalog.of_class(EntityArchetype.CLASS_DECOR).is_empty())
+	assert(not EntityArchetypeCatalog.of_class(EntityArchetype.CLASS_FILL).is_empty())
 	# The rabbit is an actor (live creature the citizen hunts), so the actor class
 	# is populated rather than empty.
 	assert(not EntityArchetypeCatalog.of_class(EntityArchetype.CLASS_ACTOR).is_empty())

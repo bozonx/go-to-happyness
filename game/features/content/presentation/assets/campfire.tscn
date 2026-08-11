@@ -1,6 +1,6 @@
 [gd_scene load_steps=14 format=3 uid="uid://cfdecorcampfire101"]
 
-[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/fill_object_controller.gd" id="1_script"]
 
 [sub_resource type="CylinderShape3D" id="Shape_asset_collision"]
 radius = 0.62

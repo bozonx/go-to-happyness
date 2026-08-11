@@ -197,7 +197,7 @@ static func filter_assets(
 
 
 ## Re-reads the on-disk asset directories. The editor calls this when entering
-## decor mode so newly authored `.tres` files show up without a restart.
+## fill mode so newly authored `.tres` files show up without a restart.
 static func refresh() -> void:
 	ContentIndex.invalidate()
 	_assets.clear()

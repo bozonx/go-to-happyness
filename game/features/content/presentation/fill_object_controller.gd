@@ -1,7 +1,7 @@
-class_name DecorObjectController
+class_name FillObjectController
 extends Node3D
 
-## Applies authored furnishing appearance values to a decor scene.
+## Applies authored furnishing appearance values to a fill scene.
 ##
 ## The controller is deliberately generic: it owns no per-asset `@export`s and
 ## does no `find_child` guessing. Each asset declares, in its `WorldAssetDef`,
@@ -23,10 +23,10 @@ func _ready() -> void:
 	# needs to look like its documented default state.
 	var asset := _asset()
 	if asset != null:
-		apply_decor_properties(asset.default_appearance())
+		apply_fill_properties(asset.default_appearance())
 
 
-func apply_decor_properties(props: Dictionary) -> void:
+func apply_fill_properties(props: Dictionary) -> void:
 	var asset := _asset()
 	if asset == null:
 		return
@@ -40,7 +40,7 @@ func apply_decor_properties(props: Dictionary) -> void:
 		_apply_bindings(bindings.get(property_name, []), _appearance[property_name])
 
 
-func set_decor_property(property_name: String, value: Variant) -> void:
+func set_fill_property(property_name: String, value: Variant) -> void:
 	var asset := _asset()
 	if asset == null:
 		return
@@ -48,7 +48,7 @@ func set_decor_property(property_name: String, value: Variant) -> void:
 	_apply_bindings(asset.bindings().get(property_name, []), value)
 
 
-func get_decor_properties() -> Dictionary:
+func get_fill_properties() -> Dictionary:
 	return _appearance.duplicate(true)
 
 
@@ -62,7 +62,7 @@ func apply_state_variant(variant_id: String) -> void:
 		return
 	var variant := asset.state_appearance(variant_id)
 	for key: Variant in variant.keys():
-		set_decor_property(str(key), variant[key])
+		set_fill_property(str(key), variant[key])
 
 
 func _asset() -> WorldAssetDef:
@@ -81,7 +81,7 @@ func _apply_bindings(binds: Variant, value: Variant) -> void:
 			continue
 		var node := get_node_or_null(NodePath(node_path))
 		if node == null:
-			push_warning("DecorObjectController(%s): binding target '%s' not found" % [asset_id, node_path])
+			push_warning("FillObjectController(%s): binding target '%s' not found" % [asset_id, node_path])
 			continue
 		_apply_to_node(node, property_name, value)
 
@@ -128,10 +128,10 @@ func _set_albedo(node: Node, color: Color) -> void:
 		_set_shader_albedo(mesh_instance, color)
 		return
 	var override := mesh_instance.material_override as StandardMaterial3D
-	if override == null or not override.has_meta("decor_instance_material"):
+	if override == null or not override.has_meta("fill_instance_material"):
 		var source := _source_material(mesh_instance)
 		override = source.duplicate() as StandardMaterial3D if source is StandardMaterial3D else StandardMaterial3D.new()
-		override.set_meta("decor_instance_material", true)
+		override.set_meta("fill_instance_material", true)
 		mesh_instance.material_override = override
 	override.albedo_color = color
 	# Unshaded flame meshes read better when the tint drives emission too.
@@ -144,12 +144,12 @@ const SHADER_ALBEDO := &"albedo_color"
 
 func _set_shader_albedo(mesh_instance: MeshInstance3D, color: Color) -> void:
 	var override := mesh_instance.material_override as ShaderMaterial
-	if override == null or not override.has_meta("decor_instance_material"):
+	if override == null or not override.has_meta("fill_instance_material"):
 		var source := _source_material(mesh_instance) as ShaderMaterial
 		if source == null:
 			return
 		override = source.duplicate() as ShaderMaterial
-		override.set_meta("decor_instance_material", true)
+		override.set_meta("fill_instance_material", true)
 		mesh_instance.material_override = override
 	override.set_shader_parameter(SHADER_ALBEDO, color)
 

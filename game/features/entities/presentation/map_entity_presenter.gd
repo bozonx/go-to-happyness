@@ -78,11 +78,11 @@ func _on_entity_changed(entity_id: StringName, change: StringName) -> void:
 	if change == &"state":
 		view.set_meta("map_entity_state", entity.state)
 		_apply_state_appearance(view, entity, EntityArchetypeCatalog.asset_of(entity.archetype.id))
-	if change == &"appearance" and view.has_method("apply_decor_properties"):
+	if change == &"appearance" and view.has_method("apply_fill_properties"):
 		var asset := EntityArchetypeCatalog.asset_of(entity.archetype.id)
 		var values := asset.default_appearance() if asset != null else {}
 		values.merge(entity.appearance, true)
-		view.call("apply_decor_properties", values)
+		view.call("apply_fill_properties", values)
 
 
 func _make_view(entity: MapEntityRuntime.RuntimeEntity) -> Node3D:
@@ -104,10 +104,10 @@ func _make_view(entity: MapEntityRuntime.RuntimeEntity) -> Node3D:
 	view.set_meta("map_entity_id", entity.id)
 	view.set_meta("map_entity_state", entity.state)
 	_apply_state_appearance(view, entity, asset)
-	if view.has_method("apply_decor_properties") and not entity.appearance.is_empty():
+	if view.has_method("apply_fill_properties") and not entity.appearance.is_empty():
 		var appearance := asset.default_appearance() if asset != null else {}
 		appearance.merge(entity.appearance, true)
-		view.call("apply_decor_properties", appearance)
+		view.call("apply_fill_properties", appearance)
 	return view
 
 

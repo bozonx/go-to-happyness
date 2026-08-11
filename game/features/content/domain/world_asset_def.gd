@@ -13,7 +13,7 @@ extends Resource
 ##     "bind": [{"node": "Fire", "prop": "visible"}, ...]
 ##   }
 ##
-## `bind` declares *where the value lands in the scene*, so DecorObjectController
+## `bind` declares *where the value lands in the scene*, so FillObjectController
 ## stays a generic applier instead of carrying one @export per asset. `prop`
 ## accepts any node property (including sub-paths such as `position:y`) plus the
 ## synthetic `albedo` (tints the mesh material, duplicated per instance), `scale`

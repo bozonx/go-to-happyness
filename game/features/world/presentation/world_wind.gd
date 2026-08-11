@@ -12,7 +12,7 @@ extends RefCounted
 ##
 ## Foliage materials read the wind as global shader uniforms rather than being
 ## walked and poked one by one: every bush duplicates its material per instance
-## (see `DecorObjectController._set_albedo`), so "set it on each material" would
+## (see `FillObjectController._set_albedo`), so "set it on each material" would
 ## mean traversing every plant on the map every frame.
 
 const GLOBAL_DIRECTION := &"world_wind_direction"

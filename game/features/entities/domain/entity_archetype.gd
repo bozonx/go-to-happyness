@@ -23,11 +23,11 @@ extends RefCounted
 ## (§4.2). A pebble is anonymous and interchangeable; a tree must be able to
 ## *become* named the moment it is felled; a merchant is named always, because a
 ## quest, a rule and a save all point at him.
-const CLASS_DECOR := &"decor"
+const CLASS_FILL := &"fill"
 const CLASS_OBJECT := &"object"
 const CLASS_ACTOR := &"actor"
 
-const CONTENT_CLASSES: Array[StringName] = [CLASS_DECOR, CLASS_OBJECT, CLASS_ACTOR]
+const CONTENT_CLASSES: Array[StringName] = [CLASS_FILL, CLASS_OBJECT, CLASS_ACTOR]
 
 ## Activity policy (§5.3). Declared from the start even though the runtime that
 ## honours it does not exist yet: adding it later would mean rewriting every map
@@ -46,7 +46,7 @@ const FORMAT_VERSION := 1
 var id: StringName = &""
 var name: String = ""
 ## Default asset this archetype is drawn with. A record may override it — three
-## spruce models, one archetype — but "the same spruce as indestructible decor" is
+## spruce models, one archetype — but "the same spruce as indestructible fill" is
 ## a different archetype, not a flag (§4).
 var asset_id: StringName = &""
 var content_class: StringName = CLASS_OBJECT

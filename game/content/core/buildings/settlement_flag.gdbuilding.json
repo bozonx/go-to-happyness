@@ -34,7 +34,7 @@
 	"routes": [],
 	"objects": [
 		{
-			"id": "decor_flag_1",
+			"id": "fill_flag_1",
 			"asset_id": "flag",
 			"owner_zone": "",
 			"pos": [

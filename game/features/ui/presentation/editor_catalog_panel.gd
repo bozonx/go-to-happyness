@@ -2,7 +2,7 @@ class_name EditorCatalogPanel
 extends VBoxContainer
 
 ## Shared catalog panel for browsing, searching, tag filtering, and tracking recent
-## assets across authoring tools (map editor fill mode, building editor decor mode).
+## assets across authoring tools (map editor fill mode, building editor fill mode).
 ##
 ## Snap steps used to live here. They are gone on purpose: an object is placed on
 ## whole cells and then nudged by an authored offset, so there is no second

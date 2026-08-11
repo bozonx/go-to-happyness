@@ -109,7 +109,7 @@ definition (`start.game_definition`, см. §7.1 и [multi_purpose_engine.md](mu
 
 Общего у них ровно четыре вещи, и каждая существует в **одном** экземпляре
 (§3.6): кисть рельефа `terrain_brush_controller.gd`, кисть воды, навигационный оверлей
-и `DecorObjectController`. Третий потребитель того же контроллера — слой `Terrain Base`
+и `FillObjectController`. Третий потребитель того же контроллера — слой `Terrain Base`
 редактора зданий (`grid_terrain_system.md` §5.2).
 
 В редакторе территорий ручной пандус — не одноклеточный штамп. Инструмент «Соединить
@@ -304,7 +304,7 @@ map_editor_command.gd    # интерфейс отменяемой операц�
 
 1. **Кисть рельефа и воды** — `terrain_brush_controller.gd` / `water_brush_controller.gd`
    на трёх хостов: лаборатория, редактор территорий, слой `Terrain Base` редактора зданий.
-2. **Applier наполнения.** `DecorObjectController` — generic: объект описывается записью
+2. **Applier наполнения.** `FillObjectController` — generic: объект описывается записью
    каталога с `bind`, без пер-ассетных `@export`. Каталог дополняется картовыми ассетами,
    код — нет.
 3. **Placement Merge.** Один сервис обслуживает и здания, и префабы.
@@ -1314,7 +1314,7 @@ game/features/world/
                        terrain_brush_controller.gd  # общий с лабораторией и зданиями
                        surface_mode_controller.gd   # земля и покрытия, §5.2
                        water_mode_controller.gd
-                       fill_mode_controller.gd      # использует DecorObjectController
+                       fill_mode_controller.gd      # использует FillObjectController
                        map_zones_mode_controller.gd # §5.5; жесты и стиль — общие
                        scenario_mode_controller.gd  # §10
 res://game/content/core/maps/     встроенные карты

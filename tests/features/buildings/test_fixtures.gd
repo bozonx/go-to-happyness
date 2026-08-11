@@ -169,7 +169,7 @@ func _test_migrated_blueprints_have_fixtures() -> void:
 	assert(campfire.fixtures.size() == 1, "campfire must have 1 fixture")
 	var cf_fixture := campfire.fixtures[0]
 	assert(cf_fixture.has_capability(FixtureDefinitionScript.CAP_FIRE_SOURCE), "campfire fixture must be fire_source")
-	assert(cf_fixture.visual_object_id == "decor_campfire_1", "campfire fixture must reference decor_campfire_1")
+	assert(cf_fixture.visual_object_id == "fill_campfire_1", "campfire fixture must reference fill_campfire_1")
 	# Validate the fixture.
 	var obj_ids := {}
 	for obj in campfire.objects:
@@ -182,7 +182,7 @@ func _test_migrated_blueprints_have_fixtures() -> void:
 	assert(cook.fixtures.size() == 1, "cook_campfire must have 1 fixture")
 	var cook_fixture := cook.fixtures[0]
 	assert(cook_fixture.has_capability(FixtureDefinitionScript.CAP_FIRE_SOURCE), "cook_campfire fixture must be fire_source")
-	assert(cook_fixture.visual_object_id == "decor_cooking_campfire_1", "cook_campfire fixture must reference decor_cooking_campfire_1")
+	assert(cook_fixture.visual_object_id == "fill_cooking_campfire_1", "cook_campfire fixture must reference fill_cooking_campfire_1")
 
 	# Verify runtime_defaults have expected fire values.
 	var defaults := FireSourceDefaultsScript.from_dict(cf_fixture.runtime_defaults)

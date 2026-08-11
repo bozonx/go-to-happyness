@@ -22,19 +22,19 @@ static func get_blueprint(building_type: String) -> Dictionary:
 static func create_module(module: Dictionary) -> StaticBody3D:
 	if module.has("block_id"):
 		return _create_block_module(module)
-	if module.has("asset_id") or module.get("kind") == "decor":
-		var decor := _create_decor_module(module)
-		if decor != null:
-			return decor
-		push_error("Could not create authored decor module '%s'." % module.get("asset_id", ""))
+	if module.has("asset_id") or module.get("kind") == "fill":
+		var fill := _create_fill_module(module)
+		if fill != null:
+			return fill
+		push_error("Could not create authored fill module '%s'." % module.get("asset_id", ""))
 	return null
 
 
-static func _create_decor_module(module: Dictionary) -> StaticBody3D:
+static func _create_fill_module(module: Dictionary) -> StaticBody3D:
 	var asset_id: StringName = StringName(module.get("asset_id", ""))
 	var asset := WorldAssetCatalog.get_asset(asset_id)
 	if asset == null:
-		push_error("Unknown authored decor asset '%s'." % asset_id)
+		push_error("Unknown authored fill asset '%s'." % asset_id)
 		return null
 	var scene := load(asset.scene_path) as PackedScene
 	if scene == null:
@@ -48,7 +48,7 @@ static func _create_decor_module(module: Dictionary) -> StaticBody3D:
 	body.rotation_degrees = module.get("rotation", module.get("rot", Vector3.ZERO))
 	body.scale = module.get("scale", Vector3.ONE)
 	body.set_meta("building_module", true)
-	body.set_meta("module_kind", "decor")
+	body.set_meta("module_kind", "fill")
 
 	var mesh_instance := body.get_node("MeshInstance3D") as MeshInstance3D
 	if mesh_instance != null:
@@ -60,8 +60,8 @@ static func _create_decor_module(module: Dictionary) -> StaticBody3D:
 		# `scene` and navigation-only footprints behave identically at runtime.
 		collision.shape = null
 	body.add_child(instance)
-	if instance.has_method("apply_decor_properties"):
-		instance.call("apply_decor_properties", module.get("appearance", module.get("properties", {})))
+	if instance.has_method("apply_fill_properties"):
+		instance.call("apply_fill_properties", module.get("appearance", module.get("properties", {})))
 	return body
 
 

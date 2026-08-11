@@ -7,10 +7,10 @@ extends RefCounted
 ##
 ## The adapter is called from FireManagementService.update_fire_visual.
 ## It reads the fire phase from FireSourceState and drives the child nodes
-## of the building (or the decor object referenced by visual_object_id).
+## of the building (or the fill object referenced by visual_object_id).
 ##
 ## Phase 2A: the adapter walks the building's children directly, matching
-## the existing visual layout. When decor objects are spawned at runtime
+## the existing visual layout. When fill objects are spawned at runtime
 ## (future phase), it will resolve visual_object_id to the correct child.
 
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
@@ -39,8 +39,8 @@ func apply_fire_visual(building: Node3D, fire_state: RefCounted, minute: int) ->
 	_apply_phase_to_building(building, phase)
 
 
-## Apply fire visual state to a specific decor object node (future use,
-## when fixtures reference visual_object_id and decor objects are spawned
+## Apply fire visual state to a specific fill object node (future use,
+## when fixtures reference visual_object_id and fill objects are spawned
 ## at runtime).
 func apply_fire_visual_to_node(visual_node: Node3D, fire_state: RefCounted, minute: int) -> void:
 	if not is_instance_valid(visual_node) or fire_state == null:
@@ -50,11 +50,11 @@ func apply_fire_visual_to_node(visual_node: Node3D, fire_state: RefCounted, minu
 
 
 func _apply_phase_to_building(building: Node3D, phase: int) -> void:
-	# Walk immediate children and any nested decor objects.
+	# Walk immediate children and any nested fill objects.
 	for child in building.get_children():
 		if child is OmniLight3D:
 			_apply_light(child, phase)
-		# Check if this child is a campfire decor object (has Fire/Embers/Light children).
+		# Check if this child is a campfire fill object (has Fire/Embers/Light children).
 		if child is Node3D:
 			_apply_phase_to_node(child, phase)
 

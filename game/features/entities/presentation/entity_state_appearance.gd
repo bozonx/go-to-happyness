@@ -12,7 +12,7 @@ extends RefCounted
 
 ## Накладывает вариант состояния поверх умолчаний ассета.
 ##
-## `null`-ассет и нода без `apply_decor_properties` — не ошибка: у заглушки
+## `null`-ассет и нода без `apply_fill_properties` — не ошибка: у заглушки
 ## пропавшего контента нет ни того, ни другого, а карта обязана открываться и с
 ## неустановленным паком (§11).
 static func apply(
@@ -24,7 +24,7 @@ static func apply(
 ) -> void:
 	if view == null or asset == null or archetype == null:
 		return
-	if not view.has_method("apply_decor_properties"):
+	if not view.has_method("apply_fill_properties"):
 		return
 	var appearance := asset.default_appearance()
 	var state := archetype.states.get_state(state_id)
@@ -36,8 +36,8 @@ static func apply(
 		appearance.merge(extra_appearance, true)
 	# Gameplay props intentionally do not overwrite visual state: a cold campfire
 	# must remain cold even if an old author override set the flame control.
-	view.call("apply_decor_properties", appearance)
-	# A freshly-instanced DecorObjectController applies its defaults in `_ready`.
+	view.call("apply_fill_properties", appearance)
+	# A freshly-instanced FillObjectController applies its defaults in `_ready`.
 	# Repeat state one turn later so authored initial state wins regardless of
 	# whether the caller ran before or after the child entered the scene tree.
-	view.call_deferred("apply_decor_properties", appearance)
+	view.call_deferred("apply_fill_properties", appearance)

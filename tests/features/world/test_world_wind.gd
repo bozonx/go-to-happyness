@@ -134,21 +134,21 @@ func _test_foliage_uses_the_shared_shader() -> void:
 ## тонирование умело только StandardMaterial3D, и перевод листвы на шейдер тихо
 ## сломал бы и разброс вариаций, и сезонные состояния.
 func _test_shader_foliage_can_still_be_tinted() -> void:
-	var tree := (load(ASSETS + "tree.tscn") as PackedScene).instantiate() as DecorObjectController
-	tree.apply_decor_properties({"crown_color": "ff0000", "trunk_color": "0000ff"})
+	var tree := (load(ASSETS + "tree.tscn") as PackedScene).instantiate() as FillObjectController
+	tree.apply_fill_properties({"crown_color": "ff0000", "trunk_color": "0000ff"})
 
 	var blob := tree.get_node("Crown/BlobA") as MeshInstance3D
 	var blob_material := blob.material_override as ShaderMaterial
 	assert(blob_material != null, "крона должна получить собственный шейдерный материал")
-	var tint: Color = blob_material.get_shader_parameter(DecorObjectController.SHADER_ALBEDO)
+	var tint: Color = blob_material.get_shader_parameter(FillObjectController.SHADER_ALBEDO)
 	assert(tint.is_equal_approx(Color.RED), "цвет кроны не доехал до шейдера, получено %s" % tint)
 
 	# Собственный материал на экземпляр, иначе перекраска одного дерева
 	# перекрашивает лес.
-	var other := (load(ASSETS + "tree.tscn") as PackedScene).instantiate() as DecorObjectController
-	other.apply_decor_properties({"crown_color": "00ff00"})
+	var other := (load(ASSETS + "tree.tscn") as PackedScene).instantiate() as FillObjectController
+	other.apply_fill_properties({"crown_color": "00ff00"})
 	var other_tint: Color = ((other.get_node("Crown/BlobA") as MeshInstance3D).material_override as ShaderMaterial) \
-		.get_shader_parameter(DecorObjectController.SHADER_ALBEDO)
+		.get_shader_parameter(FillObjectController.SHADER_ALBEDO)
 	assert(other_tint.is_equal_approx(Color.GREEN))
 	assert(tint.is_equal_approx(Color.RED), "второе дерево перекрасило первое")
 

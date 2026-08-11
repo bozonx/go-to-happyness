@@ -34,7 +34,7 @@
 	"routes": [],
 	"objects": [
 		{
-			"id": "decor_entrance_sign_1",
+			"id": "fill_entrance_sign_1",
 			"asset_id": "entrance_sign",
 			"owner_zone": "",
 			"pos": [

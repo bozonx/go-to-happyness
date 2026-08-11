@@ -34,7 +34,7 @@
 	"routes": [],
 	"objects": [
 		{
-			"id": "decor_campfire_1",
+			"id": "fill_campfire_1",
 			"asset_id": "campfire",
 			"owner_zone": "",
 			"pos": [
@@ -62,7 +62,7 @@
 				"fire_source"
 			],
 			"owner_zone": "",
-			"visual_object": "decor_campfire_1",
+			"visual_object": "fill_campfire_1",
 			"runtime_defaults": {
 				"lit": true,
 				"fuel": 4,

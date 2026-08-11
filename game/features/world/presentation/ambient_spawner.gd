@@ -195,7 +195,7 @@ func _scene_of(asset_id: StringName) -> PackedScene:
 ## and would otherwise recolour the meadow every time the player loads.
 func _apply_appearance(node: Node3D, entry: NaturalEntry) -> void:
 	var asset := WorldAssetCatalog.get_asset(entry.asset_id)
-	if asset == null or not node.has_method("apply_decor_properties"):
+	if asset == null or not node.has_method("apply_fill_properties"):
 		return
 	var cell: Vector2i = simulation.cell_from_position(entry.position)
 	var rng := RandomNumberGenerator.new()
@@ -203,7 +203,7 @@ func _apply_appearance(node: Node3D, entry: NaturalEntry) -> void:
 	var appearance := asset.default_appearance()
 	appearance.merge(asset.random_appearance(rng), true)
 	appearance.merge(entry.appearance, true)
-	node.call("apply_decor_properties", appearance)
+	node.call("apply_fill_properties", appearance)
 
 
 func create_forest() -> void:
