@@ -300,7 +300,7 @@ func refresh_ghost() -> void:
 	_ghost_tool = _editor.current_tool
 	_ghost_rot = _editor.current_rot
 	_ghost_valid = _editor.cursor_valid
-	if not _editor.cursor_valid:
+	if not _editor.cursor_valid or _editor._eyedropper_active:
 		_ghost.visible = false
 		return
 	if _editor.current_tool == Tool.PLACE and _editor.current_block_id.is_empty() and _stamp_brush.is_empty():
@@ -515,7 +515,8 @@ func refresh_shift_hover() -> void:
 	if _shift_hover_visual == null:
 		return
 	_shift_hover_block = null
-	if not is_active() or not Input.is_key_pressed(KEY_SHIFT) or not _editor.cursor_valid:
+	if not is_active() or (not Input.is_key_pressed(KEY_SHIFT) and not _editor._eyedropper_active) \
+			or not _editor.cursor_valid:
 		_shift_hover_visual.visible = false
 		return
 	var block := _block_under_mouse()
@@ -529,6 +530,13 @@ func refresh_shift_hover() -> void:
 	_shift_hover_visual.rotation = block.rotation_euler()
 	_shift_hover_visual.material_override = _editor.mesh_library.ghost_material(true)
 	_shift_hover_visual.visible = true
+
+
+func hide_cursor_feedback() -> void:
+	if _ghost != null:
+		_ghost.visible = false
+	if _shift_hover_visual != null:
+		_shift_hover_visual.visible = false
 
 
 func _block_under_mouse() -> BlueprintBlock:

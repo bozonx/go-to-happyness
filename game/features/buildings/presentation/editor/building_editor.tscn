@@ -98,6 +98,7 @@ tooltip_text = "Сохранить текущий чертёж"
 tooltip_text = "Сохранить как новый чертёж"
 
 [node name="SettingsButton" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/DocumentActions" index="5"]
+text = "Параметры здания"
 tooltip_text = "Параметры здания"
 
 [node name="VSep1" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/Scroll/Row"]

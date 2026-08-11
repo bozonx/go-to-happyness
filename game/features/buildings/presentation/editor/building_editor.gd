@@ -200,8 +200,13 @@ func _init_world() -> void:
 # ---------------------------------------------------------------------------
 
 func _process(delta: float) -> void:
-	if _camera_controller != null:
+	# CameraController polls keys instead of receiving events. Do not let WASD
+	# move the orbit camera behind a text field or behind the walk-through camera.
+	if _camera_controller != null and not _text_input_has_focus() \
+			and (walkthrough == null or not walkthrough.is_active()):
 		_camera_controller.update(delta)
+	if walkthrough != null and walkthrough.is_active():
+		return
 	_update_cursor()
 	if current_mode == EditMode.FILL:
 		fill_mode.refresh_ghost()
@@ -293,8 +298,10 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 	if event.pressed and _pointer_over_ui():
 		return
 	if _eyedropper_active and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		if _pick_from_cursor():
-			_set_eyedropper_active(false)
+		# A pipette is a one-shot tool. Empty space cancels it too, otherwise the
+		# next ordinary click unexpectedly samples something elsewhere.
+		_pick_from_cursor()
+		_set_eyedropper_active(false)
 		return
 	match event.button_index:
 		MOUSE_BUTTON_RIGHT:
@@ -519,8 +526,12 @@ func _is_cell_in_bounds(cell: Vector3i) -> bool:
 # ---------------------------------------------------------------------------
 
 func _set_layer(layer: int) -> void:
-	var max_layer := maxi(0, blueprint.grid_bounds.y - 1) if blueprint != null else 0
-	active_layer = clampi(layer, 0, max_layer)
+	active_layer = maxi(0, layer)
+	# Height is authored by the player. Grow the document when they move above
+	# its current top instead of treating the initial four layers as a limit.
+	if blueprint != null and active_layer >= blueprint.grid_bounds.y:
+		blueprint.grid_bounds.y = active_layer + 1
+		mark_dirty()
 	frame_mode.refresh_layer_plane()
 	if fill_mode != null:
 		fill_mode.on_layer_changed()
@@ -657,6 +668,7 @@ func _select_mode(mode: int) -> void:
 		_update_status("Этот режим подготовлен в формате и будет реализован следующим срезом.")
 		_mode_bar.set_active(_mode_id(current_mode))
 		return
+	_set_eyedropper_active(false)
 	current_mode = mode
 	_mode_bar.set_active(_mode_id(mode))
 	_update_shortcut_tooltip()
@@ -776,6 +788,10 @@ func _start_walkthrough(from_cursor := false) -> void:
 		add_child(walkthrough)
 	var start := _cursor_walk_position() if from_cursor else _walk_start_position()
 	var sources: Array[Node] = [get_node_or_null("BlocksRoot"), fill_mode]
+	_set_eyedropper_active(false)
+	cursor_valid = false
+	frame_mode.hide_cursor_feedback()
+	fill_mode.hide_cursor_feedback()
 	walkthrough.enter(sources, start)
 	_editor_ui.visible = false
 	if _test_point_views != null:

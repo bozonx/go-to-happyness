@@ -799,7 +799,8 @@ func _remove_node(object_id: String) -> void:
 
 func refresh_ghost() -> void:
 	refresh_hover()
-	if not is_active() or not _editor.cursor_valid or not _hovered_object_id.is_empty():
+	if not is_active() or not _editor.cursor_valid or not _hovered_object_id.is_empty() \
+			or _editor._eyedropper_active:
 		_hide_ghost()
 		return
 	var asset := WorldAssetCatalog.get_asset(current_asset_id)
@@ -854,6 +855,12 @@ func _update_hover_marker() -> void:
 func _hide_ghost() -> void:
 	if _ghost != null:
 		_ghost.visible = false
+
+
+func hide_cursor_feedback() -> void:
+	_hide_ghost()
+	if _hover_marker != null:
+		_hover_marker.visible = false
 
 
 ## Updates the ghost material colour based on placement state (design §6.2).
