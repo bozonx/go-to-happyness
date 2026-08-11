@@ -321,60 +321,119 @@ func reopen_workplace_menu() -> void:
 func upgrade_selected_building() -> void:
 	if not is_instance_valid(game.selected_building):
 		return
-	var old_type := game.building_registry.building_type_for_node(game.selected_building)
+	var source := game.selected_building
+	var old_type := game.building_registry.building_type_for_node(source)
 	var target_type := game.settlement.next_building_upgrade(old_type)
 	if target_type.is_empty():
 		return
-	var old_footprint: Vector2i = game.selected_building.get_meta("footprint", BuildingBlueprints.get_blueprint(old_type).footprint)
+	if bool(source.get_meta("pending_upgrade", false)):
+		game.update_interface("This building is already being upgraded.")
+		return
+	var old_footprint: Vector2i = source.get_meta("footprint", BuildingBlueprints.get_blueprint(old_type).footprint)
 	var blueprint := BuildingBlueprints.get_blueprint(target_type)
 	if blueprint.footprint != old_footprint:
 		game.update_interface("This upgrade needs rebuilding because its footprint changes.")
 		return
 	if not game.settlement.can_upgrade_building(old_type):
-		game.update_interface("Upgrade needs research and resources.")
+		game.update_interface("Upgrade needs the required research and era.")
 		return
-	var service_position: Vector3 = game.selected_building.get_meta("service_position", game.selected_building.global_position)
-	var warehouse_index := game.warehouse_positions.find(service_position)
-	if game.settlement.pay_for_building_upgrade(old_type, warehouse_index).is_empty():
+	var record := game.building_registry.record_for_node(source)
+	if record == null:
 		return
-	for child in game.selected_building.get_children():
-		game.selected_building.remove_child(child)
+	var rotation_quarters := posmod(roundi(source.rotation_degrees.y / 90.0), 4)
+	var site := game.construction_controller.create_construction_site(
+		record.cell, target_type, record.center, rotation_quarters, blueprint, record.footprint)
+	if site == null:
+		return
+	site.upgrade_source = source
+	site.upgrade_from_type = old_type
+	source.set_meta("pending_upgrade", true)
+	game.hero_interaction_controller.deliver_pocket_to_site(site, true)
+	game.input_controller.close_context_menus()
+	game.update_interface("Upgrade marked. The building remains operational while materials and labour are supplied.")
+
+
+func complete_building_upgrade(site: ConstructionSite) -> void:
+	if site == null or not site.is_upgrade():
+		return
+	var building := site.upgrade_source
+	var old_type := site.upgrade_from_type
+	var target_type := site.building_type
+	var blueprint := site.blueprint
+	var old_footprint: Vector2i = building.get_meta("footprint", blueprint.footprint)
+	var service_position: Vector3 = building.get_meta("service_position", building.global_position)
+	game.service_pocket_manager.unregister_service_pockets(building)
+	game.service_pocket_manager.unregister_navigation_footprint(building.global_position, old_footprint)
+	for child in building.get_children():
+		building.remove_child(child)
 		child.queue_free()
-	if game.selected_building.has_meta("status_indicator"):
-		game.selected_building.remove_meta("status_indicator")
-	if game.selected_building.has_meta("warehouse_fill_label"):
-		game.selected_building.remove_meta("warehouse_fill_label")
-	game.selected_building.set_meta("building_type", target_type)
-	game.selected_building.set_meta("footprint", blueprint.footprint)
-	game.selected_building.set_meta("occupied_footprint", blueprint.footprint)
+	for meta_name in ["status_indicator", "warehouse_fill_label", "entrance_position", "back_entrance_position", "service_position", "service_positions"]:
+		if building.has_meta(meta_name):
+			building.remove_meta(meta_name)
 	for module in blueprint.modules:
-		game.selected_building.add_child(BuildingBlueprints.create_module(module))
-		game.service_pocket_manager.unregister_navigation_footprint(game.selected_building.global_position, old_footprint)
+		building.add_child(BuildingBlueprints.create_module(module))
+	building.set_meta("building_type", target_type)
+	building.set_meta("footprint", blueprint.footprint)
+	building.set_meta("occupied_footprint", blueprint.footprint)
+	building.set_meta("condition", 100.0)
+	building.set_meta("pending_upgrade", false)
+	if blueprint.has("blueprint_ref"):
+		building.set_meta("blueprint_ref", blueprint["blueprint_ref"])
+	if blueprint.has("routing_anchors"):
+		building.set_meta("routing_anchors", blueprint["routing_anchors"])
+	if blueprint.has("routes"):
+		building.set_meta("zone_routes", blueprint["routes"])
+	if blueprint.has("overlays"):
+		building.set_meta("zone_overlays", blueprint["overlays"])
+	if game.building_zone_service != null:
+		game.building_zone_service.configure_building(building, blueprint.get("zones", []), [])
+	var building_instance_id := str(building.get_meta("building_instance_id", "%d,%d" % [site.cell.x, site.cell.y]))
+	building.set_meta("building_instance_id", building_instance_id)
+	if game.fixture_service != null:
+		game.fixture_service.remove_building(building_instance_id)
+		var raw_fixtures: Array = blueprint.get("fixtures", [])
+		if not raw_fixtures.is_empty():
+			var fixture_blueprint := BuildingBlueprint.new()
+			fixture_blueprint.id = StringName(target_type)
+			for fixture_data in raw_fixtures:
+				if fixture_data is Dictionary:
+					fixture_blueprint.fixtures.append(FixtureDefinition.from_dict(fixture_data))
+			game.fixture_service.initialize_for_building(building_instance_id, fixture_blueprint, int(game.game_minutes))
+	game.building_registry.update_building_type(building, target_type)
+	game.settlement.buildings[old_type] = maxi(0, int(game.settlement.buildings.get(old_type, 0)) - 1)
+	game.settlement.buildings[target_type] = int(game.settlement.buildings.get(target_type, 0)) + 1
+	if BuildingTypes.is_warehouse(old_type) and BuildingTypes.is_warehouse(target_type):
+		var warehouse_index := game.warehouse_positions.find(service_position)
+		if warehouse_index >= 0 and warehouse_index < game.settlement.warehouses.size():
+			game.settlement.warehouse_types[warehouse_index] = target_type
+			game.settlement.warehouses[warehouse_index].capacity = WarehouseState.capacity_for_building_type(target_type, game.settlement.era)
 	var is_home := BuildingTypes.is_housing(target_type)
-	game.service_pocket_manager.register_service_entrance(game.selected_building, blueprint, is_home, target_type not in ["farm", "park"])
+	game.service_pocket_manager.register_service_entrance(building, blueprint, is_home, target_type not in ["farm", "park"])
 	if BuildingTypes.is_civic(target_type):
-		game.campfire_node = game.selected_building
-		game.research_controller.activate_employment_centre(game.selected_building)
-		game.building_visuals.add_building_selector(game.selected_building, "campfire_selector", blueprint.footprint)
-		game.building_visuals.add_fire_light(game.selected_building)
+		game.campfire_node = building
+		game.research_controller.activate_employment_centre(building)
+		game.building_visuals.add_building_selector(building, "campfire_selector", blueprint.footprint)
+		game.building_visuals.add_fire_light(building)
 	elif BuildingTypes.is_kitchen(target_type):
-		game.building_management.activate_kitchen_if_better(game.selected_building, service_position)
-		game.building_visuals.add_building_selector(game.selected_building, "cook_campfire_selector", blueprint.footprint)
-		game.building_visuals.add_fire_light(game.selected_building)
-	game.building_visuals.add_building_status_indicator(game.selected_building)
+		game.building_management.activate_kitchen_if_better(building, building.get_meta("service_position", building.global_position))
+		game.building_visuals.add_building_selector(building, "cook_campfire_selector", blueprint.footprint)
+		game.building_visuals.add_fire_light(building)
+	elif BuildingTypes.needs_generic_selector(target_type):
+		game.building_visuals.add_building_selector(building, "building_selector", blueprint.footprint)
+	game.building_visuals.add_building_status_indicator(building)
 	if BuildingTypes.is_warehouse(target_type):
-		game.building_visuals.add_warehouse_fill_label(game.selected_building)
+		game.building_visuals.add_warehouse_fill_label(building)
 	game.village_territory_service.recalculate()
 	game.world_navigation_controller.refresh_boundary_markers()
 	game.world_navigation_controller.refresh_navigation_grid()
 	game.update_workers()
 	game.update_interface("%s upgraded to %s." % [str(BuildingCatalog.definition_for(old_type).get("name", old_type)), str(BuildingCatalog.definition_for(target_type).get("name", target_type))])
-	if game.ui_manager.campfire_menu.visible and game.selected_building == game.selected_campfire:
-		if game.campfire_menu_controller != null:
-			game.campfire_menu_controller.refresh_campfire_menu()
-	else:
-		if game.building_menu_controller != null:
-			game.building_menu_controller.show_building_menu()
+	game.request_courier_dispatch()
+
+
+func on_construction_site_cancelled(site: ConstructionSite) -> void:
+	if site != null and is_instance_valid(site.upgrade_source):
+		site.upgrade_source.set_meta("pending_upgrade", false)
 
 
 func assign_cook_at_campfire() -> void:

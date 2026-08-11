@@ -35,6 +35,8 @@ var _fire_state_for: Callable
 var _apply_fire_state: Callable
 var _is_route_reachable: Callable
 var _construction_source_available: Callable
+var _take_construction_source: Callable
+var _return_construction_source: Callable
 var _citizen_for_ai_id: Callable
 
 
@@ -63,6 +65,8 @@ func configure(port: CourierTaskRuntimePort) -> void:
 	_apply_fire_state = port.apply_fire_state
 	_is_route_reachable = port.is_route_reachable
 	_construction_source_available = port.construction_source_available
+	_take_construction_source = port.take_construction_source
+	_return_construction_source = port.return_construction_source
 	_citizen_for_ai_id = port.citizen_for_ai_id
 
 
@@ -132,12 +136,23 @@ func start_courier_construction_or_supply(courier: Citizen, task: RefCounted) ->
 			var storage_reserved: int = maxi(0, total_reserved - in_transit)
 			var source_available: int = _settlement.amount(resource_type)
 			var warehouse_index: int = int(source.get("warehouse_index", -1))
-			if warehouse_index >= 0:
+			var is_pile := str(source.get("kind", "")) == "pile"
+			if is_pile:
+				source_available = int(_construction_source_available.call(resource_type, source))
+			elif warehouse_index >= 0:
 				source_available = _settlement.warehouse_amount(resource_type, warehouse_index)
-			var amount: int = mini(courier.courier_capacity(), mini(source_available, mini(storage_reserved, remaining)))
+			var committed_available := remaining if is_pile else storage_reserved
+			var amount: int = mini(courier.courier_capacity(), mini(source_available, mini(committed_available, remaining)))
 			if amount <= 0:
 				return false
-			if warehouse_index >= 0:
+			if is_pile:
+				var taken := int(_take_construction_source.call(resource_type, source, amount))
+				if taken <= 0:
+					return false
+				amount = taken
+				# A nearer pile replaces the same part of a storage commitment.
+				_settlement.release_for_construction(site.site_id, resource_type, mini(amount, storage_reserved))
+			elif warehouse_index >= 0:
 				if _settlement.add_to_warehouse(resource_type, -amount, warehouse_index) != 0:
 					return false
 			else:
@@ -265,6 +280,15 @@ func cancel_courier_task(courier: Citizen, task: RefCounted) -> void:
 			if carried > 0 and is_instance_valid(courier) and courier.courier_resource_type == ResourceIds.WATER:
 				_water_collector_service.return_water(task.pickup, carried)
 				courier.carried_amount = 0
+		CourierTask.Kind.CONSTRUCTION:
+			var construction_site: ConstructionSite = task.payload.get("site") as ConstructionSite
+			var construction_resource := str(task.payload.get("resource", ""))
+			if carried > 0 and not construction_resource.is_empty():
+				_return_construction_source.call(construction_resource, task.payload.get("source", {}), carried)
+				if construction_site != null:
+					construction_site.reserved_materials[construction_resource] = maxi(
+						0, int(construction_site.reserved_materials.get(construction_resource, 0)) - carried)
+				courier.carried_amount = 0
 		CourierTask.Kind.BUILDING_SUPPLY:
 			var supply_kind: String = str(task.payload.get("supply_kind", ""))
 			if supply_kind == "repair":
@@ -341,11 +365,12 @@ func is_courier_task_valid(task: RefCounted) -> bool:
 			if not task.is_assigned():
 				if source.is_empty() or _construction_source_available.call(resource_type, source) <= 0:
 					return false
-			var total_reserved: int = _settlement.construction_reserved_for_site(site.site_id, resource_type)
-			var in_transit := int(site.reserved_materials.get(resource_type, 0))
-			var storage_reserved := maxi(0, total_reserved - in_transit)
-			var source_available := storage_reserved > 0
-			return int(site.delivered_materials.get(resource_type, 0)) + in_transit < int(site.required_materials.get(resource_type, 0)) and source_available
+				var total_reserved: int = _settlement.construction_reserved_for_site(site.site_id, resource_type)
+				var in_transit := int(site.reserved_materials.get(resource_type, 0))
+				var storage_reserved := maxi(0, total_reserved - in_transit)
+				var source_is_pile := str(source.get("kind", "")) == "pile"
+				var source_committed: bool = bool(_construction_source_available.call(resource_type, source) > 0) if source_is_pile else storage_reserved > 0
+				return int(site.delivered_materials.get(resource_type, 0)) + in_transit < int(site.required_materials.get(resource_type, 0)) and source_committed
 		CourierTask.Kind.BUILDING_SUPPLY:
 			var building: Node3D = task.payload.building
 			if not is_instance_valid(building):

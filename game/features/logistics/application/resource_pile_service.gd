@@ -50,6 +50,29 @@ func create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_
 	resource_piles.append(ResourcePileScript.new(pile, normalized, is_backpack_pile))
 	return pile
 
+
+func take_resource(pile: ResourcePile, resource_type: String, max_amount: int) -> int:
+	if pile == null or max_amount <= 0 or resource_type.is_empty() or not is_instance_valid(pile.node):
+		return 0
+	var available := int(pile.resources.get(resource_type, 0))
+	var taken := mini(max_amount, available)
+	if taken <= 0:
+		return 0
+	pile.resources[resource_type] = available - taken
+	if int(pile.resources[resource_type]) <= 0:
+		pile.resources.erase(resource_type)
+	var labels: Array[String] = []
+	for piled_resource in pile.resources:
+		labels.append("%s x%d" % [str(piled_resource).to_upper(), int(pile.resources[piled_resource])])
+	labels.sort()
+	var label := pile.node.get_node_or_null("PileLabel") as Label3D
+	if label != null:
+		label.text = "\n".join(labels)
+	if pile.resources.is_empty():
+		resource_piles.erase(pile)
+		pile.node.queue_free()
+	return taken
+
 func remove_backpack_pile(backpack_node: Node3D) -> Node3D:
 	if not is_instance_valid(backpack_node):
 		return null

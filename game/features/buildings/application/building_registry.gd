@@ -39,6 +39,22 @@ func attach_node(cell: Vector2i, node: Node3D, building_type: String = "") -> Bu
 	return record
 
 
+func update_building_type(node: Node3D, building_type: String) -> bool:
+	var record := record_for_node(node)
+	if record == null or building_type.is_empty():
+		return false
+	record.building_type = building_type
+	return true
+
+
+## Empties the registry without replacing the registry object. Runtime ports and
+## terrain-anchor subscriptions deliberately keep this instance for the lifetime
+## of a session, so save restore must clear it in place.
+func clear() -> void:
+	for index in range(_records.size() - 1, -1, -1):
+		_remove(_records[index])
+
+
 func cancel_reservation(cell: Vector2i) -> BuildingRecord:
 	var record := record_at_cell(cell)
 	if record == null or is_instance_valid(record.node):

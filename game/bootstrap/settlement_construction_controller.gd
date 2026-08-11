@@ -13,8 +13,8 @@ func _init(p_game: SettlementGame) -> void:
 	game = p_game
 
 
-func create_construction_site(cell: Vector2i, building_type: String, position_on_board: Vector3, rotation_quarters := 0, blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO) -> ConstructionSite:
-	var site := game.construction.start_site(cell, building_type, position_on_board, rotation_quarters, blueprint, occupied_footprint)
+func create_construction_site(cell: Vector2i, building_type: String, position_on_board: Vector3, rotation_quarters := 0, blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO, restored_site_id := 0, required_materials_override: Dictionary = {}) -> ConstructionSite:
+	var site := game.construction.start_site(cell, building_type, position_on_board, rotation_quarters, blueprint, occupied_footprint, restored_site_id, required_materials_override)
 	game.service_pocket_manager.register_service_pockets(site.node)
 	# The reservation refresh runs before the site exists. Publish its entrance
 	# pockets immediately so couriers and builders can route to the new site.
@@ -48,8 +48,15 @@ func update_construction_supply_label(site: ConstructionSite) -> void:
 	for resource_type in site.required_materials:
 		delivered += int(site.delivered_materials.get(resource_type, 0))
 		required += int(site.required_materials[resource_type])
+	var paid := 0
+	var payment_required := 0
+	for payment_type in site.required_payments:
+		paid += int(site.paid_payments.get(payment_type, 0))
+		payment_required += int(site.required_payments[payment_type])
 	label.text = "MATERIALS %d/%d" % [delivered, required]
-	label.modulate = Color("f0c45d") if delivered < required else Color("56bd58")
+	if payment_required > 0:
+		label.text += "  FUNDS %d/%d" % [paid, payment_required]
+	label.modulate = Color("f0c45d") if delivered < required or paid < payment_required else Color("56bd58")
 
 
 func complete_building(cell: Vector2i, building_type: String, position_on_board: Vector3, building: Node3D, blueprint: Dictionary) -> void:
@@ -128,7 +135,7 @@ func cancel_selected_construction() -> void:
 	game.service_pocket_manager.unregister_service_pockets(game.selected_building)
 	game.construction.cancel_site(game.selected_building)
 	game.input_controller.close_context_menus()
-	game.update_interface("Construction cancelled. Refunded 50% of costs.")
+	game.update_interface("Construction cancelled. Delivered materials refunded 50%; cargo in transit returned in full.")
 
 
 func reconcile_construction_reservations(site: ConstructionSite) -> void:
@@ -149,14 +156,30 @@ func builder_count(site_node: Node3D) -> int:
 	for citizen in game.citizens:
 		if citizen.is_building_site(site_node):
 			count += 1
-	return count
+	if is_instance_valid(game.player_work_target) and game.player_work_target == site_node and game.player_citizen != null:
+		count += 1
+	return mini(count, construction_worker_slots(site_node))
 
 
 func building_power(site_node: Node3D) -> float:
-	var power := 0.0
+	var efficiencies: Array[float] = []
 	for citizen in game.citizens:
 		if citizen.is_building_site(site_node):
-			power += citizen.get_efficiency("construction")
+			efficiencies.append(citizen.get_efficiency("construction"))
 	if is_instance_valid(game.player_work_target) and game.player_work_target == site_node and game.player_citizen != null:
-		power += game.player_citizen.get_efficiency("construction")
+		efficiencies.append(game.player_citizen.get_efficiency("construction"))
+	efficiencies.sort()
+	efficiencies.reverse()
+	var contribution := [1.0, 0.75, 0.55, 0.40, 0.30, 0.25]
+	var power := 0.0
+	for index in mini(efficiencies.size(), construction_worker_slots(site_node)):
+		power += efficiencies[index] * contribution[index]
 	return power
+
+
+func construction_worker_slots(site_node: Node3D) -> int:
+	var site := game.construction.site_for_node(site_node)
+	if site == null:
+		return 1
+	var footprint: Vector2i = site.blueprint.get("footprint", Vector2i.ONE)
+	return clampi(1 + ceili(float(footprint.x * footprint.y) / 20.0), 1, 6)

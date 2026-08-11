@@ -14,6 +14,7 @@ static func run_all() -> void:
 	_test_construction_reservation_blocks_other_spending()
 	_test_construction_progress_limited_by_materials()
 	_test_construction_service_cancellation()
+	_test_upgrade_is_supplied_construction_project()
 	_test_completed_construction_cleans_temporary_ui()
 	_test_demolition_service_completion()
 	_test_building_registry()
@@ -129,6 +130,37 @@ static func _test_construction_service_cancellation() -> void:
 	scene_root.free()
 
 
+static func _test_upgrade_is_supplied_construction_project() -> void:
+	var scene_root := Node3D.new()
+	var runtime := ConstructionRuntime.new()
+	runtime.scene_root = scene_root
+	runtime.settlement = SettlementState.new()
+	runtime.building_registry = BuildingRegistry.new()
+	runtime.citizens = []
+	runtime.duration = 1.0
+	runtime.builder_power = func(_site: Node3D) -> float: return 1.0
+	runtime.builder_count = func(_site: Node3D) -> int: return 1
+	runtime.set_status = func(_text: String) -> void: pass
+	runtime.workers_changed = func() -> void: pass
+	runtime.navigation_changed = func() -> void: pass
+	runtime.building_completed = func(_cell, _type, _position, _building, _blueprint): assert(false)
+	var completed: Array[ConstructionSite] = []
+	runtime.upgrade_completed = func(site: ConstructionSite): completed.append(site)
+	var service := ConstructionService.new()
+	service.configure(runtime)
+	service.configure_scenes(ConstructionSiteScene, ConstructionEntrancePostScene)
+	var source := Node3D.new()
+	scene_root.add_child(source)
+	var site := service.start_site(Vector2i.ZERO, "campfire_lvl2", Vector3.ZERO)
+	site.upgrade_source = source
+	site.upgrade_from_type = "campfire"
+	site.delivered_materials = site.required_materials.duplicate(true)
+	service.tick(site.labor_units)
+	assert(completed.size() == 1 and completed[0] == site)
+	assert(service.sites.is_empty())
+	scene_root.free()
+
+
 static func _test_completed_construction_cleans_temporary_ui() -> void:
 	var scene_root := Node3D.new()
 	var runtime := ConstructionRuntime.new()
@@ -147,7 +179,7 @@ static func _test_completed_construction_cleans_temporary_ui() -> void:
 	service.configure_scenes(ConstructionSiteScene, ConstructionEntrancePostScene)
 	var site := service.start_site(Vector2i.ZERO, "warehouse", Vector3.ZERO)
 	site.delivered_materials = site.required_materials.duplicate(true)
-	service.tick(1.0)
+	service.tick(site.labor_units)
 	assert(site.node.get_node("SupplyLabel").is_queued_for_deletion())
 	assert(site.node.get_node("ConstructionSelector").is_queued_for_deletion())
 	scene_root.free()

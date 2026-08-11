@@ -157,6 +157,7 @@ func mark_building_for_demolition(building: Node3D) -> void:
 	if not _can_hero_build.call() or not is_instance_valid(building):
 		return
 	if _demolition.has_site(building):
+		cancel_building_demolition(building)
 		return
 	if building == _entrance_stone_getter.call():
 		_update_interface.call("This building cannot be demolished.")
@@ -165,13 +166,24 @@ func mark_building_for_demolition(building: Node3D) -> void:
 	if not BuildingCatalog.is_demolishable(building_type):
 		_update_interface.call("This landmark cannot be demolished.")
 		return
-	release_employment_at_building(building)
 	building.set_meta("pending_demolition", true)
-	_cancel_arrivals_for_house.call(building)
 	_add_demolition_marker.call(building)
 	_demolition.mark(building, building_type)
 	_update_workers.call()
 	_update_interface.call("Building marked for demolition. Residents and stored goods must be relocated first.")
+
+
+func cancel_building_demolition(building: Node3D) -> void:
+	if not is_instance_valid(building) or not _demolition.cancel(building):
+		return
+	building.set_meta("pending_demolition", false)
+	var marker: Node = building.get_meta("demolition_marker", null) as Node
+	if is_instance_valid(marker):
+		marker.queue_free()
+	if building.has_meta("demolition_marker"):
+		building.remove_meta("demolition_marker")
+	_update_workers.call()
+	_update_interface.call("Demolition cancelled.")
 
 
 func demolition_ready(site: DemolitionSite) -> bool:
@@ -215,6 +227,7 @@ func find_relocation_home(excluded: Node3D) -> Node3D:
 func finish_demolition(site: DemolitionSite) -> void:
 	var building: Node3D = site.building
 	var building_type: String = site.building_type
+	_cancel_arrivals_for_house.call(building)
 	var active_kitchen_removed: bool = _canteen_getter.call() == building
 	_unregister_service_pockets.call(building)
 	var pile_resources: Dictionary = BuildingCatalog.demolition_refund(building_type).duplicate(true)

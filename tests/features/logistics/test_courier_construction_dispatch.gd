@@ -22,6 +22,11 @@ func _init() -> void:
 
 	# Keep two storages so task identity and source selection are exercised. The
 	# nearest source is removed below to emulate demolition or a blocked route.
+	# Keep this fixture warehouse-only; pile selection has its own assertion in
+	# test_construction_courier.gd.
+	for pile: ResourcePile in simulation.resource_piles:
+		if pile != null and not pile.is_backpack:
+			pile.resources.clear()
 	var nearest_warehouse := Vector3(11.0, 0.0, 10.0)
 	var fallback_warehouse := Vector3.ZERO
 	simulation.warehouse_positions.append(nearest_warehouse)
@@ -50,6 +55,25 @@ func _init() -> void:
 		func(task: CourierTask) -> bool: return str(task.payload.get("resource", "")) == "branches"
 	)
 	assert(branch_tasks.size() >= 2, "A construction load larger than one courier capacity must publish parallel delivery tasks")
+
+	# A closer ground pile wins over a warehouse; source type is not an implicit
+	# priority. Once it is empty, dispatch falls back to the closest stocked store.
+	var near_pile_position := campfire_position + Vector3(0.25, 0.0, 0.0)
+	SimHelper.create_resource_pile(simulation, near_pile_position, {"branches": 20, "grass": 20})
+	var near_pile: ResourcePile = simulation.resource_piles.back()
+	SimHelper.update_couriers(simulation)
+	construction_tasks = simulation.courier_dispatcher.available_tasks().filter(
+		func(task: CourierTask) -> bool: return task.kind == CourierTask.Kind.CONSTRUCTION
+	)
+	var pile_branch_tasks := construction_tasks.filter(func(task: CourierTask) -> bool:
+		return (task.payload.get("site") as ConstructionSite) == simulation.construction_sites[0] \
+			and str(task.payload.get("resource", "")) == "branches")
+	assert(not pile_branch_tasks.is_empty())
+	var nearest_pile_tasks := pile_branch_tasks.filter(func(task: CourierTask) -> bool: return task.pickup == near_pile_position)
+	var warehouse_tasks := pile_branch_tasks.filter(func(task: CourierTask) -> bool: return task.pickup == nearest_warehouse)
+	assert(not nearest_pile_tasks.is_empty(), "A nearby pile must be published as a construction source")
+	assert(warehouse_tasks.is_empty() or nearest_pile_tasks.front().priority > warehouse_tasks.front().priority, "A nearer pile must win dispatch priority over a farther warehouse")
+	near_pile.resources.clear()
 
 	# An unassigned task must follow the physical stock when another warehouse is
 	# closer but empty.

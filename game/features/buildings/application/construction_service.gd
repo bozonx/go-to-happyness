@@ -5,6 +5,7 @@ var site_scene: PackedScene = null
 var entrance_post_scene: PackedScene = null
 var runtime: ConstructionRuntime
 var sites: Array[ConstructionSite] = []
+var _next_site_id := 1
 
 
 const SERVICE_PAD_OFFSET := 1.0
@@ -29,7 +30,7 @@ func _get_entrance_post_scene() -> PackedScene:
 	return entrance_post_scene
 
 
-func start_site(cell: Vector2i, building_type: String, position: Vector3, rotation_quarters := 0, supplied_blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO) -> ConstructionSite:
+func start_site(cell: Vector2i, building_type: String, position: Vector3, rotation_quarters := 0, supplied_blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO, restored_site_id := 0, required_materials_override: Dictionary = {}) -> ConstructionSite:
 	var site_node: Node3D = _get_site_scene().instantiate()
 	site_node.position = position
 	site_node.rotation.y = rotation_quarters * PI * 0.5
@@ -73,9 +74,19 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 	box.size = Vector3(display_footprint.x, 2.5, display_footprint.y)
 	selector_shape.shape = box
 
-	var required: Dictionary = BuildingCatalog.definition_for(building_type).get("costs", {}).duplicate(true)
+	var definition := BuildingCatalog.definition_for(building_type)
+	var all_costs: Dictionary = required_materials_override.duplicate(true) if not required_materials_override.is_empty() else definition.get("costs", {}).duplicate(true)
+	var required: Dictionary = {}
+	var required_payments: Dictionary = {}
+	for resource_type in all_costs:
+		if str(resource_type) == "money":
+			required_payments[str(resource_type)] = maxi(0, int(all_costs[resource_type]))
+		else:
+			required[str(resource_type)] = maxi(0, int(all_costs[resource_type]))
 	var site := ConstructionSite.new(cell, building_type, position, site_node, blueprint, required)
-	site.site_id = hash(Vector2i(cell.x, cell.y))
+	site.required_payments = required_payments
+	site.labor_units = float(definition.get("labor_units", _estimate_labor_units(required, blueprint)))
+	site.site_id = _allocate_site_id(restored_site_id)
 	sites.append(site)
 	# Commit any resources that are already in storage to this site so they cannot
 	# be accidentally spent on research, trade, or another building.
@@ -83,6 +94,7 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 		var needed := int(required.get(resource_type, 0))
 		if needed > 0:
 			runtime.settlement.reserve_for_construction(site.site_id, str(resource_type), needed)
+	_capture_available_payments(site)
 	runtime.workers_changed.call()
 	return site
 
@@ -96,17 +108,31 @@ func tick(delta: float) -> void:
 			for resource_type in site.reserved_materials:
 				runtime.settlement.add(resource_type, int(site.reserved_materials[resource_type]))
 			runtime.settlement.release_site_construction_reservations(site.site_id)
+			if site.is_upgrade() and is_instance_valid(site.upgrade_source):
+				site.upgrade_source.set_meta("pending_upgrade", false)
+			if runtime.site_cancelled.is_valid():
+				runtime.site_cancelled.call(site)
+			var record := runtime.building_registry.record_at_cell(site.cell)
+			if record != null and record.node == site.node:
+				runtime.building_registry.remove_node(site.node)
+			else:
+				runtime.building_registry.cancel_reservation(site.cell)
 			sites.remove_at(index)
+			if runtime.navigation_changed.is_valid():
+				runtime.navigation_changed.call()
+			if runtime.workers_changed.is_valid():
+				runtime.workers_changed.call()
 			continue
 		if runtime.update_supply_label.is_valid():
 			runtime.update_supply_label.call(site)
+		_capture_available_payments(site)
 		var material_progress: float = site.material_progress()
 		if material_progress <= 0.0:
 			site.node.set_meta("can_advance", false)
 			continue
 		site.node.set_meta("can_advance", material_progress > site.progress + 0.0001)
 		var builder_power: float = runtime.builder_power.call(site.node)
-		var progress := ConstructionProgress.advance(site.progress, delta, runtime.duration, builder_power)
+		var progress := ConstructionProgress.advance(site.progress, delta, site.labor_units, builder_power)
 		progress = minf(progress, material_progress)
 		if index == sites.size() - 1:
 			runtime.set_status.call("Building %s: %d builder(s), %.1fx speed." % [site.building_type, runtime.builder_count.call(site.node), builder_power])
@@ -126,7 +152,11 @@ func tick(delta: float) -> void:
 		sites.remove_at(index)
 		for citizen in runtime.citizens:
 			citizen.finish_construction(site.node)
-		runtime.building_completed.call(site.cell, site.building_type, site.position, site.node, site.blueprint)
+		if site.is_upgrade() and runtime.upgrade_completed.is_valid():
+			runtime.upgrade_completed.call(site)
+			site.node.queue_free()
+		else:
+			runtime.building_completed.call(site.cell, site.building_type, site.position, site.node, site.blueprint)
 
 
 func accept_delivery(site_node: Node3D, resource_type: String, amount: int) -> bool:
@@ -167,8 +197,13 @@ func cancel_site(site_node: Node3D) -> bool:
 		# Delivered stock is returned at the normal cancellation rate. In-transit
 		# cargo is returned in full so resources can never vanish.
 		for resource_type in site.delivered_materials:
-			var refund := maxi(1, floori(int(site.delivered_materials[resource_type]) * 0.5))
-			runtime.settlement.add(resource_type, refund)
+			var refund := floori(int(site.delivered_materials[resource_type]) * 0.5)
+			if refund > 0:
+				runtime.settlement.add(resource_type, refund)
+		for payment_type in site.paid_payments:
+			var paid_refund := floori(int(site.paid_payments[payment_type]) * 0.5)
+			if paid_refund > 0:
+				runtime.settlement.add(payment_type, paid_refund)
 		for resource_type in site.reserved_materials:
 			runtime.settlement.add(resource_type, int(site.reserved_materials[resource_type]))
 		runtime.settlement.release_site_construction_reservations(site.site_id)
@@ -179,6 +214,10 @@ func cancel_site(site_node: Node3D) -> bool:
 				citizen.idle()
 		for citizen in runtime.citizens:
 			citizen.finish_construction(site_node)
+		if site.is_upgrade() and is_instance_valid(site.upgrade_source):
+			site.upgrade_source.set_meta("pending_upgrade", false)
+		if runtime.site_cancelled.is_valid():
+			runtime.site_cancelled.call(site)
 		var record := runtime.building_registry.record_at_cell(site.cell)
 		if record != null and record.node == site_node:
 			runtime.building_registry.remove_node(site_node)
@@ -199,3 +238,34 @@ func _cleanup_completed_site(site: ConstructionSite) -> void:
 		var child := site.node.get_node_or_null(child_name)
 		if child != null:
 			child.queue_free()
+
+
+func _allocate_site_id(restored_site_id: int) -> int:
+	if restored_site_id > 0:
+		_next_site_id = maxi(_next_site_id, restored_site_id + 1)
+		return restored_site_id
+	var allocated := _next_site_id
+	_next_site_id += 1
+	return allocated
+
+
+func _capture_available_payments(site: ConstructionSite) -> void:
+	for payment_type in site.required_payments:
+		var remaining := int(site.required_payments[payment_type]) - int(site.paid_payments.get(payment_type, 0))
+		if remaining <= 0:
+			continue
+		var captured := mini(remaining, runtime.settlement.available_amount(str(payment_type)))
+		if captured <= 0:
+			continue
+		runtime.settlement.add(str(payment_type), -captured)
+		site.paid_payments[str(payment_type)] = int(site.paid_payments.get(payment_type, 0)) + captured
+
+
+func _estimate_labor_units(required: Dictionary, blueprint: Dictionary) -> float:
+	var material_units := 0
+	for resource_type in required:
+		material_units += maxi(0, int(required[resource_type]))
+	var modules: Array = blueprint.get("modules", [])
+	var footprint: Vector2i = blueprint.get("footprint", Vector2i.ONE)
+	var complexity := 1.0 + float(material_units) / 20.0 + float(modules.size()) / 200.0 + float(footprint.x * footprint.y) / 50.0
+	return maxf(runtime.duration, runtime.duration * complexity)

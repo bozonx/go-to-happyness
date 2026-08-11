@@ -83,34 +83,48 @@ static func capture_settlement_section(game: Node) -> Dictionary:
 	if "building_registry" in game and game.building_registry != null:
 		for record in game.building_registry.records():
 			if is_instance_valid(record.node):
+				# Active sites are serialized from ConstructionService below. Upgrade
+				# projects deliberately do not own a registry record at all.
+				if "construction" in game and game.construction != null and game.construction.has_site(record.node):
+					continue
 				var cell_dict = SaveDataScript.vector2i_to_dict(record.cell)
 				var center_dict = SaveDataScript.vector3_to_dict(record.center)
 				var rot_y = record.node.rotation_degrees.y
 				var b_type = record.building_type
 				var blueprint_ref: Dictionary = record.node.get_meta("blueprint_ref", {})
 				var zone_state: Array = game.building_zone_service.zone_state_snapshot(record.node) if "building_zone_service" in game and game.building_zone_service != null else []
-				if "construction_controller" in game and game.construction_controller != null and game.construction_controller.is_construction_site(record.node):
-					var site = game.call("_get_construction_site_data", record.node)
-					if site != null:
-						construction_sites_list.append({
-							"cell": cell_dict,
-							"building_type": b_type,
-							"position": center_dict,
-							"rotation_y": rot_y,
-							"progress": site.progress,
-							"delivered_materials": site.delivered_materials.duplicate(),
-							"blueprint_ref": blueprint_ref.duplicate(true),
-							"zone_state": zone_state.duplicate(true),
-						})
-				else:
-					buildings_list.append({
-						"cell": cell_dict,
-						"building_type": b_type,
-						"position": center_dict,
-						"rotation_y": rot_y,
-						"blueprint_ref": blueprint_ref.duplicate(true),
-						"zone_state": zone_state.duplicate(true),
-					})
+				buildings_list.append({
+					"cell": cell_dict,
+					"building_type": b_type,
+					"position": center_dict,
+					"rotation_y": rot_y,
+					"blueprint_ref": blueprint_ref.duplicate(true),
+					"zone_state": zone_state.duplicate(true),
+				})
+	if "construction" in game and game.construction != null:
+		for site: ConstructionSite in game.construction.sites:
+			if not is_instance_valid(site.node):
+				continue
+			var site_data := {
+				"cell": SaveDataScript.vector2i_to_dict(site.cell),
+				"building_type": site.building_type,
+				"position": SaveDataScript.vector3_to_dict(site.position),
+				"rotation_y": site.node.rotation_degrees.y,
+				"progress": site.progress,
+				"site_id": site.site_id,
+				"delivered_materials": site.delivered_materials.duplicate(),
+				# Courier tasks are transient. The loader returns carried cargo to
+				# storage, then dispatches a fresh task from the restored world state.
+				"in_transit_materials": site.reserved_materials.duplicate(),
+				"required_materials": site.required_materials.duplicate(),
+				"required_payments": site.required_payments.duplicate(),
+				"paid_payments": site.paid_payments.duplicate(),
+				"labor_units": site.labor_units,
+				"blueprint_ref": site.node.get_meta("blueprint_ref", {}).duplicate(true),
+			}
+			if site.is_upgrade():
+				site_data["upgrade_from_type"] = site.upgrade_from_type
+			construction_sites_list.append(site_data)
 
 	# 5. Resource Piles
 	var piles_list: Array = []

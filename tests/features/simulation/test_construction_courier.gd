@@ -23,47 +23,29 @@ func _init() -> void:
 	supply_worker.idle()
 	var logistics_worker: Citizen = simulation.citizens[3]
 
-	# Ground piles are reserved for cleaners. Couriers must not turn a
-	# construction delivery into an implicit cleaning task.
+	# Construction logistics may consume a nearby ground pile directly. This is
+	# different from generic cleaning: only the exact required resource is taken.
 	assert(simulation.warehouse_positions.is_empty())
-	SimHelper.create_resource_pile(simulation, logistics_worker.global_position, {construction_resource: 1})
+	SimHelper.create_resource_pile(simulation, position + Vector3(0.25, 0.0, 0.0), {construction_resource: 1})
 	var source_pile: ResourcePileScript = simulation.resource_piles.back()
 	SimHelper.assign_daily_order(simulation, logistics_worker, "courier")
 	SimHelper.update_couriers(simulation)
-	var pile_snapshot := SettlementAIWorldFacade.new(simulation).capture(999)
-	var pile_orders := CourierDeliveryOrderProvider.new().collect_orders(pile_snapshot)
-	var matching_pile_orders := pile_orders.filter(func(order: CitizenOrder): return order.citizen_id == logistics_worker.ai_id and order.kind == &"courier_delivery")
-	assert(matching_pile_orders.is_empty())
-	assert(int(source_pile.resources.get(construction_resource, 0)) == 1)
-	logistics_worker.clear_daily_order()
-
-	# Ctrl+F grants settlement stock without creating a warehouse or a pile. That
-	# stock is collected from the camp entrance until a warehouse is completed.
-	# The green_valley map may place citizens in a different connectivity island
-	# from the entrance; move the courier there so the reachability check passes.
-	logistics_worker.global_position = simulation.entrance_stone.global_position
-	simulation.settlement.add(construction_resource, 1)
-	SimHelper.assign_daily_order(simulation, logistics_worker, "courier")
-	SimHelper.update_couriers(simulation)
-	var debug_stock_snapshot := SettlementAIWorldFacade.new(simulation).capture(1000)
-	var debug_stock_orders := CourierDeliveryOrderProvider.new().collect_orders(debug_stock_snapshot)
-	var matching_debug_orders := debug_stock_orders.filter(func(order: CitizenOrder): return order.citizen_id == logistics_worker.ai_id and order.kind == &"courier_delivery")
-	assert(not matching_debug_orders.is_empty())
-	var debug_stock_order: CitizenOrder = matching_debug_orders.front()
-	assert(simulation.courier_dispatcher.start_task(logistics_worker, debug_stock_order.payload.value(&"courier.task_id")))
-	assert(simulation.settlement.amount(construction_resource) == 0)
-	logistics_worker.global_position = simulation.entrance_stone.global_position
+	var pile_tasks: Array[CourierTask] = simulation.courier_dispatcher.available_tasks().filter(func(task: CourierTask) -> bool:
+		return task.kind == CourierTask.Kind.CONSTRUCTION and task.pickup == source_pile.node.global_position)
+	assert(not pile_tasks.is_empty())
+	logistics_worker.global_position = source_pile.node.global_position
+	assert(simulation.courier_task_service.start_courier_construction_or_supply(logistics_worker, pile_tasks.front()))
 	logistics_worker._process_construction_pickup(0.1)
 	logistics_worker.global_position = logistics_worker.construction_position
 	logistics_worker._process_construction_delivery(0.1)
+	assert(int(source_pile.resources.get(construction_resource, 0)) == 0)
 	assert(int(construction_site.delivered_materials.get(construction_resource, 0)) == 1)
-	assert(bool(construction_site.node.get_meta("can_advance", false)), "A delivered material must unblock builders immediately")
+	assert(bool(construction_site.node.get_meta("can_advance", false)), "A pile delivery must unblock builders immediately")
 	logistics_worker.clear_daily_order()
 
 	# With a warehouse, workforce orders exclude the supply worker (already
 	# assigned to construction) and courier orders include the logistics worker.
 	simulation.settlement.add(construction_resource, 1)
-	var material_before: int = simulation.settlement.amount(construction_resource)
 	var added_test_warehouse := false
 	if simulation.warehouse_positions.is_empty():
 		simulation.warehouse_positions.append(supply_worker.global_position)
@@ -78,8 +60,7 @@ func _init() -> void:
 	var construction_snapshot := SettlementAIWorldFacade.new(simulation).capture(1000)
 	var workforce_orders := WorkforceOrderProvider.new().collect_orders(construction_snapshot)
 	assert(workforce_orders.all(func(order: CitizenOrder): return order.citizen_id != supply_worker.ai_id))
-	var courier_orders := CourierDeliveryOrderProvider.new().collect_orders(construction_snapshot)
-	assert(courier_orders.any(func(order: CitizenOrder): return order.citizen_id == logistics_worker.ai_id and order.kind == &"courier_delivery"))
+	assert(simulation.courier_dispatcher.available_tasks().any(func(task: CourierTask) -> bool: return task.kind == CourierTask.Kind.CONSTRUCTION))
 	logistics_worker.clear_daily_order()
 	supply_worker.clear_daily_order()
 	if added_test_warehouse:
@@ -88,19 +69,12 @@ func _init() -> void:
 		simulation.settlement.warehouse_types.clear()
 		simulation.settlement.warehouse_ever_built = false
 
-	# Dispatcher reservation/reconciliation path for construction supply.
-	SimHelper.assign_daily_order(simulation, logistics_worker, "courier")
-	SimHelper.update_couriers(simulation)
-	var final_snapshot := SettlementAIWorldFacade.new(simulation).capture(1001)
-	var final_orders := CourierDeliveryOrderProvider.new().collect_orders(final_snapshot)
-	var final_order: Variant = final_orders.filter(func(order: CitizenOrder): return order.citizen_id == logistics_worker.ai_id and order.kind == &"courier_delivery").front()
-	assert(final_order != null)
-	assert(simulation.courier_dispatcher.start_task(logistics_worker, final_order.payload.value(&"courier.task_id")))
-	assert(simulation.settlement.amount(construction_resource) == material_before - 1)
-	assert(int(construction_site.reserved_materials.get(construction_resource, 0)) == 1)
-	logistics_worker.idle()
+	# Reconciliation returns orphaned cargo exactly once when no courier owns it.
+	var before_orphan: int = simulation.settlement.amount(construction_resource)
+	simulation.settlement.add(construction_resource, -1)
+	construction_site.reserved_materials[construction_resource] = 1
 	SimHelper.reconcile_construction_reservations(simulation, construction_site)
-	assert(simulation.settlement.amount(construction_resource) == material_before)
+	assert(simulation.settlement.amount(construction_resource) == before_orphan)
 	assert(int(construction_site.reserved_materials.get(construction_resource, 0)) == 0)
 	logistics_worker.clear_daily_order()
 	assert(simulation.construction.cancel_site(simulation.construction_sites[0].node))

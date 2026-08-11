@@ -12,15 +12,15 @@ func compute_efficiency(
 		buffs: Dictionary,
 		has_perk_fn: Callable,
 		is_jack_of_all_trades: bool,
-		era_index: int,
+		_era_index: int,
 		story_multiplier_fn: Callable
 		) -> float:
 	var core_skill := CitizenProfileScript.get_core_skill_for_role(role)
 	var S := float(skills.get(core_skill, 0.0)) if not core_skill.is_empty() else 0.5
 
-	# Max penalty is era-dependent
-	var max_penalty := 0.15 + 0.11 * float(era_index)
-	var skill_efficiency_factor := lerpf(1.0 - max_penalty, 1.30, S)
+	# Project complexity belongs to the project. Advancing the global era must not
+	# make the same citizen suddenly worse at the same physical task.
+	var skill_efficiency_factor := lerpf(0.80, 1.30, S)
 
 	# Farmer perk bonus
 	if role == "farming" and has_perk_fn.call("farming"):

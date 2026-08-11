@@ -386,7 +386,7 @@ static func has_definition(building_type: String) -> bool:
 static func definition_for(building_type: String) -> Dictionary:
 	if _runtime_definitions.has(building_type):
 		return (_runtime_definitions[building_type] as Dictionary).duplicate(true)
-	return DEFINITIONS.get(building_type, DEFINITIONS.house).duplicate(true)
+	return DEFINITIONS.get(building_type, {}).duplicate(true)
 static func cost_resources(building_type: String) -> Array[String]:
 	var result: Array[String] = []
 	for resource_type in definition_for(building_type).get("costs", {}): result.append(resource_type)
@@ -401,7 +401,8 @@ static func demolition_refund(building_type: String) -> Dictionary:
 	for resource_type in costs:
 		var refund_ratio := 0.30 if building_type == "tent" else 0.35
 		var refund_amount := floori(int(costs[resource_type]) * refund_ratio)
-		recovered[resource_type] = refund_amount if building_type == "tent" else maxi(1, refund_amount)
+		if refund_amount > 0:
+			recovered[resource_type] = refund_amount
 	return recovered
 static func currency_for(building_type: String) -> String:
 	var resources := cost_resources(building_type)

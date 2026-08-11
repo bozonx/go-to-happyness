@@ -27,4 +27,6 @@ var fire_state_for: Callable
 var apply_fire_state: Callable
 var is_route_reachable: Callable
 var construction_source_available: Callable
+var take_construction_source: Callable
+var return_construction_source: Callable
 var citizen_for_ai_id: Callable

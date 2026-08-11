@@ -307,7 +307,8 @@ static func _test_courier_dispatcher_publish_does_not_duplicate() -> void:
 	dispatcher.publish(&"task_1", CourierTask.Kind.SAWMILL_PICKUP, 99, Vector3(2.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0), {})
 	assert(dispatcher.tasks.size() == 1)
 	var task: RefCounted = dispatcher.tasks[&"task_1"]
-	assert(task.priority == 50)
+	assert(task.priority == 99)
+	assert(task.pickup == Vector3(2.0, 0.0, 0.0))
 	sim.free()
 
 

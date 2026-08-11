@@ -23,6 +23,14 @@ func has_site(building: Node3D) -> bool:
 	return false
 
 
+func cancel(building: Node3D) -> bool:
+	for index in range(sites.size() - 1, -1, -1):
+		if sites[index].building == building:
+			sites.remove_at(index)
+			return true
+	return false
+
+
 func tick(delta: float) -> void:
 	for index in range(sites.size() - 1, -1, -1):
 		var site := sites[index]

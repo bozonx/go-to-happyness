@@ -453,17 +453,15 @@ func can_upgrade_building(building_type: String) -> bool:
 	var target := next_building_upgrade(building_type)
 	if target.is_empty() or not is_building_unlocked(target):
 		return false
-	if BuildingCatalog.era_for(target) > era:
-		return false
-	for resource_type in BuildingCatalog.cost_resources(target):
-		if available_amount(resource_type) < BuildingCatalog.cost_for_resource(target, resource_type):
-			return false
-	return true
+	return BuildingCatalog.era_for(target) <= era
 
 func pay_for_building_upgrade(building_type: String, warehouse_index := -1) -> String:
 	if not can_upgrade_building(building_type):
 		return ""
 	var target := next_building_upgrade(building_type)
+	for resource_type in BuildingCatalog.cost_resources(target):
+		if available_amount(resource_type) < BuildingCatalog.cost_for_resource(target, resource_type):
+			return ""
 	for resource_type in BuildingCatalog.cost_resources(target):
 		add(resource_type, -BuildingCatalog.cost_for_resource(target, resource_type))
 	buildings[building_type] = maxi(0, int(buildings.get(building_type, 0)) - 1)

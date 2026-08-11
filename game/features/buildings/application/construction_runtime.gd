@@ -16,3 +16,5 @@ var building_completed: Callable
 var workers_changed: Callable
 var navigation_changed: Callable
 var update_supply_label: Callable
+var upgrade_completed: Callable
+var site_cancelled: Callable

@@ -111,6 +111,16 @@ func _publish_manual_worker_tasks() -> void:
 
 func publish(id: StringName, kind: CourierTask.Kind, priority: int, pickup: Vector3, dropoff: Vector3, payload := {}) -> void:
 	if tasks.has(id):
+		# Producers republish desired state every scheduling pass. An unassigned
+		# task must follow a newly-nearest source instead of retaining stale pickup
+		# data merely because its logical request id stayed the same.
+		var existing: CourierTask = tasks[id]
+		if not existing.is_assigned():
+			existing.kind = kind
+			existing.priority = priority
+			existing.pickup = pickup
+			existing.dropoff = dropoff
+			existing.payload = payload
 		return
 	var task := CourierTaskScript.new()
 	task.id = id

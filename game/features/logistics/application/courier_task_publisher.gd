@@ -141,37 +141,44 @@ func publish_courier_tasks(dispatcher: RefCounted) -> void:
 			if sources.is_empty():
 				continue
 			var total_reserved: int = _settlement.construction_reserved_for_site(site.site_id, str(resource_type))
+			# The settlement reservation includes cargo already in transit.
 			var still_needed: int = maxi(0, required - delivered - total_reserved)
 			if still_needed > 0:
 				_settlement.reserve_for_construction(site.site_id, str(resource_type), still_needed)
 			total_reserved = _settlement.construction_reserved_for_site(site.site_id, str(resource_type))
 			var storage_reserved: int = maxi(0, total_reserved - in_transit)
-			if storage_reserved > 0:
-				var smallest_courier_capacity := 0
-				for citizen in _citizens:
-					if is_instance_valid(citizen) and citizen.can_handle_entry_logistics():
-						var courier_capacity: int = citizen.courier_capacity()
-						smallest_courier_capacity = courier_capacity if smallest_courier_capacity == 0 else mini(smallest_courier_capacity, courier_capacity)
-				var unallocated := storage_reserved
-				for source: Dictionary in sources:
-					if unallocated <= 0:
-						break
-					var source_available: int = _construction_source_available.call(str(resource_type), source)
-					var source_allocation: int = mini(unallocated, source_available)
-					if source_allocation <= 0:
-						continue
-					var source_id: String = str(source.get("id", "storage"))
-					var delivery_slots: int = ceili(float(source_allocation) / float(maxi(1, smallest_courier_capacity)))
-					for slot in range(delivery_slots):
-						dispatcher.publish(
-							StringName("construction_%s_%s_%s_%d" % [site.cell, resource_type, source_id, slot]),
-							CourierTaskScript.Kind.CONSTRUCTION,
-							maxi(70, 79 - site_index),
-							source.position,
-							site.node.global_position,
-							{"site": site, "resource": resource_type, "source": source}
-						)
-					unallocated -= source_allocation
+			var smallest_courier_capacity := 0
+			for citizen in _citizens:
+				if is_instance_valid(citizen) and citizen.can_handle_entry_logistics():
+					var courier_capacity: int = citizen.courier_capacity()
+					smallest_courier_capacity = courier_capacity if smallest_courier_capacity == 0 else mini(smallest_courier_capacity, courier_capacity)
+			var unallocated := maxi(0, required - delivered - in_transit)
+			var storage_left := storage_reserved
+			var published_slot := 0
+			for source_index in sources.size():
+				if unallocated <= 0:
+					break
+				var source: Dictionary = sources[source_index]
+				var source_available: int = _construction_source_available.call(str(resource_type), source)
+				if str(source.get("kind", "")) != "pile":
+					source_available = mini(source_available, storage_left)
+				var source_allocation: int = mini(unallocated, source_available)
+				if source_allocation <= 0:
+					continue
+				var delivery_slots: int = ceili(float(source_allocation) / float(maxi(1, smallest_courier_capacity)))
+				for _slot in range(delivery_slots):
+					dispatcher.publish(
+						StringName("construction_%s_%s_%d" % [site.site_id, resource_type, published_slot]),
+						CourierTaskScript.Kind.CONSTRUCTION,
+						maxi(70, 89 - site_index * 3 - source_index),
+						source.position,
+						site.node.global_position,
+						{"site": site, "resource": resource_type, "source": source}
+					)
+					published_slot += 1
+				unallocated -= source_allocation
+				if str(source.get("kind", "")) != "pile":
+					storage_left -= source_allocation
 
 	if not _warehouse_positions.is_empty() and _settlement.amount(ResourceIds.BRANCHES) > 0:
 		for record in _building_registry.records():

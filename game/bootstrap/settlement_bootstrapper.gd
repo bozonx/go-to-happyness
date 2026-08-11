@@ -308,6 +308,8 @@ func _setup_construction_and_demolition() -> void:
 	construction_runtime.workers_changed = game.update_workers
 	construction_runtime.navigation_changed = func(): game.world_navigation_controller.refresh_navigation_grid()
 	construction_runtime.update_supply_label = func(site): game.construction_controller.update_construction_supply_label(site)
+	construction_runtime.upgrade_completed = func(site): game.workplace_controller.complete_building_upgrade(site)
+	construction_runtime.site_cancelled = func(site): game.workplace_controller.on_construction_site_cancelled(site)
 	game.construction = ConstructionService.new()
 	game.construction.site_scene = ConstructionSiteScene
 	game.construction.entrance_post_scene = ConstructionEntrancePostScene
@@ -541,8 +543,8 @@ func _setup_building_lifecycle() -> void:
 	priority_port.construction_sites = game.construction_sites
 	priority_port.warehouse_positions = game.warehouse_positions
 	priority_port.sawmill_positions = game.sawmill_positions
-	priority_port.campfire_node = game.campfire_node
-	priority_port.canteen = game.canteen
+	priority_port.campfire_node_getter = func() -> Node3D: return game.campfire_node
+	priority_port.canteen_getter = func() -> Node3D: return game.canteen
 	priority_port.population_provider = func() -> int: return game.citizens.size()
 	priority_port.housing_slots_provider = func(): return game.building_registry.housing_capacity()
 	priority_port.food_amount_provider = func() -> int: return game.settlement.amount(SettlementGame.ResourceIds.FOOD)
@@ -758,6 +760,8 @@ func _setup_courier_system() -> void:
 	task_port.apply_fire_state = func(building, fire_state): game.fire_management_service.apply_fire_state(building, fire_state)
 	task_port.is_route_reachable = game.is_route_reachable
 	task_port.construction_source_available = func(resource_type, source): return game.logistics_controller.construction_source_available(resource_type, source)
+	task_port.take_construction_source = func(resource_type, source, amount): return game.logistics_controller.take_construction_source(resource_type, source, amount)
+	task_port.return_construction_source = func(resource_type, source, amount): game.logistics_controller.return_construction_source(resource_type, source, amount)
 	task_port.citizen_for_ai_id = func(citizen_id): return game.citizen_factory.citizen_for_ai_id(citizen_id)
 	game.courier_task_service.configure(task_port)
 

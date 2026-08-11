@@ -55,22 +55,57 @@ func construction_material_sources(resource_type: String, from_position: Vector3
 				# The position keeps task identity stable enough to invalidate a task when
 				# warehouses are demolished; the index makes pickup remove the same stock.
 				sources.append({"kind": "storage", "id": "storage_%s" % game.cell_from_position(position), "position": position, "warehouse_index": index})
-			sources.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
-				return from_position.distance_squared_to(left.position) < from_position.distance_squared_to(right.position)
-			)
-			return sources
-		# Before the first warehouse is built, all resources live in the virtual
-		# stockpile. Couriers pull from that unlimited reserve at the camp entrance
-		# so the bootstrap warehouse and main campfire can still be supplied.
-		sources.append({"kind": "open_storage", "id": "open_storage", "position": get_nearest_delivery_position(from_position)})
-	# Ground piles belong exclusively to cleaners. Construction starts only after
-	# their contents have been delivered to the settlement stock.
+		else:
+			# Before the first warehouse is built, all resources live in the starter
+			# backpack. It is represented visually by a pile too, so only publish this
+			# virtual source and skip backpack piles below to avoid double counting.
+			sources.append({"kind": "open_storage", "id": "open_storage", "position": get_nearest_delivery_position(from_position)})
+	for pile: ResourcePile in game.resource_piles:
+		if pile == null or pile.is_backpack or not is_instance_valid(pile.node):
+			continue
+		if int(pile.resources.get(resource_type, 0)) <= 0:
+			continue
+		sources.append({
+			"kind": "pile",
+			"id": "pile_%s" % game.cell_from_position(pile.node.global_position),
+			"position": pile.node.global_position,
+			"pile": pile,
+		})
+	sources.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
+		return from_position.distance_squared_to(left.position) < from_position.distance_squared_to(right.position)
+	)
 	return sources
 
 
 func construction_source_available(resource_type: String, source: Dictionary) -> int:
+	if str(source.get("kind", "")) == "pile":
+		var pile: ResourcePile = source.get("pile") as ResourcePile
+		return int(pile.resources.get(resource_type, 0)) if pile != null and is_instance_valid(pile.node) else 0
 	var warehouse_index := int(source.get("warehouse_index", -1))
 	return game.settlement.warehouse_amount(resource_type, warehouse_index) if warehouse_index >= 0 else game.settlement.amount(resource_type)
+
+
+func take_construction_source(resource_type: String, source: Dictionary, amount: int) -> int:
+	if amount <= 0:
+		return 0
+	if str(source.get("kind", "")) == "pile":
+		return game.resource_pile_service.take_resource(source.get("pile") as ResourcePile, resource_type, amount)
+	return 0
+
+
+func return_construction_source(resource_type: String, source: Dictionary, amount: int) -> void:
+	if amount <= 0:
+		return
+	if str(source.get("kind", "")) == "pile":
+		game.resource_pile_service.drop_resource_pile(source.get("position", Vector3.ZERO), resource_type, amount)
+		return
+	var warehouse_index := int(source.get("warehouse_index", -1))
+	if warehouse_index >= 0:
+		var overflow := game.settlement.add_to_warehouse(resource_type, amount, warehouse_index)
+		if overflow > 0:
+			game.resource_pile_service.drop_resource_pile(source.get("position", Vector3.ZERO), resource_type, overflow)
+	else:
+		game.settlement.add(resource_type, amount)
 
 
 func set_canteen_delivery_state(active: bool, carrier: Citizen, amount: int) -> void:

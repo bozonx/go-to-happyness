@@ -34,17 +34,13 @@ func restore(p_game: SettlementGame, section: Dictionary) -> bool:
 			citizen.queue_free()
 	game.citizens.clear()
 
-	# 2. Despawn current buildings and reset building registry
+	# 2. Despawn current buildings and clear the long-lived building registry.
+	# Replacing it would strand every runtime port and terrain-anchor signal on the
+	# old object.
 	for record in game.building_registry.records():
 		if is_instance_valid(record.node):
 			record.node.queue_free()
-	game.building_registry = BuildingRegistry.new()
-	if game.building_queue_service != null:
-		game.building_queue_service.configure(game.building_registry, game.nav_grid)
-	if game.village_territory_service != null:
-		game.village_territory_service.configure(game.building_registry, int(game.settlement.era))
-	if game.construction != null and game.construction.runtime != null:
-		game.construction.runtime.building_registry = game.building_registry
+	game.building_registry.clear()
 
 	# Despawn current construction sites
 	for site in game.construction_sites.duplicate():
@@ -81,6 +77,11 @@ func restore(p_game: SettlementGame, section: Dictionary) -> bool:
 	game.completed_house_count = 0
 	game.canteen_food = 0
 	game.settlement.buildings.clear()
+	game.settlement.warehouses.clear()
+	game.settlement.warehouse_types.clear()
+	game.settlement.backpack.clear()
+	game.settlement.warehouse_ever_built = false
+	game.settlement.construction_reservations.clear()
 
 	# 3. Restore Settlement State
 	var s_dict: Dictionary = settlement_state
@@ -135,6 +136,10 @@ func restore(p_game: SettlementGame, section: Dictionary) -> bool:
 		else:
 			push_warning("SettlementSaveLoader: skipping building with unknown type '" + b_type + "' at cell " + str(cell))
 
+	# Completed warehouses now exist, so restore their exact inventories before
+	# construction sites rebuild reservations against the saved stock.
+	SaveGameService.restore_warehouses(game.settlement, s_dict.get("warehouses", []), s_dict.get("warehouse_types", []), bool(s_dict.get("warehouse_ever_built", false)))
+
 	# 7. Restore Construction Sites
 	for c_dict in construction_sites_state:
 		var cell = SaveData.dict_to_vector2i(c_dict.get("cell", {}))
@@ -144,23 +149,51 @@ func restore(p_game: SettlementGame, section: Dictionary) -> bool:
 		var rot_quarters = posmod(roundi(rot_y / 90.0), 4)
 		var progress = float(c_dict.get("progress", 0.0))
 		var delivered = c_dict.get("delivered_materials", {}).duplicate()
+		var saved_site_id := int(c_dict.get("site_id", 0))
+		var required_materials: Dictionary = c_dict.get("required_materials", {}).duplicate()
+		var required_payments: Dictionary = c_dict.get("required_payments", {}).duplicate()
+		var paid_payments: Dictionary = c_dict.get("paid_payments", {}).duplicate()
+		var upgrade_from_type := str(c_dict.get("upgrade_from_type", ""))
+		var in_transit: Dictionary = c_dict.get("in_transit_materials", {}).duplicate()
+		# Active courier assignments are intentionally not saved. Put their cargo
+		# back before recreating the site so it can be reserved and dispatched anew.
+		for resource_type in in_transit:
+			game.settlement.add(str(resource_type), int(in_transit[resource_type]))
 
 		var resolved := _resolve_saved_building_blueprint(b_type, c_dict)
 		b_type = resolved.type
 		var blueprint: Dictionary = resolved.blueprint
 		if not blueprint.is_empty():
 			var occupied_footprint = game.building_placement_controller.rotated_footprint(blueprint.footprint, rot_quarters) if game.building_placement_controller != null else blueprint.footprint
-			game.building_registry.reserve(cell, pos, occupied_footprint)
-			var site = game.construction_controller.create_construction_site(cell, b_type, pos, rot_quarters, blueprint, occupied_footprint)
+			if upgrade_from_type.is_empty():
+				game.building_registry.reserve(cell, pos, occupied_footprint)
+			var site = game.construction_controller.create_construction_site(cell, b_type, pos, rot_quarters, blueprint, occupied_footprint, saved_site_id, required_materials)
 			if site != null:
 				site.progress = progress
 				site.delivered_materials = delivered
-				game.building_registry.attach_node(cell, site.node, b_type)
+				if c_dict.has("required_payments"):
+					site.required_payments = required_payments
+				if c_dict.has("paid_payments"):
+					site.paid_payments = paid_payments
+				site.labor_units = maxf(0.001, float(c_dict.get("labor_units", site.labor_units)))
+				var restored_modules := mini(site.blueprint.get("modules", []).size(), floori(site.progress * site.blueprint.get("modules", []).size()))
+				for module_index in restored_modules:
+					site.node.add_child(BuildingBlueprints.create_module(site.blueprint.modules[module_index]))
+				site.modules_built = restored_modules
+				if upgrade_from_type.is_empty():
+					game.building_registry.attach_node(cell, site.node, b_type)
+				else:
+					var source_record := game.building_registry.record_at_cell(cell)
+					if source_record != null and is_instance_valid(source_record.node) and source_record.building_type == upgrade_from_type:
+						site.upgrade_source = source_record.node
+						site.upgrade_from_type = upgrade_from_type
+						source_record.node.set_meta("pending_upgrade", true)
+					else:
+						push_warning("SettlementSaveLoader: discarded orphaned upgrade at " + str(cell))
+						game.construction.cancel_site(site.node)
 				game.construction_controller.update_construction_supply_label(site)
 		else:
 			push_warning("SettlementSaveLoader: skipping construction site with unknown type '" + b_type + "' at cell " + str(cell))
-
-	SaveGameService.restore_warehouses(game.settlement, s_dict.get("warehouses", []), s_dict.get("warehouse_types", []), bool(s_dict.get("warehouse_ever_built", false)))
 
 	# 8. Restore Resource Piles
 	for p_dict in resource_piles_state:
