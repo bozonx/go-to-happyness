@@ -3,7 +3,7 @@
 	"id": "flag",
 	"name": "Флаг",
 	"asset": "flag",
-	"content_class": "decor",
+	"content_class": "fill",
 	"category": "world_props",
 	"activity": "distance",
 	"tags": ["town", "sign"],

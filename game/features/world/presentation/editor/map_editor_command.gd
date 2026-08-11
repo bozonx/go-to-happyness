@@ -9,7 +9,7 @@ extends RefCounted
 ## author's last action, whatever mode made it.
 ##
 ## This is the deliberate correction of the building editor, where undo was built
-## per mode and decor kept a stack of its own — which already reads as a bug: the
+## per mode and fill kept a stack of its own — which already reads as a bug: the
 ## author presses undo, and nothing they did comes back.
 
 ## Short description of what was done, shown in the status line and the edit menu.

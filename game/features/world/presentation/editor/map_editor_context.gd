@@ -18,7 +18,7 @@ signal scatter_chunks_changed(chunks: Array)
 ## Handed to every mode instead of the editor node itself. That is the whole
 ## point: a mode that held `map_editor.gd` would start calling its panels and
 ## its siblings, and the modes would stop being separable — which is exactly how
-## `building_editor.gd` reached 2159 lines before decor was pulled out of it.
+## `building_editor.gd` reached 2159 lines before fill was pulled out of it.
 ##
 ## What is here is the document, the services that act on it, the shared undo
 ## stack and the few scene nodes a mode legitimately needs to draw with.
