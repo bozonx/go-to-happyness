@@ -80,7 +80,7 @@ theme = ExtResource("2_theme")
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
-offset_bottom = 52.0
+offset_bottom = 55.0
 grow_horizontal = 2
 
 [node name="Compass" parent="EditorUI/Root" instance=ExtResource("13_compass")]
@@ -104,7 +104,7 @@ tooltip_text = "Сохранить текущий чертёж"
 tooltip_text = "Сохранить как новый чертёж"
 
 [node name="SettingsButton" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/DocumentActions" index="5"]
-text = "Параметры здания"
+text = "⚙"
 tooltip_text = "Параметры здания"
 
 [node name="VSep1" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/Scroll/Row"]
@@ -230,6 +230,7 @@ theme_override_constants/separation = 6
 [node name="FillDeleteSelectionBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/Scroll/Row/FillToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
+custom_minimum_size = Vector2(38, 38)
 disabled = true
 text = "🗑"
 tooltip_text = "Удалить выбранный объект"
@@ -784,6 +785,7 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Объект не выбран"
 horizontal_alignment = 1
+autowrap_mode = 2
 
 [node name="GeneralSectionLbl" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
@@ -797,6 +799,7 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 theme_override_font_sizes/font_size = 12
 text = "ID: —"
+autowrap_mode = 2
 
 [node name="FillAssetLabel" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
@@ -804,6 +807,7 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 theme_override_font_sizes/font_size = 12
 text = "Ассет: —"
+autowrap_mode = 2
 
 [node name="FillBadgesLabel" type="Label" parent="EditorUI/Root/FillInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true

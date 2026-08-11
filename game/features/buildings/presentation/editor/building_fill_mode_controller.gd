@@ -188,7 +188,7 @@ func activate() -> void:
 	current_category = WorldAssetCatalog.first_populated_category(current_category)
 	_catalog_panel.activate()
 	_panel.visible = true
-	_inspector_panel.visible = true
+	_inspector_panel.visible = not selected_object_id.is_empty()
 	_toolbar.visible = true
 	rebuild_nodes()
 	_refresh_zone_filter_options()
@@ -237,11 +237,6 @@ func on_left_pressed(additive: bool = false) -> void:
 	var count_before: int = _editor.blueprint.objects.size()
 	_place_or_select_at(hit)
 	_placing_stroke = _editor.blueprint.objects.size() > count_before
-	if _placing_stroke:
-		# Placement continues to edit the brush. Clear selection through the normal
-		# path so the inspector and marker cannot show an object while its controls
-		# are actually changing the mouse ghost.
-		select_object("")
 	_last_placed_cell = occupied_cells(snapped_position(hit), current_asset_id, current_scale, current_yaw_deg).position
 
 
@@ -310,7 +305,6 @@ func on_drag() -> void:
 				var sample_position := position + Vector3(sample.x - cell.x, 0.0, sample.y - cell.y)
 				if pick_object_at(sample_position).is_empty():
 					_place_at(sample_position)
-					selected_object_id = ""
 			_last_placed_cell = cell
 		return
 	if not _dragging or not _editor.cursor_valid:
@@ -1005,7 +999,7 @@ func selected_records() -> Array:
 
 
 func _after_selection_changed() -> void:
-	_inspector_panel.visible = is_active()
+	_inspector_panel.visible = is_active() and not selected_object_id.is_empty()
 	_toolbar_delete_btn.disabled = selected_object_id.is_empty()
 	_refresh_object_list()
 	_refresh_inspector()

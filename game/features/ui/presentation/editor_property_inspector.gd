@@ -108,6 +108,7 @@ func _build_property_row(property: EntityPropertyDef, value: Variant, editable: 
 	var label := Label.new()
 	label.text = property.label + (" · " + property.unit if not property.unit.is_empty() else "")
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	heading.add_child(label)
 	if field_editable and property.default != null and not _values_equivalent(value, property.default):
 		var reset := Button.new()
@@ -254,19 +255,17 @@ func _build_control(property: EntityPropertyDef, value: Variant) -> Control:
 
 
 func _vector_control(property: EntityPropertyDef, value: Variant) -> Control:
-	var row := HBoxContainer.new()
+	var row := GridContainer.new()
+	row.columns = 2
 	var count := 2 if property.type == EntityPropertyDef.TYPE_VECTOR2 else 3
 	var values: Array = value as Array if value is Array else ([value.x, value.y] if value is Vector2 else ([value.x, value.y, value.z] if value is Vector3 else []))
 	while values.size() < count:
 		values.append(0.0)
 	var spins: Array[SpinBox] = []
 	for index in count:
-		var column := VBoxContainer.new()
-		column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var axis := Label.new()
 		axis.text = ["X", "Y", "Z"][index]
-		axis.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		column.add_child(axis)
+		row.add_child(axis)
 		var spin := SpinBox.new()
 		spin.step = float(property.step) if property.step is float or property.step is int else 0.1
 		var has_min := property.minimum is float or property.minimum is int
@@ -277,8 +276,8 @@ func _vector_control(property: EntityPropertyDef, value: Variant) -> Control:
 		spin.max_value = float(property.maximum) if has_max else 1000000.0
 		spin.value = float(values[index])
 		spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		column.add_child(spin)
-		row.add_child(column)
+		spin.custom_minimum_size.x = 72.0
+		row.add_child(spin)
 		spins.append(spin)
 		var read := func() -> Variant:
 			return spins.map(func(item: SpinBox) -> float: return item.value)

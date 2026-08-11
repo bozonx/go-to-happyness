@@ -298,7 +298,6 @@ func refresh_ghost() -> void:
 	if not is_active():
 		_ghost.visible = false
 		return
-	_update_current_subgrid_anchor()
 	_ghost_cell = _editor.cursor_cell
 	_ghost_tool = _editor.current_tool
 	_ghost_rot = _editor.current_rot
@@ -306,29 +305,23 @@ func refresh_ghost() -> void:
 	if not _editor.cursor_valid or _editor._eyedropper_active:
 		_ghost.visible = false
 		return
-	if _editor.current_tool == Tool.PLACE and _editor.current_block_id.is_empty() and _stamp_brush.is_empty():
+	if _editor.current_tool == Tool.ERASE:
+		# Erasing targets authored geometry, not the current construction brush.
+		# The same ray-picked overlay as the eyedropper shows the exact sub-block
+		# that a click will remove.
+		_ghost.visible = false
+		return
+	_update_current_subgrid_anchor()
+	if _editor.current_block_id.is_empty() and _stamp_brush.is_empty():
 		_ghost.visible = false
 		return
 	_ghost.visible = true
-	if _editor.current_tool == Tool.ERASE:
-		var target := _editor.grid_model.get_block_at(_editor.cursor_cell)
-		if target == null:
-			_ghost.mesh = _editor.mesh_library.mesh_for(_editor.current_block_id, _editor.current_variant)
-			_ghost.rotation = _current_ghost_euler()
-			_ghost.position = Vector3(_editor.cursor_cell) + BlockMeshLibrary.local_offset(_editor.current_block_id, _editor.current_variant, _editor.current_rot, _editor.current_anchor, 0.0, _editor.current_rot_x, _editor.current_rot_z)
-			_ghost.material_override = _editor.mesh_library.ghost_material(false)
-		else:
-			_ghost.mesh = _editor.mesh_library.mesh_for(target.block_id, target.variant)
-			_ghost.rotation = target.rotation_euler()
-			_ghost.position = Vector3(target.pos) + BlockMeshLibrary.local_offset(target.block_id, target.variant, target.rot, target.anchor, 0.0, target.rot_x, target.rot_z)
-			_ghost.material_override = _editor.mesh_library.ghost_material(false)
-	else:
-		_ghost.mesh = _editor.mesh_library.mesh_for(_editor.current_block_id, _editor.current_variant)
-		_ghost.rotation = _current_ghost_euler()
-		_ghost.position = Vector3(_editor.cursor_cell) + BlockMeshLibrary.local_offset(_editor.current_block_id, _editor.current_variant, _editor.current_rot, _editor.current_anchor, 0.0, _editor.current_rot_x, _editor.current_rot_z)
-		_ghost.material_override = _editor.mesh_library.ghost_material(is_block_in_bounds(_editor.cursor_cell, _editor.current_block_id, _editor.current_variant, _editor.current_rot) and _editor.grid_model.can_place(
-			_editor.cursor_cell, _editor.current_block_id, _editor.current_rot, _editor.current_material_id, _editor.current_variant,
-			_editor.current_anchor, _editor.current_rot_x, _editor.current_rot_z))
+	_ghost.mesh = _editor.mesh_library.mesh_for(_editor.current_block_id, _editor.current_variant)
+	_ghost.rotation = _current_ghost_euler()
+	_ghost.position = Vector3(_editor.cursor_cell) + BlockMeshLibrary.local_offset(_editor.current_block_id, _editor.current_variant, _editor.current_rot, _editor.current_anchor, 0.0, _editor.current_rot_x, _editor.current_rot_z)
+	_ghost.material_override = _editor.mesh_library.ghost_material(is_block_in_bounds(_editor.cursor_cell, _editor.current_block_id, _editor.current_variant, _editor.current_rot) and _editor.grid_model.can_place(
+		_editor.cursor_cell, _editor.current_block_id, _editor.current_rot, _editor.current_material_id, _editor.current_variant,
+		_editor.current_anchor, _editor.current_rot_x, _editor.current_rot_z))
 
 
 func _current_ghost_euler() -> Vector3:
@@ -354,11 +347,15 @@ func begin_paint_stroke() -> void:
 	_paint_snap_blocks.clear()
 	for block: BlueprintBlock in _editor.grid_model.all_blocks():
 		_paint_snap_blocks.append(block)
-	_update_current_subgrid_anchor()
 	painting = true
 	last_paint_cell = _editor.cursor_cell
 	paint_anchor = _editor.cursor_cell
 	_paint_anchor = _editor.current_anchor
+	if _editor.current_tool == Tool.ERASE and _editor.current_brush == Brush.LINE:
+		erase_hovered_block_or_cell()
+		refresh_ghost()
+		return
+	_update_current_subgrid_anchor()
 	if _editor.current_brush == Brush.RECT:
 		paint_rect(paint_anchor, _editor.cursor_cell, _paint_anchor)
 	else:
@@ -518,7 +515,8 @@ func refresh_shift_hover() -> void:
 	if _shift_hover_visual == null:
 		return
 	_shift_hover_block = null
-	if not is_active() or (not Input.is_key_pressed(KEY_SHIFT) and not _editor._eyedropper_active) \
+	if not is_active() or (not Input.is_key_pressed(KEY_SHIFT) and not _editor._eyedropper_active \
+			and _editor.current_tool != Tool.ERASE) \
 			or not _editor.cursor_valid:
 		_shift_hover_visual.visible = false
 		return

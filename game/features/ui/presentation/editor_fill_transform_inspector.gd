@@ -108,6 +108,10 @@ func _spin(step: float, minimum: float, maximum: float) -> SpinBox:
 	spin.min_value = minimum
 	spin.max_value = maximum
 	spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# SpinBox has a fairly wide intrinsic minimum. Axis triples must still fit a
+	# narrow editor inspector, so rows lay them out vertically and let the field
+	# consume the remaining width.
+	spin.custom_minimum_size.x = 72.0
 	return spin
 
 
@@ -128,7 +132,8 @@ func _heading(text: String, reset_property: StringName = &"") -> Control:
 
 
 func _axis_row(items: Array) -> Control:
-	var row := HBoxContainer.new()
+	var row := GridContainer.new()
+	row.columns = 2
 	for item: Array in items:
 		var label := Label.new()
 		label.text = item[0]

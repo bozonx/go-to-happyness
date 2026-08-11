@@ -31,7 +31,10 @@ func _run() -> void:
 	var top_scroll := editor.get_node("EditorUI/Root/TopBar/Margin/Scroll") as ScrollContainer
 	var palette := editor.get_node("%FillPanel") as Control
 	var inspector := editor.get_node("%FillInspectorPanel") as Control
+	var settings_button := editor.get_node("EditorUI/Root/TopBar/Margin/Scroll/Row/DocumentActions/SettingsButton") as Button
 	assert(top_bar.get_combined_minimum_size().y <= 55.0, "building top bar keeps its compact height")
+	assert(settings_button.text == "⚙" and settings_button.tooltip_text == "Параметры здания",
+		"building parameters use a compact gear button with a descriptive tooltip")
 	assert(top_scroll.horizontal_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED,
 		"building top bar preserves access to overflowing actions")
 	assert(palette.custom_minimum_size.x + inspector.custom_minimum_size.x + 16.0 <= 1280.0,
@@ -98,6 +101,7 @@ func _run() -> void:
 	assert(editor.get_node("%FillToolbar").visible, "fill toolbar visible")
 	assert(not editor.get_node("%FrameToolbar").visible, "frame toolbar hidden")
 	assert(not editor.get_node("%Ghost").visible, "frame ghost hidden outside frame mode")
+	assert(not inspector.visible, "fill inspector stays hidden without an object selection")
 	var inspector_scroll := inspector.get_node("Scroll") as ScrollContainer
 	var objects_panel := inspector.get_node("FillObjectsPanel") as Control
 	assert(inspector_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED,
@@ -138,8 +142,19 @@ func _run() -> void:
 	await process_frame
 	assert(editor.blueprint.objects.size() == 2, "two objects placed, got %d" % editor.blueprint.objects.size())
 	assert(fill._nodes.size() == 2, "two instances spawned")
-	assert(fill.selected_object_id.is_empty(),
-		"placement clears object selection consistently instead of leaving a stale selected inspector")
+	assert(fill.selected_object_id == editor.blueprint.objects[1].id,
+		"the most recently placed object becomes the inspector selection")
+	assert(inspector.visible, "placing an object opens its inspector")
+	var inspector_content := inspector_scroll.get_node("InspectorVBox") as Control
+	assert(inspector_content.get_combined_minimum_size().x <= inspector_scroll.size.x,
+		"fill inspector content stays inside the right column")
+	var selected_after_placement = fill.find_record(fill.selected_object_id)
+	var brush_yaw_before: float = fill.current_yaw_deg
+	fill._yaw_spin.value = 45.0
+	assert(is_equal_approx(selected_after_placement.rot.y, 45.0),
+		"inspector edits the newly placed object")
+	assert(is_equal_approx(fill.current_yaw_deg, brush_yaw_before),
+		"selected-object edits do not leak into the placement ghost")
 	print("  placement ok, ids=", editor.blueprint.objects.map(func(r): return r.id))
 
 	# The contextual tool never stacks on an existing object: it selects it.
@@ -152,6 +167,8 @@ func _run() -> void:
 	assert(fill._ghost == null or not fill._ghost.visible, "ghost hides while the cursor is over fill")
 	assert(fill._hover_marker.visible, "hover marker identifies the object a click will select")
 	assert(not editor.get_node("%FillDeleteSelectionBtn").disabled, "toolbar delete enables for selection")
+	assert(top_bar.size.y >= 55.0 and editor.get_node("%FillDeleteSelectionBtn").size.y >= 38.0,
+		"selection does not collapse the top bar or its delete action")
 	print("  occupied placement selects instead of stacking")
 
 	# The same contextual click handles selection and dragging.
@@ -297,6 +314,7 @@ func _run() -> void:
 	fill.select_object(editor.blueprint.objects[0].id)
 	fill.cancel_current_action()
 	assert(fill.selected_object_id.is_empty(), "first Esc clears fill selection")
+	assert(not inspector.visible, "clearing the selection hides the fill inspector")
 	assert(not fill.current_asset_id.is_empty(), "first Esc keeps the placement brush")
 	fill.cancel_current_action()
 	assert(fill.current_asset_id.is_empty(), "second Esc clears the placement brush")

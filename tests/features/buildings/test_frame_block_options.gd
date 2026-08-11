@@ -15,6 +15,13 @@ func _run() -> void:
 	root.add_child(editor)
 	await process_frame
 	var frame: FrameModeController = editor.frame_mode
+	editor.cursor_valid = true
+	frame.select_block(&"cube", &"1")
+	frame.set_tool(FrameModeController.Tool.ERASE)
+	frame.refresh_ghost()
+	assert(not editor.get_node("%Ghost").visible,
+		"erase mode hides the construction ghost and uses the hovered-block overlay")
+	frame.set_tool(FrameModeController.Tool.PLACE)
 
 	frame.select_block(&"column_square")
 	await process_frame
