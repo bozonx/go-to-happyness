@@ -1,0 +1,81 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+
+
+[sub_resource type="StandardMaterial3D" id="Mat_stone"]
+albedo_color = Color(0.482, 0.478, 0.463, 1)
+roughness = 1.0
+
+[sub_resource type="BoxMesh" id="Mesh_shaft"]
+material = SubResource("Mat_stone")
+size = Vector3(0.62, 2.4, 0.42)
+
+[sub_resource type="BoxMesh" id="Mesh_cap"]
+material = SubResource("Mat_stone")
+size = Vector3(0.5, 0.3, 0.34)
+
+[sub_resource type="SphereMesh" id="Mesh_footing"]
+material = SubResource("Mat_stone")
+radius = 0.24
+height = 0.28
+radial_segments = 5
+rings = 3
+
+[sub_resource type="StandardMaterial3D" id="Mat_carving"]
+albedo_color = Color(0.302, 0.294, 0.278, 1)
+roughness = 1.0
+
+[sub_resource type="BoxMesh" id="Mesh_groove"]
+material = SubResource("Mat_carving")
+size = Vector3(0.36, 0.05, 0.02)
+
+[sub_resource type="BoxMesh" id="Mesh_ring"]
+material = SubResource("Mat_carving")
+size = Vector3(0.2, 0.2, 0.02)
+
+[sub_resource type="BoxShape3D" id="Shape_menhir"]
+size = Vector3(0.7, 2.4, 0.5)
+
+[node name="Menhir" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"menhir"
+
+[node name="Stone" type="Node3D" parent="."]
+
+[node name="Shaft" type="MeshInstance3D" parent="Stone"]
+transform = Transform3D(0.9962, 0.0872, 0, -0.0872, 0.9962, 0, 0, 0, 1, 0, 1.2, 0)
+mesh = SubResource("Mesh_shaft")
+
+[node name="Cap" type="MeshInstance3D" parent="Stone"]
+transform = Transform3D(0.9848, 0.1736, 0, -0.1736, 0.9848, 0, 0, 0, 1, -0.14, 2.42, 0.02)
+mesh = SubResource("Mesh_cap")
+
+[node name="FootingA" type="MeshInstance3D" parent="Stone"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.44, 0.12, 0.3)
+mesh = SubResource("Mesh_footing")
+
+[node name="FootingB" type="MeshInstance3D" parent="Stone"]
+transform = Transform3D(0.8, 0, 0, 0, 0.8, 0, 0, 0, 0.8, -0.42, 0.1, -0.26)
+mesh = SubResource("Mesh_footing")
+
+[node name="Carvings" type="Node3D" parent="."]
+visible = false
+
+[node name="Ring" type="MeshInstance3D" parent="Carvings"]
+transform = Transform3D(0.9962, 0.0872, 0, -0.0872, 0.9962, 0, 0, 0, 1, 0.02, 1.55, 0.22)
+mesh = SubResource("Mesh_ring")
+
+[node name="GrooveA" type="MeshInstance3D" parent="Carvings"]
+transform = Transform3D(0.9962, 0.0872, 0, -0.0872, 0.9962, 0, 0, 0, 1, 0.02, 1.15, 0.22)
+mesh = SubResource("Mesh_groove")
+
+[node name="GrooveB" type="MeshInstance3D" parent="Carvings"]
+transform = Transform3D(0.9962, 0.0872, 0, -0.0872, 0.9962, 0, 0, 0, 1, 0.03, 0.95, 0.22)
+mesh = SubResource("Mesh_groove")
+
+[node name="MenhirCollision" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MenhirCollision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 0)
+shape = SubResource("Shape_menhir")

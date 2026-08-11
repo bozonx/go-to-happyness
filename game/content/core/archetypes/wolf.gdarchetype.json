@@ -1,0 +1,1 @@
+{"version":1,"id":"wolf","name":"Волк","asset":"wolf","content_class":"actor","category":"creatures","components":{"settlement_natural":{"kind":"wolf"},"wander":{"habit":"prowling"}}}

@@ -1,0 +1,1 @@
+{"version":1,"id":"bird","name":"Птица","asset":"bird","content_class":"actor","category":"creatures","components":{"wander":{"habit":"flocking"}}}

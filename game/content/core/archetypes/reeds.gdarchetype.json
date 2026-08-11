@@ -1,0 +1,1 @@
+{"version":1,"id":"reeds","name":"Камыш","asset":"reeds","content_class":"object","category":"vegetation","components":{"settlement_natural":{"kind":"grass_source"}},"properties":[{"name":"amount","label":"Количество","type":"int","min":1,"max":99,"default":4}]}

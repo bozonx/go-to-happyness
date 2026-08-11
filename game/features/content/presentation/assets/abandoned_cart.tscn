@@ -1,0 +1,115 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+
+
+[sub_resource type="StandardMaterial3D" id="Mat_wood"]
+albedo_color = Color(0.427, 0.325, 0.231, 1)
+roughness = 1.0
+
+[sub_resource type="BoxMesh" id="Mesh_bed"]
+material = SubResource("Mat_wood")
+size = Vector3(1.7, 0.12, 0.95)
+
+[sub_resource type="BoxMesh" id="Mesh_side"]
+material = SubResource("Mat_wood")
+size = Vector3(1.7, 0.38, 0.08)
+
+[sub_resource type="BoxMesh" id="Mesh_end"]
+material = SubResource("Mat_wood")
+size = Vector3(0.08, 0.38, 0.95)
+
+[sub_resource type="CylinderMesh" id="Mesh_shaft"]
+material = SubResource("Mat_wood")
+top_radius = 0.045
+bottom_radius = 0.055
+height = 1.2
+radial_segments = 5
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_wheel"]
+material = SubResource("Mat_wood")
+top_radius = 0.44
+bottom_radius = 0.44
+height = 0.09
+radial_segments = 12
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_axle"]
+material = SubResource("Mat_wood")
+top_radius = 0.05
+bottom_radius = 0.05
+height = 1.1
+radial_segments = 6
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="Mat_cloth"]
+albedo_color = Color(0.6, 0.549, 0.443, 1)
+roughness = 1.0
+
+[sub_resource type="BoxMesh" id="Mesh_cargo"]
+material = SubResource("Mat_cloth")
+size = Vector3(0.7, 0.4, 0.6)
+
+[sub_resource type="BoxShape3D" id="Shape_cart"]
+size = Vector3(1.8, 0.9, 1.1)
+
+[node name="AbandonedCart" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"abandoned_cart"
+
+[node name="Frame" type="Node3D" parent="."]
+transform = Transform3D(0.9848, -0.1736, 0, 0.1736, 0.9848, 0, 0, 0, 1, 0, 0.34, 0)
+
+[node name="Bed" type="MeshInstance3D" parent="Frame"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.62, 0)
+mesh = SubResource("Mesh_bed")
+
+[node name="SideLeft" type="MeshInstance3D" parent="Frame"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0.44)
+mesh = SubResource("Mesh_side")
+
+[node name="SideRight" type="MeshInstance3D" parent="Frame"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, -0.44)
+mesh = SubResource("Mesh_side")
+
+[node name="EndBack" type="MeshInstance3D" parent="Frame"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.82, 0.85, 0)
+mesh = SubResource("Mesh_end")
+
+[node name="ShaftLeft" type="MeshInstance3D" parent="Frame"]
+transform = Transform3D(0.1736, -0.9848, 0, 0.9848, 0.1736, 0, 0, 0, 1, 1.4, 0.5, 0.36)
+mesh = SubResource("Mesh_shaft")
+
+[node name="ShaftRight" type="MeshInstance3D" parent="Frame"]
+transform = Transform3D(0.1736, -0.9848, 0, 0.9848, 0.1736, 0, 0, 0, 1, 1.4, 0.5, -0.36)
+mesh = SubResource("Mesh_shaft")
+
+[node name="Axle" type="MeshInstance3D" parent="Frame"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -0.1, 0.5, 0)
+mesh = SubResource("Mesh_axle")
+
+[node name="WheelLeft" type="MeshInstance3D" parent="Frame"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -0.1, 0.46, 0.54)
+mesh = SubResource("Mesh_wheel")
+
+[node name="WheelRight" type="MeshInstance3D" parent="Frame"]
+transform = Transform3D(0.9063, 0, 0.4226, 0.4226, 0, -0.9063, 0, 1, 0, 0.65, 0.16, -0.72)
+mesh = SubResource("Mesh_wheel")
+
+[node name="Cargo" type="Node3D" parent="."]
+visible = false
+
+[node name="CrateA" type="MeshInstance3D" parent="Cargo"]
+transform = Transform3D(0.9848, -0.1736, 0, 0.1736, 0.9848, 0, 0, 0, 1, -0.3, 0.9, 0.1)
+mesh = SubResource("Mesh_cargo")
+
+[node name="CrateB" type="MeshInstance3D" parent="Cargo"]
+transform = Transform3D(0.6, 0, 0, 0, 0.6, 0, 0, 0, 0.6, 1.05, 0.24, 0.62)
+mesh = SubResource("Mesh_cargo")
+
+[node name="CartCollision" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="CartCollision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.55, 0)
+shape = SubResource("Shape_cart")

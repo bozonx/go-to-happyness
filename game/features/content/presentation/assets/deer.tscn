@@ -1,0 +1,126 @@
+[gd_scene load_steps=11 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+
+
+[sub_resource type="StandardMaterial3D" id="Mat_fur"]
+albedo_color = Color(0.635, 0.463, 0.302, 1)
+roughness = 1.0
+
+[sub_resource type="SphereMesh" id="Mesh_body"]
+material = SubResource("Mat_fur")
+radius = 0.3
+height = 0.56
+radial_segments = 8
+rings = 4
+
+[sub_resource type="CylinderMesh" id="Mesh_neck"]
+material = SubResource("Mat_fur")
+top_radius = 0.09
+bottom_radius = 0.13
+height = 0.42
+radial_segments = 6
+rings = 1
+
+[sub_resource type="SphereMesh" id="Mesh_head"]
+material = SubResource("Mat_fur")
+radius = 0.11
+height = 0.26
+radial_segments = 7
+rings = 4
+
+[sub_resource type="PrismMesh" id="Mesh_ear"]
+material = SubResource("Mat_fur")
+size = Vector3(0.06, 0.14, 0.02)
+
+[sub_resource type="CylinderMesh" id="Mesh_leg"]
+material = SubResource("Mat_fur")
+top_radius = 0.045
+bottom_radius = 0.03
+height = 0.62
+radial_segments = 5
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="Mat_antler"]
+albedo_color = Color(0.788, 0.729, 0.62, 1)
+roughness = 0.9
+
+[sub_resource type="CylinderMesh" id="Mesh_antler_beam"]
+material = SubResource("Mat_antler")
+top_radius = 0.014
+bottom_radius = 0.026
+height = 0.42
+radial_segments = 4
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_antler_tine"]
+material = SubResource("Mat_antler")
+top_radius = 0.008
+bottom_radius = 0.016
+height = 0.2
+radial_segments = 4
+rings = 1
+
+[node name="Deer" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"deer"
+
+[node name="Fur" type="Node3D" parent="."]
+
+[node name="Body" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1.9, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
+mesh = SubResource("Mesh_body")
+
+[node name="Neck" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(0.8192, 0.5736, 0, -0.5736, 0.8192, 0, 0, 0, 1, 0.44, 1.02, 0)
+mesh = SubResource("Mesh_neck")
+
+[node name="Head" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(0, -1, 0, 1, 0, 0, 0, 0, 1, 0.66, 1.2, 0)
+mesh = SubResource("Mesh_head")
+
+[node name="EarLeft" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(0.9063, 0.4226, 0, -0.4226, 0.9063, 0, 0, 0, 1, 0.58, 1.3, 0.08)
+mesh = SubResource("Mesh_ear")
+
+[node name="EarRight" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(0.9063, 0.4226, 0, -0.4226, 0.9063, 0, 0, 0, 1, 0.58, 1.3, -0.08)
+mesh = SubResource("Mesh_ear")
+
+[node name="LegFrontLeft" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.32, 0.31, 0.14)
+mesh = SubResource("Mesh_leg")
+
+[node name="LegFrontRight" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.32, 0.31, -0.14)
+mesh = SubResource("Mesh_leg")
+
+[node name="LegBackLeft" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.34, 0.31, 0.14)
+mesh = SubResource("Mesh_leg")
+
+[node name="LegBackRight" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.34, 0.31, -0.14)
+mesh = SubResource("Mesh_leg")
+
+[node name="Tail" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(0.32, 0, 0, 0, 0.32, 0, 0, 0, 0.32, -0.58, 0.88, 0)
+mesh = SubResource("Mesh_head")
+
+[node name="Antlers" type="Node3D" parent="."]
+
+[node name="BeamLeft" type="MeshInstance3D" parent="Antlers"]
+transform = Transform3D(0.9397, -0.2962, 0.1710, 0.342, 0.8138, -0.4698, 0, 0.5, 0.866, 0.62, 1.48, 0.07)
+mesh = SubResource("Mesh_antler_beam")
+
+[node name="BeamRight" type="MeshInstance3D" parent="Antlers"]
+transform = Transform3D(0.9397, -0.2962, -0.1710, 0.342, 0.8138, 0.4698, 0, -0.5, 0.866, 0.62, 1.48, -0.07)
+mesh = SubResource("Mesh_antler_beam")
+
+[node name="TineLeft" type="MeshInstance3D" parent="Antlers"]
+transform = Transform3D(0.766, -0.6428, 0, 0.6428, 0.766, 0, 0, 0, 1, 0.5, 1.66, 0.14)
+mesh = SubResource("Mesh_antler_tine")
+
+[node name="TineRight" type="MeshInstance3D" parent="Antlers"]
+transform = Transform3D(0.766, -0.6428, 0, 0.6428, 0.766, 0, 0, 0, 1, 0.5, 1.66, -0.14)
+mesh = SubResource("Mesh_antler_tine")

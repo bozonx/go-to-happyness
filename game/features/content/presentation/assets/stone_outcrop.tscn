@@ -1,0 +1,81 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+
+
+[sub_resource type="StandardMaterial3D" id="Mat_rock"]
+albedo_color = Color(0.451, 0.459, 0.478, 1)
+roughness = 1.0
+
+[sub_resource type="BoxMesh" id="Mesh_slab_big"]
+material = SubResource("Mat_rock")
+size = Vector3(2.2, 1.5, 1.6)
+
+[sub_resource type="BoxMesh" id="Mesh_slab_mid"]
+material = SubResource("Mat_rock")
+size = Vector3(1.5, 1.0, 1.2)
+
+[sub_resource type="BoxMesh" id="Mesh_ledge"]
+material = SubResource("Mat_rock")
+size = Vector3(1.9, 0.35, 1.1)
+
+[sub_resource type="SphereMesh" id="Mesh_debris"]
+material = SubResource("Mat_rock")
+radius = 0.22
+height = 0.3
+radial_segments = 5
+rings = 3
+
+[sub_resource type="StandardMaterial3D" id="Mat_moss"]
+albedo_color = Color(0.325, 0.412, 0.263, 1)
+roughness = 1.0
+
+[sub_resource type="BoxMesh" id="Mesh_moss"]
+material = SubResource("Mat_moss")
+size = Vector3(0.9, 0.06, 0.7)
+
+[sub_resource type="BoxShape3D" id="Shape_outcrop"]
+size = Vector3(2.4, 1.8, 1.8)
+
+[node name="StoneOutcrop" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"stone_outcrop"
+
+[node name="Rock" type="Node3D" parent="."]
+
+[node name="SlabMain" type="MeshInstance3D" parent="Rock"]
+transform = Transform3D(0.9848, 0.1736, 0, -0.1736, 0.9848, 0, 0, 0, 1, 0, 0.72, 0)
+mesh = SubResource("Mesh_slab_big")
+
+[node name="SlabSide" type="MeshInstance3D" parent="Rock"]
+transform = Transform3D(0.9063, -0.2962, 0.3021, 0.4226, 0.6353, -0.6472, 0, 0.7146, 0.6995, 1.1, 0.44, 0.28)
+mesh = SubResource("Mesh_slab_mid")
+
+[node name="Ledge" type="MeshInstance3D" parent="Rock"]
+transform = Transform3D(0.9659, 0.0868, -0.2437, -0.2588, 0.3239, -0.9096, 0, 0.9421, 0.3354, -0.62, 1.32, 0.22)
+mesh = SubResource("Mesh_ledge")
+
+[node name="DebrisA" type="MeshInstance3D" parent="Rock"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.32, 0.16, 0.62)
+mesh = SubResource("Mesh_debris")
+
+[node name="DebrisB" type="MeshInstance3D" parent="Rock"]
+transform = Transform3D(0.7, 0, 0, 0, 0.7, 0, 0, 0, 0.7, 0.95, 0.11, -0.86)
+mesh = SubResource("Mesh_debris")
+
+[node name="Moss" type="Node3D" parent="."]
+visible = false
+
+[node name="PatchA" type="MeshInstance3D" parent="Moss"]
+transform = Transform3D(0.9848, 0.1736, 0, -0.1736, 0.9848, 0, 0, 0, 1, -0.15, 1.46, 0.16)
+mesh = SubResource("Mesh_moss")
+
+[node name="PatchB" type="MeshInstance3D" parent="Moss"]
+transform = Transform3D(0.6, 0, 0, 0, 0.6, 0, 0, 0, 0.6, 0.95, 0.9, 0.55)
+mesh = SubResource("Mesh_moss")
+
+[node name="OutcropCollision" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="OutcropCollision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
+shape = SubResource("Shape_outcrop")

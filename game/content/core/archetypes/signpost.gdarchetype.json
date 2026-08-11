@@ -1,0 +1,1 @@
+{"version":1,"id":"signpost","name":"Путевой указатель","asset":"signpost","content_class":"decor","category":"world_props","properties":[{"name":"sign_text","label":"Надпись","type":"string","default":"Тракт"}]}

@@ -1,0 +1,120 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+
+
+[sub_resource type="StandardMaterial3D" id="Mat_fur"]
+albedo_color = Color(0.318, 0.271, 0.239, 1)
+roughness = 1.0
+
+[sub_resource type="SphereMesh" id="Mesh_body"]
+material = SubResource("Mat_fur")
+radius = 0.28
+height = 0.5
+radial_segments = 8
+rings = 4
+
+[sub_resource type="SphereMesh" id="Mesh_head"]
+material = SubResource("Mat_fur")
+radius = 0.17
+height = 0.3
+radial_segments = 7
+rings = 4
+
+[sub_resource type="CylinderMesh" id="Mesh_snout"]
+material = SubResource("Mat_fur")
+top_radius = 0.06
+bottom_radius = 0.09
+height = 0.16
+radial_segments = 6
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_leg"]
+material = SubResource("Mat_fur")
+top_radius = 0.055
+bottom_radius = 0.04
+height = 0.3
+radial_segments = 5
+rings = 1
+
+[sub_resource type="PrismMesh" id="Mesh_bristle"]
+material = SubResource("Mat_fur")
+size = Vector3(0.06, 0.12, 0.02)
+
+[sub_resource type="StandardMaterial3D" id="Mat_tusk"]
+albedo_color = Color(0.867, 0.839, 0.757, 1)
+roughness = 0.7
+
+[sub_resource type="CylinderMesh" id="Mesh_tusk"]
+material = SubResource("Mat_tusk")
+top_radius = 0.008
+bottom_radius = 0.02
+height = 0.13
+radial_segments = 4
+rings = 1
+
+[node name="Boar" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"boar"
+
+[node name="Fur" type="Node3D" parent="."]
+
+[node name="Body" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1.75, 0, 0, 0, 1.05, 0, 0, 0, 1.1, 0, 0.42, 0)
+mesh = SubResource("Mesh_body")
+
+[node name="Head" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1.2, 0, 0, 0, 1, 0, 0, 0, 1, 0.48, 0.4, 0)
+mesh = SubResource("Mesh_head")
+
+[node name="Snout" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(0, -1, 0, 1, 0, 0, 0, 0, 1, 0.7, 0.34, 0)
+mesh = SubResource("Mesh_snout")
+
+[node name="EarLeft" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(0.9848, 0.1736, 0, -0.1736, 0.9848, 0, 0, 0, 1, 0.4, 0.55, 0.09)
+mesh = SubResource("Mesh_bristle")
+
+[node name="EarRight" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(0.9848, 0.1736, 0, -0.1736, 0.9848, 0, 0, 0, 1, 0.4, 0.55, -0.09)
+mesh = SubResource("Mesh_bristle")
+
+[node name="LegFrontLeft" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.26, 0.15, 0.13)
+mesh = SubResource("Mesh_leg")
+
+[node name="LegFrontRight" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.26, 0.15, -0.13)
+mesh = SubResource("Mesh_leg")
+
+[node name="LegBackLeft" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.28, 0.15, 0.13)
+mesh = SubResource("Mesh_leg")
+
+[node name="LegBackRight" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.28, 0.15, -0.13)
+mesh = SubResource("Mesh_leg")
+
+[node name="Mane" type="Node3D" parent="Fur"]
+
+[node name="BristleA" type="MeshInstance3D" parent="Fur/Mane"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.22, 0.68, 0)
+mesh = SubResource("Mesh_bristle")
+
+[node name="BristleB" type="MeshInstance3D" parent="Fur/Mane"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.06, 0.7, 0)
+mesh = SubResource("Mesh_bristle")
+
+[node name="BristleC" type="MeshInstance3D" parent="Fur/Mane"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.1, 0.68, 0)
+mesh = SubResource("Mesh_bristle")
+
+[node name="Tusks" type="Node3D" parent="."]
+
+[node name="TuskLeft" type="MeshInstance3D" parent="Tusks"]
+transform = Transform3D(0.6428, 0.766, 0, -0.766, 0.6428, 0, 0, 0, 1, 0.74, 0.32, 0.06)
+mesh = SubResource("Mesh_tusk")
+
+[node name="TuskRight" type="MeshInstance3D" parent="Tusks"]
+transform = Transform3D(0.6428, 0.766, 0, -0.766, 0.6428, 0, 0, 0, 1, 0.74, 0.32, -0.06)
+mesh = SubResource("Mesh_tusk")

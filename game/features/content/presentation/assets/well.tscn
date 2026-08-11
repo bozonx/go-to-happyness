@@ -1,0 +1,122 @@
+[gd_scene load_steps=12 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+
+
+[sub_resource type="StandardMaterial3D" id="Mat_stone"]
+albedo_color = Color(0.573, 0.561, 0.529, 1)
+roughness = 1.0
+
+[sub_resource type="CylinderMesh" id="Mesh_ring"]
+material = SubResource("Mat_stone")
+top_radius = 0.78
+bottom_radius = 0.85
+height = 0.7
+radial_segments = 12
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_coping"]
+material = SubResource("Mat_stone")
+top_radius = 0.9
+bottom_radius = 0.86
+height = 0.12
+radial_segments = 12
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="Mat_shaft"]
+albedo_color = Color(0.075, 0.086, 0.09, 1)
+roughness = 1.0
+
+[sub_resource type="CylinderMesh" id="Mesh_shaft"]
+material = SubResource("Mat_shaft")
+top_radius = 0.66
+bottom_radius = 0.66
+height = 0.05
+radial_segments = 12
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="Mat_wood"]
+albedo_color = Color(0.435, 0.337, 0.239, 1)
+roughness = 1.0
+
+[sub_resource type="CylinderMesh" id="Mesh_post"]
+material = SubResource("Mat_wood")
+top_radius = 0.06
+bottom_radius = 0.07
+height = 1.3
+radial_segments = 6
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_winch"]
+material = SubResource("Mat_wood")
+top_radius = 0.08
+bottom_radius = 0.08
+height = 1.1
+radial_segments = 7
+rings = 1
+
+[sub_resource type="PrismMesh" id="Mesh_roof"]
+material = SubResource("Mat_wood")
+size = Vector3(1.7, 0.5, 1.2)
+
+[sub_resource type="CylinderMesh" id="Mesh_bucket"]
+material = SubResource("Mat_wood")
+top_radius = 0.16
+bottom_radius = 0.13
+height = 0.24
+radial_segments = 8
+rings = 1
+
+[sub_resource type="CylinderShape3D" id="Shape_well"]
+radius = 0.9
+height = 0.85
+
+[node name="Well" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"well"
+
+[node name="Stone" type="Node3D" parent="."]
+
+[node name="Ring" type="MeshInstance3D" parent="Stone"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, 0)
+mesh = SubResource("Mesh_ring")
+
+[node name="Coping" type="MeshInstance3D" parent="Stone"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
+mesh = SubResource("Mesh_coping")
+
+[node name="Shaft" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.74, 0)
+mesh = SubResource("Mesh_shaft")
+
+[node name="Timber" type="Node3D" parent="."]
+
+[node name="PostLeft" type="MeshInstance3D" parent="Timber"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, 0.62)
+mesh = SubResource("Mesh_post")
+
+[node name="PostRight" type="MeshInstance3D" parent="Timber"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, -0.62)
+mesh = SubResource("Mesh_post")
+
+[node name="Winch" type="MeshInstance3D" parent="Timber"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 1.95, 0)
+mesh = SubResource("Mesh_winch")
+
+[node name="Roof" type="Node3D" parent="."]
+
+[node name="Gable" type="MeshInstance3D" parent="Roof"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.32, 0)
+mesh = SubResource("Mesh_roof")
+
+[node name="Bucket" type="Node3D" parent="."]
+
+[node name="Pail" type="MeshInstance3D" parent="Bucket"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.16, 1.15, 0)
+mesh = SubResource("Mesh_bucket")
+
+[node name="WellCollision" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WellCollision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.42, 0)
+shape = SubResource("Shape_well")

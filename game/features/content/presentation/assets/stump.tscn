@@ -1,0 +1,91 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+
+
+[sub_resource type="StandardMaterial3D" id="Mat_bark"]
+albedo_color = Color(0.361, 0.278, 0.208, 1)
+roughness = 1.0
+
+[sub_resource type="CylinderMesh" id="Mesh_body"]
+material = SubResource("Mat_bark")
+top_radius = 0.34
+bottom_radius = 0.42
+height = 0.52
+radial_segments = 7
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_root"]
+material = SubResource("Mat_bark")
+top_radius = 0.05
+bottom_radius = 0.14
+height = 0.44
+radial_segments = 5
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="Mat_cut"]
+albedo_color = Color(0.788, 0.671, 0.482, 1)
+roughness = 0.9
+
+[sub_resource type="CylinderMesh" id="Mesh_cut"]
+material = SubResource("Mat_cut")
+top_radius = 0.33
+bottom_radius = 0.33
+height = 0.04
+radial_segments = 7
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="Mat_moss"]
+albedo_color = Color(0.298, 0.435, 0.243, 1)
+roughness = 1.0
+
+[sub_resource type="SphereMesh" id="Mesh_moss_a"]
+material = SubResource("Mat_moss")
+radius = 0.2
+height = 0.09
+radial_segments = 6
+rings = 2
+
+[sub_resource type="SphereMesh" id="Mesh_moss_b"]
+material = SubResource("Mat_moss")
+radius = 0.12
+height = 0.06
+radial_segments = 5
+rings = 2
+
+[node name="Stump" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"stump"
+
+[node name="Wood" type="Node3D" parent="."]
+
+[node name="Body" type="MeshInstance3D" parent="Wood"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.26, 0)
+mesh = SubResource("Mesh_body")
+
+[node name="RootA" type="MeshInstance3D" parent="Wood"]
+transform = Transform3D(0.5, -0.866, 0, 0.866, 0.5, 0, 0, 0, 1, 0.4, 0.12, 0.06)
+mesh = SubResource("Mesh_root")
+
+[node name="RootB" type="MeshInstance3D" parent="Wood"]
+transform = Transform3D(0.5, 0.866, 0, -0.866, 0.5, 0, 0, 0, 1, -0.36, 0.11, -0.18)
+mesh = SubResource("Mesh_root")
+
+[node name="RootC" type="MeshInstance3D" parent="Wood"]
+transform = Transform3D(1, 0, 0, 0, 0.5, 0.866, 0, -0.866, 0.5, -0.05, 0.1, 0.4)
+mesh = SubResource("Mesh_root")
+
+[node name="Cut" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.53, 0)
+mesh = SubResource("Mesh_cut")
+
+[node name="Moss" type="Node3D" parent="."]
+visible = false
+
+[node name="PatchA" type="MeshInstance3D" parent="Moss"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.16, 0.54, 0.1)
+mesh = SubResource("Mesh_moss_a")
+
+[node name="PatchB" type="MeshInstance3D" parent="Moss"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.3, 0.3, 0.22)
+mesh = SubResource("Mesh_moss_b")

@@ -1,0 +1,86 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+
+
+[sub_resource type="StandardMaterial3D" id="Mat_post"]
+albedo_color = Color(0.396, 0.31, 0.22, 1)
+roughness = 1.0
+
+[sub_resource type="CylinderMesh" id="Mesh_post"]
+material = SubResource("Mat_post")
+top_radius = 0.07
+bottom_radius = 0.09
+height = 1.9
+radial_segments = 6
+rings = 1
+
+[sub_resource type="SphereMesh" id="Mesh_finial"]
+material = SubResource("Mat_post")
+radius = 0.09
+height = 0.14
+radial_segments = 6
+rings = 3
+
+[sub_resource type="StandardMaterial3D" id="Mat_board"]
+albedo_color = Color(0.541, 0.435, 0.318, 1)
+roughness = 1.0
+
+[sub_resource type="BoxMesh" id="Mesh_board"]
+material = SubResource("Mat_board")
+size = Vector3(0.86, 0.24, 0.05)
+
+[sub_resource type="PrismMesh" id="Mesh_point"]
+material = SubResource("Mat_board")
+size = Vector3(0.24, 0.24, 0.05)
+
+[sub_resource type="CylinderShape3D" id="Shape_post"]
+radius = 0.12
+height = 1.9
+
+[node name="Signpost" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"signpost"
+
+[node name="Post" type="Node3D" parent="."]
+
+[node name="Shaft" type="MeshInstance3D" parent="Post"]
+transform = Transform3D(0.9962, 0.0872, 0, -0.0872, 0.9962, 0, 0, 0, 1, 0, 0.95, 0)
+mesh = SubResource("Mesh_post")
+
+[node name="Finial" type="MeshInstance3D" parent="Post"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.09, 1.94, 0)
+mesh = SubResource("Mesh_finial")
+
+[node name="Boards" type="Node3D" parent="."]
+
+[node name="BoardUpper" type="MeshInstance3D" parent="Boards"]
+transform = Transform3D(0.9397, 0, -0.342, 0, 1, 0, 0.342, 0, 0.9397, 0.42, 1.62, -0.12)
+mesh = SubResource("Mesh_board")
+
+[node name="BoardUpperPoint" type="MeshInstance3D" parent="Boards"]
+transform = Transform3D(0, 0.9397, -0.342, -1, 0, 0, 0, 0.342, 0.9397, 0.83, 1.62, -0.27)
+mesh = SubResource("Mesh_point")
+
+[node name="BoardUpperLabel" type="Label3D" parent="Boards"]
+transform = Transform3D(0.9397, 0, -0.342, 0, 1, 0, 0.342, 0, 0.9397, 0.42, 1.62, -0.09)
+pixel_size = 0.004
+text = "Тракт"
+font_size = 48
+outline_size = 8
+modulate = Color(0.949, 0.906, 0.796, 1)
+outline_modulate = Color(0.145, 0.114, 0.086, 1)
+
+[node name="BoardLower" type="MeshInstance3D" parent="Boards"]
+transform = Transform3D(0.8192, 0, 0.5736, 0, 1, 0, -0.5736, 0, 0.8192, -0.36, 1.24, 0.2)
+mesh = SubResource("Mesh_board")
+
+[node name="BoardLowerPoint" type="MeshInstance3D" parent="Boards"]
+transform = Transform3D(0, -0.8192, -0.5736, 1, 0, 0, 0, -0.5736, 0.8192, -0.72, 1.24, 0.45)
+mesh = SubResource("Mesh_point")
+
+[node name="SignpostCollision" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="SignpostCollision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.95, 0)
+shape = SubResource("Shape_post")

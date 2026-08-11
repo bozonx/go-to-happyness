@@ -1,0 +1,94 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+
+
+[sub_resource type="StandardMaterial3D" id="Mat_bone"]
+albedo_color = Color(0.851, 0.831, 0.769, 1)
+roughness = 0.9
+
+[sub_resource type="SphereMesh" id="Mesh_skull"]
+material = SubResource("Mat_bone")
+radius = 0.16
+height = 0.26
+radial_segments = 7
+rings = 4
+
+[sub_resource type="CylinderMesh" id="Mesh_jaw"]
+material = SubResource("Mat_bone")
+top_radius = 0.05
+bottom_radius = 0.07
+height = 0.2
+radial_segments = 5
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_rib"]
+material = SubResource("Mat_bone")
+top_radius = 0.018
+bottom_radius = 0.022
+height = 0.44
+radial_segments = 4
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_long_bone"]
+material = SubResource("Mat_bone")
+top_radius = 0.032
+bottom_radius = 0.032
+height = 0.5
+radial_segments = 5
+rings = 1
+
+[sub_resource type="SphereMesh" id="Mesh_knuckle"]
+material = SubResource("Mat_bone")
+radius = 0.045
+height = 0.07
+radial_segments = 5
+rings = 3
+
+[node name="Bones" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"bones"
+
+[node name="Skull" type="Node3D" parent="."]
+
+[node name="Cranium" type="MeshInstance3D" parent="Skull"]
+transform = Transform3D(1.25, 0, 0, 0, 1, 0, 0, 0, 1, -0.62, 0.13, 0.1)
+mesh = SubResource("Mesh_skull")
+
+[node name="Jaw" type="MeshInstance3D" parent="Skull"]
+transform = Transform3D(0, -1, 0, 1, 0, 0, 0, 0, 1, -0.38, 0.06, 0.1)
+mesh = SubResource("Mesh_jaw")
+
+[node name="Skeleton" type="Node3D" parent="."]
+
+[node name="RibA" type="MeshInstance3D" parent="Skeleton"]
+transform = Transform3D(0, -1, 0, 0.2588, 0, 0.9659, -0.9659, 0, 0.2588, -0.1, 0.05, 0.08)
+mesh = SubResource("Mesh_rib")
+
+[node name="RibB" type="MeshInstance3D" parent="Skeleton"]
+transform = Transform3D(0, -1, 0, 0.1736, 0, 0.9848, -0.9848, 0, 0.1736, 0.06, 0.05, 0.05)
+mesh = SubResource("Mesh_rib")
+
+[node name="RibC" type="MeshInstance3D" parent="Skeleton"]
+transform = Transform3D(0, -1, 0, 0.342, 0, 0.9397, -0.9397, 0, 0.342, 0.22, 0.05, 0.09)
+mesh = SubResource("Mesh_rib")
+
+[node name="Spine" type="MeshInstance3D" parent="Skeleton"]
+transform = Transform3D(0, -1, 0, 1, 0, 0, 0, 0, 1, 0.06, 0.04, 0.08)
+mesh = SubResource("Mesh_long_bone")
+
+[node name="LongBoneA" type="MeshInstance3D" parent="Skeleton"]
+transform = Transform3D(0.2588, -0.9659, 0, 0.9659, 0.2588, 0, 0, 0, 1, 0.52, 0.04, -0.28)
+mesh = SubResource("Mesh_long_bone")
+
+[node name="LongBoneB" type="MeshInstance3D" parent="Skeleton"]
+transform = Transform3D(-0.5, -0.866, 0, 0.866, -0.5, 0, 0, 0, 1, 0.34, 0.04, 0.42)
+mesh = SubResource("Mesh_long_bone")
+
+[node name="KnuckleA" type="MeshInstance3D" parent="Skeleton"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.78, 0.04, -0.34)
+mesh = SubResource("Mesh_knuckle")
+
+[node name="KnuckleB" type="MeshInstance3D" parent="Skeleton"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.1, 0.04, 0.55)
+mesh = SubResource("Mesh_knuckle")

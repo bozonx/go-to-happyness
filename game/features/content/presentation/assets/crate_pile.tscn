@@ -1,0 +1,94 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+
+
+[sub_resource type="StandardMaterial3D" id="Mat_wood"]
+albedo_color = Color(0.482, 0.376, 0.263, 1)
+roughness = 1.0
+
+[sub_resource type="BoxMesh" id="Mesh_crate_big"]
+material = SubResource("Mat_wood")
+size = Vector3(0.72, 0.68, 0.72)
+
+[sub_resource type="BoxMesh" id="Mesh_crate_small"]
+material = SubResource("Mat_wood")
+size = Vector3(0.5, 0.46, 0.5)
+
+[sub_resource type="StandardMaterial3D" id="Mat_slat"]
+albedo_color = Color(0.365, 0.278, 0.192, 1)
+roughness = 1.0
+
+[sub_resource type="BoxMesh" id="Mesh_slat"]
+material = SubResource("Mat_slat")
+size = Vector3(0.76, 0.07, 0.76)
+
+[sub_resource type="CylinderMesh" id="Mesh_barrel"]
+material = SubResource("Mat_wood")
+top_radius = 0.24
+bottom_radius = 0.26
+height = 0.7
+radial_segments = 10
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="Mat_hoop"]
+albedo_color = Color(0.318, 0.294, 0.271, 1)
+roughness = 0.7
+metallic = 0.3
+
+[sub_resource type="CylinderMesh" id="Mesh_hoop"]
+material = SubResource("Mat_hoop")
+top_radius = 0.28
+bottom_radius = 0.28
+height = 0.06
+radial_segments = 10
+rings = 1
+
+[sub_resource type="BoxShape3D" id="Shape_pile"]
+size = Vector3(1.9, 0.8, 1.3)
+
+[node name="CratePile" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"crate_pile"
+
+[node name="Crates" type="Node3D" parent="."]
+
+[node name="CrateBase" type="MeshInstance3D" parent="Crates"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.42, 0.34, 0)
+mesh = SubResource("Mesh_crate_big")
+
+[node name="CrateBaseSlat" type="MeshInstance3D" parent="Crates"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.42, 0.34, 0)
+mesh = SubResource("Mesh_slat")
+
+[node name="CrateTop" type="MeshInstance3D" parent="Crates"]
+transform = Transform3D(0.9397, 0, 0.342, 0, 1, 0, -0.342, 0, 0.9397, -0.36, 0.91, 0.1)
+mesh = SubResource("Mesh_crate_small")
+
+[node name="CrateSide" type="MeshInstance3D" parent="Crates"]
+transform = Transform3D(0.866, 0, -0.5, 0, 1, 0, 0.5, 0, 0.866, 0.34, 0.23, -0.38)
+mesh = SubResource("Mesh_crate_small")
+
+[node name="Barrels" type="Node3D" parent="."]
+
+[node name="BarrelA" type="MeshInstance3D" parent="Barrels"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.62, 0.35, 0.34)
+mesh = SubResource("Mesh_barrel")
+
+[node name="BarrelAHoop" type="MeshInstance3D" parent="Barrels"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.62, 0.35, 0.34)
+mesh = SubResource("Mesh_hoop")
+
+[node name="BarrelB" type="MeshInstance3D" parent="Barrels"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0.95, 0.25, -0.4)
+mesh = SubResource("Mesh_barrel")
+
+[node name="BarrelBHoop" type="MeshInstance3D" parent="Barrels"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0.95, 0.25, -0.4)
+mesh = SubResource("Mesh_hoop")
+
+[node name="PileCollision" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="PileCollision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.1, 0.4, 0)
+shape = SubResource("Shape_pile")

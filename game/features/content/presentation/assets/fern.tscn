@@ -1,0 +1,93 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+[ext_resource type="Shader" path="res://game/features/content/presentation/foliage_sway.gdshader" id="2_sway"]
+
+
+[sub_resource type="ShaderMaterial" id="Mat_frond"]
+shader = ExtResource("2_sway")
+shader_parameter/albedo_color = Color(0.243, 0.451, 0.259, 1)
+shader_parameter/roughness_value = 1.0
+shader_parameter/sway_amount = 0.9
+shader_parameter/sway_pivot_y = -0.2
+shader_parameter/sway_full_height = 0.7
+shader_parameter/sway_speed = 1.25
+
+[sub_resource type="PrismMesh" id="Mesh_frond_long"]
+material = SubResource("Mat_frond")
+size = Vector3(0.4, 1.2, 0.04)
+
+[sub_resource type="PrismMesh" id="Mesh_frond_short"]
+material = SubResource("Mat_frond")
+size = Vector3(0.34, 0.95, 0.04)
+
+[sub_resource type="SphereMesh" id="Mesh_shoot"]
+material = SubResource("Mat_frond")
+radius = 0.055
+height = 0.11
+radial_segments = 5
+rings = 3
+
+[sub_resource type="CylinderMesh" id="Mesh_stem"]
+material = SubResource("Mat_frond")
+top_radius = 0.012
+bottom_radius = 0.02
+height = 0.3
+radial_segments = 4
+rings = 1
+
+[node name="Fern" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"fern"
+
+[node name="Fronds" type="Node3D" parent="."]
+
+[node name="FrondA" type="MeshInstance3D" parent="Fronds"]
+transform = Transform3D(0.6947, 0.7193, -0.0000, -0.7193, 0.6947, 0.0000, 0.0000, 0.0000, 1.0000, -0.432, 0.467, 0.000)
+mesh = SubResource("Mesh_frond_long")
+
+[node name="FrondB" type="MeshInstance3D" parent="Fronds"]
+transform = Transform3D(0.4181, 0.7193, -0.5548, -0.4329, 0.6947, 0.5745, 0.7986, 0.0000, 0.6018, -0.206, 0.380, 0.273)
+mesh = SubResource("Mesh_frond_short")
+
+[node name="FrondC" type="MeshInstance3D" parent="Fronds"]
+transform = Transform3D(0.0000, 0.7193, -0.6947, -0.0000, 0.6947, 0.7193, 1.0000, 0.0000, 0.0000, -0.000, 0.467, 0.432)
+mesh = SubResource("Mesh_frond_long")
+
+[node name="FrondD" type="MeshInstance3D" parent="Fronds"]
+transform = Transform3D(-0.5548, 0.7193, -0.4181, 0.5745, 0.6947, 0.4329, 0.6018, 0.0000, -0.7986, 0.273, 0.380, 0.206)
+mesh = SubResource("Mesh_frond_short")
+
+[node name="FrondE" type="MeshInstance3D" parent="Fronds"]
+transform = Transform3D(-0.6947, 0.7193, -0.0000, 0.7193, 0.6947, 0.0000, 0.0000, 0.0000, -1.0000, 0.432, 0.467, 0.000)
+mesh = SubResource("Mesh_frond_long")
+
+[node name="FrondF" type="MeshInstance3D" parent="Fronds"]
+transform = Transform3D(-0.4181, 0.7193, 0.5548, 0.4329, 0.6947, -0.5745, -0.7986, 0.0000, -0.6018, 0.206, 0.380, -0.273)
+mesh = SubResource("Mesh_frond_short")
+
+[node name="FrondG" type="MeshInstance3D" parent="Fronds"]
+transform = Transform3D(-0.0000, 0.7193, 0.6947, 0.0000, 0.6947, -0.7193, -1.0000, 0.0000, -0.0000, 0.000, 0.467, -0.432)
+mesh = SubResource("Mesh_frond_long")
+
+[node name="FrondH" type="MeshInstance3D" parent="Fronds"]
+transform = Transform3D(0.5548, 0.7193, 0.4181, -0.5745, 0.6947, -0.4329, -0.6018, 0.0000, 0.7986, -0.273, 0.380, -0.206)
+mesh = SubResource("Mesh_frond_short")
+
+[node name="Shoots" type="Node3D" parent="."]
+
+[node name="StemA" type="MeshInstance3D" parent="Shoots"]
+transform = Transform3D(0.9848, 0.1736, 0, -0.1736, 0.9848, 0, 0, 0, 1, 0.09, 0.15, 0.08)
+mesh = SubResource("Mesh_stem")
+
+[node name="CurlA" type="MeshInstance3D" parent="Shoots"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.14, 0.31, 0.08)
+mesh = SubResource("Mesh_shoot")
+
+[node name="StemB" type="MeshInstance3D" parent="Shoots"]
+transform = Transform3D(0.9659, -0.2588, 0, 0.2588, 0.9659, 0, 0, 0, 1, -0.11, 0.13, -0.06)
+mesh = SubResource("Mesh_stem")
+
+[node name="CurlB" type="MeshInstance3D" parent="Shoots"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.17, 0.27, -0.06)
+mesh = SubResource("Mesh_shoot")

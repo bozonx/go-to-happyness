@@ -1,0 +1,130 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+
+
+[sub_resource type="StandardMaterial3D" id="Mat_fur"]
+albedo_color = Color(0.475, 0.482, 0.494, 1)
+roughness = 1.0
+
+[sub_resource type="SphereMesh" id="Mesh_body"]
+material = SubResource("Mat_fur")
+radius = 0.22
+height = 0.42
+radial_segments = 8
+rings = 4
+
+[sub_resource type="CylinderMesh" id="Mesh_neck"]
+material = SubResource("Mat_fur")
+top_radius = 0.1
+bottom_radius = 0.13
+height = 0.22
+radial_segments = 6
+rings = 1
+
+[sub_resource type="SphereMesh" id="Mesh_head"]
+material = SubResource("Mat_fur")
+radius = 0.12
+height = 0.24
+radial_segments = 7
+rings = 4
+
+[sub_resource type="CylinderMesh" id="Mesh_muzzle"]
+material = SubResource("Mat_fur")
+top_radius = 0.045
+bottom_radius = 0.075
+height = 0.18
+radial_segments = 6
+rings = 1
+
+[sub_resource type="PrismMesh" id="Mesh_ear"]
+material = SubResource("Mat_fur")
+size = Vector3(0.07, 0.11, 0.02)
+
+[sub_resource type="CylinderMesh" id="Mesh_leg"]
+material = SubResource("Mat_fur")
+top_radius = 0.045
+bottom_radius = 0.032
+height = 0.42
+radial_segments = 5
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_tail"]
+material = SubResource("Mat_fur")
+top_radius = 0.035
+bottom_radius = 0.08
+height = 0.34
+radial_segments = 6
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="Mat_eye"]
+albedo_color = Color(0.851, 0.706, 0.271, 1)
+roughness = 0.3
+emission_enabled = true
+emission = Color(0.851, 0.706, 0.271, 1)
+emission_energy_multiplier = 0.35
+
+[sub_resource type="SphereMesh" id="Mesh_eye"]
+material = SubResource("Mat_eye")
+radius = 0.018
+height = 0.034
+radial_segments = 5
+rings = 3
+
+[node name="Wolf" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"wolf"
+
+[node name="Fur" type="Node3D" parent="."]
+
+[node name="Body" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1.95, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.56, 0)
+mesh = SubResource("Mesh_body")
+
+[node name="Neck" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(0.9397, 0.342, 0, -0.342, 0.9397, 0, 0, 0, 1, 0.38, 0.66, 0)
+mesh = SubResource("Mesh_neck")
+
+[node name="Head" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1.2, 0, 0, 0, 1, 0, 0, 0, 1, 0.52, 0.74, 0)
+mesh = SubResource("Mesh_head")
+
+[node name="Muzzle" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(0, -1, 0, 1, 0, 0, 0, 0, 1, 0.7, 0.7, 0)
+mesh = SubResource("Mesh_muzzle")
+
+[node name="EarLeft" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(0.9848, 0.1736, 0, -0.1736, 0.9848, 0, 0, 0, 1, 0.48, 0.87, 0.07)
+mesh = SubResource("Mesh_ear")
+
+[node name="EarRight" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(0.9848, -0.1736, 0, 0.1736, 0.9848, 0, 0, 0, 1, 0.48, 0.87, -0.07)
+mesh = SubResource("Mesh_ear")
+
+[node name="LegFrontLeft" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.26, 0.21, 0.11)
+mesh = SubResource("Mesh_leg")
+
+[node name="LegFrontRight" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.26, 0.21, -0.11)
+mesh = SubResource("Mesh_leg")
+
+[node name="LegBackLeft" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.28, 0.21, 0.11)
+mesh = SubResource("Mesh_leg")
+
+[node name="LegBackRight" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.28, 0.21, -0.11)
+mesh = SubResource("Mesh_leg")
+
+[node name="Tail" type="MeshInstance3D" parent="Fur"]
+transform = Transform3D(0.5, -0.866, 0, 0.866, 0.5, 0, 0, 0, 1, -0.5, 0.6, 0)
+mesh = SubResource("Mesh_tail")
+
+[node name="EyeLeft" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.62, 0.78, 0.06)
+mesh = SubResource("Mesh_eye")
+
+[node name="EyeRight" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.62, 0.78, -0.06)
+mesh = SubResource("Mesh_eye")

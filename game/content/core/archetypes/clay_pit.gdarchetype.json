@@ -1,0 +1,1 @@
+{"version":1,"id":"clay_pit","name":"Глиняная яма","asset":"clay_pit","content_class":"object","category":"rocks_minerals","properties":[{"name":"clay","label":"Запас глины","type":"int","min":1,"max":999,"default":30}]}

@@ -1,0 +1,109 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+[ext_resource type="Shader" path="res://game/features/content/presentation/foliage_sway.gdshader" id="2_sway"]
+
+
+[sub_resource type="ShaderMaterial" id="Mat_stalk"]
+shader = ExtResource("2_sway")
+shader_parameter/albedo_color = Color(0.494, 0.612, 0.325, 1)
+shader_parameter/roughness_value = 1.0
+shader_parameter/sway_amount = 1.6
+shader_parameter/sway_pivot_y = -0.6
+shader_parameter/sway_full_height = 1.3
+shader_parameter/sway_speed = 1.05
+
+[sub_resource type="CylinderMesh" id="Mesh_stalk_tall"]
+material = SubResource("Mat_stalk")
+top_radius = 0.022
+bottom_radius = 0.038
+height = 1.3
+radial_segments = 4
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_stalk_mid"]
+material = SubResource("Mat_stalk")
+top_radius = 0.02
+bottom_radius = 0.034
+height = 1.0
+radial_segments = 4
+rings = 1
+
+[sub_resource type="PrismMesh" id="Mesh_leaf"]
+material = SubResource("Mat_stalk")
+size = Vector3(0.14, 1.0, 0.02)
+
+[sub_resource type="StandardMaterial3D" id="Mat_cattail"]
+albedo_color = Color(0.365, 0.243, 0.157, 1)
+roughness = 1.0
+
+[sub_resource type="CapsuleMesh" id="Mesh_cattail"]
+material = SubResource("Mat_cattail")
+radius = 0.05
+height = 0.3
+radial_segments = 6
+rings = 3
+
+[node name="Reeds" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"reeds"
+
+[node name="Stalks" type="Node3D" parent="."]
+
+[node name="StalkA" type="MeshInstance3D" parent="Stalks"]
+transform = Transform3D(0.9962, 0.0872, 0, -0.0872, 0.9962, 0, 0, 0, 1, 0.05, 0.65, 0.03)
+mesh = SubResource("Mesh_stalk_tall")
+
+[node name="StalkB" type="MeshInstance3D" parent="Stalks"]
+transform = Transform3D(0.9848, -0.1736, 0, 0.1736, 0.9848, 0, 0, 0, 1, -0.14, 0.5, 0.12)
+mesh = SubResource("Mesh_stalk_mid")
+
+[node name="StalkC" type="MeshInstance3D" parent="Stalks"]
+transform = Transform3D(1, 0, 0, 0, 0.9848, 0.1736, 0, -0.1736, 0.9848, 0.16, 0.62, -0.1)
+mesh = SubResource("Mesh_stalk_tall")
+
+[node name="StalkD" type="MeshInstance3D" parent="Stalks"]
+transform = Transform3D(1, 0, 0, 0, 0.9848, -0.1736, 0, 0.1736, 0.9848, -0.05, 0.48, -0.18)
+mesh = SubResource("Mesh_stalk_mid")
+
+[node name="StalkE" type="MeshInstance3D" parent="Stalks"]
+transform = Transform3D(0.9962, 0.0872, 0, -0.0872, 0.9962, 0, 0, 0, 1, 0.24, 0.64, 0.16)
+mesh = SubResource("Mesh_stalk_tall")
+
+[node name="LeafA" type="MeshInstance3D" parent="Stalks"]
+transform = Transform3D(0.6428, 0.3214, -0.6634, -0.766, 0.2697, -0.5567, 0, 0.9063, 0.4226, 0.1, 0.4, 0.2)
+mesh = SubResource("Mesh_leaf")
+
+[node name="LeafB" type="MeshInstance3D" parent="Stalks"]
+transform = Transform3D(-0.5736, -0.4384, 0.6919, 0.6428, -0.3913, 0.6175, 0.5077, 0.809, 0.2962, -0.18, 0.36, -0.08)
+mesh = SubResource("Mesh_leaf")
+
+[node name="LeafC" type="MeshInstance3D" parent="Stalks"]
+transform = Transform3D(0.0872, -0.4437, -0.8919, -0.0872, 0.8871, -0.4529, 0.9924, 0.1276, -0.0064, 0.2, 0.38, -0.16)
+mesh = SubResource("Mesh_leaf")
+
+[node name="StalkF" type="MeshInstance3D" parent="Stalks"]
+transform = Transform3D(0.9848, -0.1736, 0, 0.1736, 0.9848, 0, 0, 0, 1, -0.26, 0.6, -0.04)
+mesh = SubResource("Mesh_stalk_tall")
+
+[node name="StalkG" type="MeshInstance3D" parent="Stalks"]
+transform = Transform3D(1, 0, 0, 0, 0.9848, 0.1736, 0, -0.1736, 0.9848, 0.02, 0.5, 0.26)
+mesh = SubResource("Mesh_stalk_mid")
+
+[node name="StalkH" type="MeshInstance3D" parent="Stalks"]
+transform = Transform3D(0.9962, 0.0872, 0, -0.0872, 0.9962, 0, 0, 0, 1, -0.22, 0.62, 0.2)
+mesh = SubResource("Mesh_stalk_tall")
+
+[node name="Cattails" type="Node3D" parent="."]
+
+[node name="CattailA" type="MeshInstance3D" parent="Cattails"]
+transform = Transform3D(0.9962, 0.0872, 0, -0.0872, 0.9962, 0, 0, 0, 1, 0.09, 1.38, 0.03)
+mesh = SubResource("Mesh_cattail")
+
+[node name="CattailB" type="MeshInstance3D" parent="Cattails"]
+transform = Transform3D(1, 0, 0, 0, 0.9848, 0.1736, 0, -0.1736, 0.9848, 0.16, 1.34, -0.21)
+mesh = SubResource("Mesh_cattail")
+
+[node name="CattailC" type="MeshInstance3D" parent="Cattails"]
+transform = Transform3D(0.9962, 0.0872, 0, -0.0872, 0.9962, 0, 0, 0, 1, 0.28, 1.36, 0.16)
+mesh = SubResource("Mesh_cattail")

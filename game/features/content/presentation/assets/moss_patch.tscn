@@ -1,0 +1,77 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+
+
+[sub_resource type="StandardMaterial3D" id="Mat_moss"]
+albedo_color = Color(0.353, 0.475, 0.286, 1)
+roughness = 1.0
+
+[sub_resource type="SphereMesh" id="Mesh_pad_wide"]
+material = SubResource("Mat_moss")
+radius = 0.46
+height = 0.12
+radial_segments = 8
+rings = 3
+
+[sub_resource type="SphereMesh" id="Mesh_pad_mid"]
+material = SubResource("Mat_moss")
+radius = 0.3
+height = 0.1
+radial_segments = 7
+rings = 3
+
+[sub_resource type="SphereMesh" id="Mesh_pad_small"]
+material = SubResource("Mat_moss")
+radius = 0.19
+height = 0.08
+radial_segments = 6
+rings = 2
+
+[sub_resource type="StandardMaterial3D" id="Mat_lichen"]
+albedo_color = Color(0.741, 0.769, 0.678, 1)
+roughness = 1.0
+
+[sub_resource type="SphereMesh" id="Mesh_lichen"]
+material = SubResource("Mat_lichen")
+radius = 0.13
+height = 0.05
+radial_segments = 6
+rings = 2
+
+[node name="MossPatch" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"moss_patch"
+
+[node name="Moss" type="Node3D" parent="."]
+
+[node name="PadA" type="MeshInstance3D" parent="Moss"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.04, 0)
+mesh = SubResource("Mesh_pad_wide")
+
+[node name="PadB" type="MeshInstance3D" parent="Moss"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.44, 0.03, 0.26)
+mesh = SubResource("Mesh_pad_mid")
+
+[node name="PadC" type="MeshInstance3D" parent="Moss"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.38, 0.03, 0.3)
+mesh = SubResource("Mesh_pad_small")
+
+[node name="PadD" type="MeshInstance3D" parent="Moss"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.1, 0.03, -0.42)
+mesh = SubResource("Mesh_pad_mid")
+
+[node name="Lichen" type="Node3D" parent="."]
+visible = false
+
+[node name="SpotA" type="MeshInstance3D" parent="Lichen"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.18, 0.08, -0.1)
+mesh = SubResource("Mesh_lichen")
+
+[node name="SpotB" type="MeshInstance3D" parent="Lichen"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.24, 0.06, 0.16)
+mesh = SubResource("Mesh_lichen")
+
+[node name="SpotC" type="MeshInstance3D" parent="Lichen"]
+transform = Transform3D(0.7, 0, 0, 0, 0.7, 0, 0, 0, 0.7, 0.5, 0.06, 0.34)
+mesh = SubResource("Mesh_lichen")

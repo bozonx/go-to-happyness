@@ -1,0 +1,1 @@
+{"version":1,"id":"deer","name":"Олень","asset":"deer","content_class":"actor","category":"creatures","components":{"settlement_natural":{"kind":"deer"},"wander":{"habit":"grazing","cohesion":0.5}}}

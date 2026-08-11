@@ -1,0 +1,80 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+
+
+[sub_resource type="StandardMaterial3D" id="Mat_sand"]
+albedo_color = Color(0.831, 0.757, 0.573, 1)
+roughness = 1.0
+
+[sub_resource type="CylinderMesh" id="Mesh_sheet"]
+material = SubResource("Mat_sand")
+top_radius = 1.25
+bottom_radius = 1.35
+height = 0.07
+radial_segments = 11
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_lobe"]
+material = SubResource("Mat_sand")
+top_radius = 0.55
+bottom_radius = 0.7
+height = 0.06
+radial_segments = 9
+rings = 1
+
+[sub_resource type="BoxMesh" id="Mesh_ripple"]
+material = SubResource("Mat_sand")
+size = Vector3(1.1, 0.05, 0.16)
+
+[sub_resource type="StandardMaterial3D" id="Mat_pebble"]
+albedo_color = Color(0.541, 0.518, 0.475, 1)
+roughness = 1.0
+
+[sub_resource type="SphereMesh" id="Mesh_pebble"]
+material = SubResource("Mat_pebble")
+radius = 0.09
+height = 0.1
+radial_segments = 5
+rings = 2
+
+[node name="SandPatch" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"sand_patch"
+
+[node name="Sand" type="Node3D" parent="."]
+
+[node name="Sheet" type="MeshInstance3D" parent="Sand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.035, 0)
+mesh = SubResource("Mesh_sheet")
+
+[node name="LobeA" type="MeshInstance3D" parent="Sand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.15, 0.03, 0.5)
+mesh = SubResource("Mesh_lobe")
+
+[node name="LobeB" type="MeshInstance3D" parent="Sand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.9, 0.03, -0.85)
+mesh = SubResource("Mesh_lobe")
+
+[node name="RippleA" type="MeshInstance3D" parent="Sand"]
+transform = Transform3D(0.9848, 0, -0.1736, 0, 1, 0, 0.1736, 0, 0.9848, -0.1, 0.08, 0.35)
+mesh = SubResource("Mesh_ripple")
+
+[node name="RippleB" type="MeshInstance3D" parent="Sand"]
+transform = Transform3D(0.9397, 0, 0.342, 0, 1, 0, -0.342, 0, 0.9397, 0.12, 0.08, -0.3)
+mesh = SubResource("Mesh_ripple")
+
+[node name="Pebbles" type="Node3D" parent="."]
+visible = false
+
+[node name="PebbleA" type="MeshInstance3D" parent="Pebbles"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.42, 0.1, 0.18)
+mesh = SubResource("Mesh_pebble")
+
+[node name="PebbleB" type="MeshInstance3D" parent="Pebbles"]
+transform = Transform3D(0.8, 0, 0, 0, 0.8, 0, 0, 0, 0.8, -0.55, 0.09, 0.44)
+mesh = SubResource("Mesh_pebble")
+
+[node name="PebbleC" type="MeshInstance3D" parent="Pebbles"]
+transform = Transform3D(0.65, 0, 0, 0, 0.65, 0, 0, 0, 0.65, 0.05, 0.09, -0.62)
+mesh = SubResource("Mesh_pebble")

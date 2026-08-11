@@ -1,0 +1,122 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+
+
+[sub_resource type="StandardMaterial3D" id="Mat_flesh"]
+albedo_color = Color(0.278, 0.451, 0.271, 1)
+roughness = 0.9
+
+[sub_resource type="CylinderMesh" id="Mesh_column"]
+material = SubResource("Mat_flesh")
+top_radius = 0.22
+bottom_radius = 0.26
+height = 1.9
+radial_segments = 8
+rings = 1
+
+[sub_resource type="SphereMesh" id="Mesh_tip"]
+material = SubResource("Mat_flesh")
+radius = 0.22
+height = 0.34
+radial_segments = 8
+rings = 4
+
+[sub_resource type="CylinderMesh" id="Mesh_arm"]
+material = SubResource("Mat_flesh")
+top_radius = 0.14
+bottom_radius = 0.14
+height = 0.62
+radial_segments = 7
+rings = 1
+
+[sub_resource type="SphereMesh" id="Mesh_elbow"]
+material = SubResource("Mat_flesh")
+radius = 0.14
+height = 0.24
+radial_segments = 7
+rings = 3
+
+[sub_resource type="StandardMaterial3D" id="Mat_flower"]
+albedo_color = Color(0.878, 0.549, 0.62, 1)
+roughness = 0.8
+
+[sub_resource type="SphereMesh" id="Mesh_flower"]
+material = SubResource("Mat_flower")
+radius = 0.09
+height = 0.1
+radial_segments = 7
+rings = 3
+
+[sub_resource type="CylinderShape3D" id="Shape_body"]
+radius = 0.26
+height = 2.0
+
+[node name="Cactus" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"cactus"
+
+[node name="Body" type="Node3D" parent="."]
+
+[node name="Column" type="MeshInstance3D" parent="Body"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.95, 0)
+mesh = SubResource("Mesh_column")
+
+[node name="Tip" type="MeshInstance3D" parent="Body"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.9, 0)
+mesh = SubResource("Mesh_tip")
+
+[node name="Arms" type="Node3D" parent="Body"]
+
+[node name="ArmLeftLower" type="MeshInstance3D" parent="Body/Arms"]
+transform = Transform3D(0, -1, 0, 1, 0, 0, 0, 0, 1, -0.5, 1.05, 0)
+mesh = SubResource("Mesh_arm")
+
+[node name="ArmLeftElbow" type="MeshInstance3D" parent="Body/Arms"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.78, 1.05, 0)
+mesh = SubResource("Mesh_elbow")
+
+[node name="ArmLeftUpper" type="MeshInstance3D" parent="Body/Arms"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.78, 1.4, 0)
+mesh = SubResource("Mesh_arm")
+
+[node name="ArmLeftTip" type="MeshInstance3D" parent="Body/Arms"]
+transform = Transform3D(0.65, 0, 0, 0, 0.65, 0, 0, 0, 0.65, -0.78, 1.72, 0)
+mesh = SubResource("Mesh_tip")
+
+[node name="ArmRightLower" type="MeshInstance3D" parent="Body/Arms"]
+transform = Transform3D(0, -1, 0, 1, 0, 0, 0, 0, 1, 0.46, 0.72, 0.05)
+mesh = SubResource("Mesh_arm")
+
+[node name="ArmRightElbow" type="MeshInstance3D" parent="Body/Arms"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.72, 0.72, 0.05)
+mesh = SubResource("Mesh_elbow")
+
+[node name="ArmRightUpper" type="MeshInstance3D" parent="Body/Arms"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.72, 1.05, 0.05)
+mesh = SubResource("Mesh_arm")
+
+[node name="ArmRightTip" type="MeshInstance3D" parent="Body/Arms"]
+transform = Transform3D(0.65, 0, 0, 0, 0.65, 0, 0, 0, 0.65, 0.72, 1.36, 0.05)
+mesh = SubResource("Mesh_tip")
+
+[node name="Flowers" type="Node3D" parent="."]
+visible = false
+
+[node name="FlowerTop" type="MeshInstance3D" parent="Flowers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.06, 0)
+mesh = SubResource("Mesh_flower")
+
+[node name="FlowerLeft" type="MeshInstance3D" parent="Flowers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.78, 1.84, 0)
+mesh = SubResource("Mesh_flower")
+
+[node name="FlowerRight" type="MeshInstance3D" parent="Flowers"]
+transform = Transform3D(0.8, 0, 0, 0, 0.8, 0, 0, 0, 0.8, 0.72, 1.48, 0.05)
+mesh = SubResource("Mesh_flower")
+
+[node name="CactusCollision" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="CactusCollision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+shape = SubResource("Shape_body")

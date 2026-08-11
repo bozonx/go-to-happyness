@@ -1,0 +1,1 @@
+{"version":1,"id":"boar","name":"Кабан","asset":"boar","content_class":"actor","category":"creatures","components":{"settlement_natural":{"kind":"boar"},"wander":{"habit":"grazing","radius":9.0}}}

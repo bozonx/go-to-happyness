@@ -1,0 +1,162 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+[ext_resource type="Shader" path="res://game/features/content/presentation/foliage_sway.gdshader" id="2_sway"]
+
+
+[sub_resource type="StandardMaterial3D" id="Mat_bark"]
+albedo_color = Color(0.549, 0.451, 0.325, 1)
+roughness = 1.0
+
+[sub_resource type="CylinderMesh" id="Mesh_trunk_low"]
+material = SubResource("Mat_bark")
+top_radius = 0.2
+bottom_radius = 0.3
+height = 1.5
+radial_segments = 7
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_trunk_mid"]
+material = SubResource("Mat_bark")
+top_radius = 0.17
+bottom_radius = 0.2
+height = 1.5
+radial_segments = 7
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_trunk_top"]
+material = SubResource("Mat_bark")
+top_radius = 0.15
+bottom_radius = 0.17
+height = 1.4
+radial_segments = 7
+rings = 1
+
+[sub_resource type="ShaderMaterial" id="Mat_frond"]
+shader = ExtResource("2_sway")
+shader_parameter/albedo_color = Color(0.302, 0.545, 0.271, 1)
+shader_parameter/roughness_value = 1.0
+shader_parameter/sway_amount = 1.5
+shader_parameter/sway_pivot_y = -0.3
+shader_parameter/sway_full_height = 1.2
+shader_parameter/sway_speed = 0.85
+
+[sub_resource type="PrismMesh" id="Mesh_frond"]
+material = SubResource("Mat_frond")
+size = Vector3(0.78, 2.2, 0.05)
+
+[sub_resource type="SphereMesh" id="Mesh_crown_core"]
+material = SubResource("Mat_frond")
+radius = 0.34
+height = 0.5
+radial_segments = 7
+rings = 3
+
+[sub_resource type="StandardMaterial3D" id="Mat_coconut"]
+albedo_color = Color(0.396, 0.294, 0.196, 1)
+roughness = 1.0
+
+[sub_resource type="SphereMesh" id="Mesh_coconut"]
+material = SubResource("Mat_coconut")
+radius = 0.11
+height = 0.2
+radial_segments = 6
+rings = 3
+
+[sub_resource type="CylinderShape3D" id="Shape_trunk"]
+radius = 0.22
+height = 4.4
+
+[node name="PalmTree" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"palm_tree"
+
+[node name="Wood" type="Node3D" parent="."]
+
+[node name="TrunkLow" type="MeshInstance3D" parent="Wood"]
+transform = Transform3D(0.9962, 0.0872, 0, -0.0872, 0.9962, 0, 0, 0, 1, 0.03, 0.75, 0)
+mesh = SubResource("Mesh_trunk_low")
+
+[node name="TrunkMid" type="MeshInstance3D" parent="Wood"]
+transform = Transform3D(0.9848, 0.1736, 0, -0.1736, 0.9848, 0, 0, 0, 1, 0.19, 2.2, 0)
+mesh = SubResource("Mesh_trunk_mid")
+
+[node name="TrunkTop" type="MeshInstance3D" parent="Wood"]
+transform = Transform3D(0.9659, 0.2588, 0, -0.2588, 0.9659, 0, 0, 0, 1, 0.5, 3.6, 0)
+mesh = SubResource("Mesh_trunk_top")
+
+[node name="Crown" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.68, 4.25, 0)
+
+[node name="Core" type="MeshInstance3D" parent="Crown"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+mesh = SubResource("Mesh_crown_core")
+
+[node name="FrondA" type="MeshInstance3D" parent="Crown"]
+transform = Transform3D(0.4695, 0.8829, -0.0000, -0.8829, 0.4695, 0.0000, 0.0000, 0.0000, 1.0000, -0.971, 0.516, 0.000)
+mesh = SubResource("Mesh_frond")
+
+[node name="FrondB" type="MeshInstance3D" parent="Crown"]
+transform = Transform3D(0.2825, 0.8829, -0.3749, -0.5314, 0.4695, 0.7052, 0.7986, 0.0000, 0.6018, -0.585, 0.516, 0.776)
+mesh = SubResource("Mesh_frond")
+
+[node name="FrondC" type="MeshInstance3D" parent="Crown"]
+transform = Transform3D(0.0000, 0.8829, -0.4695, -0.0000, 0.4695, 0.8829, 1.0000, 0.0000, 0.0000, -0.000, 0.516, 0.971)
+mesh = SubResource("Mesh_frond")
+
+[node name="FrondD" type="MeshInstance3D" parent="Crown"]
+transform = Transform3D(-0.3749, 0.8829, -0.2825, 0.7052, 0.4695, 0.5314, 0.6018, 0.0000, -0.7986, 0.776, 0.516, 0.585)
+mesh = SubResource("Mesh_frond")
+
+[node name="FrondE" type="MeshInstance3D" parent="Crown"]
+transform = Transform3D(-0.4695, 0.8829, -0.0000, 0.8829, 0.4695, 0.0000, 0.0000, 0.0000, -1.0000, 0.971, 0.516, 0.000)
+mesh = SubResource("Mesh_frond")
+
+[node name="FrondF" type="MeshInstance3D" parent="Crown"]
+transform = Transform3D(-0.2825, 0.8829, 0.3749, 0.5314, 0.4695, -0.7052, -0.7986, 0.0000, -0.6018, 0.585, 0.516, -0.776)
+mesh = SubResource("Mesh_frond")
+
+[node name="FrondG" type="MeshInstance3D" parent="Crown"]
+transform = Transform3D(-0.0000, 0.8829, 0.4695, 0.0000, 0.4695, -0.8829, -1.0000, 0.0000, -0.0000, 0.000, 0.516, -0.971)
+mesh = SubResource("Mesh_frond")
+
+[node name="FrondH" type="MeshInstance3D" parent="Crown"]
+transform = Transform3D(0.3749, 0.8829, 0.2825, -0.7052, 0.4695, -0.5314, -0.6018, 0.0000, 0.7986, -0.776, 0.516, -0.585)
+mesh = SubResource("Mesh_frond")
+
+[node name="Coconuts" type="Node3D" parent="."]
+visible = false
+
+[node name="NutA" type="MeshInstance3D" parent="Coconuts"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6, 4.16, 0.14)
+mesh = SubResource("Mesh_coconut")
+
+[node name="NutB" type="MeshInstance3D" parent="Coconuts"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.78, 4.1, -0.06)
+mesh = SubResource("Mesh_coconut")
+
+[node name="NutC" type="MeshInstance3D" parent="Coconuts"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.62, 4.06, -0.16)
+mesh = SubResource("Mesh_coconut")
+
+[node name="SunGlareOccluder" type="StaticBody3D" parent="."]
+collision_layer = 8
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="SunGlareOccluder"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.68, 4.3, 0)
+shape = SubResource("Shape_trunk")
+
+[node name="PalmCollision" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="PalmCollision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.18, 2.2, 0)
+shape = SubResource("Shape_trunk")
+
+[node name="PalmInteractionSelector" type="Area3D" parent="."]
+collision_layer = 4
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="PalmInteractionSelector"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.18, 2.2, 0)
+shape = SubResource("Shape_trunk")

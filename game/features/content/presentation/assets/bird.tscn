@@ -1,0 +1,68 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/content/presentation/decor_object_controller.gd" id="1_script"]
+
+
+[sub_resource type="StandardMaterial3D" id="Mat_plumage"]
+albedo_color = Color(0.271, 0.263, 0.298, 1)
+roughness = 1.0
+
+[sub_resource type="SphereMesh" id="Mesh_body"]
+material = SubResource("Mat_plumage")
+radius = 0.07
+height = 0.13
+radial_segments = 7
+rings = 4
+
+[sub_resource type="SphereMesh" id="Mesh_head"]
+material = SubResource("Mat_plumage")
+radius = 0.042
+height = 0.075
+radial_segments = 6
+rings = 3
+
+[sub_resource type="PrismMesh" id="Mesh_wing"]
+material = SubResource("Mat_plumage")
+size = Vector3(0.1, 0.22, 0.015)
+
+[sub_resource type="PrismMesh" id="Mesh_tail"]
+material = SubResource("Mat_plumage")
+size = Vector3(0.08, 0.13, 0.012)
+
+[sub_resource type="StandardMaterial3D" id="Mat_beak"]
+albedo_color = Color(0.827, 0.635, 0.243, 1)
+roughness = 0.8
+
+[sub_resource type="PrismMesh" id="Mesh_beak"]
+material = SubResource("Mat_beak")
+size = Vector3(0.028, 0.055, 0.024)
+
+[node name="Bird" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"bird"
+
+[node name="Plumage" type="Node3D" parent="."]
+
+[node name="Body" type="MeshInstance3D" parent="Plumage"]
+transform = Transform3D(1.6, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, 0)
+mesh = SubResource("Mesh_body")
+
+[node name="Head" type="MeshInstance3D" parent="Plumage"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.1, 0.17, 0)
+mesh = SubResource("Mesh_head")
+
+[node name="WingLeft" type="MeshInstance3D" parent="Plumage"]
+transform = Transform3D(0.0872, -0.9962, 0, 0.9962, 0.0872, 0, 0, 0, 1, -0.02, 0.16, 0.11)
+mesh = SubResource("Mesh_wing")
+
+[node name="WingRight" type="MeshInstance3D" parent="Plumage"]
+transform = Transform3D(0.0872, 0.9962, 0, -0.9962, 0.0872, 0, 0, 0, 1, -0.02, 0.16, -0.11)
+mesh = SubResource("Mesh_wing")
+
+[node name="Tail" type="MeshInstance3D" parent="Plumage"]
+transform = Transform3D(-0.2588, -0.9659, 0, 0.9659, -0.2588, 0, 0, 0, 1, -0.15, 0.13, 0)
+mesh = SubResource("Mesh_tail")
+
+[node name="Beak" type="MeshInstance3D" parent="."]
+transform = Transform3D(0, -1, 0, 1, 0, 0, 0, 0, 1, 0.16, 0.165, 0)
+mesh = SubResource("Mesh_beak")
